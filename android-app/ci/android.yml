@@ -1,0 +1,123 @@
+# Boxshelf Android (AYN Thor) build: ~25 minutes (most of it the device test).
+#   build → fast device test (android-app/ci/web-device-test.js: the APK's own files in Chromium with Capacitor's real
+#   Android bridge, plus the full Thor flow on a pretend device) → the APK is published (Boxshelf-thor-debug) only if it
+#   passed. Results: the run's Summary page; screenshots in the "device-test" artifact.
+# Optional full test on a real Android emulator: Actions → Android build → Run workflow → tick "Also run the emulator test".
+# Source of truth: android-app/ci/android.yml (copied here by android-app/ci/Install GitHub build.bat).
+name: Android build
+
+on:
+  push:
+    paths:
+      - 'renderer/**'
+      - 'shared/**'
+      - 'android-app/**'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+    inputs:
+      emulator:
+        description: 'Also run the emulator test (slow, ~15 min)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45 # (0.3.5: the device test alone is ~20 min now; 20 cut the run off before the APK was published)
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: android-app/package-lock.json
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Install Capacitor and the test browser
+        working-directory: android-app
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Copy the shared UI into the Android app
+        working-directory: android-app
+        run: npm run sync
+
+      - name: Build the debug APK
+        working-directory: android-app/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Device test (fast)
+        working-directory: android-app
+        run: node ci/web-device-test.js www ../out/device-test
+
+      - name: Keep the test's screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: device-test
+          path: out/device-test/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Publish the APK (only when the device test passed)
+        run: |
+          V=$(node -p "require('./android-app/package.json').version")
+          cp android-app/android/app/build/outputs/apk/debug/app-debug.apk "out/Boxshelf-thor-${V}-${GITHUB_SHA::7}-debug.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Boxshelf-thor-debug
+          path: out/*.apk
+          retention-days: 14
+
+  emulator:
+    # optional: a real Android emulator boot (slow and sometimes flaky on GitHub's machines)
+    if: github.event_name == 'workflow_dispatch' && inputs.emulator
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: Boxshelf-thor-debug
+          path: out
+      - name: Enable the emulator's hardware acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Test on the Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          cores: 4
+          ram-size: 4096M
+          emulator-boot-timeout: 1200
+          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: bash android-app/ci/emulator-test.sh
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emulator-test
+          path: out/device-test/
+          if-no-files-found: ignore
+          retention-days: 14
