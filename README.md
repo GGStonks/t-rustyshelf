@@ -274,6 +274,10 @@ SIL Open Font License (see `renderer\fonts\LICENSES`). Bundled libraries and the
 Boxshelf is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 as published by the Free Software Foundation, version 3 ([LICENSE](LICENSE)). It comes with no warranty.
 
+**The name and logo:** the GPL covers the code, not the Boxshelf name or its logo. If you release a fork or a
+modified version, please give it a different name and logo, so people can tell it apart from the official Boxshelf
+(saying it's "based on Boxshelf" is welcome).
+
 ## When something's off
 
 `data\boxshelf.log` records launches, downloads, matches that failed and renderer errors. Settings → Startup & system → *Open app folder* gets you there. Try Settings → Display →
