@@ -12,8 +12,12 @@ const https = require('https');
 const { scanSystem, cleanTitle } = require('./scanner');
 const { isFile, artBase, artDirFor } = require('./paths');
 
-const LIBRETRO = { gc: 'Nintendo - GameCube', wii: 'Nintendo - Wii', psp: 'Sony - PlayStation Portable', wiiu: 'Nintendo - Wii U', sw: 'Nintendo - Switch', ps3: 'Sony - PlayStation 3', ps4: 'Sony - PlayStation 4', ps2: 'Sony - PlayStation 2', x360: 'Microsoft - Xbox 360', n3ds: 'Nintendo - Nintendo 3DS' };
-const LAUNCHBOX = { gc: 'Nintendo GameCube', wii: 'Nintendo Wii', psp: 'Sony PSP', wiiu: 'Nintendo Wii U', sw: 'Nintendo Switch', sw2: 'Nintendo Switch 2', ps3: 'Sony Playstation 3', ps4: 'Sony Playstation 4', ps5: 'Sony Playstation 5', ps2: 'Sony Playstation 2', x360: 'Microsoft Xbox 360', n3ds: 'Nintendo 3DS' };
+const LIBRETRO = { gc: 'Nintendo - GameCube', wii: 'Nintendo - Wii', psp: 'Sony - PlayStation Portable', wiiu: 'Nintendo - Wii U', sw: 'Nintendo - Switch', ps3: 'Sony - PlayStation 3', ps4: 'Sony - PlayStation 4', ps2: 'Sony - PlayStation 2', x360: 'Microsoft - Xbox 360', n3ds: 'Nintendo - Nintendo 3DS',
+  // (beta.6) the retro shelves (folder names checked on thumbnails.libretro.com)
+  psx: 'Sony - PlayStation', nes: 'Nintendo - Nintendo Entertainment System', snes: 'Nintendo - Super Nintendo Entertainment System', n64: 'Nintendo - Nintendo 64', gb: 'Nintendo - Game Boy', gbc: 'Nintendo - Game Boy Color', gba: 'Nintendo - Game Boy Advance', nds: 'Nintendo - Nintendo DS', megadrive: 'Sega - Mega Drive - Genesis', mastersystem: 'Sega - Master System - Mark III', gamegear: 'Sega - Game Gear', dreamcast: 'Sega - Dreamcast' };
+const LAUNCHBOX = { gc: 'Nintendo GameCube', wii: 'Nintendo Wii', psp: 'Sony PSP', wiiu: 'Nintendo Wii U', sw: 'Nintendo Switch', sw2: 'Nintendo Switch 2', ps3: 'Sony Playstation 3', ps4: 'Sony Playstation 4', ps5: 'Sony Playstation 5', ps2: 'Sony Playstation 2', x360: 'Microsoft Xbox 360', n3ds: 'Nintendo 3DS',
+  // (beta.6) the retro shelves: LaunchBox's own platform names (the index rebuilds once to take them in)
+  psx: 'Sony Playstation', nes: 'Nintendo Entertainment System', snes: 'Super Nintendo Entertainment System', n64: 'Nintendo 64', gb: 'Nintendo Game Boy', gbc: 'Nintendo Game Boy Color', gba: 'Nintendo Game Boy Advance', nds: 'Nintendo DS', megadrive: 'Sega Genesis', mastersystem: 'Sega Master System', gamegear: 'Sega Game Gear', dreamcast: 'Sega Dreamcast' };
 const IDX_V = 8; // 8: full box wraps (Box - Full) indexed too, to cut spines from
 const LB_ZIP = 'https://gamesdb.launchbox-app.com/Metadata.zip';
 const LB_IMG = 'https://images.launchbox-app.com/';

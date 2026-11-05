@@ -143,8 +143,47 @@ const CONSOLES = [
     gameArgs: '-f "{rom}"',
     emulatorArgs: '',
     coverSeconds: 4
-  }
+  },
+  // ---------- (beta.6) retro and handheld shelves: RetroArch for all of them (raCore: its core for this console; the
+  // launch builds `-f -L <RetroArch>\cores\<core>_libretro.dll "{rom}"` whenever the emulator is retroarch.exe), or the
+  // standalone emulator named first. Launch options checked against the real programs (2026-11): DuckStation
+  // -fullscreen -batch -nogui -- ; mGBA -f ; melonDS -f ; RMG --fullscreen --quit-after-emulation --nogui ; BlastEm -f
+  // (toggles fullscreen). Their cases and media are in renderer/systems-extra.js.
+  ...retro([
+    ['psx', 'PlayStation', 'DuckStation', ['duckstation-qt-x64-ReleaseLTCG.exe', 'duckstation-qt-x64-ReleaseLTCG-SSE2.exe', 'duckstation-qt.exe'], ['{app}\\DuckStation', '{app}\\duckstation', '%LOCALAPPDATA%\\Programs\\DuckStation', '%ProgramFiles%\\DuckStation'],
+      ['psx', 'ps1', 'playstation', 'playstation 1'], ['cue', 'chd', 'm3u', 'pbp', 'iso', 'ecm', 'mds', 'img', 'ccd'], '-fullscreen -batch -nogui -- "{rom}"', 'swanstation', true],
+    ['nes', 'NES', 'RetroArch', [], [], ['nes', 'famicom', 'nintendo entertainment system'], ['nes', 'fds', 'unf', 'unif', 'zip', '7z'], '', 'mesen'],
+    ['snes', 'SNES', 'RetroArch', [], [], ['snes', 'sfc', 'super nintendo', 'super famicom'], ['sfc', 'smc', 'fig', 'swc', 'bs', 'zip', '7z'], '', 'snes9x'],
+    ['n64', 'Nintendo 64', 'RetroArch', ['RMG.exe'], ['{app}\\RMG', '{app}\\Rosalie\'s Mupen GUI', '%LOCALAPPDATA%\\Programs\\RMG'],
+      ['n64', 'nintendo 64'], ['z64', 'n64', 'v64', 'zip', '7z'], '--fullscreen --quit-after-emulation --nogui "{rom}"', 'mupen64plus_next'],
+    ['gb', 'Game Boy', 'RetroArch', [], [], ['gb', 'gameboy', 'game boy'], ['gb', 'zip', '7z'], '', 'gambatte'],
+    ['gbc', 'Game Boy Color', 'RetroArch', [], [], ['gbc', 'gameboy color', 'game boy color'], ['gbc', 'zip', '7z'], '', 'gambatte'],
+    ['gba', 'Game Boy Advance', 'RetroArch', ['mGBA.exe'], ['{app}\\mGBA', '%ProgramFiles%\\mGBA'], ['gba', 'gameboy advance', 'game boy advance'], ['gba', 'zip', '7z'], '-f "{rom}"', 'mgba'],
+    ['nds', 'DS', 'melonDS', ['melonDS.exe'], ['{app}\\melonDS', '%ProgramFiles%\\melonDS'], ['nds', 'ds', 'nintendo ds'], ['nds', 'dsi', 'zip', '7z'], '-f "{rom}"', 'melondsds', true],
+    ['megadrive', 'Mega Drive', 'RetroArch', ['blastem.exe'], ['{app}\\BlastEm', '{app}\\blastem'], ['megadrive', 'genesis', 'mega drive', 'md'], ['md', 'gen', 'smd', 'bin', 'zip', '7z'], '-f "{rom}"', 'genesis_plus_gx'],
+    ['mastersystem', 'Master System', 'RetroArch', [], [], ['mastersystem', 'master system', 'sms'], ['sms', 'zip', '7z'], '', 'genesis_plus_gx'],
+    ['gamegear', 'Game Gear', 'RetroArch', [], [], ['gamegear', 'game gear', 'gg'], ['gg', 'zip', '7z'], '', 'genesis_plus_gx'],
+    // Flycast 2.7 has no fullscreen option to pass: the Dreamcast starts in RetroArch's Flycast core unless Flycast itself is chosen
+    ['dreamcast', 'Dreamcast', 'RetroArch', ['flycast.exe'], ['{app}\\Flycast', '{app}\\flycast'], ['dreamcast', 'dc'], ['chd', 'gdi', 'cdi', 'cue', 'm3u'], '"{rom}"', 'flycast'],
+  ])
 ];
+// (beta.6) one retro shelf: [id, name, emulator name, standalone exe names, its folders, ROM folder names, extensions,
+// standalone launch options, RetroArch core, standalone first?]. RetroArch's usual homes are searched for every one of them;
+// a shelf whose standalone emulator is the better choice (DuckStation, melonDS) looks for it first.
+function retro(rows) {
+  const RA_EXE = ['retroarch.exe'];
+  const RA_DIRS = ['{app}\\RetroArch', '{app}\\RetroArch-Win64', 'C:\\RetroArch-Win64', 'C:\\RetroArch', '%APPDATA%\\RetroArch', '%ProgramFiles%\\RetroArch', '%ProgramFiles%\\RetroArch-Win64',
+    '%ProgramFiles(x86)%\\Steam\\steamapps\\common\\RetroArch', '%ProgramFiles%\\Steam\\steamapps\\common\\RetroArch'];
+  return rows.map(([id, name, emulatorName, exes, dirs, romFolderNames, extensions, args, raCore, standaloneFirst]) => ({
+    id, name, emulatorName, raCore, retro: true,
+    exeNames: standaloneFirst ? [...exes, ...RA_EXE] : [...RA_EXE, ...exes],
+    emulatorFolders: standaloneFirst ? [...dirs, ...RA_DIRS] : [...RA_DIRS, ...dirs],
+    romFolderNames, extensions,
+    gameArgs: args || '"{rom}"', // (the standalone's options; RetroArch gets its own, see main.js retroArgs)
+    emulatorArgs: '',
+    coverSeconds: 4
+  }));
+}
 
 const APPS = [
   {

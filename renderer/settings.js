@@ -47,7 +47,7 @@ if(XTHEMES)for(const t of window.BS_EXTRA_THEMES)if(t&&t.id&&!THEMES.some(x=>x[0
 const syncCustomThemes=()=>{for(let i=THEMES.length-1;i>=0;i--)if(/^custom-/.test(THEMES[i][0]))THEMES.splice(i,1);
   for(const t of (window.BS_CUSTOM_THEMES||[]))if(t&&/^custom-[a-z0-9-]{1,48}$/.test(t.id))THEMES.push([t.id,String(t.name||"Custom"),`linear-gradient(rgba(0,0,0,.12),rgba(0,0,0,.12)),url("${String(t.bg||"").replace(/["\\\n\r]/g,"")}") center/cover no-repeat,#0b0c14`])};
 syncCustomThemes();
-const OFFICIAL={gc:"https://dolphin-emu.org/download/",wii:"https://dolphin-emu.org/download/",wiiu:"https://cemu.info/",sw:"https://eden-emu.dev/downloads",sw2:"https://github.com/Djihads80/Eglantine/releases",psp:"https://www.ppsspp.org/download/",ps2:"https://pcsx2.net/downloads/",ps3:"https://rpcs3.net/download",ps4:"https://shadps4.net/downloads",ps5:"https://github.com/Jetsku/KytyPS5/releases",n3ds:"https://azahar-emu.org/pages/download/",x360:"https://xenia.jp/download/",steam:"https://store.steampowered.com/about/",stremio:"https://www.stremio.com/downloads",nuvio:"https://github.com/NuvioMedia/NuvioDesktop"};
+const OFFICIAL={gc:"https://dolphin-emu.org/download/",wii:"https://dolphin-emu.org/download/",wiiu:"https://cemu.info/",sw:"https://eden-emu.dev/downloads",sw2:"https://github.com/Djihads80/Eglantine/releases",psp:"https://www.ppsspp.org/download/",ps2:"https://pcsx2.net/downloads/",ps3:"https://rpcs3.net/download",ps4:"https://shadps4.net/downloads",ps5:"https://github.com/Jetsku/KytyPS5/releases",n3ds:"https://azahar-emu.org/pages/download/",x360:"https://xenia.jp/download/",psx:"https://github.com/stenzek/duckstation/releases",nds:"https://melonds.kuribo64.net/downloads.php",nes:"https://www.retroarch.com/?page=platforms",snes:"https://www.retroarch.com/?page=platforms",n64:"https://www.retroarch.com/?page=platforms",gb:"https://www.retroarch.com/?page=platforms",gbc:"https://www.retroarch.com/?page=platforms",gba:"https://www.retroarch.com/?page=platforms",megadrive:"https://www.retroarch.com/?page=platforms",mastersystem:"https://www.retroarch.com/?page=platforms",gamegear:"https://www.retroarch.com/?page=platforms",dreamcast:"https://www.retroarch.com/?page=platforms",retroarch:"https://www.retroarch.com/?page=platforms",steam:"https://store.steampowered.com/about/",stremio:"https://www.stremio.com/downloads",nuvio:"https://github.com/NuvioMedia/NuvioDesktop"};
 const HELP={gc:"Dolphin runs GameCube games. Point to Dolphin.exe.",wii:"Dolphin also runs Wii games. It can be the same Dolphin.exe as GameCube.",
   wiiu:"Cemu runs Wii U games: .wua, .wud / .wux or extracted game folders. Disc images need your keys.txt set up in Cemu.",sw:"Eden runs Switch games. Point to eden.exe.",sw2:"Eglantine (an Eden fork) runs Switch 2 games. Point to eglantine.exe (forks like Orchid or Lichii are found too; Build picks which one plays). Unpacked game folders work (exefs + romfs, or base + updates: the newest update is started), and .nsp / .xci.",
   psp:"PPSSPP runs PSP games. Point to PPSSPPWindows64.exe.",ps2:"PCSX2 runs PS2 games (.iso, .chd, .cso, .zso). It needs a PS2 BIOS of its own.",
@@ -179,13 +179,17 @@ function build(){
     C("Clock","ui.clock",[["full","Day, date and time"],["time","Time only"],["off","Hidden"]],"full","What shows in the top corner of the shelf.",{keys:"time date",live:v=>applyUi({clock:v})}),
     T("24-hour clock","ui.clock24",false,"Shows 18:30 instead of 6:30 PM.",{keys:"time 24 hour",live:v=>applyUi({clock24:v})}),
     // a second screen (the AYN Thor's bottom screen): only offered when the device has one (Android: android-bottom.js)
-    C("Bottom screen","ui.bottomScreen",[["on","On"],["off","Off"]],"on","The small screen under the shelf shows the game you're on: its case to turn and open with a finger, its details, trophies and big touch buttons. While a game is playing the bottom screen is always handed to the game, so DS and 3DS emulators and bottom-screen mods get all of it.",{when:()=>!!(api.bottomScreen&&api.bottomScreen.available()),keys:"bottom screen second display dual thor touch ds 3ds",live:v=>api.bottomScreen.set(v!=="off")}),
+    C("Bottom screen","ui.bottomScreen",[["on","On"],["off","Off"]],"on","The small screen under the shelf shows the game you're on: its case to turn and open with a finger, its details, trophies and big touch buttons. While a game is playing the bottom screen is always handed to the game, so DS and 3DS emulators and bottom-screen mods get all of it.",{when:()=>!!(api.bottomScreen&&api.bottomScreen.available()),keys:"bottom screen second display dual thor touch ds 3ds",live:v=>api.bottomScreen.set(v!=="off"),
+      // (0.4.0) what the native side really does (off by default on devices that aren't AYN's: a TV or a cast isn't a bottom screen)
+      get:()=>{const s=api.bottomScreen&&api.bottomScreen.status();return s&&typeof s.enabled==="boolean"?(s.enabled?"on":"off"):(gp("ui.bottomScreen")||"on")},
+      sub:()=>{const s=api.bottomScreen&&api.bottomScreen.status();return s&&s.builtIn===false?{text:`A second display was found${s.name?` (${s.name})`:""}. On this device (${s.device||"not a Thor"}) it stays off unless you turn it on.`}:null}}),
     H("Starting up"),
     C("Startup animation","ui.bootIntro",[["ripple","Logo + ripple"],["fade","Logo + fade"],["off","Off"]],"ripple","The Boxshelf logo shows while your shelf loads, then the games come in: the one you were on first, rippling out to each side, or the whole shelf fading up together. Off starts straight on the shelf.",{keys:"boot intro",live:v=>{try{localStorage.setItem("bootIntro",v)}catch{}}}),
     C("Open into","ui.openInto",[["last","Last shelf"],["home","Home shelf"],["museum","Museum"]],"last","Where Boxshelf goes when it starts: the console shelf you were on last time, Home (continue playing and favourites), or straight into the museum.",{more:"Museum: after the Boxshelf logo the lights come up in the museum overview (a little slower to start than the shelf). B still takes you to the shelf any time.",keys:"start startup boot launch open first home museum shelf",live:v=>applyUi({openInto:v})}),
     H("More"),
     M("Screen & motion","display-more","Which screen, fullscreen, fitting the picture to your TV and reduce motion.","Set these once for your TV.",[
       T("Start in fullscreen","ui.startFullscreen",true,"Opens Boxshelf fullscreen. Press F11 any time to switch.",{keys:"full screen window"}),
+      T("Hide the taskbar during games","ui.hideTaskbar",true,"Nothing but Boxshelf and your game on screen: the Windows taskbar is hidden while a game starts, runs and closes, and comes back on the shelf.",{keys:"taskbar windows bar immersion flash desktop start menu"}),
       C("Screen","ui.display",()=>displays,"","Which screen Boxshelf opens on, for a PC with both a monitor and a TV. Games open on the same screen.",{when:()=>!!(displays&&displays.length),keys:"monitor tv hdmi output display second",live:v=>{if(api.moveToDisplay){const d=(displays||[]).find(x=>x[0]===v);Promise.resolve(api.moveToDisplay(v||(d&&d[2])||"")).catch(e=>toast(errMsg(e)))}}}),
       S("Fit to TV","ui.safeArea",100,90,100,1,v=>v+"%","Shrinks everything slightly if your TV cuts off the edges of the picture (overscan). Watch the corners of the screen while you change it.",{keys:"overscan safe area edges cut off zoom",live:v=>{applyUi({safeArea:v});fit()}}),
       T("Reduce motion","ui.reduceMotion",false,"Tones down the startup ripple, the museum walk-in and the moving theme backgrounds.",{keys:"animation accessibility motion sickness",live:v=>{applyUi({reduceMotion:v});document.body.classList.toggle("bss-reduce",!!v)}}),
@@ -647,7 +651,7 @@ const sw2Row=()=>!!api.sw2Builds&&!(window.bsPlatform&&bsPlatform.os==="android"
 // (beta.4) Settings → Custom games: Quiver Launcher (found where it usually is, or found / chosen once for a portable
 // copy) and the programs added by hand, each named here. pcSt: what main sees ({ quiver: folder, epic: count }), asked
 // for when the page is drawn
-let pcSt=null,pcAsking=false;
+let pcSt=null,pcAsking=false;const customNameRows=new WeakMap();
 function pcStatus(){if(pcAsking||!api.pcStatus)return;pcAsking=true;Promise.resolve(api.pcStatus()).then(r=>{pcSt=r||{};pcAsking=false;bump()}).catch(()=>{pcSt={};pcAsking=false;bump()})}
 function customRows(){if(!pcSt)setTimeout(pcStatus,0);cfg.pc=cfg.pc||{epic:true,quiver:true,quiverPath:"",custom:[]};const pc=cfg.pc;if(!Array.isArray(pc.custom))pc.custom=[];const rows=[];
   const again=()=>{pcSt=null;changed({rescan:true})};
@@ -665,7 +669,9 @@ function customRows(){if(!pcSt)setTimeout(pcStatus,0);cfg.pc=cfg.pc||{epic:true,
     const title=String(exe).split(/[\\/]/).pop().replace(/\.[^.]+$/,"").replace(/[_\-.]+/g," ").replace(/\s+/g," ").trim()||"Game";
     pc.custom.push({id:Date.now().toString(36),title,exe,args:""});changed({rescan:true});toast(`Added ${title}. Rename it below if you like.`)},{keys:"add custom game recomp port program exe"}));
   pc.custom.forEach((c,i)=>{
-    rows.push(X(c.title||"Game","",`Its name on the shelf. Program: ${c.exe}`,{get:()=>c.title||"",set:v=>{c.title=String(v||"").slice(0,120)},rescan:true,ns:true,keys:"rename custom game",sub:()=>({text:folderName(c.exe)})}));
+    // (beta.5) the name row is kept per game (the text editor finds its row by identity: a new object each draw never edited)
+    let nr=customNameRows.get(c);if(!nr){nr=X(c.title||"Game","",`Its name on the shelf. Program: ${c.exe}`,{get:()=>c.title||"",set:v=>{c.title=String(v||"").slice(0,120);nr.label=c.title||"Game"},rescan:true,ns:true,keys:"rename custom game",sub:()=>({text:folderName(c.exe)})});customNameRows.set(c,nr)}
+    rows.push(nr);
     rows.push(A("Remove "+(c.title||"this game"),"Remove","Takes it off the Custom shelf. Nothing is deleted.",()=>twice("pcx:"+i,()=>{pc.custom.splice(i,1);changed({rescan:true});toast("Removed from the Custom shelf (nothing was deleted)")},"Press again to remove it"),{ns:true,ask:"pcx:"+i}))});
   return rows}
 const sw2Low=x=>String(x||"").toLowerCase();
@@ -856,7 +862,30 @@ function checkPathsSoon(){if(!pathAsk.size||!api.checkPaths)return;const L=[...p
 /* ---------- open / close / the classic pages ---------- */
 function ensureCfg(){cfg.ui=cfg.ui||{};cfg.steam=cfg.steam||{enabled:true,path:""};cfg.apps=cfg.apps||{};cfg.ra=cfg.ra||{user:"",key:"",enabled:true};cfg.keys=cfg.keys||{};cfg.systems=cfg.systems||{};(info.apps||[]).forEach(a=>{cfg.apps[a.id]=cfg.apps[a.id]||{enabled:true,path:""}})}
 const PAGE_MAP={bottom:["display","Bottom screen"],phone:"phone",consoles:"consoles",steam:"pc",pc:"pc",epic:"pc",custom:"custom",quiver:"custom",media:"apps",apps:"apps",ra:{svc:"ra"},connections:["acct","fanart.tv"],screenscraper:{svc:"screenscraper"},acct:"acct",accounts:"acct",display:"display",perf:"perf",performance:"perf",sound:"sound",controller:"pad",pad:"pad",museum:"museum",shelf:"shelf",library:["art","Fetch manuals for new games"],art:"art",reading:["reading","Find on the Internet Archive"],magazines:"reading",guides:"reading",manuals:"art",startup:"sys",system:"sys",sys:"sys"};
+// (beta.5) Details → Rename: one game's name, on a page of its own (typed, or with the on-screen keyboard on a controller).
+// Saved by main (cfg.games[key].title) the moment Enter is pressed; "Use the file's name" puts the scanned one back
+let renameState=null;
+// (the rows are made once per page: the text editor finds its row by identity)
+function renameRows(){const s=renameState;if(!s)return [];
+  if(!s.nameRow)s.nameRow=X("Name","","The game's name on the shelf, its case and in searches. Box art and manuals are looked up by it too. The file itself isn't touched. Enter saves it.",{get:()=>s.name,set:v=>{s.name=String(v||"")},nosave:true,live:v=>renameSave(v),ns:true,keys:"rename name title"});
+  if(!s.resetRow)s.resetRow=A("Use the file's name","Reset",`Back to "${s.file}".`,()=>renameSave(""),{ns:true,sub:()=>({text:s.file})});
+  return s.renamed?[s.nameRow,s.resetRow]:[s.nameRow]}
+async function renameSave(v){const s=renameState;if(!s||!api.renameGame)return;v=String(v||"").replace(/\s+/g," ").trim();const back=!v||v===s.file;
+  try{await api.renameGame({...s.ref,title:back?"":v});s.renamed=!back;s.name=back?s.file:v;play("tick",1);toast(back?"Back to its file name":`Renamed to ${v}`);shelf("refresh",true)} /* (true: the shelf stays on this game) */catch(e){toast(errMsg(e));play("error")}bump()}
+// (beta.5) the cover picker's Search by name: a name typed here (keyboard, or the on-screen one on a controller); Enter
+// closes Settings and the picker opens again with SteamGridDB's covers for that name
+let coverSearch=null;
+function coverSearchRows(){const s=coverSearch;if(!s)return [];
+  if(!s.row)s.row=X("Search for","",`A name to look up on SteamGridDB instead of "${s.title}". Enter searches. The game's own name stays as it is (Rename changes that).`,{get:()=>s.term,set:v=>{s.term=String(v||"")},nosave:true,live:v=>coverSearchGo(v),ns:true,keys:"search cover name steamgriddb"});
+  return [s.row]}
+async function coverSearchGo(v){const s=coverSearch;v=String(v||"").replace(/\s+/g," ").trim();if(!s||!v)return;play("open");await close();shelf("pcCoverSearch",s.id,v)}
 function route(page,o){if(!page)return;o=o||{};
+  if(page==="coversearch"&&o.id){coverSearch={id:String(o.id),title:String(o.title||""),term:String(o.term||o.title||"")};
+    MORE.coversearch={id:"coversearch",name:"Search for a cover",lead:`Covers for ${coverSearch.title} under another name.`,rows:[{t:"dyn",fn:coverSearchRows}]};
+    goSecId(/^(steam|epic)-/.test(coverSearch.id)?"pc":"custom");focus="page";rowI=0;openSub({kind:"more",id:"coversearch"});return}
+  if(page==="rename"&&o.ref){const file=String(o.fileTitle||o.title||""),cur=String(o.title||"");renameState={ref:o.ref,name:cur,file,renamed:!!o.fileTitle&&o.fileTitle!==cur};
+    MORE.rename={id:"rename",name:`Rename ${cur}`.slice(0,60),lead:o.fileTitle&&o.fileTitle!==cur?`Its file's name: ${o.fileTitle}`:"Give this game the name you want on your shelf.",rows:[{t:"dyn",fn:renameRows}]};
+    goSecId(o.ref.systemId?"consoles":(/^(steam|epic)-/.test(String(o.ref.id||""))?"pc":"custom"));focus="page";rowI=0;openSub({kind:"more",id:"rename"});return}
   // Details → Box art: straight to that game's mix (B goes up to its console's games, then the Art page)
   // Details → Choose manual…: straight to that game's manuals (B: the Manual row, then its console's games, then the Art page)
   if(page==="manualgame"||page==="manualstudio"){goSecId("art");focus="page";rowI=0;if(!api.manualStudio||!o.systemId)return;inMore("art-manuals");sRet=-1;stack=[];

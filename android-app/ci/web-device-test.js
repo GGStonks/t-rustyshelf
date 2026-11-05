@@ -23,6 +23,8 @@
 //   Pass 14 "box art screens": the Box art page, games grid and game page (ci/artui-test.js).
 //   Pass 15 "beta": new-install defaults, beta version order, the update notice and Settings rows (ci/beta-test.js).
 //   Pass 16 "pcgames": Epic's installs, Quiver Launcher 3 / 4, games added by hand, the Custom shelf (ci/pcgames-test.js).
+//   Pass 17 "screens": the Android build on a 20:9 phone, a small phone and a 16:10 tablet (ci/screens-test.js).
+//   Pass 18 "retro": the 12 retro shelves (PlayStation … Dreamcast) through RetroArch or a standalone (ci/retro-test.js).
 // Writes a table to the GitHub run's Summary and screenshots to out/device-test/. Exit code 1 = failed (APK not published).
 // Usage: node ci/web-device-test.js <www dir> <out dir>
 'use strict';
@@ -608,7 +610,13 @@ server.listen(0, async () => {
         for (let y = H * .25; y < H * .85; y += 12) for (let x = 60; x < W - 60; x += 12) { const p = Museum.pickAt(x, y); if (p && p.row === r.row && (want === 'sel' ? p.sel : !p.sel && p.col > 0)) (by[p.col] = by[p.col] || []).push([x, y]); }
         const col = Object.keys(by).sort((a, b) => by[b].length - by[a].length)[0]; if (col == null) return null; const pts = by[col], mx = pts.reduce((s, q) => s + q[0], 0) / pts.length, my = pts.reduce((s, q) => s + q[1], 0) / pts.length;
         const best = pts.reduce((m, q) => Math.hypot(q[0] - mx, q[1] - my) < Math.hypot(m[0] - mx, m[1] - my) ? q : m); return { x: best[0], y: best[1], col: +col }; }, [W, H, want]);
-      const tgt = await find('other'); let d = null, e = null, f = null, g = null;
+      // aim, then make sure the point still hits that case a moment later (the slow software camera can still drift a
+      // hair after settle(), and a tap on the edge of a case then lands on its neighbour): aim again until it holds
+      let tgt = null;
+      for (let n = 0; n < 4; n++) { tgt = await find('other'); if (!tgt) break; await pause(700);
+        const still = await page.evaluate(([x, y]) => { const p = Museum.pickAt(x, y); return p ? p.col : null; }, [tgt.x, tgt.y]);
+        if (still === tgt.col) break; await settle(); }
+      let d = null, e = null, f = null, g = null;
       if (tgt) { await tap(tgt.x, tgt.y); await pause(600); await settle(); d = await ms();
         const t2 = await find('sel'); if (t2) { await tap(t2.x, t2.y); await pause(1800); e = await ms();
           await drag(W * .5, H * .5, W * .5 + 200, H * .45, 8); await pause(600); f = await ms();                   // a drag turns the case in your hands
@@ -1426,10 +1434,13 @@ server.listen(0, async () => {
       // the shelf under the museum isn't drawn once the room has faded in
       const under = await page.evaluate(() => getComputedStyle(document.getElementById('scene')).visibility);
       check('Heat: the shelf under the museum is not drawn', under === 'hidden', under);
-      // the Thor test meter: tap to small, tap to hidden; hidden it has no loop of its own
+      // the Thor test meter (0.4.0): off by default (nothing shown, no loop); turned on, tap to small, tap to hidden (its loop
+      // stopped), tap back to big
       const hud = await page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), el = document.getElementById('thorHud'), tap = () => el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-        const a = __thorHud(); tap(); await w(100); const b = __thorHud(); tap(); await w(300); const c = __thorHud(); tap(); await w(100); return { a, b, c, back: __thorHud() }; });
-      check('Heat: the Thor test meter taps big → small → hidden (its loop stopped) → big', hud.a.view === 'big' && hud.b.view === 'small' && hud.c.view === 'hidden' && !hud.c.looping && hud.back.view === 'big' && hud.back.looping, JSON.stringify(hud));
+        const off = Object.assign(__thorHud(), { shown: getComputedStyle(el).display !== 'none' }); __thorHudSet('big'); await w(200);
+        const a = __thorHud(); tap(); await w(100); const b = __thorHud(); tap(); await w(300); const c = __thorHud(); tap(); await w(100); const back = __thorHud(); __thorHudSet('off'); return { off, a, b, c, back }; });
+      check('Heat: the Thor test meter starts off (not shown, no loop); on, it taps big → small → hidden (its loop stopped) → big',
+        hud.off.view === 'off' && !hud.off.looping && !hud.off.shown && hud.a.view === 'big' && hud.b.view === 'small' && hud.c.view === 'hidden' && !hud.c.looping && hud.back.view === 'big' && hud.back.looping, JSON.stringify(hud));
       check('Heat pass: no script errors', !errors.length, errors.slice(0, 3).join(' | '));
       await ctx.close(); }
     // ---------- pass 10: magazines & guides (0.3.2): the store, downloads, the reading corner (ci/reading-test.js) ----------
@@ -1447,6 +1458,10 @@ server.listen(0, async () => {
     await require('./beta-test')({ browser, base, check, newPage, OUT });
     // ---------- pass 16: PC games beyond Steam (beta.4): Epic, Quiver Launcher, the Custom shelf (ci/pcgames-test.js) ----------
     await require('./pcgames-test')({ browser, base, check, newPage, OUT });
+    // ---------- pass 17: other Android screens (0.4.0): a 20:9 phone, a small phone, a 16:10 tablet (ci/screens-test.js) ----------
+    await require('./screens-test')({ browser, base, check, newPage, OUT });
+    // ---------- pass 18: the retro shelves (beta.6): PlayStation, NES … Dreamcast through RetroArch (ci/retro-test.js) ----------
+    await require('./retro-test')({ browser, base, check, newPage, OUT });
     check('Every file the page loads is in the APK', !missing.size, [...missing].join(', '));
   } catch (e) { check('Test ran to the end', false, e && e.stack ? e.stack.split('\n').slice(0, 2).join(' ') : e); }
   await browser.close(); server.close();

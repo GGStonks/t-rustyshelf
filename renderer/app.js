@@ -407,7 +407,11 @@ function artSwapNext(){
   artBusy=true;const pre=new Image();pre.decoding="async";pre.src=thumb(g.art.front,bh*OS);
   const attach=()=>{if(window.BS_BUSY&&BS_BUSY()){setTimeout(attach,300);return}
     requestAnimationFrame(()=>{if(s.img===img&&s.g===g&&s.el)setFront(s,g,g.art.front);artBusy=false;artSwapNext()})};
-  (pre.decode?pre.decode():Promise.resolve()).then(attach,attach); // a picture that won't decode: setFront's own fallback (the generated cover) takes over
+  // (0.4.0) decode() settles as a frame is made: on an idle page (no frame asked for: the test meter's loop used to keep
+  // frames coming) it could wait for ever and hold the whole queue. One frame is asked for (not a loop), and after 1.5 s
+  // the swap goes ahead anyway
+  requestAnimationFrame(()=>{});
+  Promise.race([pre.decode?pre.decode():Promise.resolve(),new Promise(r=>setTimeout(r,1500))]).then(attach,attach); // a picture that won't decode: setFront's own fallback (the generated cover) takes over
 }
 // The back of the box is only needed once you settle on a game.
 function ensureBack(onlyReal){
@@ -869,7 +873,7 @@ function fillDetails(){
   $("dPlay").textContent=g.kind==="rom"||g.kind==="steam"?"Play":"Open";
   $("dInspect").hidden=g.kind!=="rom";$("dManual").hidden=g.kind!=="rom";$("dManual").textContent=hasManual(g)?"Read manual":"Read booklet";
   $("dEmu").hidden=!(g.kind==="rom"&&s.hasEmulator);$("dEmu").textContent=`Open ${s.emulatorName||"emulator"}`;
-  {const b=$("dBoxArt");if(b)b.hidden=!(g.kind==="rom"&&api.artStudio&&g.file);}
+  {const b=$("dBoxArt");if(b)b.hidden=!((g.kind==="rom"&&api.artStudio&&g.file)||(g.kind==="steam"&&api.pcCoverOptions));}{const b=$("dRename");if(b)b.hidden=!(api.renameGame&&((g.kind==="rom"&&g.file)||g.kind==="steam"));} /* (beta.5: PC games too, through the cover picker) */
   {const b=$("dChooseManual");if(b){b.hidden=!(g.kind==="rom"&&api.manualStudio&&g.file);b.textContent=hasManual(g)?"Choose manual…":"Find a manual…"}}
   {const b=$("dGameEmu");if(b){const own=g.kind==="rom"?gameEmu(g):"";b.hidden=!(g.kind==="rom"&&api.gameEmulator);b.textContent=own?(emuLabel(own).length>16?emuLabel(own).slice(0,15)+"…":emuLabel(own)):"Emulator";b.title=own?`Runs in ${own} (just this game). Press to change.`:`Runs in the shelf's ${s.emulatorName||"emulator"}. Press to pick a different build for just this game.`;b.classList.toggle("own",!!own)}}
   renderHints(); // Y's prompt follows this game's trailer / achievements row (updateInfo drew the bar before this fill)
@@ -911,6 +915,50 @@ function bpRender(){if(bp)bp.rows.forEach((r,j)=>r.classList.toggle("on",j===bp.
 function bpMove(d){if(!bp)return;const n=bp.rows.length;let j=bp.i;for(let k=0;k<n;k++){j=(j+d+n)%n;if(!bp.rows[j].disabled)break}if(j!==bp.i){bp.i=j;play_("tick",{dir:d});bpRender()}}
 function bpChoose(){if(bp&&!bp.rows[bp.i].disabled)bpDone(bp.builds[bp.i].exe)}
 function bpDone(exe){if(!bp)return;const b=bp;bp=null;mode=b.prev;b.el.classList.remove("on");setTimeout(()=>b.el.remove(),260);if(exe==null||exe==="")sfx.back();b.res(exe||null)}
+/* (beta.5) a PC game's cover (Steam, Epic, Quiver, added by hand; console games have the Art Studio): SteamGridDB's
+   posters (with the player's key), Steam's own cover, a picture of your own, or back to the automatic one. The arrows /
+   D-pad move through the grid, A uses, B (Esc) closes; a click or tap uses a tile. The main side keeps the addresses:
+   the page sends a game id and an option's key only */
+let cp=null;
+async function pcCoverOpen(g,term){
+  if(!api.pcCoverOptions||cp||bp||(mode!=="browse"&&mode!=="details"))return;
+  const el=document.createElement("div");el.className="buildpick coverpick";
+  const card=document.createElement("div");card.className="bp-card";card.setAttribute("role","dialog");card.setAttribute("aria-label","Choose a cover");
+  const t=document.createElement("div");t.className="bp-title";t.textContent="Choose a cover";
+  const sub=document.createElement("div");sub.className="bp-game";sub.textContent=g.title;
+  const note=document.createElement("div");note.className="cp-note";note.textContent="Looking for covers…";
+  const grid=document.createElement("div");grid.className="cp-grid";
+  const f=document.createElement("div");f.className="bp-foot";f.textContent=`${btnWord("a")} use · ${btnWord("back")} back`;
+  card.append(t,sub,note,grid,f);el.append(card);el.addEventListener("click",e=>{if(e.target===el){cpDone();sfx.back()}});document.body.append(el);
+  cp={el,grid,note,g,term:term||"",items:[],tiles:[],i:0,prev:mode==="details"?"browse":mode,busy:false};if(mode==="details")closeDetails(true);mode="cover";
+  requestAnimationFrame(()=>el.classList.add("on"));sfx.flip();
+  let r=null;try{r=await api.pcCoverOptions(g.id,term||"")}catch(e){if(cp&&cp.g===g)cp.note.textContent=String(e&&e.message||e);r={list:[],sgdb:true,current:false}}
+  if(!cp||cp.g!==g)return;
+  const items=[...(r.sgdb?[{act:"search",icon:"⌕",label:"Search by name…",sub:term?`Now: ${term}`:"Another name to look up"}]:[]),{act:"own",icon:"+",label:"A picture of yours",sub:"JPG, PNG or WebP"},...(r.current?[{act:"reset",icon:"↺",label:"Automatic cover",sub:"Go back to it"}]:[]),
+    ...(r.list||[]).map(x=>({key:x.key,thumb:x.thumb,label:x.label,sub:x.sub||""}))];
+  const n=(r.list||[]).filter(x=>x.source==="steamgriddb").length;
+  cp.note.textContent=n?`${n} cover${n===1?"":"s"} from SteamGridDB${term?` for "${term}"`:""}.`:term?`SteamGridDB has nothing for "${term}". Try another name.`:r.sgdb?"SteamGridDB has no covers for this game. Use a picture of yours.":"For dozens of covers to choose from, add a free SteamGridDB key in Settings → Accounts & services.";
+  cp.items=items;cp.tiles=items.map((it,j)=>{const b=document.createElement("button");b.type="button";b.className="cp-tile";
+    const im=document.createElement("div");im.className="im";if(it.thumb)im.style.backgroundImage=`url("${String(it.thumb).replace(/"/g,"%22")}")`;else im.textContent=it.icon||"";
+    const l=document.createElement("b");l.textContent=it.label;const s=document.createElement("span");s.textContent=it.sub;b.append(im,l,s);
+    b.addEventListener("click",()=>{if(cp){cp.i=j;cpRender();cpChoose()}});b.addEventListener("pointerenter",()=>{if(cp&&inputMode==="pointer"){cp.i=j;cpRender()}});grid.append(b);return b});
+  const first=items.findIndex(x=>x.key&&x.key!=="current");cp.i=first>=0?first:0;cpRender();
+}
+function cpRender(){if(!cp)return;cp.tiles.forEach((b,j)=>b.classList.toggle("on",j===cp.i));const b=cp.tiles[cp.i];if(b)b.scrollIntoView({block:"nearest"})}
+function cpCols(){const T=cp.tiles;if(T.length<2)return 1;const y=T[0].offsetTop;let n=1;while(n<T.length&&T[n].offsetTop===y)n++;return n}
+function cpMove(dx,dy){if(!cp||!cp.tiles.length)return;const n=cp.tiles.length,j=Math.max(0,Math.min(n-1,cp.i+dx+dy*cpCols()));if(j!==cp.i){cp.i=j;play_("tick",{dir:dx||dy});cpRender()}}
+async function cpChoose(){if(!cp||cp.busy)return;const it=cp.items[cp.i],g=cp.g,term=cp.term;if(!it)return;cp.busy=true;
+  try{
+    if(it.act==="own"){const r=await api.pcCoverOwn(g.id);if(r&&r.ok){cpDone();play_("toast");toast(`New cover for ${g.title}`)}else if(cp)cp.busy=false;return}
+    if(it.act==="search"){cpDone();play_("panel");Setup.open({page:"coversearch",id:g.id,title:g.title,term:term||""});return}
+    if(it.act==="reset"){await api.pcCoverReset(g.id);cpDone();play_("toast");toast(`${g.title} is back on its automatic cover`);return}
+    if(it.key==="current"){cpDone();return}
+    cp.note.textContent="Downloading the cover…";await api.pcCoverUse(g.id,it.key);cpDone();play_("toast");toast(`New cover for ${g.title}`);
+  }catch(e){if(cp){cp.busy=false;cp.note.textContent=String(e&&e.message||e)}play_("error")}
+}
+function cpDone(){if(!cp)return;const c=cp;cp=null;mode=c.prev;c.el.classList.remove("on");setTimeout(()=>c.el.remove(),260)}
+function cpKey(k){if(k==="ArrowLeft")cpMove(-1,0);else if(k==="ArrowRight")cpMove(1,0);else if(k==="ArrowUp")cpMove(0,-1);else if(k==="ArrowDown")cpMove(0,1);
+  else if(k==="Enter"||k===" ")cpChoose();else if(k==="Escape"||k==="Backspace"){cpDone();sfx.back()}else return false;return true}
 function bpKey(k){if(k==="ArrowUp")bpMove(-1);else if(k==="ArrowDown")bpMove(1);else if(k==="Enter"||k===" ")bpChoose();else if(k==="Escape"||k==="Backspace")bpDone(null);else return false;return true}
 /* ---------- launching ---------- */
 let launchTimer,runningKind=null;
@@ -1500,6 +1548,7 @@ api.onExited(async info=>{if(window.Sound&&Sound.nextSong)Sound.nextSong("game")
 function back(){
   if(mode==="sort"){closeSort();return}
   if(mode==="build"){bpDone("");return}
+  if(mode==="cover"){cpDone();sfx.back();return}
   if(mode==="achv"){closeAchievements();return}
   if(mode==="boot"){endBoot(true);return}
   if(mode==="customize"){if(!czClosePick())closeCustomize();return}
@@ -1962,7 +2011,7 @@ function qsAct(k){const g=qsGame();if(!g)return;
 // One game's Art Studio. The Android build brings its own handheld-sized studio (web-extras/android-studio.js: a row per
 // part, big pictures, the bottom screen as a touch companion); everywhere else it's the Settings picker, as before.
 function artStudioFor(g){const sh=shelfFor(g);play_("panel");if(window.BS_STUDIO&&BS_STUDIO.open({systemId:sh.id,file:g.file,title:g.title,id:g.id,game:g}))return;Setup.open({page:"artgame",systemId:sh.id,file:g.file,title:g.title})}
-async function qsChooseArt(g){if(!api.chooseArt)return;try{const r=await api.chooseArt(g.id);if(r&&r.ok){play_("toast");toast(`New box art for ${g.title}`)}}catch(e){toast(String(e&&e.message||e))}}
+async function qsChooseArt(g){if(g&&g.kind==="steam"&&api.pcCoverOptions){pcCoverOpen(g);return} /* (beta.5) PC games: the cover picker */if(!api.chooseArt)return;try{const r=await api.chooseArt(g.id);if(r&&r.ok){play_("toast");toast(`New box art for ${g.title}`)}}catch(e){toast(String(e&&e.message||e))}}
 let qsHr=0;
 function qsHoldStart(b){if(qsHr)return;const t0=performance.now(),bar=b.querySelector(".qm-hb");
   const step=t=>{const k=Math.min(1,Math.max(0,(t-t0)/1000));if(bar)bar.style.width=k*100+"%";if(k>=1){qsHr=0;const kind=b.dataset.v;qmClose(true);toast(kind==="shutdown"?"Shutting down…":"Restarting…");if(api.power)api.power(kind);return}qsHr=requestAnimationFrame(step)};qsHr=requestAnimationFrame(step)}
@@ -2885,6 +2934,7 @@ addEventListener("keydown",e=>{
   if(mode==="setup"){Setup.key(e);return}
   if(mode==="sort"){setInput("kbd");if(sortKey(e.key))e.preventDefault();return}
   if(mode==="build"){setInput("kbd");if(bpKey(e.key))e.preventDefault();return}
+  if(mode==="cover"){setInput("kbd");if(cpKey(e.key))e.preventDefault();return}
   if((e.key==="-"||e.key==="_"||e.key==="="||e.key==="+")&&mode!=="inspect"&&mode!=="museum"){setVol(curVol()+(e.key==="-"||e.key==="_"?-.05:.05),true);play_("tick",{dir:1});e.preventDefault();return}
   if(mode==="inspect"){inspectKey(e);return}
   if(mode==="museum"&&musFind.open){const a=document.activeElement,typing=a&&a.tagName==="INPUT"&&musFind.el.contains(a);if(e.key==="Escape"){e.preventDefault();if(typing)a.blur();else if(!(window.BoxshelfIA&&BoxshelfIA.back&&BoxshelfIA.back()))musFindClose();return}if(typing)return;if(e.key==="PageDown"||e.key==="PageUp"){e.preventDefault();musFindScroll((e.key==="PageDown"?1:-1)*innerHeight*.5);return}if(e.key==="Tab"){e.preventDefault();musFindSection(e.shiftKey?-1:1);return}const m={ArrowUp:"up",ArrowDown:"down",ArrowLeft:"left",ArrowRight:"right",Backspace:"back"}[e.key];if(m){e.preventDefault();musFindKey(m)}return}
@@ -3149,6 +3199,10 @@ function pollBody(t){
     // the PS button (DualSense / DualShock; Chromium's button 16) opens the Home menu, as the Home key does (Xbox's Guide
     // never reaches Chromium: the controller helper reports that one). Not on Android: the Thor's Home is the system's
     if(!ANDROID)edge(gp,16,()=>{if((mode==="browse"||mode==="details")&&api.openShelfMenu&&cfgInfo&&cfgInfo.config.ui.homeMenu!==false){qmClose(true);api.openShelfMenu()}});
+    if(mode==="cover"){
+      if(h&&!prevBtn.h){setInput("pad");cpMove(h,0)}if(v&&!prevBtn.v){setInput("pad");cpMove(0,v)}prevBtn.v=!!v;prevBtn.h=!!h;
+      edge(gp,0,()=>cpChoose());edge(gp,1,()=>{cpDone();sfx.back()});return;
+    }
     if(mode==="build"){
       if(v&&!prevBtn.v){setInput("pad");bpMove(v)}prevBtn.v=!!v;prevBtn.h=!!h;
       edge(gp,0,()=>bpChoose());edge(gp,1,()=>bpDone(""));return;
@@ -3481,7 +3535,12 @@ async function chooseGameEmu(g){if(!g||g.kind!=="rom"||!api.gameEmulator)return;
 // the Details panel's "Box art" button (1.67): opens Settings → Art & manuals straight at this game's mix (front, back,
 // spine and disc looks, Pick exact for any part); B there goes up to the console's games, then the Art page
 (function(){const c=$("dClose");if(!c||$("dBoxArt"))return;const b=document.createElement("button");b.className="btn";b.type="button";b.id="dBoxArt";b.textContent="Box art";b.title="Choose this game's box art: front, back, spine and disc";
-  b.addEventListener("click",()=>{const g=curGame();if(!g||g.kind!=="rom"||!api.artStudio)return;artStudioFor(g)});c.before(b)})();
+  b.addEventListener("click",()=>{const g=curGame();if(g&&g.kind==="steam"&&api.pcCoverOptions){closeDetails(true);pcCoverOpen(g);return}if(!g||g.kind!=="rom"||!api.artStudio)return;artStudioFor(g)});c.before(b)})();
+// (beta.5) Details → Rename: a console or PC game's own name (Settings' Rename page, so a controller gets the on-screen
+// keyboard); main applies it everywhere it reads games, so box art and manuals are looked up by it too
+(function(){const c=$("dClose");if(!c||$("dRename"))return;const b=document.createElement("button");b.className="btn";b.type="button";b.id="dRename";b.textContent="Rename";b.title="Give this game the name you want on your shelf";
+  b.addEventListener("click",()=>{const g=curGame();if(!g||!api.renameGame||!(g.kind==="rom"||g.kind==="steam"))return;const s=g._sh||shelfFor(g);const ref=g.kind==="rom"?{systemId:s.id,file:g.file}:{id:g.id};
+    closeDetails(true);play_("panel");Setup.open({page:"rename",ref,title:g.title,fileTitle:g.fileTitle||""})});c.before(b)})();
 // the Details panel's "Choose manual…" button (Manual Studio): every manual found for this game side by side, in Settings
 // → Art & manuals (the same picker as the box art's); B there goes up to the console's games, then the Art page
 (function(){const m=$("dManual");if(!m||$("dChooseManual"))return;const b=document.createElement("button");b.className="btn";b.type="button";b.id="dChooseManual";b.textContent="Choose manual…";b.title="Every manual found for this game, side by side: pick another language, region or scan, or add your own PDF";
@@ -3493,6 +3552,8 @@ async function chooseGameEmu(g){if(!g||g.kind!=="rom"||!api.gameEmulator)return;
 window.Shelf={
   reloadCustomThemes:()=>loadCustomThemes(), // (Settings → Display: Find themes again / Make a theme from a picture)
   companionPlay,smoothTest,holdInput,
+  // (beta.5) Settings → Search for a cover: the picker again for that game, with SteamGridDB's covers for the typed name
+  pcCoverSearch:(id,term)=>{const g=allShelves.flatMap(s=>s.items||[]).find(x=>x&&x.id===id);if(g)setTimeout(()=>pcCoverOpen(g,term),350)},
   homeButton:()=>{if(qm.open){qmClose();return "closed"}qmOpen();return qm.open?"opened":"busy"},quickMenuOpen:()=>!!qm.open, // the Thor's Home key while Boxshelf is the Home app
   _mus:{set:(k,v)=>musSetOpt(k,v),style:()=>musStyle(),hist:h=>{HIST=Object.assign({},HIST,h||{})},tv:()=>({ch:tvS.ch,n:tvS.list.length,list:tvS.list.slice(0,4).map(e=>String(e.key).slice(0,12)),i:tvS.i,ads:tvS.ads.length,bad:[...tvS.bad],guide:!!tvS.guide}),games:()=>allShelves.filter(sh=>sh.kind==="console").flatMap(sh=>sh.items.filter(isGame).map(g=>({id:g.id,title:g.title,sys:sh.id})))}, // museum test hooks (the harness can't see these names)
   refresh,flushSaves,toast,shuffle,cleanLogo,attractNow:()=>{lastInputAt=-1e9;attractCheck()},sound:(o)=>{if(o&&o.enabled!=null){soundOn=!!o.enabled;musTvVol()}if(o&&o.volume!=null&&cfgInfo){cfgInfo.config.ui.volume=+o.volume;paintVol()}if(window.Sound){Sound.set(o);if(o.preview)Sound.play(o.preview);if(o.music!=null||o.musicLevel!=null){if(o.music!=null)mmTrack=String(o.music);if(o.musicLevel!=null)mmLevel=+o.musicLevel;ambient(mmWant)}else if(o.enabled===true)ambient(mmWant)}},raReload:()=>{RA.shelf={};RA.game.clear();raInit()},

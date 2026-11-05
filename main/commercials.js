@@ -9,7 +9,7 @@ const crypto = require('crypto');
 let log = () => {}, dir = null, fetchBuf = null, fetchFile = null, memoFile = null, memo = null;
 function init(opts) { log = opts.log || log; dir = opts.dir; fetchBuf = opts.fetchBuf; fetchFile = opts.fetchFile || null; memoFile = opts.memoFile; }
 const CAP = 600 * 1024 * 1024; // the cache's size
-const CONSOLE = { gc: ['Nintendo GameCube', 'GameCube'], wii: ['Nintendo Wii', 'Wii'], wiiu: ['Wii U'], sw: ['Nintendo Switch'], sw2: ['Nintendo Switch 2', 'Switch 2'], psp: ['PSP', 'PlayStation Portable'], ps2: ['PlayStation 2', 'PS2'], ps3: ['PlayStation 3', 'PS3'], ps4: ['PlayStation 4', 'PS4'], ps5: ['PlayStation 5', 'PS5'], x360: ['Xbox 360'], n3ds: ['Nintendo 3DS', '3DS'] };
+const CONSOLE = { gc: ['Nintendo GameCube', 'GameCube'], wii: ['Nintendo Wii', 'Wii'], wiiu: ['Wii U'], sw: ['Nintendo Switch'], sw2: ['Nintendo Switch 2', 'Switch 2'], psp: ['PSP', 'PlayStation Portable'], ps2: ['PlayStation 2', 'PS2'], ps3: ['PlayStation 3', 'PS3'], ps4: ['PlayStation 4', 'PS4'], ps5: ['PlayStation 5', 'PS5'], x360: ['Xbox 360'], n3ds: ['Nintendo 3DS', '3DS'], psx: ['PlayStation', 'PS1', 'PSX'], nes: ['Nintendo Entertainment System', 'NES'], snes: ['Super Nintendo', 'SNES'], n64: ['Nintendo 64', 'N64'], gb: ['Game Boy'], gbc: ['Game Boy Color'], gba: ['Game Boy Advance', 'GBA'], nds: ['Nintendo DS'], megadrive: ['Sega Genesis', 'Mega Drive'], mastersystem: ['Master System'], gamegear: ['Game Gear'], dreamcast: ['Dreamcast'] };
 const AD = /\b(commercials?|tv spots?|tv ads?|television (ad|commercial)s?|adverts?|advertisements?|ad)\b/i;
 const NOT_AD = /\b(trailer|review|gameplay|walkthrough|let'?s play|longplay|speedrun|soundtrack|ost|unboxing)\b/i;
 

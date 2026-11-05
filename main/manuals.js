@@ -6,7 +6,7 @@ const https = require('https');
 const { scanSystem } = require('./scanner');
 const { isFile, artBase, manualDirFor } = require('./paths');
 
-const SYSTEM_WORDS = { gc: ['gamecube', 'game cube', 'gcn', 'ngc'], wii: ['wii'], wiiu: ['wii u', 'wiiu'], psp: ['psp', 'playstation portable'], sw: ['switch'], sw2: ['switch 2', 'switch'], ps3: ['ps3', 'playstation 3'], ps4: ['ps4', 'playstation 4'], ps5: ['ps5', 'playstation 5'], ps2: ['ps2', 'playstation 2'], x360: ['xbox 360', 'xbox360', 'x360'], n3ds: ['3ds', 'nintendo 3ds'] };
+const SYSTEM_WORDS = { gc: ['gamecube', 'game cube', 'gcn', 'ngc'], wii: ['wii'], wiiu: ['wii u', 'wiiu'], psp: ['psp', 'playstation portable'], sw: ['switch'], sw2: ['switch 2', 'switch'], ps3: ['ps3', 'playstation 3'], ps4: ['ps4', 'playstation 4'], ps5: ['ps5', 'playstation 5'], ps2: ['ps2', 'playstation 2'], x360: ['xbox 360', 'xbox360', 'x360'], n3ds: ['3ds', 'nintendo 3ds'], psx: ['playstation', 'psx', 'ps1'], nes: ['nes', 'nintendo entertainment system', 'famicom'], snes: ['snes', 'super nintendo', 'super famicom'], n64: ['n64', 'nintendo 64'], gb: ['game boy', 'gameboy'], gbc: ['game boy color', 'gameboy color', 'gbc'], gba: ['game boy advance', 'gba'], nds: ['nintendo ds', 'nds'], megadrive: ['genesis', 'mega drive', 'megadrive'], mastersystem: ['master system', 'sms'], gamegear: ['game gear'], dreamcast: ['dreamcast'] };
 const MAX_PAGES = 60, PAGE_WIDTH = 1600, PARALLEL = 4; /* page images from archive.org: 1600 px wide keeps small print readable (was 800) */
 let log = () => {};
 function init(logger) { if (logger) log = logger; }
@@ -92,10 +92,14 @@ function similarity(a, b) { const A = words(a), B = words(b); if (!A.size) retur
   const wrongSequel = got.some(n => !A.has(n)) || (want.length && !want.every(n => B.has(n)) && got.length); /* a different number in the title = a different game */
   return recall * (noise >= 3 ? .6 : noise === 2 ? .8 : 1) * (wrongSequel ? .4 : 1); }
 
-const PLATFORM_RE = { gc: /\b(game ?cube|gcn|ngc)\b/i, wii: /\bwii\b(?! ?u)/i, wiiu: /\bwii ?u\b/i, sw: /\bswitch\b/i, sw2: /\bswitch ?2\b/i, psp: /\b(psp|playstation portable)\b/i, ps2: /\b(ps2|playstation 2)\b/i, ps3: /\b(ps3|playstation 3)\b/i, ps4: /\b(ps4|playstation 4)\b/i, ps5: /\b(ps5|playstation 5)\b/i, x360: /\b(xbox ?360|x360)\b/i, pc: /\b(pc|windows|dos|mac)\b/i, xone: /\bxbox one\b/i, xbox: /\bxbox\b(?! ?(360|one))/i, ds: /\b(nds|nintendo ds)\b/i, n3ds: /\b(3ds|nintendo 3ds)\b/i };
+const PLATFORM_RE = { gc: /\b(game ?cube|gcn|ngc)\b/i, wii: /\bwii\b(?! ?u)/i, wiiu: /\bwii ?u\b/i, sw: /\bswitch\b/i, sw2: /\bswitch ?2\b/i, psp: /\b(psp|playstation portable)\b/i, ps2: /\b(ps2|playstation 2)\b/i, ps3: /\b(ps3|playstation 3)\b/i, ps4: /\b(ps4|playstation 4)\b/i, ps5: /\b(ps5|playstation 5)\b/i, x360: /\b(xbox ?360|x360)\b/i, pc: /\b(pc|windows|dos|mac)\b/i, xone: /\bxbox one\b/i, xbox: /\bxbox\b(?! ?(360|one))/i, ds: /\b(nds|nintendo ds)\b/i, n3ds: /\b(3ds|nintendo 3ds)\b/i,
+  // (beta.6) the retro shelves (nds is the DS shelf's id; ds stays for uploads that name it)
+  nds: /\b(nds|nintendo ds)\b/i, psx: /\b(playstation|psx|ps1)\b(?! ?[2-5])(?! portable)/i, nes: /\b(nes|famicom)\b/i, snes: /\b(snes|super nintendo|super famicom)\b/i,
+  n64: /\b(n64|nintendo 64)\b/i, gb: /\bgame ?boy\b(?! ?(colou?r|advance))/i, gbc: /\b(game ?boy colou?r|gbc)\b/i, gba: /\b(game ?boy advance|gba)\b/i,
+  megadrive: /\b(genesis|mega ?drive)\b/i, mastersystem: /\bmaster system\b/i, gamegear: /\bgame gear\b/i, dreamcast: /\bdreamcast\b/i };
 /* the title names a console and it isn't ours (Xbox 360's sibling "Xbox One" counts as other) */
 function otherPlatform(sysId, t) { const own = PLATFORM_RE[sysId]; if (own && own.test(t)) return false; return Object.entries(PLATFORM_RE).some(([k, re]) => k !== sysId && re.test(t)); }
-const GDB_SYSTEM = { gc: 'nintendo-gamecube', wii: 'nintendo-wii', wiiu: 'nintendo-wii-u', psp: 'sony-psp', sw: 'nintendo-switch', ps3: 'sony-playstation-3', ps4: 'sony-playstation-4', ps2: 'sony-playstation-2', x360: 'microsoft-xbox-360', n3ds: 'nintendo-3ds' };
+const GDB_SYSTEM = { gc: 'nintendo-gamecube', wii: 'nintendo-wii', wiiu: 'nintendo-wii-u', psp: 'sony-psp', sw: 'nintendo-switch', ps3: 'sony-playstation-3', ps4: 'sony-playstation-4', ps2: 'sony-playstation-2', x360: 'microsoft-xbox-360', n3ds: 'nintendo-3ds', psx: 'sony-playstation', nes: 'nintendo-nes', snes: 'nintendo-snes', n64: 'nintendo-n64', gb: 'nintendo-game-boy', gbc: 'nintendo-game-boy-color', gba: 'nintendo-game-boy-advance', nds: 'nintendo-ds', megadrive: 'sega-genesis', mastersystem: 'sega-master-system', gamegear: 'sega-game-gear', dreamcast: 'sega-dreamcast' }; // (beta.6: the retro shelves, each checked on gamesdatabase.org)
 const LANG_NAMES = { eng: 'English', en: 'English', fre: 'French', fra: 'French', fr: 'French', ger: 'German', deu: 'German', de: 'German', spa: 'Spanish', es: 'Spanish', ita: 'Italian', it: 'Italian', jpn: 'Japanese', ja: 'Japanese', por: 'Portuguese', dut: 'Dutch', nld: 'Dutch' };
 function getText(url, hops = 0) {
   return limited(url, hops, url => new Promise((resolve, reject) => {

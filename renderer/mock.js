@@ -30,6 +30,15 @@ const folder={gc:"Gamecube",wii:"Wii",wiiu:"Wii U",sw:"Switch",psp:"PSP",ps3:"PS
 // so the other passes keep their console counts
 const SW2=/[?&]sw2=1/.test(location.search),PCX=/[?&]pcx=1/.test(location.search);
 if(SW2){consoles.push({id:"sw2",name:"Switch 2",emulatorName:"Eglantine",exeNames:["eglantine.exe"],extensions:["nsp","xci","nup"],gameArgs:'-f -g "{rom}"'});titles.sw2=["Glimmer Kart","Hollow Ridge","Tidal Run"];emu.sw2="Switch 2 emu\\Selvet Forks\\performance-6\\eglantine.exe";folder.sw2="Switch 2"}
+// ?retro=1 (beta.6 device test): a few of the retro shelves (RetroArch, DuckStation) with games, for their cases, titles,
+// Settings pages and the wizard
+const RETRO=/[?&]retro=1/.test(location.search);
+if(RETRO){[["psx","PlayStation","DuckStation","DuckStation\\duckstation-qt-x64-ReleaseLTCG.exe","PS1","cue",["Crystal Cavern","Neon Drift","Polygon Knights"]],
+  ["snes","SNES","RetroArch","RetroArch-Win64\\retroarch.exe","SNES","sfc",["Super Moon Quest","Pixel Paddle","Kart Comet"]],
+  ["gba","Game Boy Advance","RetroArch","RetroArch-Win64\\retroarch.exe","GBA","gba",["Pocket Pilots Advance","Rune Rangers"]],
+  ["megadrive","Mega Drive","RetroArch","RetroArch-Win64\\retroarch.exe","Mega Drive","md",["Blast Hedgehog","Street Rage"]],
+  ["dreamcast","Dreamcast","RetroArch","RetroArch-Win64\\retroarch.exe","Dreamcast","chd",["Soul Spiral","Crazy Courier"]]].forEach(([id,name,en,ex,fo,e,ts])=>{
+  consoles.push({id,name,emulatorName:en,exeNames:[ex.split("\\").pop()],extensions:[e],gameArgs:'"{rom}"'});titles[id]=ts;emu[id]=ex;folder[id]=fo})}
 function mockSw2Builds(){const s=config.systems.sw2||{},B=[["Switch 2 emu\\Selvet Forks\\performance-6\\eglantine.exe","Selvet · Performance 6",false],["Switch 2 emu\\Lichii\\pgo\\lichii.exe","Lichii pgo",true],["Switch 2 emu\\Orchid v0.7.0\\orchid.exe","Orchid v0.7.0",false]].map(([e,label,nup],i)=>({exe:root+"\\"+e,group:"",name:label,label,date:Date.UTC(2026,9,20+i),nup}));
   (Array.isArray(s.buildDirs)?s.buildDirs:[]).forEach((d,i)=>B.push({exe:d+"\\fork-"+i+"\\eglantine.exe",group:"",name:"Fork "+(i+1),label:"Fork "+(i+1),date:Date.UTC(2026,10,1),nup:false}));
   (Array.isArray(s.buildExes)?s.buildExes:[]).forEach(x=>B.push({exe:x,group:"",name:x.split("\\").pop(),label:"Added · "+x.split("\\").pop(),date:Date.UTC(2026,10,2),nup:false}));
@@ -39,6 +48,7 @@ consoles.forEach(c=>config.systems[c.id]={enabled:true,emulator:"",gameArgs:c.ga
 // Inside the Android shell (or with ?shelf=1) skip the wizard and open on a filled demo shelf, for performance testing
 if(window.Capacitor||/[?&]shelf=1/.test(location.search)){config.setupDone=true;consoles.forEach(c=>{config.systems[c.id].emulator=root+"\\"+emu[c.id];config.systems[c.id].romDirs=[root+"\\ROMS\\"+folder[c.id]];});}
 const ext={gc:"rvz",wii:"rvz",wiiu:"wua",sw:"nsp",psp:"iso",ps3:"iso",n3ds:"3ds",sw2:"nsp"};
+if(RETRO)Object.assign(ext,{psx:"cue",snes:"sfc",gba:"gba",megadrive:"md",dreamcast:"chd"});
 let onExit=()=>{};const apiHooks={};
 const wait=ms=>new Promise(r=>setTimeout(r,ms));const mockDl={};
 window.boxshelf={
@@ -59,18 +69,25 @@ window.boxshelf={
     const out=[];
     consoles.forEach(c=>{const s=config.systems[c.id];if(!s.enabled||(!s.emulator&&!s.romDirs.length))return;
       out.push({id:c.id,kind:"console",name:c.name,emulatorName:c.emulatorName,hasEmulator:!!s.emulator,emulator:s.emulator,gameArgs:s.gameArgs,bootOnLaunch:s.bootOnLaunch,
-        games:s.romDirs.length?titles[c.id].map((t,i)=>({kind:"rom",id:c.id+i,title:t,region:"USA",ext:ext[c.id],sizeBytes:(400+i*97)*1048576,file:`${s.romDirs[0]}\\${t} (USA).${ext[c.id]}`,discs:[1],info:{release:String(1999+((i*7)%12))+"-06-01",dev:["Moonbeam Works","Hollow Pine","Studio Kite"][i%3],pub:["Northlight","Moonbeam Works"][i%2],genres:["Platform","Racing","Puzzle","Adventure"][i%4],rating:(2.8+((i*13)%22)/10).toFixed(1),...(window.__TRAILERS&&i%2===0?{video:"https://www.youtube.com/watch?v=aaaaaaaaaaa"}:{})} /* __TRAILERS: some games with a trailer (the museum TV's trailers channel) */,art:i===0&&c.id==="gc"?{manual:window.__mockManual||[]}:{}})):[]})});
+        games:s.romDirs.length?titles[c.id].map((t,i)=>({kind:"rom",id:c.id+i,...(()=>{const o=(config.games||{})[c.id+":"+`${s.romDirs[0]}\\${t} (USA).${ext[c.id]}`];return o&&o.title?{title:o.title,fileTitle:t}:{title:t}})(),region:"USA",ext:ext[c.id],sizeBytes:(400+i*97)*1048576,file:`${s.romDirs[0]}\\${t} (USA).${ext[c.id]}`,discs:[1],info:{release:String(1999+((i*7)%12))+"-06-01",dev:["Moonbeam Works","Hollow Pine","Studio Kite"][i%3],pub:["Northlight","Moonbeam Works"][i%2],genres:["Platform","Racing","Puzzle","Adventure"][i%4],rating:(2.8+((i*13)%22)/10).toFixed(1),...(window.__TRAILERS&&i%2===0?{video:"https://www.youtube.com/watch?v=aaaaaaaaaaa"}:{})} /* __TRAILERS: some games with a trailer (the museum TV's trailers channel) */,art:i===0&&c.id==="gc"?{manual:window.__mockManual||[]}:{}})):[]})});
     if(config.steam.enabled&&config.steam.path)out.push({id:"pc",kind:"steam",name:"PC",games:["Cobalt Drift","Glasshouse","Hollow Crown","Night Courier"].map((t,i)=>({kind:"steam",id:"s"+i,appid:String(400000+i),title:t,minutes:i*510,lastPlayed:Date.now()/1000-i*86400*3,sizeBytes:(8+i*11)*1073741824,art:{}}))});
     // ?pcx=1 (beta.4 device test): an Epic game on the PC shelf, and a Custom shelf (a Quiver recomp + the games added in Settings)
     if(PCX){const pc=out.find(s=>s.id==="pc")||(out.push({id:"pc",kind:"steam",name:"PC",games:[]}),out[out.length-1]);pc.games.push({kind:"steam",source:"epic",id:"epic-ember-trail",title:"Ember Trail",art:{}});
-      const mine=[{kind:"steam",source:"quiver",id:"quiver-quarantine",title:"Quarantine",art:{}},...((config.pc&&config.pc.custom)||[]).map(c=>({kind:"steam",source:"custom",id:"custom-"+c.id,title:c.title||"Game",art:{}}))];
+      const own=(id,t)=>{const o=(config.games||{})[id];return o&&o.title?{title:o.title,fileTitle:t}:{title:t}};
+      const mine=[{kind:"steam",source:"quiver",id:"quiver-quarantine",...own("quiver-quarantine","Quarantine"),art:{}},...((config.pc&&config.pc.custom)||[]).map(c=>({kind:"steam",source:"custom",id:"custom-"+c.id,title:c.title||"Game",art:{}}))];
       out.push({id:"custom",kind:"steam",name:"Custom",games:mine})}
     const apps=["stremio","nuvio"].filter(a=>config.apps[a].enabled&&config.apps[a].path).map(a=>({kind:"app",id:"app-"+a,appId:a,title:a==="stremio"?"Stremio":"Nuvio",path:config.apps[a].path,art:{}}));
     if(apps.length)out.push({id:"media",kind:"apps",name:"Media",games:apps});
     return out;
   },
   pick:async o=>o.kind==="folder"?root+"\\ROMS\\Picked":root+"\\Picked\\program.exe",
-  ...(PCX?{launchPc:async id=>{window.__pcLaunched=(window.__pcLaunched||[]).concat(id);await wait(100);if(id.startsWith("epic-"))return {external:true};setTimeout(()=>onExit({code:0}),3000);return {pid:4242,cover:3}},pcStatus:async()=>({quiver:root+"\\Quiver",epic:1}),findQuiver:async()=>root+"\\Quiver"}:{}),
+  // (beta.5) Details → Rename: a name of its own per game (main keeps it in config.games; the scan above applies it)
+  renameGame:async({systemId,file,id,title})=>{await wait(80);const k=systemId?systemId+":"+file:String(id);config.games=config.games||{};const v=String(title||"").trim();if(v)config.games[k]=Object.assign({},config.games[k],{title:v});else if(config.games[k])delete config.games[k].title;return {ok:true,title:v}},
+  ...(PCX?{pcCoverOptions:async(id,term)=>{await wait(150);window.__pcCoverTerm=term||"";const svg=(c,t)=>"data:image/svg+xml;charset=utf-8,"+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="300"><rect width="200" height="300" fill="${c}"/><text x="20" y="160" font-size="22" fill="#fff">${t}</text></svg>`);
+      const cur=(window.__pcCovers||{})[id];return {sgdb:true,current:!!cur,list:[...(cur?[{key:"current",thumb:svg("#555","Yours"),source:"yours",label:"Your choice now"}]:[]),{key:"sg0",thumb:svg("#a33","Grid 1"),source:"steamgriddb",label:"SteamGridDB · Alternate",sub:"by someone"},{key:"sg1",thumb:svg("#3a3","Grid 2"),source:"steamgriddb",label:"SteamGridDB",sub:"by another"},{key:"sg2",thumb:svg("#33a","Grid 3"),source:"steamgriddb",label:"SteamGridDB · White logo",sub:""}]}},
+    pcCoverUse:async(id,key)=>{await wait(100);window.__pcCovers=Object.assign(window.__pcCovers||{},{[id]:key});return {ok:true}},pcCoverOwn:async id=>{window.__pcCovers=Object.assign(window.__pcCovers||{},{[id]:"own"});return {ok:true}},
+    pcCoverReset:async id=>{if(window.__pcCovers)delete window.__pcCovers[id];return {ok:true}},
+    launchPc:async id=>{window.__pcLaunched=(window.__pcLaunched||[]).concat(id);await wait(100);if(id.startsWith("epic-"))return {external:true};setTimeout(()=>onExit({code:0}),3000);return {pid:4242,cover:3}},pcStatus:async()=>({quiver:root+"\\Quiver",epic:1}),findQuiver:async()=>root+"\\Quiver"}:{}),
   ...(SW2?{sw2Builds:async()=>{await wait(120);const b=mockSw2Builds();return {builds:b,nup:false,first:b[0].exe}}}:{}),
   downloadCovers:async ids=>({systems:ids.map(id=>({id,name:id,total:10,front:8,back:6,spine:5,had:0,missed:["Example Game"]}))}),
   onCoversProgress:()=>{},

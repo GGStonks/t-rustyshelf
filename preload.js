@@ -37,6 +37,12 @@ contextBridge.exposeInMainWorld('boxshelf', {
   launchPc: id => call('launch:pc', { id }), // (beta.4) Epic, Quiver and hand-added games, by id
   findQuiver: () => call('pc:findQuiver'),
   pcStatus: () => call('pc:status'),
+  // (beta.5) a PC game's cover picker
+  pcCoverOptions: (id, term) => call('pccover:options', { id, term }),
+  pcCoverUse: (id, key) => call('pccover:use', { id, key }),
+  pcCoverOwn: id => call('pccover:own', { id }),
+  pcCoverReset: id => call('pccover:reset', { id }),
+  renameGame: o => call('game:rename', o), // (beta.5) { systemId, file } or { id }, and title ('' = back to the file's name)
   themes: () => call('themes:list'),
   setTheme: (systemId, kind, file) => call('themes:set', { systemId, kind, file }),
   removeTheme: (systemId, kind) => call('themes:remove', { systemId, kind }),

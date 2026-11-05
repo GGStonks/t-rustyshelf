@@ -102,6 +102,61 @@ module.exports = async function pcGamesPass({ browser, base, check, newPage }) {
       st.pcPage.includes('Show installed Epic Games') && st.page.includes("Show Quiver's games") && st.page.includes('Add a game') && /Found/.test(st.quiverRow), JSON.stringify({ pc: st.pcPage, page: st.page, q: st.quiverRow }).slice(0, 500));
     check('PC games (Windows): Add a game puts the program on the Custom shelf named from its file; Remove (pressed twice) takes it off',
       (st.added || []).length === 1 && st.added[0].title === 'program' && /program\.exe$/.test(st.added[0].exe) && st.after.includes('program') && (st.removed || []).length === 0, JSON.stringify({ added: st.added, removed: st.removed }).slice(0, 400));
+    // (beta.5) a PC game's cover picker: Details → Box art opens it with the options (SteamGridDB's, a picture of yours);
+    // the arrows move, A uses one (by key), the picker closes and the shelf says so; opened again, Automatic cover is offered
+    const cv = await page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms));
+      const key = k => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+      for (let i = 0; i < 40 && Shelf.getMode() !== 'browse'; i++) await w(250);
+      const word = () => (document.getElementById('sysWord') || {}).textContent || '';
+      for (let i = 0; i < 20 && !/^Custom/.test(word().trim()); i++) { key('ArrowDown'); await w(500); }
+      const out = { game: Shelf._qs().g };
+      key('i'); await w(900); const btn = document.getElementById('dBoxArt'); out.button = !!btn && !btn.hidden; if (btn) btn.click(); await w(900);
+      const tiles = () => [...document.querySelectorAll('.coverpick .cp-tile')].map(t => t.textContent.trim());
+      out.mode = Shelf.getMode(); out.tiles = tiles(); out.note = ((document.querySelector('.coverpick .cp-note') || {}).textContent || '');
+      out.at = ((document.querySelector('.coverpick .cp-tile.on') || {}).textContent || '').trim();
+      key('ArrowRight'); await w(200); out.moved = ((document.querySelector('.coverpick .cp-tile.on') || {}).textContent || '').trim();
+      key('Enter'); await w(900); out.used = Object.assign({}, window.__pcCovers || {}); out.after = Shelf.getMode(); out.toast = ((document.getElementById('toast') || {}).textContent || '');
+      key('i'); await w(900); const b2 = document.getElementById('dBoxArt'); if (b2) b2.click(); await w(900); out.again = tiles();
+      key('Escape'); await w(500); out.closed = Shelf.getMode();
+      // Search by name: the picker's first tile → Settings' Search for page → Enter → the picker again, for that name
+      key('i'); await w(900); const b3 = document.getElementById('dBoxArt'); if (b3) b3.click(); await w(900);
+      const first = document.querySelector('.coverpick .cp-tile'); out.searchTile = first ? first.textContent.trim() : ''; if (first) first.click();
+      for (let i = 0; i < 40 && !document.querySelector('#bss.on .bss-row'); i++) await w(150); await w(600);
+      out.searchPage = (document.querySelector('#bss .bss-title') || {}).textContent || '';
+      out.searchRows = [...document.querySelectorAll('#bss .bss-row .nm')].map(e => e.textContent).slice(0, 6);
+      key('Enter'); await w(400); const inp = document.querySelector('#bss .bss-edit'); if (inp) { inp.value = 'Quarantine 1994'; inp.dispatchEvent(new Event('input', { bubbles: true })); } key('Enter');
+      for (let i = 0; i < 30 && Shelf.getMode() !== 'cover'; i++) await w(200); await w(600);
+      out.searchMode = Shelf.getMode(); out.term = window.__pcCoverTerm; out.searchNote = ((document.querySelector('.coverpick .cp-note') || {}).textContent || '');
+      key('Escape'); await w(500); return out; });
+    check('PC games (Windows): Box art on a PC game opens the cover picker (SteamGridDB covers, a picture of yours); A uses one and the picker closes; Automatic cover is offered after',
+      cv.button && cv.mode === 'cover' && cv.tiles.length >= 4 && cv.tiles.some(t => /A picture of yours/.test(t)) && /SteamGridDB/.test(cv.at) && cv.moved !== cv.at && /3 covers from SteamGridDB/.test(cv.note)
+        && cv.used['quiver-quarantine'] === 'sg1' && cv.after === 'browse' && /New cover for Quarantine/.test(cv.toast) && cv.again.some(t => /Automatic cover/.test(t)) && cv.closed === 'browse', JSON.stringify(cv).slice(0, 600));
+    check('PC games (Windows): the cover picker\'s Search by name opens a Search for page; Enter brings the picker back with covers for the typed name',
+      /Search by name/.test(cv.searchTile) && /Search for a cover/.test(cv.searchPage) && cv.searchMode === 'cover' && cv.term === 'Quarantine 1994' && /for "Quarantine 1994"/.test(cv.searchNote), JSON.stringify({ t: cv.searchTile, p: cv.searchPage, rows: cv.searchRows, m: cv.searchMode, term: cv.term, n: cv.searchNote }));
+    // (beta.5) Details → Rename: Settings' Rename page; Enter saves the name, the shelf shows it; Use the file's name puts it back
+    const rn = await page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), out = {};
+      const key = k => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+      for (let i = 0; i < 40 && Shelf.getMode() !== 'browse'; i++) await w(250);
+      out.before = Shelf._qs().g;
+      key('i'); await w(900); const b = document.getElementById('dRename'); out.button = !!b && !b.hidden; if (b) b.click();
+      for (let i = 0; i < 40 && !document.querySelector('#bss.on .bss-row'); i++) await w(150); await w(700);
+      out.page = (document.querySelector('#bss .bss-title') || {}).textContent || '';
+      out.rows = [...document.querySelectorAll('#bss .bss-row')].map(r => r.textContent.replace(/\s+/g, ' ').trim().slice(0, 40)); out.cur = ((document.querySelector('#bss .bss-row.cur') || {}).textContent || '').slice(0, 40);
+      // type the new name into the Name row (Settings' own text editing: Enter starts, typing, Enter saves)
+      key('Enter'); await w(400); // (the page opens on its Name row: Enter starts editing it)
+      const inp = document.querySelector('#bss .bss-edit'); out.editing = !!inp; if (inp) { inp.value = 'Quarantine DOS'; inp.dispatchEvent(new Event('input', { bubbles: true })); }
+      key('Enter'); await w(1200);
+      out.saved = ((await window.boxshelf.getConfig()).config.games || {})['quiver-quarantine'];
+      out.resetRow = [...document.querySelectorAll('#bss .bss-row .nm')].some(e => e.textContent === "Use the file's name");
+      if (window.Settings && Settings.isOpen && Settings.isOpen()) { await Settings.close(); await w(1500); }
+      for (let i = 0; i < 20 && Shelf._qs().g !== 'Quarantine DOS'; i++) await w(250); out.after = Shelf._qs().g;
+      // and back: Rename → Use the file's name
+      key('i'); await w(900); const b2 = document.getElementById('dRename'); if (b2) b2.click(); for (let i = 0; i < 40 && !document.querySelector('#bss.on .bss-row'); i++) await w(150); await w(700);
+      const rr = [...document.querySelectorAll('#bss .bss-row')].find(r => ((r.querySelector('.nm') || {}).textContent || '') === "Use the file's name"); if (rr) rr.click(); await w(1200);
+      if (window.Settings && Settings.isOpen && Settings.isOpen()) { await Settings.close(); await w(1500); }
+      for (let i = 0; i < 20 && Shelf._qs().g !== 'Quarantine'; i++) await w(250); out.back = Shelf._qs().g; return out; });
+    check('PC games (Windows): Details → Rename saves a game\'s own name (the shelf shows it), and Use the file\'s name puts it back',
+      rn.button && /Rename/.test(rn.page) && rn.saved && rn.saved.title === 'Quarantine DOS' && rn.resetRow && rn.after === 'Quarantine DOS' && rn.back === 'Quarantine', JSON.stringify(rn).slice(0, 500));
     check('PC games pass (Windows page): no script errors', !errors.length, errors.slice(0, 3).join(' | '));
   } catch (e) { check('PC games pass (Windows page) ran to the end', false, e && e.stack ? e.stack.split('\n').slice(0, 2).join(' ') : e); }
   await ctx.close();

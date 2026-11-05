@@ -113,7 +113,15 @@ final class BottomScreen implements DisplayManager.DisplayListener {
     }
 
     // ---------- what the page can ask for ----------
-    boolean enabled() { return prefs.getBoolean(PREF_ON, true); }
+    // (0.4.0) The bottom page is on by default only on AYN's handhelds (the Thor's built-in second screen). On any other
+    // device a second display is usually a TV, a monitor or a cast (HDMI, DeX, Miracast): left alone unless the player
+    // turns the bottom screen on in Settings.
+    static boolean aynDevice() {
+        String s = (Build.MANUFACTURER + " " + Build.BRAND + " " + Build.MODEL).toLowerCase(Locale.ROOT);
+        return s.contains("ayn");
+    }
+    static String deviceName() { return (Build.MANUFACTURER + " " + Build.MODEL).trim(); }
+    boolean enabled() { return prefs.getBoolean(PREF_ON, aynDevice()); }
 
     /** On / off. remember = keep the choice across restarts (Settings), otherwise just for now. */
     void setEnabled(boolean on, boolean remember) {
@@ -143,6 +151,8 @@ final class BottomScreen implements DisplayManager.DisplayListener {
         r.put("available", d != null);
         r.put("enabled", enabled());
         r.put("shown", visible);
+        r.put("device", deviceName());   // (0.4.0) e.g. "AYN Thor": shown in Settings so a player can tell what it saw
+        r.put("builtIn", aynDevice());   // the second screen is the handheld's own (on by default), not a TV or a cast
         if (d != null) {
             DisplayMetrics m = new DisplayMetrics();
             d.getRealMetrics(m);

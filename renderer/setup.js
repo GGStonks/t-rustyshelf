@@ -205,7 +205,11 @@ function renderBody(){
 // only at eden-emu.dev (look-alike sites serve fakes)
 const OFFICIAL={gc:[["Dolphin","https://dolphin-emu.org/download/"]],wii:[["Dolphin","https://dolphin-emu.org/download/"]],wiiu:[["Cemu","https://cemu.info/"]],sw:[["Eden","https://eden-emu.dev/downloads"]],sw2:[["Eglantine","https://github.com/Djihads80/Eglantine/releases"]],
   psp:[["PPSSPP","https://www.ppsspp.org/download/"]],ps2:[["PCSX2","https://pcsx2.net/downloads/"]],ps3:[["RPCS3","https://rpcs3.net/download"]],ps4:[["shadPS4","https://shadps4.net/downloads"]],ps5:[["KytyPS5","https://github.com/Jetsku/KytyPS5/releases"]],n3ds:[["Azahar","https://azahar-emu.org/pages/download/"]],
-  x360:[["Xenia","https://xenia.jp/download/"],["Xenia Manager","https://github.com/xenia-manager/xenia-manager"]],steam:[["Steam","https://store.steampowered.com/about/"]],
+  x360:[["Xenia","https://xenia.jp/download/"],["Xenia Manager","https://github.com/xenia-manager/xenia-manager"]],
+  // (beta.6) the retro shelves: RetroArch (one download for all of them; cores from its Online Updater) and each one's best standalone
+  ...(()=>{const RA=["RetroArch","https://www.retroarch.com/?page=platforms"],o={psx:[["DuckStation","https://github.com/stenzek/duckstation/releases"],RA],nds:[["melonDS","https://melonds.kuribo64.net/downloads.php"],RA],
+    gba:[RA,["mGBA","https://mgba.io/downloads.html"]],n64:[RA,["RMG","https://github.com/Rosalie241/RMG/releases"]],megadrive:[RA,["BlastEm","https://www.retrodev.com/blastem/downloads.html"]],dreamcast:[RA,["Flycast","https://github.com/flyinghead/flycast/releases"]]};
+    for(const id of ["nes","snes","gb","gbc","mastersystem","gamegear"])o[id]=[RA];return o})(),steam:[["Steam","https://store.steampowered.com/about/"]],
   stremio:[["Stremio","https://www.stremio.com/downloads"]],nuvio:[["Nuvio","https://github.com/NuvioMedia/NuvioDesktop"]]};
 function siteLinks(id){const l=OFFICIAL[id];if(!l)return null;return el("div",{class:"row su-links"},el("span",{class:"hint-text",text:"Official site:"}),...l.map(([n,u])=>el("button",{type:"button",class:"btn small ghost",title:u,onclick:()=>openLink(u)},`Get ${n} ↗`)))}
 function head(b,kicker,title,lead){b.append(el("div",{class:"su-kicker",text:kicker}),el("div",{class:"su-title",id:"suTitle",text:title}));if(lead)b.append(el("p",{class:"su-lead",text:lead}))}

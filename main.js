@@ -16,10 +16,19 @@ paths.setAppRoot(app.isPackaged ? (process.env.PORTABLE_EXECUTABLE_DIR || path.d
 const config = require('./main/config');
 const { CONSOLES, APPS } = require('./main/systems');
 const { detectAll, detectSystem } = require('./main/detect');
-const { scanSystem } = require('./main/scanner');
+const { scanSystem: scanFolders } = require('./main/scanner');
+// (beta.5) a game's own name (Details → Rename: cfg.games["<console>:<file>"].title) replaces the scanned one wherever main
+// reads games: the shelf, box art and manual lookups, matching. fileTitle keeps the scanned one. Copies, never the
+// scanner's own objects (a reset must bring the file's name back)
+function scanSystem(def, sc) {
+  const gs = scanFolders(def, sc), G = cfg && cfg.games; if (!G) return gs;
+  return gs.map(g => { const o = G[def.id + ':' + g.file]; return o && o.title && o.title !== g.title ? { ...g, fileTitle: g.title, title: o.title } : g; });
+}
+const ownTitle = id => { const o = cfg && cfg.games && cfg.games[String(id)]; return o && o.title ? o.title : ''; }; // (PC games, by id)
 const { scanSteam } = require('./main/steam');
 const steamart = require('./main/steamart');
 const pcgames = require('./main/pcgames'); // (beta.4) Epic, Quiver Launcher and games added by hand
+const pccovers = require('./main/pccovers'); // (beta.5) choosing a PC game's cover (SteamGridDB, Steam's own, your own)
 const wiiumanual = require('./main/wiiumanual');
 const manualcoll = require('./main/manualcoll');
 const manualstudio = require('./main/manualstudio'); // Manual Studio: every manual for a game side by side, per-game locks, per-console language / region
@@ -145,6 +154,7 @@ function computeRoots() {
   if (artstudio.cacheDir()) roots.push(artstudio.cacheDir()); // Art Studio's downloaded candidates (the picker's thumbnails)
   if (manualstudio.cacheDir()) roots.push(manualstudio.cacheDir()); // Manual Studio's first-page previews and PDFs (also read by the PDF helper by address)
   if (cfg.steam.path) roots.push(path.join(cfg.steam.path, 'appcache', 'librarycache'), path.join(app.getPath('userData'), 'steam-art')); // Steam's art cache only, not its config files
+  roots.push(path.join(app.getPath('userData'), 'steam-art'), path.join(app.getPath('userData'), 'pc-covers'), path.join(app.getPath('userData'), 'pc-cover-cache')); // (beta.5) Epic games' Steam art (even without Steam), chosen PC covers and the cover picker's thumbnails
   return roots.filter(Boolean).map(r => { r = path.resolve(r).toLowerCase(); return r.endsWith(path.sep) ? r : r + path.sep; });
 }
 
@@ -240,6 +250,20 @@ function createWindow() {
     setTimeout(again, 600);
   });
   win.on('closed', () => { log('Quit: the Boxshelf window was closed'); win = null; app.quit(); }); // hidden helper windows (Home overlay, manual renderer) must not keep Boxshelf alive
+  // (beta.6) the taskbar hidden for a game comes back the moment you leave the fullscreen shelf: another app, the Start
+  // menu, minimized, windowed (see taskbarBack)
+  for (const ev of ['blur', 'leave-full-screen', 'minimize', 'hide']) win.on(ev, () => taskbarLeave(ev));
+}
+// (a blur that only went to one of Boxshelf's own windows, a trailer, isn't leaving: that window is watched instead)
+function taskbarLeave(ev) {
+  if (!tbHidden || launcher.isRunning() || launching) return;
+  if (ev !== 'blur') { taskbarShow('left the shelf: ' + ev); return; }
+  setTimeout(() => {
+    if (!tbHidden || launcher.isRunning() || launching) return;
+    const f = BrowserWindow.getFocusedWindow();
+    if (f && !f.isDestroyed()) { if (f !== win && !f.bsTbWatch) { f.bsTbWatch = true; f.on('blur', () => taskbarLeave('blur')); } return; }
+    taskbarShow('left the shelf: blur');
+  }, 60);
 }
 
 const alive = () => win && !win.isDestroyed(); // the window can be gone already when Boxshelf quits while a game still runs
@@ -257,6 +281,7 @@ function coverForQuit() {
     // animates a window that is shown, and the closing game's windows showed through that animation
     try { win.setOpacity(1); } catch {}
     win.setAlwaysOnTop(true, 'screen-saver'); if (!win.isVisible()) win.showInactive(); win.moveTop();
+    padwatch.cover(true); // (beta.6) the helper keeps the cover over the closing game's windows too, every ~40 ms
     // A closing emulator can still pop windows up (it leaves fullscreen, shows its main window or a dialog): keep the
     // cover on top until it has really exited (onExit), like the start-up cover does
     clearQuitCover();
@@ -268,15 +293,63 @@ function coverForQuit() {
         if (!alive() || !launcher.isRunning()) { clearQuitCover(); if (alive() && !launcher.isRunning()) { try { win.setAlwaysOnTop(false); } catch {} } return; }
         if (Date.now() - started > 11000) { // still running well past the force-close: give the game the screen back, controller included
           clearQuitCover(); log('Quit: the game is still running, returning to it'); pendingPower = null; quitAt = 0; /* its exit later isn't "N ms after Quit" */
-          win.setAlwaysOnTop(false); stepAside(); if (!padwatch.isRunning() && lastPadOpts) watchPad(lastPadOpts); padwatch.front(); setTimeout(() => { if (launcher.isRunning()) padwatch.front(); }, 1500); return; /* the helper may have just restarted */
+          win.setAlwaysOnTop(false); padwatch.cover(false); stepAside(); if (!padwatch.isRunning() && lastPadOpts) watchPad(lastPadOpts); padwatch.front(); setTimeout(() => { if (launcher.isRunning()) padwatch.front(); }, 1500); return; /* the helper may have just restarted */
         }
-        win.setAlwaysOnTop(true, 'screen-saver'); win.moveTop();
+        win.setAlwaysOnTop(true, 'screen-saver'); win.moveTop(); coverFullSize();
       } catch {}
     }, 100);
   } catch {}
 }
 let quitCover = null, quitAt = 0, quitSeq = 0; // quitSeq: a timer set before a Quit must not step Boxshelf aside during it
-function clearQuitCover() { if (quitCover) { clearInterval(quitCover); quitCover = null; } }
+// (beta.6) Chromium shrinks a fullscreen window that isn't the active one by a pixel (2560x1439 on a 1440p screen, while
+// the emulator has the focus): the game showed through that row as a sliver at the bottom of the black cover, starting
+// and quitting. While the cover is up it's stretched back (only that 1-2 px shrink; the helper does it too, every pass).
+function coverFullSize() {
+  try { if (!alive() || !win.isFullScreen()) return; const b = win.getBounds(), d = screen.getDisplayMatching(b).bounds;
+    if ((b.width !== d.width || b.height !== d.height || b.x !== d.x || b.y !== d.y) && Math.abs(b.width - d.width) <= 2 && Math.abs(b.height - d.height) <= 2) win.setBounds(d); } catch {}
+}
+function clearQuitCover() { if (quitCover) { clearInterval(quitCover); quitCover = null; } goneCover = false; }
+// (beta.6) Nothing but Boxshelf and the game on screen: the taskbar is hidden from just before an emulator starts until
+// the shelf is back (an emulator's window that wasn't fullscreen yet, or any more, made Windows raise it over the black
+// cover for a moment, starting and closing). A file marks it hidden: a watchdog process (padwatch.taskbarGuard) puts it
+// back if Boxshelf crashes or is ended, and the next start does too. Settings → Display → Screen & motion turns it off.
+let tbHidden = false;
+const tbMark = () => path.join(app.getPath('userData'), 'taskbar-hidden');
+const tbWanted = () => process.platform === 'win32' && cfg.ui.hideTaskbar !== false;
+async function taskbarHide() {
+  if (!tbWanted() || tbHidden) return;
+  tbHidden = true; try { fs.writeFileSync(tbMark(), String(Date.now())); padwatch.taskbarGuard(process.pid, tbMark()); } catch {} // (the guard: back even if Boxshelf crashes)
+  const t0 = Date.now(); const ok = await padwatch.taskbar(false); log('Taskbar hidden for the game', ok ? `(${Date.now() - t0} ms)` : '(no answer)');
+}
+// Back on the shelf after a game. Fullscreen and in front, Boxshelf would have the taskbar hidden by Windows anyway, so
+// it stays hidden until you leave the shelf (the window's blur / leave-full-screen / minimize / hide, set up with the
+// window). Showing it here instead left it over the fullscreen shelf until a mouse click: Windows only re-checks for a
+// fullscreen app when the active window changes, and Boxshelf already was the active one. A windowed or unfocused shelf
+// gets it back at once.
+function taskbarBack(focused) {
+  if (!tbHidden || launcher.isRunning() || launching) return;
+  if (focused && alive() && win.isFullScreen() && win.isVisible() && !win.isMinimized()) { log('Taskbar stays hidden while the fullscreen shelf is in front'); return; }
+  taskbarShow('back on the shelf');
+}
+function taskbarShow(why) {
+  if (!tbHidden) return; tbHidden = false; try { fs.unlinkSync(tbMark()); } catch {}
+  padwatch.taskbar(true).then(() => log('Taskbar back' + (why ? ' (' + why + ')' : '')));
+  // (once more a moment later: the watchdog may have been in the middle of a pass when the marker went)
+  setTimeout(() => { if (!tbHidden) padwatch.taskbar(true); }, 400);
+}
+// (beta.6) the game's window closed while the emulator is still running (quit from the emulator's own menu, or Esc): the
+// black cover goes up at once, like a Quit from the Home menu; a window that comes back (the emulator only rebuilt it)
+// gets the screen back
+let goneCover = false;
+function onGameWindow(back) {
+  if (!back) {
+    if (!launcher.isRunning() || quitCover || coverTimer || homemenu.isOpen()) return;
+    log('Game window closed, the emulator still running: covering the screen until it exits'); coverForQuit(); goneCover = true; return;
+  }
+  if (!goneCover || !quitCover || !launcher.isRunning()) return;
+  log('Game window back: stepping aside again'); clearQuitCover(); quitAt = 0;
+  try { win.setAlwaysOnTop(false); } catch {} padwatch.cover(false); stepAside(); padwatch.front();
+}
 // While a game runs Boxshelf stays on screen, behind it, fully transparent: it can't be clicked or activated (so it
 // never takes the focus from the game) and the page is told to stop drawing. Hiding the window instead meant Windows
 // played its show animation when we came back, and the closing game's windows were visible through it.
@@ -297,6 +370,7 @@ function liftCover() {
   const wait = Math.max(350, (t.minMs || 800) - (Date.now() - t.at));
   setTimeout(() => { if (coverTimer === t) { log('game window ready: lifting the loading screen'); t.lift(); } }, wait);
 }
+let backKeep = null;
 function bringBack() {
   markEvent('bringBack'); backAt = Date.now();
   if (!alive()) return;
@@ -308,7 +382,20 @@ function bringBack() {
   win.focus();
   // Windows often won't let a background app take the focus back: ask the controller helper to hand it over
   try { const b = win.getNativeWindowHandle(); padwatch.focusWindow(b.length >= 8 ? b.readBigUInt64LE(0).toString() : String(b.readUInt32LE(0))); } catch (e) { log('focus handoff', e.message); }
-  setTimeout(() => alive() && win.setAlwaysOnTop(false), 400);
+  // (beta.6) Stay on top until Windows has really given Boxshelf the focus (the helper's handoff comes when the shelf's
+  // helper starts, ~1.5 s), at most 5 s. Letting go after 0.4 s left a gap: the closing game's focus went to the next
+  // window in line (Discord, Explorer…), which then came up over the whole shelf. The taskbar returns after that.
+  clearInterval(backKeep); const t0 = Date.now();
+  backKeep = setInterval(() => {
+    if (!alive() || launcher.isRunning()) { clearInterval(backKeep); backKeep = null; return; }
+    const el = Date.now() - t0, focused = win.isFocused();
+    if ((focused && el > 400) || el > 5000) {
+      clearInterval(backKeep); backKeep = null; try { win.setAlwaysOnTop(false); win.moveTop(); } catch {}
+      if (!focused) log('Back on the shelf without the focus (Windows refused it)');
+      taskbarBack(focused);
+      return; }
+    try { if (!win.isAlwaysOnTop()) win.setAlwaysOnTop(true); win.moveTop(); } catch {}
+  }, 100);
   // (and ask for a fresh frame now and a moment later, in case the window still isn't being drawn)
   const paint = () => { try { if (alive() && !launcher.isRunning()) win.webContents.invalidate(); } catch {} };
   paint(); setTimeout(paint, 300); setTimeout(paint, 1200);
@@ -326,9 +413,10 @@ function coverWhileStarting(seconds) {
   if (wasWindowed) { try { win.setFullScreen(true); } catch {} }
   coverWindowed = wasWindowed;
   win.setAlwaysOnTop(true, 'screen-saver');
+  padwatch.cover(true); // (beta.6) and the helper puts it back over any of the game's windows within ~40 ms
   // Some emulators (Eden) create their window in two steps and can pop over us; keep re-asserting until the cover ends.
   const t0 = Date.now(); let lastTop = 0;
-  const keep = setInterval(() => { try { if (!alive() || !coverTimer) return; const now = Date.now(); if (now - t0 > 2500 && now - lastTop < 1000) return; lastTop = now; if (!win.isAlwaysOnTop()) win.setAlwaysOnTop(true, 'screen-saver'); win.moveTop(); homemenu.raise(); } catch {} }, 250);
+  const keep = setInterval(() => { try { if (!alive() || !coverTimer) return; coverFullSize(); const now = Date.now(); if (now - t0 > 2500 && now - lastTop < 1000) return; lastTop = now; if (!win.isAlwaysOnTop()) win.setAlwaysOnTop(true, 'screen-saver'); win.moveTop(); homemenu.raise(); } catch {} }, 100);
   const lift = () => {
     if (!coverTimer) return; clearTimeout(coverTimer);
     coverTimer = null; clearInterval(keep);
@@ -340,6 +428,7 @@ function coverWhileStarting(seconds) {
     const qs = quitSeq; // Quit pressed in these 300 ms: the quit cover must stay opaque (stepAside made it see-through)
     setTimeout(() => {
     if (!alive() || !launcher.isRunning() || qs !== quitSeq) return;
+    padwatch.cover(false); // (first: the helper must not pull the cover back over the game)
     win.setAlwaysOnTop(false);
     // the game straight to the front (no win.blur(): Windows hands a blurred window's focus to the next one in line,
     // usually the taskbar, which then showed over the fullscreen game until a click). The helper keeps the game in front
@@ -366,7 +455,7 @@ function watchPad(opts) {
   // with the quit combo turned off, use a mask no pad can press so only the other duties remain
   const combo = cfg.ui.quitCombo === false ? null : (cfg.ui.quitComboKeys || 'l3+r3');
   padwatch.start(combo || 'none', 900, () => { log('Quit combo: closing', launcher.isRunning() ? 'emulator' : 'nothing'); if (launcher.isRunning()) coverForQuit(); closeGame(); },
-    { ...opts, home, nin: true, cmdFile: path.join(app.getPath('temp'), `boxshelf-pad-${process.pid}.txt`), onHome: kind => { homemenu.setMeta({ glyphs: kind || shelfGlyphs }); /* the menu shows the buttons of the pad that opened it (an XInput pad: the shelf's last prompts) */ Promise.resolve(homemenu.open()).catch(e => log('home menu', e && e.message)); }, onButton: (b, d) => homemenu.button(b, d), isMenuOpen: () => homemenu.isOpen(), onFullscreen: opts.appPid ? liftCover : undefined });
+    { ...opts, home, nin: true, taskbarHidden: tbHidden, onWindow: opts.appPid ? onGameWindow : undefined, cmdFile: path.join(app.getPath('temp'), `boxshelf-pad-${process.pid}.txt`), onHome: kind => { homemenu.setMeta({ glyphs: kind || shelfGlyphs }); /* the menu shows the buttons of the pad that opened it (an XInput pad: the shelf's last prompts) */ Promise.resolve(homemenu.open()).catch(e => log('home menu', e && e.message)); }, onButton: (b, d) => homemenu.button(b, d), isMenuOpen: () => homemenu.isOpen(), onFullscreen: opts.appPid ? liftCover : undefined });
 }
 function onExit(info) {
   markEvent('game exited'); clearQuitCover(); wiimote.resume(); // (the Wii remote back to the shelf, after Dolphin had it)
@@ -387,6 +476,7 @@ function onExit(info) {
   lastLaunch = null;
   clearTimeout(coverTimer); coverTimer = null;
   bringBack(); if (cfg.ui.homeMenu === false) focusOnlyHelper();
+  // (beta.6) the taskbar comes back once the shelf has the focus again (bringBack)
   if (alive()) win.webContents.send('run:exited', info);
   if (pendingPower) { const p = pendingPower; pendingPower = null; if (Date.now() - p.at < 20000) { setTimeout(() => powerAction(p.kind), 800); setTimeout(() => { if (alive() && !launcher.isRunning()) watchShelf(); }, 15000); return; } /* a cancelled shutdown still needs Guide back */ log('Power: dropped a stale', p.kind); } // a game that took ages to close: don't shut the PC down out of the blue later
   setTimeout(watchShelf, 1500);
@@ -419,7 +509,7 @@ async function buildLibrary() {
   let pcShelf = [];
   if (cfg.steam.enabled && cfg.steam.path) {
     // Steam's own cached art first, then anything Boxshelf fetched from the Steam store for games Steam has no cover for
-    pcShelf = scanSteam(cfg.steam.path, { hideTools: cfg.steam.hideTools !== false }).map(g => { const l = steamart.local(g.appid); return { ...g, info: steamart.gameInfo(g.appid), art: { front: fileUrl(g.art.front || l.front), hero: fileUrl(g.art.hero || l.hero) } }; });
+    pcShelf = scanSteam(cfg.steam.path, { hideTools: cfg.steam.hideTools !== false }).map(g => { const l = steamart.local(g.appid); return { ...g, ...(ownTitle(g.id) ? { title: ownTitle(g.id), fileTitle: g.title } : {}), info: steamart.gameInfo(g.appid), art: { front: fileUrl(pccovers.cover(g.id) || g.art.front || l.front), hero: fileUrl(g.art.hero || l.hero) } }; }); // (beta.5: a cover chosen in the picker wins)
   }
   // (beta.4) Epic's installs join the PC shelf; Quiver Launcher's apps and games added by hand get the Custom shelf. They
   // are PC games with a source (kind 'steam' keeps every shelf feature); covers come from the Steam app their title
@@ -428,11 +518,12 @@ async function buildLibrary() {
   if (pc.epic !== false) try { epic.push(...pcgames.epicGames()); } catch (e) { log('Epic library', e.message); }
   if (pc.quiver !== false) try { mine.push(...pcgames.quiverGames(pc.quiverPath)); } catch (e) { log('Quiver library', e.message); }
   try { mine.push(...pcgames.customGames(pc.custom)); } catch (e) { log('Custom games', e.message); }
+  for (const g of [...epic, ...mine]) { const t = ownTitle(g.id); if (t) { g.fileTitle = g.title; g.title = t; } } // (beta.5: renamed in Details)
   pcgames.remember([...epic, ...mine]);
   // (Steam art by title only for Epic's store games: a recomp or a program added by hand often shares its name with an
   // unrelated Steam game, "Quarantine" got a puzzle game's cover; they keep the made-up case)
   const pcGame = g => { const sid = g.source === 'epic' ? pcgames.steamIdOf(g.title) : null, l = sid ? steamart.local(sid) : {};
-    return { kind: 'steam', source: g.source, id: g.id, title: g.title, ...(sid ? { info: steamart.gameInfo(sid) } : {}), art: { front: fileUrl(l.front), hero: fileUrl(l.hero), icon: g.icon || undefined } }; };
+    return { kind: 'steam', source: g.source, id: g.id, title: g.title, ...(sid ? { info: steamart.gameInfo(sid) } : {}), art: { front: fileUrl(pccovers.cover(g.id) || l.front), hero: fileUrl(l.hero), icon: g.icon || undefined } }; };
   if (epic.length) pcShelf = pcShelf.concat(epic.map(pcGame)).sort((a, b) => String(a.title).localeCompare(String(b.title), undefined, { sensitivity: 'base' }));
   if (pcShelf.length) shelves.push({ id: 'pc', kind: 'steam', name: 'PC', games: pcShelf });
   if (mine.length) shelves.push({ id: 'custom', kind: 'steam', name: 'Custom', games: mine.map(pcGame).sort((a, b) => String(a.title).localeCompare(String(b.title), undefined, { sensitivity: 'base' })) });
@@ -446,6 +537,8 @@ async function buildLibrary() {
 // ---------- IPC ----------
 ipcMain.on('renderer:log', (e, msg) => log('[ui]', msg));
 padwatch.init(log, app.getPath('userData'));
+// (beta.6) the last Boxshelf ended with the taskbar hidden (a crash, a power cut, ended from Task Manager): put it back
+try { if (fs.existsSync(tbMark())) { fs.unlinkSync(tbMark()); padwatch.taskbar(true).then(() => log('Taskbar back (left hidden by the last session)')); } } catch {}
 customThemes.init({ root: path.join(paths.appRoot(), 'Custom themes'), cache: path.join(app.getPath('userData'), 'custom-theme-cache'), nativeImage, systems: CONSOLES.map(c => c.id).concat('home', 'media'), log });
 homemenu.init({ padwatch, log, getWin: () => (alive() ? win : null), getUi: () => cfg.ui, getSound: () => ({ enabled: cfg.ui.sound !== false, theme: cfg.ui.soundTheme || 'aero', volume: cfg.ui.volume == null ? .7 : cfg.ui.volume, boot: cfg.ui.bootSound || 'chime' }),
   // quit the game; with a power action, run it once the emulator has really exited (onExit)
@@ -487,7 +580,7 @@ function powerAction(kind) {
 // On the shelf the XInput helper still runs (lightly) so Guide can open the Home menu even though Chromium never sees it
 function watchShelf() {
   if (cfg.ui.homeMenu === false || launcher.isRunning()) return;
-  padwatch.start('none', 900, () => {}, { home: true, backHome: false, cmdFile: path.join(app.getPath('temp'), `boxshelf-pad-${process.pid}.txt`),
+  padwatch.start('none', 900, () => {}, { home: true, backHome: false, taskbarHidden: tbHidden /* (beta.6: kept hidden until you leave the shelf) */, cmdFile: path.join(app.getPath('temp'), `boxshelf-pad-${process.pid}.txt`),
     onHome: () => { if (!closeTrailer()) openShelfMenu(); }, onButton: (b, d) => { if (d && (b === 'b' || b === 'back') && !homemenu.isOpen() && closeTrailer()) return; homemenu.button(b, d); }, isMenuOpen: () => homemenu.isOpen() });
 }
 // With the Home menu off no shelf helper follows the game's, and Windows won't let Boxshelf take the focus back by
@@ -582,7 +675,7 @@ ipcMain.on('home:meta', (e, m) => { if (!m || typeof m !== 'object') return; con
   homemenu.setMeta({ title: str(m.title), cover: str(m.cover), accent: /^#[0-9a-f]{3,8}$/i.test(m.accent || '') ? m.accent : undefined, glyphs: glyphsOf(m.glyphs), layout: cfg.ui.homeLayout === 'center' ? 'center' : 'side' }); });
 emucfg.init(log);
 modelfind.init(log);
-app.on('before-quit', () => { clearTimeout(scaleT); historyEnd(); companion.stop().catch(() => {}); /* the phone companion's server and its connections */ padwatch.stop(); wiimote.stop(); homemenu.end(); modelfind.stop(); clearQuitCover(); clearTimeout(focusOnlyT); if (coverTimer) { clearInterval(coverTimer.keep); clearTimeout(coverTimer); coverTimer = null; }
+app.on('before-quit', () => { if (tbHidden) { tbHidden = false; padwatch.stop(); padwatch.taskbarSync(true); try { fs.unlinkSync(tbMark()); } catch {} log('Taskbar back (Boxshelf quitting)'); } /* (beta.6) */ clearTimeout(scaleT); historyEnd(); companion.stop().catch(() => {}); /* the phone companion's server and its connections */ padwatch.stop(); wiimote.stop(); homemenu.end(); modelfind.stop(); clearQuitCover(); clearTimeout(focusOnlyT); if (coverTimer) { clearInterval(coverTimer.keep); clearTimeout(coverTimer); coverTimer = null; }
   romWatchers.forEach(w => { try { w.close(); } catch {} }); romWatchers = []; clearTimeout(romWatchT); clearTimeout(iconLateT); Object.values(retestT).forEach(clearTimeout); if (moving) clearTimeout(moving.t); });
 function handle(name, fn) {
   ipcMain.handle(name, async (e, ...args) => {
@@ -1094,6 +1187,19 @@ handle('launch:game', async ({ systemId, file, emulator }) => {
   if (launching || launcher.isRunning()) throw new Error('Something is already running. Close it first.');
   launching = true; try { return await launchGameNow(systemId, file, sc); } finally { launching = false; }
 });
+// (beta.6) RetroArch's cores: <its folder>\cores\<core>_libretro.dll, or the folder its own settings name
+// (retroarch.cfg's libretro_directory; ":" there means RetroArch's own folder)
+const RA_CORE_NAME = { swanstation: 'SwanStation', mesen: 'Mesen', snes9x: 'Snes9x', mupen64plus_next: 'Mupen64Plus-Next', gambatte: 'Gambatte', mgba: 'mGBA', melondsds: 'melonDS DS', genesis_plus_gx: 'Genesis Plus GX', flycast: 'Flycast' };
+function retroCore(exe, core) {
+  const dir = path.dirname(exe), dirs = [path.join(dir, 'cores')];
+  for (const cfgFile of [path.join(dir, 'retroarch.cfg'), path.join(process.env.APPDATA || '', 'RetroArch', 'retroarch.cfg')]) {
+    let t = ''; try { t = fs.readFileSync(cfgFile, 'utf8'); } catch { continue; }
+    const m = /^\s*libretro_directory\s*=\s*"([^"]*)"/m.exec(t); if (m && m[1] && m[1] !== 'default') dirs.unshift(m[1].replace(/^:[\\/]?/, dir + path.sep));
+    break;
+  }
+  for (const d of dirs) { const f = path.join(d, core + '_libretro.dll'); if (paths.isFile(f)) return f; }
+  return null;
+}
 async function launchGameNow(systemId, file, sc) {
   if (systemId === 'ps4' && /\.pkg$/i.test(file)) throw new Error('This PS4 game is still a .pkg package, which shadPS4 can\'t run. Extract it to a folder first (current shadPS4 builds no longer install packages themselves) with a PKG extractor such as PKG Editor or the ShadPS4Plus pkg_extractor, into a folder inside your PS4 games folder. Once that folder has an eboot.bin in it, the game shows up here as installed.');
   if (systemId === 'x360') sc.emulator = emucfg.resolveExe('x360', sc.emulator).exe; // (sc is this launch's copy: the saved setting is fixed on load / save)
@@ -1119,9 +1225,17 @@ async function launchGameNow(systemId, file, sc) {
   // (PS5, "Start games through Kyty's launcher" on: the launcher itself, where the game is started; it takes no game to open)
   if (systemId === 'ps5' && sc.viaLauncher) { const ui = ['kyty_launcher.exe', 'launcher.exe'].map(n => path.join(path.dirname(sc.emulator || ''), n)).find(paths.isFile); if (!ui) throw new Error("Kyty's launcher (kyty_launcher.exe) isn't next to kyty_emulator.exe. Turn off \"Start games through Kyty's launcher\" in Settings → PS5, or check the emulator path."); log('PS5 launch: through the launcher'); sc.emulator = ui; sc.gameArgs = ''; sc.coverSeconds = 1; extra.length = 0; } // (the launcher applies the preset itself)
   else if (systemId === 'ps5') { const k = kyty.spec(sc.emulator, file); extra.push(...k.args); env = k.env; rom = k.dir; log('PS5 launch:', path.basename(rom), k.args.filter(x => /^--/.test(x)).join(' '), env ? '(preset)' : ''); }
+  // (beta.6) RetroArch: this console's core from RetroArch's cores folder, fullscreen; a core that isn't downloaded yet is
+  // said plainly (RetroArch itself would just open its menu)
+  { const def = CONSOLES.find(c => c.id === systemId);
+    if (def && def.raCore && /^retroarch\.exe$/i.test(path.basename(sc.emulator || ''))) {
+      const core = retroCore(sc.emulator, def.raCore), nm = RA_CORE_NAME[def.raCore] || def.raCore;
+      if (!core) throw new Error(`RetroArch doesn't have the ${nm} core for ${def.name} yet. In RetroArch: Main Menu → Online Updater → Core Downloader → ${nm}, then press Play again.`);
+      sc.gameArgs = `-f -L "${core}" "{rom}"`; log('RetroArch launch:', def.id, path.basename(core)); } }
   // Dolphin: the Wii remote is let go first, so Dolphin finds it as it always does
   if (systemId === 'gc' || systemId === 'wii' || /dolphin/i.test(path.basename(sc.emulator || ''))) await wiimote.pause();
-  let r; try { r = launcher.launchGame(sc, rom, onExit, extra, env); } catch (e) { wiimote.resume(); throw e; } runKind = 'game'; pendingPower = null;
+  await taskbarHide(); // (beta.6) gone before the emulator's first window can show
+  let r; try { r = launcher.launchGame(sc, rom, onExit, extra, env); } catch (e) { wiimote.resume(); taskbarShow('the game did not start'); throw e; } runKind = 'game'; pendingPower = null;
   // (Dolphin: once it has the remote, Boxshelf listens alongside for a held Home; listening only, nothing is sent)
   if (systemId === 'gc' || systemId === 'wii' || /dolphin/i.test(path.basename(sc.emulator || ''))) setTimeout(() => { if (launcher.isRunning()) wiimote.watch(); }, 4000);
   lastLaunch = { systemId, at: Date.now() }; historyStart(systemId + ':' + file);
@@ -1149,10 +1263,11 @@ async function launchGameNow(systemId, file, sc) {
 // (busy check first: a .cia still installing, or a game running, must not have its emulator's settings rewritten under it)
 const busyCheck = () => { if (launching || launcher.isRunning()) throw new Error('Something is already running. Close it first.'); };
 handle('launch:emulator', async ({ systemId }) => { let sc = cfg.systems[systemId]; if (!sc) throw new Error('Unknown system.'); busyCheck(); sc = { ...sc, emulator: emuPath(sc.emulator) }; const wii = systemId === 'gc' || systemId === 'wii' || /dolphin/i.test(path.basename(sc.emulator || '')); if (wii) await wiimote.pause(); /* (Dolphin: the Wii remote is its) */ if (systemId === 'ps5') { const ui = ['kyty_launcher.exe', 'launcher.exe'].map(n => path.join(path.dirname(sc.emulator || ''), n)).find(paths.isFile); if (ui) sc.emulator = ui; } /* (PS5: kyty_emulator needs a game; the emulator on its own is Kyty's launcher) */ emucfg.beforeLaunch(systemId, sc.emulator, { quitCombo: cfg.ui.quitCombo === false ? null : (cfg.ui.quitComboKeys || 'l3+r3') }); let r; try { r = launcher.launchEmulator(sc, onExit); } catch (e) { if (wii) wiimote.resume(); throw e; } /* (1.82: a missing exe no longer leaves the remote paused) */ runKind = 'emulator'; pendingPower = null; watchPad(); return r; });
-handle('launch:app', ({ appId, link }) => {
+handle('launch:app', async ({ appId, link }) => {
   const a = cfg.apps[appId]; if (!a) throw new Error('Unknown app.'); busyCheck();
   const args = appId === 'stremio' && /^stremio:\/\/\/detail\/[^\s"]+$/.test(String(link || '')) ? [String(link)] : []; // a title from the museum's movie shelves opens on its page
-  const r = launcher.launchApp(a.path, onExit, args); runKind = 'app'; pendingPower = null;
+  if (a.fullscreen !== false) { launching = true; try { await taskbarHide(); } finally { launching = false; } } // (beta.6; an app kept in a window keeps the taskbar. launching: a second press meanwhile is refused)
+  let r; try { r = launcher.launchApp(a.path, onExit, args); } catch (e) { taskbarShow('the app did not start'); throw e; } runKind = 'app'; pendingPower = null;
   // Media apps don't speak controller: drive the pointer from the pad and press the fullscreen key once the window is up.
   const meta = APPS.find(x => x.id === appId);
   if (cfg.ui.homeMenu !== false) homemenu.begin({ systemId: 'media', exe: a.path, systemName: 'Media', title: meta ? meta.name : appId, hotkeys: {} });
@@ -1166,15 +1281,45 @@ handle('launch:steam', ({ appid }) => launcher.launchSteam(appid));
 // (beta.4) a PC game that isn't Steam's, named by id only: Epic's go through its launcher's link; Quiver's and the ones
 // added by hand start their own program in its own folder (recomps read their files from there), with the Home menu and
 // the quit buttons like any app
-handle('launch:pc', ({ id }) => {
+handle('launch:pc', async ({ id }) => {
   const g = pcgames.byId(id); if (!g) throw new Error("That game isn't on the shelf any more. The shelf is refreshing; try again in a moment.");
   if (g.source === 'epic') { busyCheck(); log('PC launch: Epic,', g.title); return shell.openExternal(g.uri).then(() => ({ external: true })); }
   if (!paths.isFile(g.exe)) throw new Error(`${g.title} isn't at ${g.exe} any more. ${g.source === 'quiver' ? 'Check it in Quiver Launcher.' : 'Remove it in Settings → Custom games and add it again.'}`);
   busyCheck();
-  const r = launcher.launchApp(g.exe, onExit, launcher.buildArgs(g.args || '', '')); runKind = 'app'; pendingPower = null; log('PC launch:', g.source, g.title);
+  launching = true; try { await taskbarHide(); } finally { launching = false; } // (beta.6)
+  let r; try { r = launcher.launchApp(g.exe, onExit, launcher.buildArgs(g.args || '', '')); } catch (e) { taskbarShow('the game did not start'); throw e; } runKind = 'app'; pendingPower = null; log('PC launch:', g.source, g.title);
   if (cfg.ui.homeMenu !== false) homemenu.begin({ systemId: 'pc', exe: g.exe, systemName: g.source === 'quiver' ? 'Quiver' : 'Custom', title: g.title, hotkeys: {} });
   watchPad({ mouse: false, appPid: r.pid, fullscreenKey: null, home: true });
   return { ...r, cover: coverWhileStarting(10) };
+});
+// (beta.5) a PC game's cover picker (main/pccovers.js): the page names the game by id and an option by key only
+const pcLookup = id => { id = String(id || ''); const m = /^steam-(\d{1,10})$/.exec(id); if (m) return { id, appid: m[1], title: '' }; const g = pcgames.byId(id); return g ? { id, title: g.title } : null; };
+const pcGameOf = id => { const g = pcLookup(id); if (!g) throw new Error("That game isn't on the shelf any more."); return g; };
+const pcCoverChanged = () => { if (alive()) win.webContents.send('library:changed', { pcCover: 1 }); };
+handle('pccover:options', ({ id, term }) => { const g = pcGameOf(id), t = String(term || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+  return pccovers.options(t ? { id: g.id, title: t } : g); }); // (beta.5: term = Search by name, a title instead of the game's own / its Steam app)
+handle('pccover:use', async ({ id, key }) => { pcGameOf(id); await pccovers.use(id, key); pcCoverChanged(); return { ok: true }; });
+handle('pccover:own', async ({ id }) => {
+  pcGameOf(id);
+  const r = await dialog.showOpenDialog(alive() ? win : undefined, { title: 'Choose a cover', properties: ['openFile'], filters: [{ name: 'Pictures', extensions: ['jpg', 'jpeg', 'png', 'webp'] }] });
+  if (r.canceled || !r.filePaths || !r.filePaths[0]) return { ok: false, canceled: true };
+  await pccovers.own(id, r.filePaths[0]); pcCoverChanged(); return { ok: true };
+});
+handle('pccover:reset', ({ id }) => { pcGameOf(id); pccovers.reset(id); pcCoverChanged(); return { ok: true }; });
+// (beta.5) Details → Rename: a console game by its console and file (it must be one the scanner could find), a PC game by
+// id. An empty name (or the file's own) goes back to the scanned one. The shelf rescans; art and manuals look it up by
+// the new name from then on
+handle('game:rename', ({ systemId, file, id, title }) => {
+  let key;
+  if (systemId && file) { const def = CONSOLES.find(c => c.id === systemId); if (!def || !cfg.systems[def.id]) throw new Error('Unknown console.'); gameFile(def.id, file); key = def.id + ':' + file; }
+  else { pcGameOf(id); key = String(id); }
+  const t = String(title || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+  const games = { ...(cfg.games || {}) }, cur = { ...(games[key] || {}) };
+  if (t) cur.title = t; else delete cur.title;
+  if (Object.keys(cur).length) games[key] = cur; else delete games[key];
+  applyCfg({ ...cfg, games }); log('Game renamed:', key.split(':')[0], t ? 'to a name of its own' : 'back to its file name');
+  if (systemId) { try { artstudio.forget(systemId); } catch {} }
+  return { ok: true, title: t };
 });
 handle('pc:status', () => { const pc = cfg.pc || {}; let epic = null; try { epic = pcgames.epicGames().length; } catch {} return { quiver: pcgames.quiverRoots(pc.quiverPath)[0] || '', epic }; });
 handle('pc:findQuiver', () => { const t0 = Date.now(), d = pcgames.quiverFind(); log('Find Quiver:', d ? 'found' : 'not found', Date.now() - t0, 'ms'); return d || ''; });
@@ -1827,7 +1972,7 @@ function startUp() {
   stremio.init({ log, fanartKey: () => (cfg && cfg.keys && cfg.keys.fanart) || '', artDir: path.join(app.getPath('userData'), 'stremio-art'), fetchBuf: async url => { const r = await net.fetch(url); if (r.status === 404) return null; if (!r.ok) throw new Error('HTTP ' + r.status); return Buffer.from(await r.arrayBuffer()); } }); // null = really not there; other failures throw, so nothing "missing" is cached for them
   icons.init(app.getPath('userData'), log);
   x360.init(app.getPath('userData'), log);
-  steamart.init(app.getPath('userData'), log); pcgames.init(app.getPath('userData'), log);
+  steamart.init(app.getPath('userData'), log); pcgames.init(app.getPath('userData'), log); pccovers.init({ dataDir: app.getPath('userData'), log, fileUrl, fetchImage, steamgrid: require('./main/steamgrid'), steamCover: id => steamart.local(id).front, match: covers.sgMatch });
   wiiumanual.init(app.getPath('userData'), log);
   ra.init(app.getPath('userData'), log); ra.setCredentials(cfg.ra && cfg.ra.enabled !== false ? cfg.ra.user : '', cfg.ra && cfg.ra.key);
   manuals.init(log); archive.init(log); manuals.setStore(path.join(app.getPath('userData'), 'manual-auto.json')); manuals.setRejectStore(path.join(app.getPath('userData'), 'manual-rejects.json'));

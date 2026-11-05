@@ -12,7 +12,10 @@
     'max-width:46vw;white-space:pre-wrap;contain:content', HIDDEN_CSS = ';opacity:.35;padding:2px 7px;font-size:10px';
   box.style.cssText = CSS;
   const STATES = ['big', 'small', 'hidden'];
-  let view = 'big'; try { const v = localStorage.getItem('bsThorHud'); if (STATES.includes(v)) view = v; } catch {}
+  // (0.4.0) off by default for everyone: nothing on screen and no loop of its own until Settings → System → Test meter
+  // turns it on, or the Smoothness test runs (its results show here); ?hud=1 turns it on for a test session
+  let view = 'off'; try { const v = localStorage.getItem('bsThorHud'); if (STATES.includes(v) || v === 'off') view = v; } catch {}
+  if (/[?&]hud=1/.test(location.search) && view === 'off') view = 'big';
   let shelfAt = 0, frames = 0, lastSec = performance.now(), fps = 0, gaps = [], prev = 0, worst5 = 0, slow = 0, total = 0, looping = false;
   const smooth = [], pad = { id: '', last: '' }, errs = [];
   const raf = (window.BS_METER && BS_METER.raf) || requestAnimationFrame.bind(window); // its own loop isn't counted as the app's work
@@ -21,6 +24,7 @@
   box.addEventListener('pointerdown', e => { e.stopPropagation(); setView(STATES[(STATES.indexOf(view) + 1) % STATES.length]); }, true);
   function setView(v) {
     view = v; try { localStorage.setItem('bsThorHud', v); } catch {}
+    if (v === 'off') { looping = false; prev = 0; box.style.cssText = CSS + ';display:none'; return; }
     box.style.cssText = CSS + (v === 'hidden' ? HIDDEN_CSS : '');
     if (v === 'hidden') { looping = false; prev = 0; box.textContent = 'meter'; return; } // the loop ends at its next frame
     if (!looping) { looping = true; prev = 0; frames = 0; lastSec = performance.now(); raf(loop); }
@@ -28,7 +32,21 @@
   }
   // catch the smoothness test's result lines (they go through boxshelf.log)
   const api = window.boxshelf;
-  if (api && api.log) { const orig = api.log.bind(api); try { api.log = m => { const s = String(m); if (/smoothness/i.test(s)) { smooth.push(s.replace(/^.*?smoothness/i, 'smoothness')); if (smooth.length > 6) smooth.shift(); } return orig(m); }; } catch {} }
+  if (api && api.log) { const orig = api.log.bind(api); try { api.log = m => { const s = String(m); if (/smoothness/i.test(s)) { smooth.push(s.replace(/^.*?smoothness/i, 'smoothness')); if (smooth.length > 6) smooth.shift(); if (view === 'off') setView('big'); else draw(); } return orig(m); }; } catch {} }
+  // Settings → System → Test meter (on Android only: this file is the Android build's), beside the Smoothness test
+  const prevPatch = window.BS_SETTINGS_PATCH;
+  window.BS_SETTINGS_PATCH = (sections, h) => {
+    let S = sections; try { if (typeof prevPatch === 'function') S = prevPatch(sections, h) || sections; } catch (e) { console.error('settings patch', e); }
+    try {
+      const sys = (S || []).find(s => s && (s.id === 'sys' || (s.alias || []).includes('sys'))); if (!sys || !Array.isArray(sys.rows)) return S;
+      if (sys.rows.some(r => r && r.label === 'Test meter')) return S;
+      const row = { t: 'toggle', label: 'Test meter', d: false, keys: 'fps meter hud performance test frames memory',
+        info: 'A small panel in the corner with the frame rate, slow frames, memory and the controller in use, for checking how smoothly Boxshelf runs. Tap it to make it smaller, then to tuck it away.',
+        get: () => view !== 'off', set: v => setView(v ? 'big' : 'off') };
+      const i = sys.rows.findIndex(r => r && r.label === 'Smoothness test'); sys.rows.splice(i >= 0 ? i + 1 : sys.rows.length, 0, row);
+    } catch (e) { console.error('test meter row', e); }
+    return S;
+  };
   let medC = 16.7;
   function loop(t) {
     if (!looping) return;
@@ -74,5 +92,6 @@
   }
   addEventListener('DOMContentLoaded', () => { document.body.appendChild(box); setView(view); });
   window.__thorHud = () => ({ view, looping }); // (the device test)
+  window.__thorHudSet = v => setView(v); // (the device test)
   addEventListener('gamepadconnected', draw);
 })();

@@ -42,7 +42,7 @@ function defaults() {
     // Art Studio: styles = per console shelf style (a console without one follows defaultArtStyle(ui), i.e. the old Box art
     // region / Prefer HD settings, so nothing changes until a style is chosen); locks = per game parts auto-fetch never touches
     art: { styles: {}, locks: {} },
-    ui: { sound: true, startFullscreen: true, buttons: 'auto', performance: 'auto', quitCombo: true, quitComboKeys: 'l3+r3', soundTheme: 'aero', volume: .7, ambient: false, ambientLevel: .02, music: 'off', musicLevel: .4, rumble: true, soundRev: 4, autoCovers: false, autoManuals: false, artLibrary: '', attract: true, attractMinutes: 3, shuffleAll: true, favorites: [], background: 'blur', theme: 'spectrum', sort: 'az', filter: 'all', museumLight: 'gallery', homeMenu: true, homeLayout: 'side', uiScale: 1,
+    ui: { sound: true, startFullscreen: true, buttons: 'auto', performance: 'auto', quitCombo: true, quitComboKeys: 'l3+r3', soundTheme: 'aero', volume: .7, ambient: false, ambientLevel: .02, music: 'off', musicLevel: .4, rumble: true, soundRev: 4, autoCovers: false, autoManuals: false, artLibrary: '', attract: true, attractMinutes: 3, shuffleAll: true, favorites: [], background: 'blur', theme: 'spectrum', sort: 'az', filter: 'all', museumLight: 'gallery', homeMenu: true, homeLayout: 'side', hideTaskbar: true, uiScale: 1,
       // 1.55 Settings
       updateCheck: true, // (1.82) Settings → System → Check for new betas
       openInto: 'last', display: '', safeArea: 100, clock: 'full', clock24: false, reduceMotion: false, dimMinutes: 0, confirmButton: 'auto', scrollSpeed: 'normal', artRegion: 'auto', audioOut: '', hidden: [], museumStyle: { walkIn: true } }
@@ -160,7 +160,7 @@ function sanitize(cfg) {
   if (!isObj(cfg) || !isObj(cfg.ui)) return cfg;
   const ui = cfg.ui, d = defaults().ui;
   // per-game emulator overrides: plain paths only, a sane number of them
-  const games = {}; if (isObj(cfg.games)) for (const [id, v] of Object.entries(cfg.games).slice(0, 5000)) { if (typeof id !== 'string' || id.length > 2048 || !isObj(v)) continue; const e = typeof v.emulator === 'string' ? v.emulator.trim().slice(0, 1024) : ''; if (e) games[id] = { emulator: e }; }
+  const games = {}; if (isObj(cfg.games)) for (const [id, v] of Object.entries(cfg.games).slice(0, 5000)) { if (typeof id !== 'string' || id.length > 2048 || !isObj(v)) continue; const e = typeof v.emulator === 'string' ? v.emulator.trim().slice(0, 1024) : '', t = typeof v.title === 'string' ? v.title.replace(/\s+/g, ' ').trim().slice(0, 120) : ''; if (e || t) games[id] = { ...(e ? { emulator: e } : {}), ...(t ? { title: t } : {}) }; } // (beta.5: title = the name the player gave it)
   cfg.games = games;
   // (beta.4) games added by hand: plain paths and names only, a sane number of them
   if (isObj(cfg.pc)) { const s = (v, n) => typeof v === 'string' ? v.trim().slice(0, n) : '';

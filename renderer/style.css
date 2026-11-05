@@ -216,7 +216,23 @@ body.aside *,body.aside *::before,body.aside *::after{animation-play-state:pause
 .sys-word.wm{display:flex;flex-direction:column;align-items:flex-start;gap:7px;letter-spacing:normal}
 .wm .wm-main{display:inline-block;line-height:1;background:var(--wm-grad);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 2px 16px var(--wm-glow));padding-right:.1em}
 .wm .wm-tag{font:600 9px/1 var(--ui);letter-spacing:.38em;text-transform:uppercase;color:var(--wm-tagc)}
+/* (beta.6) any shelf without its own lettering colours (the retro shelves from systems-extra.js, a platform's own): white,
+   never the see-through text an undefined gradient gave */
+.wm{--wm-grad:linear-gradient(180deg,#ffffff 15%,#cfd6e6 100%);--wm-glow:rgba(255,255,255,.25);--wm-tagc:#c8cfdd}
 .wm-home{--wm-grad:linear-gradient(180deg,#ffffff 10%,#c9b8ff 100%);--wm-glow:rgba(201,184,255,.4);--wm-tagc:#bdb3e6}
+/* (beta.6) the retro shelves, each in its console's colours */
+.wm-psx{--wm-grad:linear-gradient(180deg,#f2f2f5 15%,#9aa3b5 100%);--wm-glow:rgba(160,170,190,.35);--wm-tagc:#c3c9d6}
+.wm-nes{--wm-grad:linear-gradient(180deg,#ffe2e2 10%,#e4202b 95%);--wm-glow:rgba(228,32,43,.4);--wm-tagc:#f2a6aa}
+.wm-snes{--wm-grad:linear-gradient(180deg,#efeaff 10%,#8f7ff0 95%);--wm-glow:rgba(143,127,240,.4);--wm-tagc:#c4baf5}
+.wm-n64{--wm-grad:linear-gradient(180deg,#dff6e8 10%,#18a85c 95%);--wm-glow:rgba(24,168,92,.4);--wm-tagc:#9ed9b8}
+.wm-gb,.wm-gbc{--wm-grad:linear-gradient(180deg,#f1f8d2 10%,#8bac0f 95%);--wm-glow:rgba(139,172,15,.4);--wm-tagc:#c6d98a}
+.wm-gbc{--wm-grad:linear-gradient(180deg,#f6e8ff 10%,#b14fd6 95%);--wm-glow:rgba(177,79,214,.4);--wm-tagc:#d9a9ec}
+.wm-gba{--wm-grad:linear-gradient(180deg,#ece8ff 10%,#5a3ec8 95%);--wm-glow:rgba(90,62,200,.45);--wm-tagc:#b3a6ea}
+.wm-nds{--wm-grad:linear-gradient(180deg,#ffffff 10%,#a7b1bf 95%);--wm-glow:rgba(167,177,191,.35);--wm-tagc:#cdd3dc}
+.wm-megadrive{--wm-grad:linear-gradient(180deg,#ffe4e4 10%,#d81f26 95%);--wm-glow:rgba(216,31,38,.4);--wm-tagc:#f0a7aa}
+.wm-mastersystem{--wm-grad:linear-gradient(180deg,#ffe9e6 10%,#e2412f 95%);--wm-glow:rgba(226,65,47,.4);--wm-tagc:#f1b0a7}
+.wm-gamegear{--wm-grad:linear-gradient(180deg,#e6f1ff 10%,#2f6fd6 95%);--wm-glow:rgba(47,111,214,.4);--wm-tagc:#a9c5ef}
+.wm-dreamcast{--wm-grad:linear-gradient(180deg,#fff0e0 10%,#ff7a12 95%);--wm-glow:rgba(255,122,18,.4);--wm-tagc:#ffc08f}
 .wm-home .wm-main{font-family:'Lexend',var(--ui);font-weight:800;letter-spacing:.1em;font-size:clamp(22px,2.4vw,34px)}
 /* favorite heart on the box corner */
 .slot.fav .f-front::before{content:"♥";position:absolute;right:calc(8px*var(--os,1));top:calc(8px*var(--os,1));z-index:3;width:calc(26px*var(--os,1));height:calc(26px*var(--os,1));border-radius:50%;background:rgba(10,10,16,.75);color:#ff5c8a;font-size:calc(14px*var(--os,1));line-height:calc(26px*var(--os,1));text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.5)}
@@ -359,6 +375,16 @@ body:not(.fx) .theme-fx i{animation:none!important}
 .bp-row.on span{color:#3a3f52}
 .bp-row:disabled{opacity:.38;cursor:default}
 .bp-foot{margin-top:10px;padding:0 8px;font-size:11px;color:var(--ink-dim)}
+/* (beta.5) a PC game's cover picker: the build picker's card, wider, with a grid of covers (2:3) and two action tiles */
+.coverpick .bp-card{width:min(980px,94vw)}
+.cp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:12px;padding:4px 8px 6px}
+.cp-tile{position:relative;display:flex;flex-direction:column;gap:6px;padding:6px;border:0;border-radius:14px;background:rgba(255,255,255,.04);color:var(--ink);font:inherit;text-align:left;cursor:pointer;transition:background .15s,box-shadow .15s,transform .15s}
+.cp-tile .im{aspect-ratio:2/3;border-radius:9px;background:#0b0d16 center/cover no-repeat;display:flex;align-items:center;justify-content:center;font-size:34px;color:var(--ink-dim)}
+.cp-tile b{font-size:12px;font-weight:600;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cp-tile span{font-size:11px;color:var(--ink-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cp-tile.on{background:rgba(255,255,255,.92);color:#10121a;box-shadow:0 0 0 2px rgba(255,255,255,.35),0 0 18px var(--sel-glow,rgba(120,140,255,.4));transform:translateY(-2px)}
+.cp-tile.on span{color:#3a3f52}
+.cp-note{padding:6px 8px 4px;font-size:13px;color:var(--ink-dim)}
 .sp-title{font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:12px}
 .sp-row{display:flex;align-items:center;gap:14px;padding:8px 10px;border-radius:14px;transition:background .2s}
 .sp-row.active{background:rgba(255,255,255,.05)}
