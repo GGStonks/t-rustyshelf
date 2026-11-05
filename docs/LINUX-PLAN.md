@@ -1,4 +1,12 @@
-# Boxshelf for Linux / Steam Deck: plan (draft, not started)
+# Boxshelf for Linux / Steam Deck: plan (phases 1-2 in progress)
+
+Status (2026-11-05): phases 1 and 2 are built and tested on GitHub's Ubuntu machines (workflow "Linux build":
+linux/ci/detect-test.js, linux/ci/app-test.js on a virtual screen). Not tried on a real Steam Deck yet. Done:
+AppImage target; data folder ~/Boxshelf (or beside the AppImage when a data folder is there); the platform report
+(main/linux.js, preload.js); Linux emulator tables (installed, Flatpak launchers, AppImage patterns); EmuDeck /
+RetroDECK / SD card ROM folders; Steam's Linux folders; RetroArch .so cores; zip unpacking without PowerShell;
+process-group quit; Boxshelf hides during a game; Azahar's Linux folders for .cia installs. Not yet: phase 3 (Home menu /
+quit combo during a game), phase 4, and the emulators' settings tweaks (Windows only for now).
 
 Goal: the same Electron app as an AppImage that runs on desktop Linux and on the Steam Deck, both in Desktop Mode
 and added to Steam as a non-Steam game (Gaming Mode, under gamescope). Windows behaviour must not change: every Linux

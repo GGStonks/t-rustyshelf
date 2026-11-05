@@ -9,7 +9,8 @@
   "scripts": {
     "start": "electron .",
     "windowed": "electron . --windowed",
-    "dist": "electron-builder --win portable"
+    "dist": "electron-builder --win portable",
+    "dist:linux": "electron-builder --linux AppImage --publish never"
   },
   "devDependencies": {
     "electron": "^39.2.0",
@@ -31,6 +32,13 @@
     "win": {
       "target": "portable",
       "icon": "renderer/app-icon.png"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "renderer/app-icon.png",
+      "category": "Game",
+      "synopsis": "TV-style launcher for emulators and Steam",
+      "artifactName": "Boxshelf-${version}-linux.${ext}"
     },
     "asar": true,
     "asarUnpack": [

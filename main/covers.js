@@ -249,6 +249,8 @@ function downloadFile(url, dest, onPct, hops = 0, until = Date.now() + 10 * 60e3
 // ---------- LaunchBox ----------
 const cancelled = () => Object.assign(new Error('Refresh cancelled'), { code: 'cancelled' });
 function untar(zip, dir, signal) {
+  // (Linux: GNU tar can't read a .zip and there's no PowerShell: bsdtar / unzip / Python, see main/linux.js)
+  if (process.platform === 'linux') return require('./linux').unzipAsync(zip, dir, 'Metadata.xml', signal).then(ok => { if (signal && signal.aborted) throw cancelled(); if (!ok) throw new Error("Couldn't unpack LaunchBox's Metadata.zip: install unzip (or bsdtar) and try again."); });
   return new Promise((resolve, reject) => {
     execFile('tar', ['-xf', zip, '-C', dir, 'Metadata.xml'], { windowsHide: true, ...(signal ? { signal } : {}) }, err => {
       if (signal && signal.aborted) return reject(cancelled());

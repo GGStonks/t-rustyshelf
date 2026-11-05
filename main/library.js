@@ -67,9 +67,16 @@ async function tarSlot(fn) { if (tarBusy >= 2) await new Promise(r => tarQ.push(
 // image entries only, never a path that climbs out of the folder, and never a name starting with '-' (tar would read it as
 // one of its own options, e.g. --use-compress-program, since the names go on its command line)
 const safeImg = n => IMG.test(n) && !/^[-@]/.test(n) && !/(^|[\\/])\.\.([\\/]|$)/.test(n) && !path.isAbsolute(n) && !/^[a-z]:/i.test(n) && !/__MACOSX/i.test(n);
-const archNames = async it => (await run('tar', ['-tf', it.path])).split(/\r?\n/).map(s => s.trim()).filter(safeImg);
+// (Linux: GNU tar reads none of these; bsdtar, SteamOS has it, reads them all; without it a .cbz still opens through
+// unzip / Python, main/linux.js)
+const TAR = process.platform === 'linux' ? 'bsdtar' : 'tar';
+const archNames = async it => {
+  try { return (await run(TAR, ['-tf', it.path])).split(/\r?\n/).map(s => s.trim()).filter(safeImg); }
+  catch (e) { const l = process.platform === 'linux' && require('./linux').zipList(it.path); if (l) return l.map(s => s.trim()).filter(safeImg); throw e; }
+};
 // many names don't fit Windows' 32,767-character command line (ENAMETOOLONG): hand them to tar in a list file then
 async function extract(it, out, names) {
+  if (process.platform === 'linux') { try { await run(TAR, ['-xf', it.path, '-C', out, ...names]); return; } catch (e) { if (await require('./linux').unzipAsync(it.path, out)) return; throw e; } }
   if (names.reduce((a, n) => a + n.length + 3, 0) < 20000) return run('tar', ['-xf', it.path, '-C', out, ...names]);
   const list = path.join(out, '.names.txt'); fs.writeFileSync(list, names.join('\n') + '\n');
   try { await run('tar', ['-xf', it.path, '-C', out, '-T', list]); } finally { try { fs.unlinkSync(list); } catch {} }

@@ -75,6 +75,7 @@ function hideWinSoon(ms) { clearTimeout(hideT); hideT = setTimeout(() => { if (w
 
 // a game started: remember what's running and load the overlay now so it opens instantly later
 function begin(meta) {
+  if (process.platform === 'linux') return; // (Linux: no controller helper to open it during a game yet; no overlay window)
   // a shelf menu left open (or never closed because its page reloaded) must not capture the game's menu
   if (shelf) { shelf = null; padwatch && padwatch.setMenu(false); }
   session = { meta: meta || {}, keys: hotkeysFor(meta.systemId, meta.exe, meta.hotkeys), startedAt: Date.now(), open: false, paused: false, ready: false };

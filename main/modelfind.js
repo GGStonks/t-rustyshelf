@@ -54,14 +54,17 @@ async function install(file, sysId, name) {
   if (/\.zip$/i.test(file)) {
     // look inside before unpacking anything: a zip without a .glb (some other download) is left alone
     // (a .gltf alone isn't enough: it needs its .bin and textures beside it, see below)
-    let list; try { list = await run('tar', ['-tf', file]); } catch (e) { log('model zip unreadable:', path.basename(file), e.message); return null; }
+    // (Linux: GNU tar can't read a .zip; bsdtar / unzip / Python list and unpack it, main/linux.js)
+    const L = process.platform === 'linux' ? require('./linux') : null;
+    let list; try { list = L ? (L.zipList(file) || []).join('\n') : await run('tar', ['-tf', file]); } catch (e) { log('model zip unreadable:', path.basename(file), e.message); return null; }
     if (!list.split(/\r?\n/).some(l => /\.glb$/i.test(l.trim()))) { log('model zip had no .glb, ignored:', path.basename(file)); return null; }
     // a fresh folder per zip, never one named after the file ("...zip" would make it "..", the data folder itself)
     const root = path.join(app.getPath('userData'), 'model-unzip'); fs.mkdirSync(root, { recursive: true });
     out = fs.mkdtempSync(path.join(root, 'z-'));
     try {
       // file names reach PowerShell through the environment, never spliced into its code (it treats ‘ ’ ‚ ‛ as quotes too)
-      try { await run('tar', ['-xf', file, '-C', out]); }
+      if (L) { if (!(await L.unzipAsync(file, out))) throw new Error('could not unpack (install unzip or bsdtar)'); }
+      else try { await run('tar', ['-xf', file, '-C', out]); }
       catch { await run('powershell', ['-NoProfile', '-NonInteractive', '-Command', 'Expand-Archive -LiteralPath $env:BS_SRC -DestinationPath $env:BS_DST -Force'], { env: { ...process.env, BS_SRC: file, BS_DST: out } }); }
       const found = []; const walk = d => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) walk(p); else if (e.isFile() && /\.glb$/i.test(e.name)) found.push(p); } }; walk(out); // (isFile: no symlinks out of the folder)
       if (!found.length) { log('model zip had no .glb:', file); return null; } // .gltf + separate textures/bins need the whole folder; ask for a .glb

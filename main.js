@@ -11,7 +11,8 @@ const stremio = require('./main/stremio');
 const commercials = require('./main/commercials');
 // Portable: the app's own folder holds Dolphin\, Eden\, PPSPP\, ROMS\ and themes\.
 // A portable exe unpacks itself into TEMP; PORTABLE_EXECUTABLE_DIR is where the real Boxshelf.exe sits
-paths.setAppRoot(app.isPackaged ? (process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(process.execPath)) : __dirname);
+const linux = require('./main/linux'); // (Linux / Steam Deck only)
+paths.setAppRoot(linux.isLinux ? linux.appRoot(app.isPackaged, __dirname) : app.isPackaged ? (process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(process.execPath)) : __dirname);
 
 const config = require('./main/config');
 const { CONSOLES, APPS } = require('./main/systems');
@@ -354,6 +355,8 @@ function onGameWindow(back) {
 // never takes the focus from the game) and the page is told to stop drawing. Hiding the window instead meant Windows
 // played its show animation when we came back, and the closing game's windows were visible through it.
 function stepAside() {
+  // (Linux: a see-through window isn't possible there, so Boxshelf hides while the game runs; bringBack shows it again)
+  if (linux.isLinux) { try { win.webContents.send('run:aside', true); } catch {} try { win.hide(); } catch {} return; }
   try { win.setOpacity(0); } catch {}
   try { win.setIgnoreMouseEvents(true); } catch {}
   try { win.setFocusable(false); } catch {}
@@ -1084,7 +1087,8 @@ handle('dialog:pick', async ({ kind, title, defaultPath, filters }) => {
   const r = await dialog.showOpenDialog(win, {
     title, defaultPath,
     properties: kind === 'folder' ? ['openDirectory'] : ['openFile'],
-    filters: kind === 'folder' ? undefined : (filters || [{ name: 'Programs', extensions: ['exe'] }])
+    // (Linux: programs have no .exe, so a "Programs" filter would hide every emulator: there it shows all files)
+    filters: kind === 'folder' ? undefined : linux.isLinux && (!filters || filters.some(f => f && Array.isArray(f.extensions) && f.extensions.includes('exe'))) ? undefined : (filters || [{ name: 'Programs', extensions: ['exe'] }])
   });
   return r.canceled ? null : r.filePaths[0];
 });
@@ -1228,8 +1232,8 @@ async function launchGameNow(systemId, file, sc) {
   // (beta.6) RetroArch: this console's core from RetroArch's cores folder, fullscreen; a core that isn't downloaded yet is
   // said plainly (RetroArch itself would just open its menu)
   { const def = CONSOLES.find(c => c.id === systemId);
-    if (def && def.raCore && /^retroarch\.exe$/i.test(path.basename(sc.emulator || ''))) {
-      const core = retroCore(sc.emulator, def.raCore), nm = RA_CORE_NAME[def.raCore] || def.raCore;
+    if (def && def.raCore && (linux.isLinux ? linux.isRetroArch(sc.emulator) : /^retroarch\.exe$/i.test(path.basename(sc.emulator || '')))) {
+      const core = linux.isLinux ? linux.retroCore(sc.emulator, def.raCore) : retroCore(sc.emulator, def.raCore), nm = RA_CORE_NAME[def.raCore] || def.raCore;
       if (!core) throw new Error(`RetroArch doesn't have the ${nm} core for ${def.name} yet. In RetroArch: Main Menu → Online Updater → Core Downloader → ${nm}, then press Play again.`);
       sc.gameArgs = `-f -L "${core}" "{rom}"`; log('RetroArch launch:', def.id, path.basename(core)); } }
   // Dolphin: the Wii remote is let go first, so Dolphin finds it as it always does

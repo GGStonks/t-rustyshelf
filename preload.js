@@ -5,7 +5,11 @@ const call = (name, arg) => ipcRenderer.invoke(name, arg).then(r => { if (!r.ok)
 
 contextBridge.exposeInMainWorld('boxshelf', {
   // What this build can do (docs/PLATFORM-API.md). The Android build reports os 'android' and turns off what it can't do.
-  platform: { os: 'windows', caps: { steam: true, power: true, homeMenu: true, emuSettings: true, autostart: true, displays: true, folders: true, companionServer: true, winMode: true, dolphinIpl: true, raAutoConfig: true } },
+  // (Linux / Steam Deck: no power menu, in-game Home menu, Windows emulator-settings fixes, start-with-Windows, Dolphin IPL
+  // setup, RetroArch auto-config or taskbar switch there yet)
+  platform: process.platform === 'linux'
+    ? { os: 'linux', caps: { steam: true, power: false, homeMenu: false, emuSettings: false, autostart: false, displays: true, folders: true, companionServer: true, winMode: false, dolphinIpl: false, raAutoConfig: false } }
+    : { os: 'windows', caps: { steam: true, power: true, homeMenu: true, emuSettings: true, autostart: true, displays: true, folders: true, companionServer: true, winMode: true, dolphinIpl: true, raAutoConfig: true } },
   getConfig: () => call('config:get'),
   openExternal: url => call('app:openExternal', { url }),
   updateCheck: force => call('app:updateCheck', { force: !!force }), // (1.82) { current, latest, newer, url, links } or { error }

@@ -38,6 +38,7 @@ async function parse(file) {
 // Citra and Lime3DS (Azahar's predecessors) keep the same layout under their own names
 const emuName = exe => /citra/i.test(path.basename(exe || '')) ? 'Citra' : /lime3ds/i.test(path.basename(exe || '')) ? 'Lime3DS' : 'Azahar';
 function sdmcDir(exe) {
+  if (process.platform === 'linux') return sdmcDirLinux(exe);
   let user = exe ? path.join(path.dirname(exe), 'user') : null;
   try { if (!user || !fs.statSync(user).isDirectory()) user = null; } catch { user = null; }
   if (!user) user = path.join(process.env.APPDATA || path.join(require('os').homedir(), 'AppData', 'Roaming'), emuName(exe));
@@ -49,6 +50,21 @@ function sdmcDir(exe) {
   return path.join(user, 'sdmc');
 }
 
+// (Linux) Azahar keeps its data in ~/.local/share/azahar-emu (the Flatpak: ~/.var/app/org.azahar_emu.Azahar/data/…) and
+// its settings in ~/.config/azahar-emu; Citra and Lime3DS the same with their own names. Azahar has to have run once.
+function sdmcDirLinux(exe) {
+  const home = require('os').homedir(), name = emuName(exe).toLowerCase() + '-emu';
+  const flat = path.join(home, '.var', 'app', 'org.azahar_emu.Azahar');
+  const pairs = [[path.join(home, '.local', 'share', name), path.join(home, '.config', name)], [path.join(flat, 'data', name), path.join(flat, 'config', name)]];
+  const hit = pairs.find(([d]) => { try { return fs.statSync(d).isDirectory(); } catch { return false; } });
+  if (!hit) throw new Error(`Open ${emuName(exe)} once on its own first (it makes its folders then), then press Play again.`);
+  try {
+    const ini = fs.readFileSync(path.join(hit[1], 'qt-config.ini'), 'utf8');
+    const custom = /^use_custom_storage\s*=\s*true\s*$/im.test(ini), m = /^sdmc_directory\s*=\s*(.+?)\s*$/im.exec(ini);
+    if (custom && m && m[1] && !/^@/.test(m[1])) return path.resolve(m[1]);
+  } catch {}
+  return path.join(hit[0], 'sdmc');
+}
 function contentDir(sdmc, info) {
   const hi = (info.titleId >> 32n).toString(16).padStart(8, '0'), lo = (info.titleId & 0xffffffffn).toString(16).padStart(8, '0');
   let dir = path.join(sdmc, 'Nintendo 3DS', ZERO, ZERO, 'title', hi, lo, 'content');

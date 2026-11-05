@@ -166,6 +166,9 @@ function dolphinQuitPads(exe, combo) {
   return true;
 }
 function beforeLaunch(systemId, exe, opts = {}) {
+  // (Linux: these tweaks look for the emulators' Windows settings folders, next to the program or in %APPDATA%; beside a
+  // Flatpak launcher or in /usr/bin that would only make stray folders. Skipped there for now.)
+  if (process.platform === 'linux') return;
   try { if ((systemId === 'gc' || systemId === 'wii') && /dolphin/i.test(path.basename(exe || '')) && opts.quitCombo) dolphinQuitPads(exe, opts.quitCombo); } catch (e) { log('Dolphin quit combo tweak failed', e.message); }
   // (Switch 2: every build is an Eden fork, whatever it calls its program: lichii.exe, orchid.exe…)
   try { if ((systemId === 'sw' && EDEN_RE.test(path.basename(exe || ''))) || systemId === 'sw2') quietEden(exe); } catch {}

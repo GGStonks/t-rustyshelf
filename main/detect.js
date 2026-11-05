@@ -25,9 +25,25 @@ function makeIndex() {
 }
 function findIn(index, dir, exeNames) {
   const m = index(dir); let best = null;
-  for (const n of exeNames) { const h = m.get(n.toLowerCase()); if (h && (!best || h.seq < best.seq)) best = h; }
+  for (const n of exeNames) {
+    if (n.startsWith('re:')) { // (Linux) a pattern, for versioned AppImage names: "re:^duckstation.*\.appimage$"
+      const re = new RegExp(n.slice(3), 'i');
+      for (const [k, h] of m) if (re.test(k) && (!best || h.seq < best.seq)) best = h;
+      continue; }
+    const h = m.get(n.toLowerCase()); if (h && (!best || h.seq < best.seq)) best = h; }
   return best ? best.full : null;
 }
+// (Linux) SD cards and USB drives: /run/media/<user>/<card> (SteamOS, most desktops), /run/media/mmcblk0p1 (older SteamOS),
+// /media/<user>/<card> (Ubuntu). Each card, and its Emulation and retrodeck folders, is searched like the home folder.
+function mediaRoots() {
+  if (process.platform !== 'linux') return [];
+  const out = [], user = require('os').userInfo().username;
+  for (const base of ['/run/media/' + user, '/run/media', '/media/' + user]) {
+    for (const ent of readDir(base)) { if (!ent.isDirectory() || ent.name === user) continue; const d = path.join(base, ent.name); out.push(d, path.join(d, 'Emulation'), path.join(d, 'retrodeck')); }
+  }
+  return [...new Set(out)];
+}
+const searchRoots = () => [...SEARCH_ROOTS.map(expand), ...mediaRoots()];
 
 function findExe(folders, exeNames, index = makeIndex()) {
   for (const f of folders) {
@@ -37,8 +53,7 @@ function findExe(folders, exeNames, index = makeIndex()) {
     if (hit) return hit;
   }
   // Portable copies in common places (e.g. Desktop\Emulators\Dolphin-x64\Dolphin.exe)
-  for (const r of SEARCH_ROOTS) {
-    const root = expand(r);
+  for (const root of searchRoots()) {
     if (!isDir(root)) continue;
     const hit = findIn(index, root, exeNames);
     if (hit) return hit;
@@ -49,7 +64,7 @@ function findExe(folders, exeNames, index = makeIndex()) {
 // Look for "<root>\ROMS\<system>" style folders.
 function findRomDirs(sys) {
   const found = new Set();
-  const roots = [appRoot(), ...SEARCH_ROOTS.map(expand)];
+  const roots = [appRoot(), ...searchRoots()];
   for (const root of roots) {
     if (!isDir(root)) continue;
     const candidates = [root];
@@ -77,6 +92,12 @@ function regQuery(key, value) {
 }
 
 async function findSteam() {
+  // (Linux) Steam's own folder (the one with steamapps): native, the Steam Deck's, or the Flatpak's
+  if (process.platform === 'linux') {
+    for (const p of ['%HOME%/.steam/steam', '%HOME%/.local/share/Steam', '%HOME%/.var/app/com.valvesoftware.Steam/.local/share/Steam'].map(expand))
+      if (isDir(path.join(p, 'steamapps'))) { try { return require('fs').realpathSync(p); } catch { return p; } }
+    return null;
+  }
   const reg = await regQuery('HKCU\\Software\\Valve\\Steam', 'SteamPath');
   const options = [reg && reg.replace(/\//g, '\\'), expand('%ProgramFiles(x86)%\\Steam'), expand('%ProgramFiles%\\Steam'), 'C:\\Steam', 'D:\\Steam'];
   for (const p of options) if (p && isFile(path.join(p, 'steam.exe'))) return p;

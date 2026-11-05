@@ -60,14 +60,16 @@ function closeRunning(forceAfterMs = 8000, onForce) {
   if (!running) return false;
   const pid = running.pid, child = running;
   if (process.platform === 'win32') quiet('taskkill', ['/PID', String(pid)]);
-  else { try { child.kill('SIGTERM'); } catch {} }
+  // (Linux: the whole process group, which detached started: a Flatpak's launcher, an AppImage's runtime and the emulator
+  // itself all get the request, not just the first process)
+  else { try { process.kill(-pid, 'SIGTERM'); } catch { try { child.kill('SIGTERM'); } catch {} } }
   if (!forceTimer) { // pressed again while waiting: ask again, but keep the first deadline
     const ms = Number.isFinite(+forceAfterMs) && +forceAfterMs >= 0 ? +forceAfterMs : 8000;
     forceTimer = setTimeout(() => {
       forceTimer = null;
       if (running !== child || child.exitCode !== null || child.signalCode !== null) return;
       // a "really quit?" dialog (or anything else) is holding it open: end the whole tree
-      if (process.platform === 'win32') quiet('taskkill', ['/PID', String(pid), '/T', '/F']); else { try { child.kill('SIGKILL'); } catch {} }
+      if (process.platform === 'win32') quiet('taskkill', ['/PID', String(pid), '/T', '/F']); else { try { process.kill(-pid, 'SIGKILL'); } catch { try { child.kill('SIGKILL'); } catch {} } }
       if (typeof onForce === 'function') { try { onForce(pid); } catch {} }
     }, ms);
     child.once('exit', () => { clearTimeout(forceTimer); forceTimer = null; });

@@ -208,4 +208,44 @@ const SEARCH_ROOTS = [
 ];
 const ROM_ROOT_NAMES = ['roms', 'games', 'isos'];
 
-module.exports = { CONSOLES, APPS, SEARCH_ROOTS, ROM_ROOT_NAMES };
+// ---------- (Linux) where emulators live there: installed programs (/usr/bin), Flatpaks (each one exports a launcher
+// named after its id, e.g. /var/lib/flatpak/exports/bin/org.DolphinEmu.dolphin-emu, so it's found and started like any
+// program) and AppImages (versioned names: "re:" entries are patterns). EmuDeck keeps AppImages in ~/Applications and ROMs
+// in ~/Emulation/roms/<system>, RetroDECK in ~/retrodeck/roms; SD cards are added by detect.js (/run/media/…).
+// Only applied on Linux: Windows keeps the tables above exactly as they are.
+const LINUX_DIRS = ['{app}', '{app}/Emulators', '%HOME%/Applications', '%HOME%/.local/bin', '%HOME%/.local/share/flatpak/exports/bin',
+  '/var/lib/flatpak/exports/bin', '/usr/bin', '/usr/games', '/usr/local/bin', '/opt', '%HOME%/Emulation/tools', '%HOME%/Desktop', '%HOME%/Downloads'];
+const LINUX_RA = ['retroarch', 'org.libretro.RetroArch', 're:^retroarch.*\\.appimage$'];
+const LINUX_RA_DIRS = ['%HOME%/.local/share/Steam/steamapps/common/RetroArch', '%HOME%/.steam/steam/steamapps/common/RetroArch'];
+const LINUX_EMU = {
+  gc: ['dolphin-emu', 'org.DolphinEmu.dolphin-emu', 're:^dolphin.*\\.appimage$'],
+  wii: ['dolphin-emu', 'org.DolphinEmu.dolphin-emu', 're:^dolphin.*\\.appimage$'],
+  wiiu: ['cemu', 'info.cemu.Cemu', 're:^cemu.*\\.appimage$'],
+  sw: ['eden', 're:^eden.*\\.appimage$'],
+  sw2: ['eglantine', 're:^eglantine.*\\.appimage$'],
+  psp: ['PPSSPPSDL', 'PPSSPPQt', 'ppsspp', 'org.ppsspp.PPSSPP', 're:^ppsspp.*\\.appimage$'],
+  ps2: ['pcsx2-qt', 'net.pcsx2.PCSX2', 're:^pcsx2.*\\.appimage$'],
+  ps3: ['rpcs3', 'net.rpcs3.RPCS3', 're:^rpcs3.*\\.appimage$'],
+  ps4: ['shadps4', 'net.shadps4.shadPS4', 're:^shadps4.*\\.appimage$'],
+  ps5: [], x360: [], // (Kyty and Xenia: Windows only)
+  n3ds: ['azahar', 'org.azahar_emu.Azahar', 're:^azahar.*\\.appimage$', 'lime3ds', 'citra-qt'],
+  psx: ['duckstation-qt', 'org.duckstation.DuckStation', 're:^duckstation.*\\.appimage$'],
+  n64: ['RMG', 'com.github.Rosalie241.RMG', 're:^rmg.*\\.appimage$'],
+  gba: ['mgba-qt', 'mgba', 'io.mgba.mGBA', 're:^mgba.*\\.appimage$'],
+  nds: ['melonDS', 'net.kuribo64.melonDS', 're:^melonds.*\\.appimage$'],
+  megadrive: ['blastem'],
+  dreamcast: ['flycast', 'org.flycast.Flycast', 're:^flycast.*\\.appimage$'],
+};
+function forLinux() {
+  for (const c of CONSOLES) {
+    const own = LINUX_EMU[c.id] || [];
+    if (c.retro) { const first = c.exeNames[0] !== 'retroarch.exe'; c.exeNames = first ? [...own, ...LINUX_RA] : [...LINUX_RA, ...own]; c.emulatorFolders = [...LINUX_DIRS, ...LINUX_RA_DIRS]; }
+    else { c.exeNames = own; c.emulatorFolders = LINUX_DIRS; }
+  }
+  APPS.splice(0, APPS.length, { id: 'stremio', name: 'Stremio', exeNames: ['stremio', 'com.stremio.Stremio'], folders: LINUX_DIRS });
+  SEARCH_ROOTS.splice(0, SEARCH_ROOTS.length, '{app}', '{app}/Emulators', '%HOME%/Emulation', '%HOME%/retrodeck', '%HOME%', '%HOME%/Games',
+    '%HOME%/Emulators', '%HOME%/Desktop', '%HOME%/Downloads', '%HOME%/Documents');
+}
+if (process.platform === 'linux') forLinux();
+
+module.exports = { CONSOLES, APPS, SEARCH_ROOTS, ROM_ROOT_NAMES, forLinux };
