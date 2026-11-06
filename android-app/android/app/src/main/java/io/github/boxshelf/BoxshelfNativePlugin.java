@@ -94,7 +94,10 @@ public class BoxshelfNativePlugin extends Plugin {
         catch (SecurityException e) { try { cr.takePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION); } catch (SecurityException ignored) {} }
         JSObject r = new JSObject();
         r.put("uri", tree.toString());
-        r.put("docId", DocumentsContract.getTreeDocumentId(tree));
+        // (beta.8) a picker that hands back a plain document link instead of a folder tree (some makers' pickers) threw
+        // here and left the folder step waiting forever: it's answered as a cancel instead
+        try { r.put("docId", DocumentsContract.getTreeDocumentId(tree)); }
+        catch (IllegalArgumentException e) { JSObject c = new JSObject(); c.put("canceled", true); c.put("error", "not a folder"); call.resolve(c); return; }
         call.resolve(r);
     }
 
@@ -1247,7 +1250,15 @@ public class BoxshelfNativePlugin extends Plugin {
         try (FileOutputStream out = new FileOutputStream(tmp)) {
             out.write(call.getString("text", "").getBytes(StandardCharsets.UTF_8)); out.getFD().sync();
         } catch (Exception e) { call.reject("Couldn't save " + f.getName()); return; }
-        if (!tmp.renameTo(f)) { f.delete(); tmp.renameTo(f); } // write-then-rename: a crash mid-save never leaves half a file
+        // write-then-rename: a crash mid-save never leaves half a file. (beta.8) If the rename over the old file fails, the
+        // old one is moved aside first and only removed once the new one is in place; it's put back if that fails too, and
+        // the save says so (it used to delete the old file first: two failed renames lost the settings)
+        if (!tmp.renameTo(f)) {
+            File old = new File(f.getPath() + ".old"); old.delete();
+            boolean aside = !f.exists() || f.renameTo(old);
+            if (aside && tmp.renameTo(f)) old.delete();
+            else { if (aside && !f.exists() && old.exists()) old.renameTo(f); tmp.delete(); call.reject("Couldn't save " + f.getName()); return; }
+        }
         call.resolve();
     }
 

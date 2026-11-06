@@ -113,7 +113,7 @@
       const list = [...inst].filter(([p]) => p !== 'io.github.boxshelf').sort((x, y) => String(x[1]).localeCompare(String(y[1]), undefined, { sensitivity: 'base' }))
         .map(([p, label]) => ({ kind: 'app', id: 'app-' + p, appId: p, title: String(label), path: p, art: {} }));
       if (list.length) out.push({ id: 'media', kind: 'apps', name: 'Apps', games: list }); } catch (e) { log('apps shelf', e && e.message); } }
-    applyArt(out); applyManuals(out); st.library = out; store('library.json', out);
+    applyArt(out); applyManuals(out); st.library = out; store('library.json', out); // (saved at once: a delayed save was lost if the app closed or reloaded right after a scan; tested in beta.8)
     setTimeout(() => queueArt('scan'), 1500); // after the shelf has had its turn
     setTimeout(() => manQueue('scan'), 5000);
     return out;
@@ -247,7 +247,13 @@
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   // wait for a quiet moment: no game running, Boxshelf in front, the shelf not sliding; then an idle slot of the page.
   // Checked every 250 ms (a timer that only reads a few numbers): work starts again soon after the shelf stops
-  async function idleTurn() { while (!quiet()) await sleep(250); if (window.requestIdleCallback) await new Promise(r => requestIdleCallback(r, { timeout: 2000 })); }
+  // maxMs (beta.7): the longest to wait for quiet, for light work that must not wait forever (the reading corner's folder
+// listing is answered by the native side, off this thread). Without it the wait has no end: on a device (or the build
+// machine) where something never settles, that work never ran at all.
+async function idleTurn(maxMs) { const until = maxMs ? Date.now() + maxMs : Infinity; while (!quiet() && Date.now() < until) await sleep(250); if (window.requestIdleCallback) await new Promise(r => requestIdleCallback(r, { timeout: 2000 })); }
+// what "quiet" is waiting on right now (the device test prints it when a background job didn't run)
+window.BS_FOLDERS = () => ({ ...st.folders }); // (the device test's diagnosis: shown path → folder; a copy)
+window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: !!document.hidden, busy: !!(window.BS_BUSY && window.BS_BUSY()), museumMoving: !!musBusy() });
   // (0.3.5) a download the native side runs and saves by itself (a manual's page) only waits for the shelf to stop sliding:
   // what comes back is one small message, so it needs no idle slot (waiting for one before every page made manuals slow)
   async function netTurn() { while (running || art.paused || document.hidden || (window.BS_BUSY && window.BS_BUSY())) await sleep(150); }

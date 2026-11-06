@@ -41,7 +41,14 @@ module.exports = async function readingPass({ browser, base, check, newPage, OUT
     await page.screenshot({ path: path.join(OUT, 'R0-settings-reading.png') });
     check('Store: Settings → Magazines & guides has the store and "Your magazines & guides" (no PC folder rows)', /Magazines & guides store/.test(set) && /Your magazines & guides/.test(set) && !/Magazines & guides folder|Guides folder|Bring them over/.test(set),
       (set.match(/Magazines & guides store|Your magazines & guides|Magazines & guides folder/g) || []).join(', '));
-    check('Store: PC-style Magazines / Guides folders copied next to the ROMs are read (a PDF, a folder of pages)', /1 magazine · 1 guide · ROMs\/Boxshelf Reading/.test(set), (set.match(/\d+ magazines? · \d+ guides?[^\n]*/) || ['none'])[0]);
+    // (beta.7: on a miss, say what the scan was waiting on, not just "none")
+    const why = /1 magazine · 1 guide · ROMs\/Boxshelf Reading/.test(set) && !process.env.BS_DIAG ? '' : await page.evaluate(async () => { const N = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.BoxshelfNative, c = (await window.boxshelf.getConfig()).config;
+      const L = async uri => { try { return ((await N.listDirs({ uri })) || {}).dirs.map(d => d.name); } catch (e) { return 'error: ' + e.message; } };
+      const folders = window.BS_FOLDERS ? BS_FOLDERS() : null, rr = c.romRoot, tree = folders && rr ? folders[rr] : null;
+      return JSON.stringify({ row: ((document.querySelector('#bss') || {}).innerText || '').split('\n').filter(l => /magazine|Looking|Boxshelf Reading/i.test(l)).slice(0, 3), romRoot: rr, folders: folders ? Object.fromEntries(Object.entries(folders).map(([k, v]) => [k, typeof v + ':' + String(v).slice(0, 90)])) : 'n/a',
+        reading: window.BS_READING && BS_READING.diag ? await BS_READING.diag() : 'n/a', fake: (window.__fakeReading || null), quiet: window.BS_QUIET ? BS_QUIET() : null }); });
+    if (why) console.log('READING DIAGNOSIS ' + why); // (beta.7: the full picture in the build log; the summary table cuts details short)
+    check('Store: PC-style Magazines / Guides folders copied next to the ROMs are read (a PDF, a folder of pages)', /1 magazine · 1 guide · ROMs\/Boxshelf Reading/.test(set), (set.match(/\d+ magazines? · \d+ guides?[^\n]*/) || ['none'])[0] + (why ? ' · ' + why : ''));
     // A on the store row (the first row): the store opens over a paused Settings
     await page.keyboard.press('Enter');
     const opened = await until(() => window.BS_READING && BS_READING.isOpen() && BS_READING.state().items >= 6, null, 60000);

@@ -1009,7 +1009,7 @@ window.Museum = (() => {
     rowI = Math.min(rowI, rows.length - 1); colI = 0; wide = false; holding = null; heldCase = null; shadowRow = -1; lastInput = woke();
     // a visit that ended with something in your hands (hold A to play with the disc out, Stremio from a Blu-ray) left the room
     // dimmed, the camera's eye-level look and the hand zoom / pan behind: the next walk-in started dark and looking straight ahead
-    dimK = 0; holdLook = 0; handZoom = handZoomT = 1; hPan.x = hPan.y = hPan.tx = hPan.ty = 0; hPan.lx = hPan.ly = 0; hold = { rx: 0, ry: 0, trx: 0, try: 0 }; roomView = false; preRow = -1; preOn = false;
+    dimK = 0; holdLook = 0; driftK = 0; handZoom = handZoomT = 1; hPan.x = hPan.y = hPan.tx = hPan.ty = 0; hPan.lx = hPan.ly = 0; hold = { rx: 0, ry: 0, trx: 0, try: 0 }; roomView = false; preRow = -1; preOn = false;
     // the mail: one delivery for everything new, and the walk-in ends at the first new game's place
     { const list = []; rows.forEach(r => r.boxes.forEach(b => { if (b.userData.mail) { b.userData.mk = list.length; list.push(b); } }));
       dvFrom = { rowI, colI };
@@ -1043,7 +1043,7 @@ window.Museum = (() => {
     hooks.onReady && hooks.onReady(Math.round(performance.now() - t0));
     return true;
   }
-  function close() { lastOpen = null; endPeek(); if (tv) tvOff(); tvView = false; if (delivery) dropDelivery(); opening = null; active = false; if (sparks) { try { sparks.parent.remove(sparks); sparks.geometry.dispose(); } catch {} sparks = null; } /* an unboxing's sparkle cut short */ cancelAnimationFrame(raf); raf = 0; if (canvas) canvas.classList.remove('on'); setTimeout(() => { if (!active && wall) { disposeWall(); rows = []; work = []; dust = []; card = null; dropQueued(); tex.forEach(t => { try { t.dispose(); } catch {} }); trimTex(24); if (rebuildGL) { rebuildGL = false; teardown(); } } }, 700); } // GPU copies only: the decoded images stay, so reopening re-uploads instead of re-downloading
+  function close() { lastOpen = null; endPeek(); if (tv) tvOff(); tvView = false; if (delivery) dropDelivery(); opening = null; active = false; if (sparks) { try { sparks.parent.remove(sparks); sparks.geometry.dispose(); } catch {} sparks = null; } /* an unboxing's sparkle cut short */ cancelAnimationFrame(raf); raf = 0; if (canvas) canvas.classList.remove('on'); setTimeout(() => { if (!active && wall) { disposeWall(); rows = []; work = []; dust = []; card = null; dropQueued(); tex.forEach(t => { try { t.dispose(); } catch {} }); trimTex(24); if (renderer) renderer.setSize(8, 8, false); /* (beta.8) the full-screen drawing buffers go too (open() sizes them again first) */ if (rebuildGL) { rebuildGL = false; teardown(); } } }, 700); } // GPU copies only: the decoded images stay, so reopening re-uploads instead of re-downloading
   // the walk-in ends on the whole room (the overview, a gold frame on the shelf you were last on) instead of zooming into a shelf
   function endIntro() { intro.on = false; rows.forEach(r => { r.lampOn = 1; r.lamp.intensity = LAMP(); }); if (!wide && rows.length) { wide = true; wideSel = Math.max(0, Math.min(rows.length - 1, rowI)); hooks.onSelect && hooks.onSelect(current()); } }
   function skipFill() { if (!intro.on) return false; endIntro(); return true; }
@@ -1571,7 +1571,7 @@ window.Museum = (() => {
   // the lid. X again takes the disc out (hold A then plays it), Y lifts the manual out to read, page by page. B steps
   // back one stage at a time: manual → disc → closed case → back on the shelf. While it's open the real case is stood
   // in for by an open-able one of the same size, handed back once it has closed.
-  let peek = null, reader = null, dimK = 0, lastNav = 0, holdLook = 0, handZoom = 1, handZoomT = 1; const hPan = { x: 0, y: 0, tx: 0, ty: 0 }; const HIDE = [];
+  let peek = null, reader = null, dimK = 0, lastNav = 0, holdLook = 0, driftK = 0 /* (beta.8) the idle drift, eased out */, handZoom = 1, handZoomT = 1; const hPan = { x: 0, y: 0, tx: 0, ty: 0 }; const HIDE = [];
   const heldReady = () => heldCase && (heldCase.userData.lift || 0) > .9;
   function buildPeek(b) {
     const THREE = T(), u = b.userData, g = u.g; b.geometry.computeBoundingBox(); const sz = b.geometry.boundingBox.getSize(new THREE.Vector3());
@@ -2084,7 +2084,9 @@ window.Museum = (() => {
     if (snapCam) { snapCam = false; tw.on = false; camP.x = camTarget.x; camP.y = camTarget.y; camP.z = camTarget.z; }
     if (tw.on) twStep(dt, camTarget); else { camP.x = sm(camP.x, camTarget.x, k); camP.y = sm(camP.y, camTarget.y, k); camP.z = sm(camP.z, camTarget.z, k); }
     camV.x = (camP.x - px) / dt; camV.y = (camP.y - py) / dt; camV.z = (camP.z - pz) / dt;
-    const dx = drift * Math.sin(now / 4200) * .18, dy = drift * Math.sin(now / 5600) * .06, dz = drift * Math.sin(now / 7000) * .25;
+    // (beta.8) the drift eases back out when you touch the controls (it used to vanish in one frame: a jump sideways)
+    driftK = drift >= driftK ? drift : sm(driftK, drift, 1 - Math.exp(-dt * 4));
+    const dx = driftK * Math.sin(now / 4200) * .18, dy = driftK * Math.sin(now / 5600) * .06, dz = driftK * Math.sin(now / 7000) * .25;
     // a case in your hands: the camera faces it straight on, at eye level, wherever it is (the shelf view looks down at the wall)
     holdLook = sm(holdLook, heldCase ? 1 : 0, 1 - Math.exp(-dt * 4));
     camera.position.set(camP.x + dx * (1 - holdLook), camP.y + .2 * (1 - holdLook) + dy * (1 - holdLook), camP.z + dz * (1 - holdLook));

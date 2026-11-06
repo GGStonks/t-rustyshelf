@@ -270,4 +270,48 @@
   // look like a second one (whose pointerdown would then be kept from the app)
   addEventListener('touchend', e => { end(e, false); if (!e.touches.length) down.clear(); }, { capture: true, passive: true });
   addEventListener('touchcancel', e => { end(e, true); if (!e.touches.length) down.clear(); }, { capture: true, passive: true });
+
+  // ---------- 4. the tap after a flick (beta.7) ----------
+  // Chromium starts a fling at the end of every quick drag. The page's touch-action keeps it from scrolling anything, but
+  // the browser still takes the next finger-down as "stop the fling" and makes no click for that tap, however long after:
+  // flick the shelf or the console bar, and the first tap on a case / console did nothing. So after a drag, a quick tap
+  // that gets no tap from Chromium (no mousedown / click) is clicked here, once; a real one that turns up late is eaten.
+  // Not for the touch that wakes a dimmed screen (its pointerdown never reached us: down is empty), the museum wall's own
+  // taps (mg), or a tap one of our gestures used up (eatClickUntil). Every other tap is left to Chromium as before.
+  const TAP_SLOP = 12, TAP_LONG = 450, TAP_WAIT = 140, LATE = 700;
+  let tp = null, afterDrag = false, waitTap = null, synthAt = 0, synthX = 0, synthY = 0;
+  addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) { if (tp) afterDrag = true; tp = null; return; }
+    const f = e.touches[0];
+    tp = { id: f.identifier, x: f.clientX, y: f.clientY, t: e.timeStamp, el: e.target, moved: false, armed: afterDrag, skip: !!mg || !down.size };
+  }, { capture: true, passive: true });
+  addEventListener('touchmove', e => {
+    if (!tp || tp.moved) return;
+    for (const c of e.changedTouches) if (c.identifier === tp.id && Math.hypot(c.clientX - tp.x, c.clientY - tp.y) > TAP_SLOP) { tp.moved = true; afterDrag = true; }
+  }, { capture: true, passive: true });
+  addEventListener('touchend', e => {
+    const t = tp; if (!t || e.touches.length) return; tp = null;
+    if (t.moved) { afterDrag = true; return; }
+    afterDrag = false;
+    if (!t.armed || t.skip || e.timeStamp - t.t > TAP_LONG || performance.now() < eatClickUntil) return;
+    const w = waitTap = { ...t, got: false };
+    setTimeout(() => {
+      if (waitTap !== w) return; waitTap = null;
+      if (w.got || w.el.isConnected === false || performance.now() < eatClickUntil) return;
+      const el = document.elementFromPoint(w.x, w.y);
+      if (!el || !(el === w.el || w.el.contains(el) || el.contains(w.el))) return; // the page changed under the finger: leave it
+      synthAt = performance.now(); synthX = w.x; synthY = w.y;
+      const f = el.closest('button,a[href],input,select,textarea,[tabindex]'); if (f && f.focus) { try { f.focus({ preventScroll: true }); } catch {} }
+      el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, composed: true, view: window, detail: 1, button: 0, clientX: w.x, clientY: w.y }));
+    }, TAP_WAIT);
+  }, { capture: true, passive: true });
+  addEventListener('touchcancel', () => { tp = null; }, { capture: true, passive: true });
+  // Chromium's own tap: its mousedown / click mark the tap as done (no backup click); one arriving after the backup is eaten
+  const tapSeen = e => {
+    if (waitTap) { waitTap.got = true; return; }
+    // (beta.8) only a click at the same spot as the backup one is its late twin: a real tap elsewhere always goes through
+    if (e.isTrusted && synthAt && performance.now() - synthAt < LATE && Math.abs(e.clientX - synthX) < 24 && Math.abs(e.clientY - synthY) < 24) { if (e.type === 'click') synthAt = 0; e.stopImmediatePropagation(); e.preventDefault(); }
+  };
+  addEventListener('mousedown', tapSeen, true); addEventListener('click', tapSeen, true);
+  window.BS_TAPFIX = { wait: TAP_WAIT }; // (for the device test)
 })();

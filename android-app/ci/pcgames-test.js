@@ -51,6 +51,22 @@ module.exports = async function pcGamesPass({ browser, base, check, newPage }) {
     fs.rmSync(tmp, { recursive: true, force: true });
     check('PC games: a hand-added game whose program is gone is left out; a saved config keeps clean entries only',
       c.length === 1 && c[0].title === 'Mine' && clean.custom.length === 1 && clean.custom[0].exe === 'C:\\x.exe' && clean.epic === true, JSON.stringify({ c, clean }));
+    // (beta.7) the new stores, from made-up installs: the registry's text (GOG, Ubisoft), EA's installer file, Xbox's game config
+    const reg = pcg.parseReg('\r\nHKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\GOG.com\\Games\\1207658924\r\n    gameName    REG_SZ    Lantern Keep\r\n    path    REG_SZ    C:\\GOG Games\\Lantern Keep\r\n    dependsOn    REG_SZ    \r\n\r\nHKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Ubisoft\\Launcher\\Installs\\4740\r\n    InstallDir    REG_SZ    C:/Ubisoft/Harbor Run/\r\n');
+    const g1 = reg.get('HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\GOG.com\\Games\\1207658924') || {}, u1 = reg.get('HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Ubisoft\\Launcher\\Installs\\4740') || {};
+    const tmp2 = fs.mkdtempSync(path.join(os.tmpdir(), 'bxstores-'));
+    const ea = path.join(tmp2, 'EA Games', 'Dust Rally'); fs.mkdirSync(path.join(ea, '__Installer'), { recursive: true }); fs.writeFileSync(path.join(ea, 'DustRally.exe'), 'x'.repeat(5000));
+    fs.writeFileSync(path.join(ea, '__Installer', 'installerdata.xml'), '<DiPManifest><contentIDs><contentID>Origin.OFR.50.0001234</contentID><contentID>1234567</contentID></contentIDs><gameTitles><gameTitle locale="de_DE">Staub</gameTitle><gameTitle locale="en_US">Dust Rally &amp; Friends</gameTitle></gameTitles></DiPManifest>');
+    const xb = path.join(tmp2, 'XboxGames'); fs.mkdirSync(path.join(xb, 'Lumen Garden', 'Content'), { recursive: true }); fs.mkdirSync(path.join(xb, 'GameSave', 'Content'), { recursive: true });
+    fs.writeFileSync(path.join(xb, 'Lumen Garden', 'Content', 'MicrosoftGame.config'), '<Game><Identity Name="Studio.LumenGarden" Publisher="CN=Studio" Version="1.0.0.0"/><ExecutableList><Executable Name="Lumen.exe" Id="Game"/></ExecutableList><ShellVisuals DefaultDisplayName="Lumen Garden"/></Game>');
+    const eaL = pcg.eaFromDirs([ea]), xbL = pcg.xboxScan([xb]);
+    fs.rmSync(tmp2, { recursive: true, force: true });
+    check('PC stores: GOG and Ubisoft registry entries read; an EA game\'s title and EA app link; an Xbox game\'s package and title (GameSave skipped)',
+      g1.gamename === 'Lantern Keep' && g1.dependson === '' && u1.installdir === 'C:/Ubisoft/Harbor Run/' &&
+      eaL.length === 1 && eaL[0].title === 'Dust Rally & Friends' && eaL[0].uri === 'origin2://game/launch?offerIds=Origin.OFR.50.0001234%2C1234567&autoDownload=1' &&
+      xbL.length === 1 && xbL[0].name === 'Studio.LumenGarden' && xbL[0].appId === 'Game' && xbL[0].title === 'Lumen Garden', JSON.stringify({ g1, u1, eaL, xbL }));
+    const cl2 = config.normalize({ pc: {} }).pc;
+    check('PC stores: the four store switches default to on', ['gog', 'ubisoft', 'ea', 'xbox'].every(k => cl2[k] === true), JSON.stringify(cl2));
   } catch (e) { check('PC games: module checks ran', false, e && e.stack ? e.stack.split('\n').slice(0, 2).join(' ') : e); }
 
   const { ctx, page, errors } = await newPage(browser, null);
@@ -80,6 +96,24 @@ module.exports = async function pcGamesPass({ browser, base, check, newPage }) {
       key('Escape'); for (let i = 0; i < 20 && Shelf.getMode() !== 'browse'; i++) await w(250); out.epic.back = Shelf.getMode(); return out; });
     check('PC games (Windows): the Epic game on the PC shelf says it starts through Epic, Play hands it over by id, Back returns',
       play.epic.game === 'Ember Trail' && /Epic/.test(play.epic.how) && /Epic Games/.test(play.epic.chips) && play.epic.launched && play.epic.back === 'browse', JSON.stringify(play.epic));
+    // (beta.7) the new stores on the PC shelf: each game names its store; Ubisoft's is handed to Ubisoft Connect (Back returns),
+    // GOG's is started by Boxshelf like an app (the shelf comes back when it closes)
+    const st7 = await page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), out = {};
+      const key = k => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+      const go = async t => { for (let i = 0; i < 12 && Shelf._qs().g !== t; i++) { key('ArrowRight'); await w(350); } if (Shelf._qs().g !== t) for (let i = 0; i < 12 && Shelf._qs().g !== t; i++) { key('ArrowLeft'); await w(350); } return Shelf._qs().g === t; };
+      out.chips = {};
+      for (const [t, src] of [['Lantern Keep', 'GOG'], ['Harbor Run', 'Ubisoft'], ['Dust Rally', 'EA'], ['Lumen Garden', 'Xbox']]) {
+        if (!(await go(t))) { out.chips[t] = 'not found'; continue; }
+        key('i'); await w(800); out.chips[t] = ((document.getElementById('dChips') || {}).textContent || '') + ' | ' + ((document.getElementById('dHow') || {}).textContent || ''); key('i'); await w(600); }
+      if (await go('Harbor Run')) { key('Enter'); await w(1600); out.ubi = { launched: (window.__pcLaunched || []).includes('ubisoft-4740'), mode: Shelf.getMode(), note: (document.getElementById('launch') || {}).textContent || '' };
+        key('Escape'); for (let i = 0; i < 20 && Shelf.getMode() !== 'browse'; i++) await w(250); out.ubi.back = Shelf.getMode(); }
+      if (await go('Lantern Keep')) { key('Enter'); await w(1500); out.gog = { launched: (window.__pcLaunched || []).includes('gog-1207658924'), mode: Shelf.getMode() };
+        for (let i = 0; i < 40 && Shelf.getMode() !== 'browse'; i++) await w(250); out.gog.back = Shelf.getMode(); }
+      return out; });
+    check('PC stores (Windows): GOG, Ubisoft, EA and Xbox games are on the PC shelf, each naming its store in Details',
+      ['GOG', 'Ubisoft', 'EA', 'Xbox'].every((s, i) => new RegExp(s).test(st7.chips[['Lantern Keep', 'Harbor Run', 'Dust Rally', 'Lumen Garden'][i]] || '')), JSON.stringify(st7.chips));
+    check('PC stores (Windows): a Ubisoft game is handed to Ubisoft Connect (Back returns); a GOG game is started by Boxshelf and the shelf comes back',
+      !!st7.ubi && st7.ubi.launched && /Ubisoft Connect/.test(st7.ubi.note) && st7.ubi.back === 'browse' && !!st7.gog && st7.gog.launched && st7.gog.mode === 'launch' && st7.gog.back === 'browse', JSON.stringify({ ubi: st7.ubi, gog: st7.gog }));
     check('PC games (Windows): Play on a Custom shelf game starts it by id (launch:pc) and the shelf comes back when it closes',
       /Custom/i.test(play.shelf) && play.game === 'Quarantine' && play.launched.includes('quiver-quarantine') && play.mode === 'launch' && play.back === 'browse', JSON.stringify(play));
     check('PC games (Windows): a Quiver game says where it came from (no Steam wording)', /Quiver/.test(play.how + play.chips) && !/Steam/.test(play.how), JSON.stringify({ how: play.how, chips: play.chips }));
@@ -92,15 +126,17 @@ module.exports = async function pcGamesPass({ browser, base, check, newPage }) {
       Setup.open({ page: 'pc' }); for (let i = 0; i < 40 && !document.querySelector('#bss.on .bss-row'); i++) await w(150); await w(600);
       out.pcPage = names();
       if (window.Settings && Settings.isOpen && Settings.isOpen()) { await Settings.close(); await w(800); }
-      Setup.open({ page: 'custom' }); for (let i = 0; i < 40 && !row('Add a game'); i++) await w(150); await w(800);
+      Setup.open({ page: 'custom' }); for (let i = 0; i < 40 && !row('Add games'); i++) await w(150); await w(800); // (beta.7: Add games, a page of its own)
       out.page = names(); out.quiverRow = (row('Quiver Launcher') || {}).textContent || '';
-      row('Add a game').click(); await w(1200); out.added = (await cfg()).custom; out.after = names();
+      row('Add games').click(); for (let i = 0; i < 40 && !row('Add one program'); i++) await w(150); await w(400); row('Add one program').click(); await w(1200); out.added = (await cfg()).custom;
+      if (window.Settings && Settings.isOpen && Settings.isOpen()) { await Settings.close(); await w(800); }
+      Setup.open({ page: 'custom' }); for (let i = 0; i < 40 && !row('Add games'); i++) await w(150); await w(800); out.after = names();
       const rm = names().find(n => /^Remove /.test(n)); if (rm) { row(rm).click(); await w(300); row(rm).click(); await w(1200); }
       out.removed = (await cfg()).custom;
       if (window.Settings && Settings.isOpen && Settings.isOpen()) { await Settings.close(); await w(800); } return out; });
-    check('PC games (Windows): Settings → PC games has the Epic switch; Custom games has Quiver and Add a game',
-      st.pcPage.includes('Show installed Epic Games') && st.page.includes("Show Quiver's games") && st.page.includes('Add a game') && /Found/.test(st.quiverRow), JSON.stringify({ pc: st.pcPage, page: st.page, q: st.quiverRow }).slice(0, 500));
-    check('PC games (Windows): Add a game puts the program on the Custom shelf named from its file; Remove (pressed twice) takes it off',
+    check('PC games (Windows): Settings → PC games has the Epic switch; Custom games has Quiver and Add games',
+      st.pcPage.includes('Show installed Epic Games') && st.page.includes("Show Quiver's games") && st.page.includes('Add games') && /Found/.test(st.quiverRow), JSON.stringify({ pc: st.pcPage, page: st.page, q: st.quiverRow }).slice(0, 500));
+    check('PC games (Windows): Add games → Add one program puts it on the Custom shelf named from its file; Remove (pressed twice) takes it off',
       (st.added || []).length === 1 && st.added[0].title === 'program' && /program\.exe$/.test(st.added[0].exe) && st.after.includes('program') && (st.removed || []).length === 0, JSON.stringify({ added: st.added, removed: st.removed }).slice(0, 400));
     // (beta.5) a PC game's cover picker: Details → Box art opens it with the options (SteamGridDB's, a picture of yours);
     // the arrows move, A uses one (by key), the picker closes and the shelf says so; opened again, Automatic cover is offered

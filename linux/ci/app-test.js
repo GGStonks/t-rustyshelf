@@ -19,7 +19,8 @@ const ra = mk('.local/bin/retroarch', `#!/bin/sh\nfor a in "$@"; do echo "$a"; d
 const core = mk('.config/retroarch/cores/snes9x_libretro.so', 'x');
 const rom = mk('Emulation/roms/snes/Test Game (USA).sfc', 'x');
 mk('Boxshelf/data/config.json', JSON.stringify({ setupDone: true,
-  ui: { bootIntro: 'off', sound: false, music: 'off', startFullscreen: true, openInto: 'last', autoCovers: false },
+  // lastSeenVersion: this version's What's new already seen (beta.7: its card would take the keys this test presses)
+  ui: { bootIntro: 'off', sound: false, music: 'off', startFullscreen: true, openInto: 'last', autoCovers: false, lastSeenVersion: require('../../package.json').version },
   steam: { enabled: false }, pc: { epic: false, quiver: false, custom: [] },
   systems: { snes: { enabled: true, emulator: ra, romDirs: [path.dirname(rom)] } } }, null, 2));
 
@@ -31,8 +32,8 @@ async function cdp(url) {
   const ev = async expr => { const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (r.result && r.result.exceptionDetails) throw new Error(JSON.stringify(r.result.exceptionDetails).slice(0, 300)); return r.result && r.result.result && r.result.result.value; };
   return { send, ev, events, close: () => ws.close() };
 }
-async function pageTarget() {
-  for (let i = 0; i < 120; i++) { try { const l = await (await fetch('http://127.0.0.1:9333/json')).json(); const t = l.find(x => x.type === 'page' && /index\.html/.test(x.url)); if (t) return t.webSocketDebuggerUrl; } catch {} await sleep(500); }
+async function pageTarget(port = 9333) {
+  for (let i = 0; i < 120; i++) { try { const l = await (await fetch('http://127.0.0.1:' + port + '/json')).json(); const t = l.find(x => x.type === 'page' && /index\.html/.test(x.url)); if (t) return t.webSocketDebuggerUrl; } catch {} await sleep(500); }
   throw new Error('the Boxshelf page never came up');
 }
 const shot = async (p, name) => { try { const r = await p.send('Page.captureScreenshot', { format: 'png' }); if (r.result && r.result.data) fs.writeFileSync(path.join(OUT, name + '.png'), Buffer.from(r.result.data, 'base64')); } catch {} };
@@ -55,6 +56,11 @@ const shot = async (p, name) => { try { const r = await p.send('Page.captureScre
     const det = await p.ev('window.boxshelf.detect()').catch(e => ({ error: e.message }));
     const snes = det && det.systems && det.systems.snes || {};
     check('detection in the app finds RetroArch and the ROM folder', snes.emulator === ra && (snes.romDirs || []).includes(path.dirname(rom)), JSON.stringify(snes));
+    // (beta.8) Add Boxshelf to Steam: Steam's list of non-Steam games gets an entry that starts this AppImage
+    const sdir = path.join(HOME, '.local/share/Steam/userdata/4242/config'); fs.mkdirSync(sdir, { recursive: true });
+    const add = await p.ev('window.boxshelf.addToSteam(false)').catch(e => ({ error: e.message }));
+    const vdf = (() => { try { return fs.readFileSync(path.join(sdir, 'shortcuts.vdf')).toString('latin1'); } catch { return ''; } })();
+    check('Add Boxshelf to Steam writes Steam\'s shortcut to this AppImage', !!add && add.ok && vdf.includes('Boxshelf') && vdf.includes('.AppImage'), JSON.stringify(add));
     check('the data folder is ~/Boxshelf (the AppImage itself is read-only)', fs.existsSync(path.join(HOME, 'Boxshelf', 'data', 'boxshelf.log')), fs.readdirSync(path.join(HOME, 'Boxshelf')).join(','));
     // Play
     await key('Enter', 13);
@@ -74,6 +80,16 @@ const shot = async (p, name) => { try { const r = await p.send('Page.captureScre
     try { if (p) p.close(); } catch {}
     try { process.kill(-app.pid, 'SIGTERM'); } catch {} await sleep(1500); try { process.kill(-app.pid, 'SIGKILL'); } catch {}
   }
+  // (beta.8) started the way Steam's Game Mode starts it (no options of our own): the AppImage's wrapper adds --no-sandbox
+  // and X11, the app comes up, knows it's in Game Mode on a Deck, and shows no Desktop Mode card
+  { const app2 = spawn(img, ['--remote-debugging-port=9334'], { env: { ...process.env, HOME, APPIMAGE_EXTRACT_AND_RUN: '1', SteamClientLaunch: '1', SteamGameId: '123', SteamGamepadUI: '1', XDG_CURRENT_DESKTOP: 'gamescope', BS_FAKE_DECK: '1' }, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+    let out2 = ''; app2.stdout.on('data', d => out2 += d); app2.stderr.on('data', d => out2 += d); let p2;
+    try { p2 = await cdp(await pageTarget(9334)); let ok = false; for (let i = 0; i < 90 && !ok; i++) { ok = await p2.ev('!!(window.Shelf && Shelf._qs && Shelf._qs().g)').catch(() => false); if (!ok) await sleep(500); }
+      await sleep(13000); const mode = await p2.ev('Shelf.getMode()').catch(() => '?'); await shot(p2, '3-game-mode');
+      const logT = (() => { try { return fs.readFileSync(path.join(HOME, 'Boxshelf', 'data', 'boxshelf.log'), 'utf8'); } catch { return ''; } })(), line = (logT.match(/Linux start:[^\n]*/g) || []).pop() || '';
+      check('started like Steam\'s Game Mode: the wrapper adds --no-sandbox and X11, the app comes up as a Deck in Game Mode, no Desktop Mode card', ok && /Steam Deck/.test(line) && /started by Steam: true/.test(line) && /Game Mode: true/.test(line) && /--no-sandbox/.test(line) && /--ozone-platform=x11/.test(line) && mode === 'browse', line + ' | mode ' + mode);
+    } catch (e) { check('the Game Mode start ran to the end', false, (e && e.message) + ' | ' + out2.slice(-400)); }
+    finally { fs.writeFileSync(path.join(OUT, 'app-output-game-mode.txt'), out2); try { if (p2) p2.close(); } catch {} try { process.kill(-app2.pid, 'SIGTERM'); } catch {} await sleep(1500); try { process.kill(-app2.pid, 'SIGKILL'); } catch {} } }
   console.log(fails ? `${fails} failed` : 'all passed');
   process.exit(fails ? 1 : 0);
 })();

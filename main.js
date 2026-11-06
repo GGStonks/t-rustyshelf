@@ -12,12 +12,14 @@ const commercials = require('./main/commercials');
 // Portable: the app's own folder holds Dolphin\, Eden\, PPSPP\, ROMS\ and themes\.
 // A portable exe unpacks itself into TEMP; PORTABLE_EXECUTABLE_DIR is where the real Boxshelf.exe sits
 const linux = require('./main/linux'); // (Linux / Steam Deck only)
+const steamdeck = require('./main/steamdeck'); // (beta.8) Steam Deck: where Boxshelf runs, Add Boxshelf to Steam
 paths.setAppRoot(linux.isLinux ? linux.appRoot(app.isPackaged, __dirname) : app.isPackaged ? (process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(process.execPath)) : __dirname);
 
 const config = require('./main/config');
 const { CONSOLES, APPS } = require('./main/systems');
 const { detectAll, detectSystem } = require('./main/detect');
 const { scanSystem: scanFolders } = require('./main/scanner');
+const arcadenames = require('./main/arcadenames');
 // (beta.5) a game's own name (Details → Rename: cfg.games["<console>:<file>"].title) replaces the scanned one wherever main
 // reads games: the shelf, box art and manual lookups, matching. fileTitle keeps the scanned one. Copies, never the
 // scanner's own objects (a reset must bring the file's name back)
@@ -41,6 +43,11 @@ const archive = require('./main/archive');
 const padwatch = require('./main/padwatch');
 const homemenu = require('./main/homemenu');
 const emucfg = require('./main/emucfg');
+const emusetup = require('./main/emusetup'); // (beta.7) Set up for me
+const racores = require('./main/racores'); // (beta.7) RetroArch cores downloaded, BIOS files checked
+const previews = require('./main/previews'); // (beta.7) video previews
+const ytclips = require('./main/ytclips'); // (beta.8) console trailers: YouTube trailers kept as short clips
+const addgames = require('./main/addgames'); // (beta.7) Add games: several at once, a folder, Playnite
 const x360 = require('./main/x360');
 const n3ds = require('./main/n3ds');
 const kyty = require('./main/kyty'); // PS5: Kyty's launch settings and the KytyJets preset
@@ -87,16 +94,49 @@ function openTrailer(url) {
   const b = win ? win.getBounds() : { x: 0, y: 0, width: 1280, height: 720 };
   trailerWin = new BrowserWindow({ parent: win || undefined, modal: false, fullscreen: !!(win && win.isFullScreen()), x: b.x, y: b.y, width: b.width, height: b.height, backgroundColor: '#000000', autoHideMenuBar: true, title: 'Trailer', webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, partition: 'trailer' } }); // its own session: YouTube's page can't reach Boxshelf's bsfile:// files
   trailerWin.setMenuBarVisibility(false);
-  trailerWin.loadURL(`https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0&modestbranding=1&iv_load_policy=3`).catch(e => log('trailer load', e.message));
+  ytLoad(trailerWin.webContents, id, { muted: false }).catch(e => log('trailer load', e.message)); // (beta.7: inside a page of its own; a bare embed no longer plays)
   trailerWin.webContents.on('before-input-event', (e, input) => { if (input.type === 'keyDown' && (input.key === 'Escape' || input.key === 'Backspace')) { e.preventDefault(); try { trailerWin.close(); } catch {} } });
   trailerWin.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  trailerWin.webContents.on('will-navigate', (e, to) => { if (!/^https:\/\/www\.youtube-nocookie\.com\//i.test(to)) e.preventDefault(); });
+  trailerWin.webContents.on('will-navigate', e => e.preventDefault()); // (the player lives in its frame; the page itself never goes anywhere)
   const tw = trailerWin; tw.on('closed', () => { if (trailerWin === tw) trailerWin = null; if (alive() && trailerWin === null) win.focus(); if (trailerWin === null && cfg && cfg.ui.homeMenu === false && !launcher.isRunning()) padwatch.stop(); });
   // the trailer has the focus, so the shelf's own pad reading can't see the controller: the XInput helper closes it on B,
   // Back or Guide (with the Home menu off no helper runs on the shelf, so start one just for the trailer)
   if (!padwatch.isRunning()) { if (cfg && cfg.ui.homeMenu !== false) watchShelf(); else padwatch.start('none', 900, () => {}, { home: true, backHome: false, cmdFile: path.join(app.getPath('temp'), `boxshelf-pad-${process.pid}.txt`), onHome: () => closeTrailer(), onButton: (n, d) => { if (d && (n === 'b' || n === 'back')) closeTrailer(); } }); }
   return { external: false };
 }
+// (beta.7) YouTube only plays an embed that sits in a web page (a bare embed shows "Video player configuration error"):
+// this little page, loaded as data with an https address of its own (nothing is fetched from that address), holds
+// YouTube's player. preview: no controls, muted unless asked, looping, cropped past YouTube's title bar, faded in once
+// it really plays; the page's title tells main how it went (yt-playing / yt-error).
+function ytPage(id, o = {}) {
+  const pv = { autoplay: 1, mute: o.muted === false ? 0 : 1, controls: o.preview ? 0 : 1, rel: 0, playsinline: 1, modestbranding: 1, iv_load_policy: 3, disablekb: o.preview ? 1 : 0, fs: o.preview ? 0 : 1, ...(o.preview ? { loop: 1, playlist: id } : {}) };
+  const crop = o.preview ? 'top:-60px;height:calc(100% + 120px)' : 'top:0;height:100%';
+  return `<!doctype html><meta charset="utf-8"><title>yt</title><style>html,body{margin:0;height:100%;overflow:hidden;background:transparent}#p{position:absolute;left:0;width:100%;${crop};border:0;opacity:0;transition:opacity .45s ease}#p.on{opacity:1}</style>
+<div id="p"></div><script src="https://www.youtube.com/iframe_api"></script><script>
+function onYouTubeIframeAPIReady(){new YT.Player('p',{videoId:${JSON.stringify(id)},host:'https://www.youtube-nocookie.com',playerVars:${JSON.stringify(pv)},
+events:{onStateChange:function(e){if(e.data===1){document.getElementById('p').className='on';document.title='yt-playing'}},onError:function(){document.title='yt-error'}}})}
+setTimeout(function(){if(document.title==='yt')document.title='yt-error'},15000);</script>`;
+}
+const ytLoad = (wc, id, o) => wc.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(ytPage(id, o)), { baseURLForDataURL: 'https://player.boxshelf.localhost/' });
+// the Details preview: YouTube's player in a view of its own laid over the panel's video box (the renderer sends where);
+// its own session like the trailer window, never keeps the keyboard, hidden whenever Details isn't showing it
+let ytView = null, ytWant = null;
+function ytEnsure() {
+  if (ytView && !ytView.webContents.isDestroyed()) return ytView;
+  const { WebContentsView } = require('electron');
+  ytView = new WebContentsView({ webPreferences: { partition: 'trailer', sandbox: true, contextIsolation: true, nodeIntegration: false } });
+  try { ytView.setBackgroundColor('#00000000'); } catch {}
+  const wc = ytView.webContents;
+  wc.setWindowOpenHandler(() => ({ action: 'deny' }));
+  wc.on('will-navigate', e => e.preventDefault());
+  wc.on('focus', () => { if (alive()) win.webContents.focus(); }); // (a click on the video must not take the controller's keys away from the shelf)
+  wc.on('page-title-updated', (e, t) => { if (alive() && (t === 'yt-playing' || t === 'yt-error')) win.webContents.send('preview:yt', { id: ytWant, state: t.slice(3) }); });
+  ytView.setVisible(false);
+  win.contentView.addChildView(ytView);
+  return ytView;
+}
+function ytBounds(r) { const z = alive() ? win.webContents.getZoomFactor() || 1 : 1; return { x: Math.round(r.x * z), y: Math.round(r.y * z), width: Math.max(1, Math.round(r.w * z)), height: Math.max(1, Math.round(r.h * z)) }; }
+function ytStop() { ytWant = null; if (ytView && !ytView.webContents.isDestroyed()) { ytView.setVisible(false); ytView.webContents.loadURL('about:blank').catch(() => {}); } }
 // true when there was a trailer to close (Guide and B close it before doing anything else)
 function closeTrailer() { if (!trailerWin || trailerWin.isDestroyed()) return false; try { trailerWin.close(); } catch {} return true; }
 let cfg = null;
@@ -120,6 +160,7 @@ function log(...a) {
 process.on('uncaughtException', e => log('ERROR', e && e.stack || e));
 process.on('unhandledRejection', e => log('ERROR', e && e.stack || e));
 log('Starting Boxshelf', app.getVersion());
+if (linux.isLinux) { steamdeck.init({ log }); const d = steamdeck.info(); log('Linux start:', d.deck ? 'Steam Deck' : 'PC', '| started by Steam:', d.steam, '| Game Mode:', d.gameMode, '| options:', d.flags.join(' ') || 'none'); }
 
 // Only one Boxshelf at a time: a second launch brings the first one forward.
 const firstInstance = app.requestSingleInstanceLock();
@@ -192,7 +233,7 @@ async function serveFile(request) {
     const u = new URL(request.url);
     const file = path.resolve(decodeURIComponent(u.pathname.replace(/^\//, '')));
     const lower = file.toLowerCase();
-    if (!allowedRoots().some(r => lower.startsWith(r))) return new Response('Not allowed', { status: 403 });
+    if (!allowedRoots().some(r => lower.startsWith(r)) && !previewOk.has(lower) && !lower.startsWith(path.join(app.getPath('userData'), 'previews').toLowerCase() + path.sep)) return new Response('Not allowed', { status: 403 }); // (beta.7: a preview video found for a game, the Steam clips)
     const stat = await fs.promises.stat(file);
     const type = MIME[path.extname(file).slice(1).toLowerCase()] || 'application/octet-stream';
     const cors = { 'Access-Control-Allow-Origin': '*', 'Content-Type': type, 'Accept-Ranges': 'bytes', 'Cache-Control': 'max-age=3600' };
@@ -498,6 +539,9 @@ function iconQuick(exe) {
   return Promise.race([p.then(v => { clearTimeout(t); return v; }), new Promise(r => { t = setTimeout(() => { late = true; r(null); }, 2500); })])
     .finally(() => { if (late) p.then(v => { if (v && !iconLateT) iconLateT = setTimeout(() => { iconLateT = null; if (alive()) win.webContents.send('library:changed', { icons: 1 }); }, 1000); }).catch(() => {}); });
 }
+// (beta.7) store games: real store titles, so their covers come from the Steam app with the same name (not Quiver's or
+// hand-added programs: those often share a name with an unrelated game)
+const STORE_SRC = new Set(['epic', 'gog', 'ubisoft', 'ea', 'xbox']);
 async function buildLibrary() {
   const shelves = [];
   for (const def of CONSOLES) {
@@ -507,6 +551,8 @@ async function buildLibrary() {
     if (!sc.emulator && !(sc.romDirs || []).length) continue;
     if (def.id === 'x360') { let t; try { await Promise.race([x360.ensureDb(), new Promise(r => { t = setTimeout(r, 15000); })]); } catch {} finally { clearTimeout(t); } }
     const games = scanSystem(def, sc).map(g => ({ ...g, info: covers.gameInfo(def.id, g.title), art: { front: fileUrl(g.art.front), hero: fileUrl(g.art.hero), back: fileUrl(g.art.back), madeBack: g.art.madeBack || undefined, spine: fileUrl(g.art.spine), madeSpine: g.art.madeSpine || undefined, disc: fileUrl(g.art.disc), manual: withCover(def.id, g, (g.art.manual || []).map(fileUrl)), manualPdf: fileUrl(g.art.manualPdf) } }));
+    // (beta.7) arcade zips are named from FinalBurn Neo's list: fetched once in the background, then the shelf refreshes
+    if (games.length && arcadenames.SYSTEMS.has(def.id) && !arcadenames.ready()) arcadenames.fetchNames().then(ok => { if (ok && alive()) win.webContents.send('library:changed', { arcade: 1 }); });
     shelves.push({ id: def.id, kind: 'console', name: def.name, emulatorName: def.emulatorName, hasEmulator: !!sc.emulator && paths.isFile(emuPath(sc.emulator)) /* (1.82) an uninstalled one gets no Open tile */, emulator: sc.emulator, emulatorIcon: fileUrl(await iconQuick(sc.emulator)), gameArgs: sc.gameArgs, bootOnLaunch: sc.bootOnLaunch !== false, useIpl: def.id === 'gc' && !!sc.useIpl, insertAnim: sc.insertAnim !== false, games });
   }
   let pcShelf = [];
@@ -519,13 +565,15 @@ async function buildLibrary() {
   // matched (pcgames.matchSteam, never an appid the screen could launch: Play goes through launch:pc by id)
   const pc = cfg.pc || {}, epic = [], mine = [];
   if (pc.epic !== false) try { epic.push(...pcgames.epicGames()); } catch (e) { log('Epic library', e.message); }
+  // (beta.7) GOG Galaxy, Ubisoft Connect, the EA app and Xbox / Game Pass join the PC shelf too, like Epic (store games)
+  try { epic.push(...await pcgames.storeGames(pc)); } catch (e) { log('PC stores', e.message); }
   if (pc.quiver !== false) try { mine.push(...pcgames.quiverGames(pc.quiverPath)); } catch (e) { log('Quiver library', e.message); }
   try { mine.push(...pcgames.customGames(pc.custom)); } catch (e) { log('Custom games', e.message); }
   for (const g of [...epic, ...mine]) { const t = ownTitle(g.id); if (t) { g.fileTitle = g.title; g.title = t; } } // (beta.5: renamed in Details)
   pcgames.remember([...epic, ...mine]);
   // (Steam art by title only for Epic's store games: a recomp or a program added by hand often shares its name with an
   // unrelated Steam game, "Quarantine" got a puzzle game's cover; they keep the made-up case)
-  const pcGame = g => { const sid = g.source === 'epic' ? pcgames.steamIdOf(g.title) : null, l = sid ? steamart.local(sid) : {};
+  const pcGame = g => { const sid = STORE_SRC.has(g.source) ? pcgames.steamIdOf(g.title) : null, l = sid ? steamart.local(sid) : {};
     return { kind: 'steam', source: g.source, id: g.id, title: g.title, ...(sid ? { info: steamart.gameInfo(sid) } : {}), art: { front: fileUrl(pccovers.cover(g.id) || l.front), hero: fileUrl(l.hero), icon: g.icon || undefined } }; };
   if (epic.length) pcShelf = pcShelf.concat(epic.map(pcGame)).sort((a, b) => String(a.title).localeCompare(String(b.title), undefined, { sensitivity: 'base' }));
   if (pcShelf.length) shelves.push({ id: 'pc', kind: 'steam', name: 'PC', games: pcShelf });
@@ -690,7 +738,7 @@ function handle(name, fn) {
 handle('config:get', () => ({ config: cfg, consoles: CONSOLES, apps: APPS, appRoot: paths.appRoot(), version: app.getVersion(), hasInfo: covers.hasInfo(), settingsBlocked: config.blocked() }));
 // (1.82) Settings → About: the newest beta (force: ask GitHub now, not the answer from this start) and the page's links
 handle('app:updateCheck', ({ force } = {}) => updates.check(app.getVersion(), !!force).then(r => ({ ...r, links: updates.LINKS })));
-handle('config:save', next => { if (!next || typeof next !== 'object' || !next.systems || !next.ui) throw new Error('Bad settings.'); return applyCfg({ ...next, art: cfg.art }); }); // Art Studio styles and locks change through art:* only: a Settings save with its older copy mustn't undo them
+handle('config:save', next => { if (!next || typeof next !== 'object' || !next.systems || !next.ui) throw new Error('Bad settings.'); return applyCfg({ ...next, art: cfg.art, games: cfg.games, emuSetup: { ...(next.emuSetup || {}), pending: (cfg.emuSetup || {}).pending || [] }, ui: { ...next.ui, sw2Last: cfg.ui.sw2Last } }); }); // Art Studio styles and locks change through art:* only: a Settings save with its older copy mustn't undo them. (beta.8) The same for what main itself keeps: each game's own name and emulator (Details → Rename / Emulator), Set up for me's waiting list and Switch 2's last build: a screen's older copy saved later used to undo a rename, or bring back a setup that was already done
 // settings saved (or restored from a backup): store them and put every change into effect now
 function applyCfg(next) { const prev = cfg, hadMenu = cfg.ui.homeMenu !== false; next = rememberEmus(prev, next); const x = o => o && o.systems && o.systems.x360 && o.systems.x360.emulator; if (x(next) !== x(prev)) next = fixXenia(next); /* (the folder walk only when that path changed) */ cfg = persistCfg(config.normalize(next)); applyArtLibrary(); applyScale(); setTimeout(watchRoms, 0); if (cfg.ui.wiimote === false) wiimote.stop(); else if (wmReady) wmStart(); /* (Settings → Controller → Wii remote, at once) */
   // Home menu switched on/off: start or stop the shelf's Guide watcher now (not after the next game)
@@ -917,7 +965,7 @@ async function steamFill(lib) {
     const all = pcs.flatMap(s => s.games); let games = all.filter(g => !g.source || g.source === 'steam'), matched = 0;
     // (beta.4) Epic / Quiver / hand-added games: their titles are matched to Steam apps (only with box art downloads turned
     // on in setup or Settings: it sends the titles to Steam's store search), then filled like Steam's own
-    const others = all.filter(g => g.source === 'epic'); // (only Epic's store games: see buildLibrary's pcGame)
+    const others = all.filter(g => STORE_SRC.has(g.source)); // (only the stores' games: see buildLibrary's pcGame)
     if (others.length && cfg.ui.autoCovers === true) {
       matched = await pcgames.matchSteam(others.map(g => g.title));
       games = games.concat(others.map(g => { const id = pcgames.steamIdOf(g.title); return id ? { appid: String(id), title: g.title, art: { front: g.art.front, hero: g.art.hero } } : null; }).filter(Boolean));
@@ -1083,14 +1131,38 @@ async function renderSpine(id, title, front) {
   return Buffer.from(m[1], 'base64');
 }
 artstudio.setMaker({ back: renderBack, spine: renderSpine });
-handle('dialog:pick', async ({ kind, title, defaultPath, filters }) => {
+handle('dialog:pick', async ({ kind, title, defaultPath, filters, multi }) => {
   const r = await dialog.showOpenDialog(win, {
     title, defaultPath,
-    properties: kind === 'folder' ? ['openDirectory'] : ['openFile'],
+    properties: kind === 'folder' ? ['openDirectory'] : multi ? ['openFile', 'multiSelections'] : ['openFile'], // (beta.7) multi: Add games → Add several programs
     // (Linux: programs have no .exe, so a "Programs" filter would hide every emulator: there it shows all files)
     filters: kind === 'folder' ? undefined : linux.isLinux && (!filters || filters.some(f => f && Array.isArray(f.extensions) && f.extensions.includes('exe'))) ? undefined : (filters || [{ name: 'Programs', extensions: ['exe'] }])
   });
-  return r.canceled ? null : r.filePaths[0];
+  return r.canceled ? null : multi ? r.filePaths : r.filePaths[0];
+});
+// ---------- (beta.7) Add games (main/addgames.js): a folder of games scanned; Playnite's library read (experimental) ----------
+handle('games:scanFolder', ({ root }) => { const r = addgames.scanFolder(String(root || '')); return { ...r, games: r.games.map(g => ({ ...g, title: g.title })) }; });
+handle('games:titleFor', ({ exes }) => (Array.isArray(exes) ? exes : []).slice(0, 500).map(e => ({ exe: String(e), title: addgames.titleFor(String(e)) })));
+let pnPlan = null;
+handle('playnite:find', ({ dir } = {}) => process.platform === 'win32' ? addgames.find(dir ? String(dir) : '') : null);
+handle('playnite:plan', async ({ dir } = {}) => {
+  const found = addgames.find(dir ? String(dir) : ''); if (!found) throw new Error('Playnite wasn\'t found. Choose its folder (the one with Playnite.DesktopApp.exe).');
+  const p = addgames.plan(await addgames.read(found), found); pnPlan = p; return { ...p, app: found.app, portable: found.portable };
+});
+// the emulator for a console inside a folder Playnite named (its own program names, two folders deep at most)
+handle('games:emuIn', ({ dir, systemId }) => {
+  const def = CONSOLES.find(c => c.id === systemId); if (!def || !dir) return null; const names = new Set((def.exeNames || []).map(n => n.toLowerCase())); let hit = null;
+  const walk = (d, left) => { if (hit) return; let ents = []; try { ents = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+    for (const e of ents) { if (hit) return; const p = path.join(d, e.name); if (e.isFile() && names.has(e.name.toLowerCase())) hit = p; else if (e.isDirectory() && left > 0) walk(p, left - 1); } };
+  walk(String(dir), 2); return hit;
+});
+// covers for games just added: a Playnite cover picked from the last summary only (never any file the page names)
+handle('games:covers', async ({ items }) => {
+  const ok = new Set(pnPlan ? pnPlan.pc.flatMap(g => [g.cover, g.bg]).filter(Boolean).map(f => path.resolve(f).toLowerCase()) : []); let n = 0;
+  const slug = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'game';
+  for (const it of (Array.isArray(items) ? items : []).slice(0, 2000)) { const f = it && String(it.file || ''); if (!f || !ok.has(path.resolve(f).toLowerCase())) continue;
+    try { await pccovers.own('custom-' + slug(it.id), f); n++; } catch (e) { log('Imported cover', e.message); } }
+  if (n && alive()) win.webContents.send('library:changed', { pcCover: 1 }); return n;
 });
 // Xenia Manager picked instead of Xenia itself: the setting switches to the real emulator. Done on the config as it is
 // loaded and saved (never in place during a scan): Settings gets the fixed path back from its save, so its own copy
@@ -1136,7 +1208,7 @@ handle('game:emulator', async ({ id }) => {
   if (act === 'pick') { const f = await dialog.showOpenDialog(alive() ? win : undefined, { title: `Emulator for this game (${def.emulatorName} or a build of it)`, defaultPath: cur || shelfExe || undefined, properties: ['openFile'], filters: [{ name: 'Programs', extensions: ['exe'] }, { name: 'All files', extensions: ['*'] }] }); if (f.canceled || !f.filePaths || !f.filePaths[0]) return { ok: false, canceled: true, games: cfg.games }; exe = f.filePaths[0]; }
   if (act === 'sugg') exe = sugg;
   const games = { ...(cfg.games || {}) };
-  if (act === 'default' || (exe && path.resolve(exe).toLowerCase() === path.resolve(shelfExe || '.').toLowerCase())) delete games[id]; else games[id] = { emulator: exe };
+  if (act === 'default' || (exe && path.resolve(exe).toLowerCase() === path.resolve(shelfExe || '.').toLowerCase())) { const o = { ...(games[id] || {}) }; delete o.emulator; if (Object.keys(o).length) games[id] = o; else delete games[id]; } else games[id] = { ...(games[id] || {}), emulator: exe }; // (beta.8: the game's own name stays)
   applyCfg({ ...cfg, games });
   log('Game emulator:', id, '→', games[id] ? games[id].emulator : 'shelf default');
   return { ok: true, games: cfg.games };
@@ -1178,7 +1250,7 @@ handle('launch:game', async ({ systemId, file, emulator }) => {
     const b = (await sw2BuildList(file)).find(x => path.resolve(x.exe).toLowerCase() === path.resolve(emulator).toLowerCase());
     if (!b) throw new Error(`That Switch 2 build isn't in the emulator folders any more (${emulator}).`);
     if (/\.nup$/i.test(file) && !b.nup) throw new Error(`${b.label} can't open .nup games. Choose a newer build.`);
-    const last = { ...(cfg.ui.sw2Last || {}), ['sw2:' + file]: b.exe }; applyCfg({ ...cfg, ui: { ...cfg.ui, sw2Last: last } });
+    const last = { ...(cfg.ui.sw2Last || {}), ['sw2:' + file]: b.exe }; try { applyCfg({ ...cfg, ui: { ...cfg.ui, sw2Last: last } }); } catch (e) { log('Switch 2: last build not remembered:', e.message); } // (beta.8: only a preference: a locked settings file mustn't stop the game)
     log('Switch 2 build:', b.label); sc = { ...sc, emulator: b.exe };
   } else {
   // this game's own emulator build, when one was chosen for it
@@ -1193,7 +1265,8 @@ handle('launch:game', async ({ systemId, file, emulator }) => {
 });
 // (beta.6) RetroArch's cores: <its folder>\cores\<core>_libretro.dll, or the folder its own settings name
 // (retroarch.cfg's libretro_directory; ":" there means RetroArch's own folder)
-const RA_CORE_NAME = { swanstation: 'SwanStation', mesen: 'Mesen', snes9x: 'Snes9x', mupen64plus_next: 'Mupen64Plus-Next', gambatte: 'Gambatte', mgba: 'mGBA', melondsds: 'melonDS DS', genesis_plus_gx: 'Genesis Plus GX', flycast: 'Flycast' };
+const RA_CORE_NAME = { swanstation: 'SwanStation', mesen: 'Mesen', snes9x: 'Snes9x', mupen64plus_next: 'Mupen64Plus-Next', gambatte: 'Gambatte', mgba: 'mGBA', melondsds: 'melonDS DS', genesis_plus_gx: 'Genesis Plus GX', flycast: 'Flycast',
+  mednafen_saturn: 'Beetle Saturn', mednafen_pce_fast: 'Beetle PCE Fast', fbneo: 'FinalBurn Neo', picodrive: 'PicoDrive', stella: 'Stella', handy: 'Handy', mednafen_wswan: 'Beetle Cygne', dosbox_pure: 'DOSBox Pure' };
 function retroCore(exe, core) {
   const dir = path.dirname(exe), dirs = [path.join(dir, 'cores')];
   for (const cfgFile of [path.join(dir, 'retroarch.cfg'), path.join(process.env.APPDATA || '', 'RetroArch', 'retroarch.cfg')]) {
@@ -1218,6 +1291,7 @@ async function launchGameNow(systemId, file, sc) {
   const extra = ipl ? ['-C', 'Dolphin.Core.SkipIPL=False'] : [];
   // Dolphin's warning pop-ups (e.g. "IPL file is not a known good dump") use its panic handlers.
   if (ipl && sc.hideDolphinWarnings) extra.push('-C', 'Dolphin.Interface.UsePanicHandlers=False');
+  await setupPending(sc.emulator); // (beta.7) Set up for me, waiting for this emulator's settings file (made by its first run)
   emucfg.beforeLaunch(systemId, sc.emulator, { quitCombo: cfg.ui.quitCombo === false ? null : (cfg.ui.quitComboKeys || 'l3+r3') }); extra.push(...emucfg.launchArgs(systemId, sc.emulator)); // Dolphin: borderless + no stop question for this run only
   // 3DS .cia: installed into Azahar the first time (the boot slide shows how far), then the installed copy is booted
   let rom = systemId === 'n3ds' ? await n3ds.bootFile(file, sc.emulator, t => { if (alive()) win.webContents.send('launch:status', String(t)); }) : file;
@@ -1229,11 +1303,17 @@ async function launchGameNow(systemId, file, sc) {
   // (PS5, "Start games through Kyty's launcher" on: the launcher itself, where the game is started; it takes no game to open)
   if (systemId === 'ps5' && sc.viaLauncher) { const ui = ['kyty_launcher.exe', 'launcher.exe'].map(n => path.join(path.dirname(sc.emulator || ''), n)).find(paths.isFile); if (!ui) throw new Error("Kyty's launcher (kyty_launcher.exe) isn't next to kyty_emulator.exe. Turn off \"Start games through Kyty's launcher\" in Settings → PS5, or check the emulator path."); log('PS5 launch: through the launcher'); sc.emulator = ui; sc.gameArgs = ''; sc.coverSeconds = 1; extra.length = 0; } // (the launcher applies the preset itself)
   else if (systemId === 'ps5') { const k = kyty.spec(sc.emulator, file); extra.push(...k.args); env = k.env; rom = k.dir; log('PS5 launch:', path.basename(rom), k.args.filter(x => /^--/.test(x)).join(' '), env ? '(preset)' : ''); }
+  // (beta.8) Switch through Ryujinx (EmuDeck's usual pick): its own options, not Eden's / Citron's "-f -g" (an edited
+  // command line is left as it is)
+  if (systemId === 'sw' && /ryujinx|ryubing/i.test(path.basename(sc.emulator || '')) && /^\s*-f\s+-g\s+"\{rom\}"\s*$/.test(sc.gameArgs || '')) { sc = { ...sc, gameArgs: '--fullscreen "{rom}"' }; log('Switch launch: Ryujinx options'); }
   // (beta.6) RetroArch: this console's core from RetroArch's cores folder, fullscreen; a core that isn't downloaded yet is
   // said plainly (RetroArch itself would just open its menu)
   { const def = CONSOLES.find(c => c.id === systemId);
     if (def && def.raCore && (linux.isLinux ? linux.isRetroArch(sc.emulator) : /^retroarch\.exe$/i.test(path.basename(sc.emulator || '')))) {
-      const core = linux.isLinux ? linux.retroCore(sc.emulator, def.raCore) : retroCore(sc.emulator, def.raCore), nm = RA_CORE_NAME[def.raCore] || def.raCore;
+      let core = linux.isLinux ? linux.retroCore(sc.emulator, def.raCore) : retroCore(sc.emulator, def.raCore); const nm = RA_CORE_NAME[def.raCore] || def.raCore;
+      // (beta.7) a missing core is downloaded now, from the same place RetroArch's Online Updater gets it (Windows)
+      if (!core && process.platform === 'win32') { const say = t => { if (alive()) win.webContents.send('launch:status', t); }; say(`Getting RetroArch's ${nm} core…`);
+        try { core = await racores.get(sc.emulator, def.raCore, p => say(`Getting RetroArch's ${nm} core… ${p}%`)); } catch (e) { log('Core download failed:', def.raCore, e.message); throw new Error(`RetroArch doesn't have the ${nm} core for ${def.name} yet, and it couldn't be downloaded (${e.message}). In RetroArch: Main Menu → Online Updater → Core Downloader → ${nm}, then press Play again.`); } }
       if (!core) throw new Error(`RetroArch doesn't have the ${nm} core for ${def.name} yet. In RetroArch: Main Menu → Online Updater → Core Downloader → ${nm}, then press Play again.`);
       sc.gameArgs = `-f -L "${core}" "{rom}"`; log('RetroArch launch:', def.id, path.basename(core)); } }
   // Dolphin: the Wii remote is let go first, so Dolphin finds it as it always does
@@ -1266,7 +1346,7 @@ async function launchGameNow(systemId, file, sc) {
 }
 // (busy check first: a .cia still installing, or a game running, must not have its emulator's settings rewritten under it)
 const busyCheck = () => { if (launching || launcher.isRunning()) throw new Error('Something is already running. Close it first.'); };
-handle('launch:emulator', async ({ systemId }) => { let sc = cfg.systems[systemId]; if (!sc) throw new Error('Unknown system.'); busyCheck(); sc = { ...sc, emulator: emuPath(sc.emulator) }; const wii = systemId === 'gc' || systemId === 'wii' || /dolphin/i.test(path.basename(sc.emulator || '')); if (wii) await wiimote.pause(); /* (Dolphin: the Wii remote is its) */ if (systemId === 'ps5') { const ui = ['kyty_launcher.exe', 'launcher.exe'].map(n => path.join(path.dirname(sc.emulator || ''), n)).find(paths.isFile); if (ui) sc.emulator = ui; } /* (PS5: kyty_emulator needs a game; the emulator on its own is Kyty's launcher) */ emucfg.beforeLaunch(systemId, sc.emulator, { quitCombo: cfg.ui.quitCombo === false ? null : (cfg.ui.quitComboKeys || 'l3+r3') }); let r; try { r = launcher.launchEmulator(sc, onExit); } catch (e) { if (wii) wiimote.resume(); throw e; } /* (1.82: a missing exe no longer leaves the remote paused) */ runKind = 'emulator'; pendingPower = null; watchPad(); return r; });
+handle('launch:emulator', async ({ systemId }) => { let sc = cfg.systems[systemId]; if (!sc) throw new Error('Unknown system.'); busyCheck(); sc = { ...sc, emulator: emuPath(sc.emulator) }; const wii = systemId === 'gc' || systemId === 'wii' || /dolphin/i.test(path.basename(sc.emulator || '')); if (wii) { launching = true; try { await wiimote.pause(); } finally { launching = false; } } /* (beta.8: a second press while the Wii remote lets go is refused, as for games) */ /* (Dolphin: the Wii remote is its) */ if (systemId === 'ps5') { const ui = ['kyty_launcher.exe', 'launcher.exe'].map(n => path.join(path.dirname(sc.emulator || ''), n)).find(paths.isFile); if (ui) sc.emulator = ui; } /* (PS5: kyty_emulator needs a game; the emulator on its own is Kyty's launcher) */ emucfg.beforeLaunch(systemId, sc.emulator, { quitCombo: cfg.ui.quitCombo === false ? null : (cfg.ui.quitComboKeys || 'l3+r3') }); let r; try { r = launcher.launchEmulator(sc, onExit); } catch (e) { if (wii) wiimote.resume(); throw e; } /* (1.82: a missing exe no longer leaves the remote paused) */ runKind = 'emulator'; pendingPower = null; watchPad(); return r; });
 handle('launch:app', async ({ appId, link }) => {
   const a = cfg.apps[appId]; if (!a) throw new Error('Unknown app.'); busyCheck();
   const args = appId === 'stremio' && /^stremio:\/\/\/detail\/[^\s"]+$/.test(String(link || '')) ? [String(link)] : []; // a title from the museum's movie shelves opens on its page
@@ -1287,12 +1367,16 @@ handle('launch:steam', ({ appid }) => launcher.launchSteam(appid));
 // the quit buttons like any app
 handle('launch:pc', async ({ id }) => {
   const g = pcgames.byId(id); if (!g) throw new Error("That game isn't on the shelf any more. The shelf is refreshing; try again in a moment.");
-  if (g.source === 'epic') { busyCheck(); log('PC launch: Epic,', g.title); return shell.openExternal(g.uri).then(() => ({ external: true })); }
-  if (!paths.isFile(g.exe)) throw new Error(`${g.title} isn't at ${g.exe} any more. ${g.source === 'quiver' ? 'Check it in Quiver Launcher.' : 'Remove it in Settings → Custom games and add it again.'}`);
+  // through its store's launcher (Epic, and from beta.7 Ubisoft Connect and the EA app: their sign-in, cloud saves, overlay)
+  if (g.uri && /^(com\.epicgames\.launcher|uplay|origin2):\/\//i.test(g.uri)) { busyCheck(); log('PC launch:', g.source, g.title); return shell.openExternal(g.uri).then(() => ({ external: true })); }
+  // (beta.7) an Xbox / Game Pass game is a Windows app: started as one (its package family and app id, from pcgames.xboxGames)
+  if (g.shellApp) { if (!/^[\w.-]+_[a-z0-9]+![\w.-]+$/i.test(g.shellApp)) throw new Error("Couldn't start that Xbox game."); busyCheck(); log('PC launch: Xbox,', g.title);
+    const p = spawn('explorer.exe', ['shell:AppsFolder\\' + g.shellApp], { detached: true, stdio: 'ignore' }); p.on('error', e => log('Xbox launch', e.message)); p.unref(); return { external: true }; }
+  if (!paths.isFile(g.exe)) throw new Error(`${g.title} isn't at ${g.exe} any more. ${g.source === 'quiver' ? 'Check it in Quiver Launcher.' : g.source === 'gog' ? 'Check it in GOG Galaxy.' : 'Remove it in Settings → Custom games and add it again.'}`);
   busyCheck();
   launching = true; try { await taskbarHide(); } finally { launching = false; } // (beta.6)
   let r; try { r = launcher.launchApp(g.exe, onExit, launcher.buildArgs(g.args || '', '')); } catch (e) { taskbarShow('the game did not start'); throw e; } runKind = 'app'; pendingPower = null; log('PC launch:', g.source, g.title);
-  if (cfg.ui.homeMenu !== false) homemenu.begin({ systemId: 'pc', exe: g.exe, systemName: g.source === 'quiver' ? 'Quiver' : 'Custom', title: g.title, hotkeys: {} });
+  if (cfg.ui.homeMenu !== false) homemenu.begin({ systemId: 'pc', exe: g.exe, systemName: g.source === 'quiver' ? 'Quiver' : g.source === 'gog' ? 'GOG' : 'Custom', title: g.title, hotkeys: {} });
   watchPad({ mouse: false, appPid: r.pid, fullscreenKey: null, home: true });
   return { ...r, cover: coverWhileStarting(10) };
 });
@@ -1325,7 +1409,11 @@ handle('game:rename', ({ systemId, file, id, title }) => {
   if (systemId) { try { artstudio.forget(systemId); } catch {} }
   return { ok: true, title: t };
 });
-handle('pc:status', () => { const pc = cfg.pc || {}; let epic = null; try { epic = pcgames.epicGames().length; } catch {} return { quiver: pcgames.quiverRoots(pc.quiverPath)[0] || '', epic }; });
+handle('pc:status', async () => { const pc = cfg.pc || {}; let epic = null; try { epic = pcgames.epicGames().length; } catch {}
+  // (beta.7) each store's installed games, counted whether its switch is on or not (Settings says what it would add)
+  const n = async f => { try { return (await f()).length; } catch { return null; } };
+  const [gog, ubisoft, ea, xbox] = await Promise.all([n(pcgames.gogGames), n(pcgames.ubisoftGames), n(pcgames.eaGames), n(pcgames.xboxGames)]);
+  return { quiver: pcgames.quiverRoots(pc.quiverPath)[0] || '', epic, gog, ubisoft, ea, xbox }; });
 handle('pc:findQuiver', () => { const t0 = Date.now(), d = pcgames.quiverFind(); log('Find Quiver:', d ? 'found' : 'not found', Date.now() - t0, 'ms'); return d || ''; });
 // the reading corner: your Magazines\ and Guides\ folders (the screen only ever names items by id)
 handle('library:list', () => { try { library.setCacheRoot(path.join(app.getPath('userData'), 'library')); return library.list().map(i => ({ id: i.id, kind: i.kind, type: i.type, title: i.title, series: i.series || '', pages: i.pages || 0 })); } catch (e) { log('library', e.message); return []; } });
@@ -1527,7 +1615,7 @@ handle('autostart:set', async ({ enabled }) => {
   if (!enabled) { try { fs.unlinkSync(lnk); } catch {} return { enabled: false, how: 'shortcut' }; }
   const bat = path.join(paths.appRoot(), 'Start Boxshelf.bat');
   if (!fs.existsSync(bat)) throw new Error('Start Boxshelf.bat was not found next to the app.');
-  const q = v => `'${String(v).replace(/'/g, "''")}'`;
+  const q = v => `'${String(v).replace(/['‘’‚‛]/g, m => m + m)}'`; // (beta.8: PowerShell also ends a quoted string at curly quotes, as in a folder named with one; doubling makes any of them literal)
   await psRun(`$s = (New-Object -ComObject WScript.Shell).CreateShortcut(${q(lnk)}); $s.TargetPath = ${q(bat)}; $s.WorkingDirectory = ${q(paths.appRoot())}; $s.WindowStyle = 7; $s.Description = 'Boxshelf'; $s.Save()`);
   log('Autostart shortcut created', lnk);
   return { enabled: true, how: 'shortcut' };
@@ -1540,7 +1628,133 @@ handle('songs:open', () => { fs.mkdirSync(songs.folder(), { recursive: true }); 
 // links from the page (e.g. a cover's source page) open in the default browser: https only
 handle('app:openExternal', ({ url: u }) => { let x; try { x = new URL(String(u)); } catch { throw new Error('Bad link.'); } if (x.protocol !== 'https:') throw new Error('Only https links open.'); return shell.openExternal(x.toString()); });
 // put back the emulator settings files Boxshelf changed (each was backed up once as <file>.boxshelf-bak)
-handle('emucfg:restore', () => emucfg.restoreBackups(Object.fromEntries(Object.entries(cfg.systems).map(([k, v]) => [k, v && emuPath(v.emulator)])))); // the real path: a portable "{app}\…" one finds its User\Config backups
+// ---------- (beta.7) Video previews (main/previews.js) ----------
+// what a game's preview is: a video file you have, Steam's trailer (joined into a small clip, kept), or YouTube's
+// trailer (the LaunchBox link). Files found are let through bsfile one by one (previewOk), never whole folders.
+const previewOk = new Set();
+const previewOpts = sc => ({ dirs: (cfg.ui.previewDirs || []).map(d => paths.expand(d)), artDirs: paths.artDirsFor ? paths.artDirsFor(sc) : [], launchbox: covers.LAUNCHBOX });
+handle('preview:find', async ({ systemId, file, title, id, youtube }) => {
+  if ((cfg.ui.previews || 'off') === 'off') return null;
+  let r = null;
+  if (systemId && file) {
+    const def = CONSOLES.find(c => c.id === systemId); const { sc } = gameFile(systemId, file);
+    const f = def ? previews.findFile(def, sc, { file, title }, previewOpts(sc)) : null;
+    if (f) { previewOk.add(path.resolve(f).toLowerCase()); return { type: 'file', url: fileUrl(f) }; }
+  }
+  const m = /^steam-(\d+)$/.exec(String(id || ''));
+  if (m) { const f = await previews.steamClip(m[1]); if (f) return { type: 'file', url: fileUrl(f), steam: true }; }
+  const yid = youtube ? previews.youtubeId(youtube) : null;
+  // (beta.8) console trailers: the clip if it's kept; else it's made in the background and the renderer is told when
+  // it's ready (preview:clip), while YouTube's player covers the Media tab in the meantime
+  if (yid && cfg.ui.previewClips !== false && ytclips.supported()) {
+    const f = ytclips.cached(yid); if (f) return { type: 'file', url: fileUrl(f), yt: yid };
+    if (ytclips.helperState().have) { ytclips.clip(yid).then(c => { if (c && alive()) win.webContents.send('preview:clip', { id: yid, url: fileUrl(c) }); }); if (cfg.ui.previewYoutube !== false) r = { type: 'youtube', id: yid, pending: true }; else r = { type: 'pending', id: yid }; return r; }
+  }
+  if (cfg.ui.previewYoutube !== false && yid) r = { type: 'youtube', id: yid };
+  return r;
+});
+// (beta.8) console trailers: the helper, how many clips are kept, clearing them
+handle('ytclip:status', () => ytclips.status());
+handle('ytclip:helper', async () => { const ok = await ytclips.getHelper(p => { if (alive()) win.webContents.send('ytclip:progress', { pct: p }); }); if (alive()) win.webContents.send('ytclip:progress', { done: true, ok }); return ok; });
+handle('ytclip:clear', () => { ytclips.clear(); return true; });
+// (beta.8) Steam Deck: where Boxshelf runs (the shelf's Desktop Mode card, Settings), and Add Boxshelf to Steam
+handle('deck:info', () => ({ ...steamdeck.info(), inSteam: linux.isLinux && process.env.APPIMAGE ? steamdeck.inSteam(process.env.APPIMAGE) : false }));
+handle('deck:addToSteam', ({ closeSteam } = {}) => steamdeck.addToSteam({ exe: process.env.APPIMAGE || '', iconSrc: path.join(__dirname, 'renderer', 'app-icon.png'), dataDir: app.getPath('userData'), closeSteam: !!closeSteam }));
+handle('preview:yt', ({ id, rect, muted }) => {
+  if (!alive() || !/^[\w-]{6,20}$/.test(String(id || '')) || !rect) return false;
+  const v = ytEnsure(); ytWant = id; v.setBounds(ytBounds(rect)); v.setVisible(true);
+  ytLoad(v.webContents, id, { preview: true, muted: muted !== false }).catch(() => {});
+  return true;
+});
+handle('preview:ytMove', ({ rect, show }) => { if (!ytView || ytView.webContents.isDestroyed() || !ytWant) return; if (rect) ytView.setBounds(ytBounds(rect)); ytView.setVisible(show !== false); });
+handle('preview:ytStop', () => ytStop());
+// Settings / the first run: how many games have a video file, per console; the Steam clips' size; forget / clear
+handle('preview:count', async () => {
+  previews.forget(); const out = []; let total = 0;
+  for (const def of CONSOLES) { const sc = cfg.systems[def.id]; if (!sc || sc.enabled === false || !(sc.romDirs || []).length) continue;
+    await new Promise(r => setImmediate(r)); let games = []; try { games = scanSystem(def, sc); } catch {}
+    const n = previews.countFiles(def, sc, games, previewOpts(sc)); if (n) out.push({ id: def.id, name: def.name, n, of: games.length }); total += n; }
+  return { total, systems: out, steamBytes: previews.steamSize(), clips: ytclips.status() };
+});
+handle('preview:clearSteam', () => { previews.clearSteam(); return true; });
+// ---------- (beta.7) Set up for me (main/emusetup.js): Windows for now (the emulators' Linux settings live elsewhere) ----------
+let gpuPreset = null;
+async function setupOpts() {
+  const g = cfg.emuSetup && cfg.emuSetup.graphics;
+  if (g && g !== 'auto') return { graphics: g };
+  if (!gpuPreset) { let info = null; try { info = await app.getGPUInfo('basic'); } catch {} gpuPreset = emusetup.presetFor(info); }
+  return { graphics: gpuPreset };
+}
+const setupOn = () => process.platform === 'win32';
+function setupExe(systemId) { const sc = cfg.systems[systemId]; if (!sc || !sc.emulator) throw new Error('Choose this console\'s emulator first.'); return emuPath(sc.emulator); }
+const samePath = (a, b) => path.resolve(String(a)).toLowerCase() === path.resolve(String(b)).toLowerCase();
+async function setupPending(exe) {
+  const P = cfg.emuSetup && cfg.emuSetup.pending; if (!setupOn() || !P || !P.some(p => samePath(emuPath(p), exe))) return;
+  const st = emusetup.status(exe); if (!st.supported || !st.ready) return;
+  try { const r = emusetup.apply(exe, { resume: cfg.emuSetup.resume }, await setupOpts()); log('Set up at launch:', st.name, r.ok ? (r.applied || []).join(', ') : r.why); } catch (e) { log('Set up at launch failed', e.message); }
+  cfg.emuSetup.pending = P.filter(p => !samePath(emuPath(p), exe)); try { persistCfg(cfg); } catch {}
+}
+handle('emusetup:status', async ({ systemId }) => {
+  const sc = cfg.systems[systemId]; if (!sc || !sc.emulator) return { supported: false, none: true };
+  if (!setupOn()) return { supported: false, why: 'Windows only for now' };
+  const exe = emuPath(sc.emulator), s = emusetup.status(exe), def = CONSOLES.find(c => c.id === systemId);
+  // (beta.7) RetroArch: this console's core (there or not), and the BIOS files it wants, checked in RetroArch's system folder
+  // and the shared one (Neo Geo: the games folder too). Other emulators: whether their BIOS folder has anything in it.
+  let core = null, bios = null;
+  if (s.kind === 'retroarch' && def && def.raCore) {
+    core = { id: def.raCore, name: RA_CORE_NAME[def.raCore] || def.raCore, installed: !!retroCore(exe, def.raCore) };
+    try { bios = await racores.bios(systemId, [emusetup.biosDirOf('retroarch', exe), emusetup.sharedBiosDir(), ...(systemId === 'neogeo' ? sc.romDirs || [] : [])]); } catch {}
+  } else if (s.kind === 'duckstation' || s.kind === 'pcsx2') {
+    const dirs = [emusetup.biosDirOf(s.kind, exe)].filter(Boolean), re = s.kind === 'pcsx2' ? /^(scph|ps2|bios).*\.bin$/i : /\.bin$/i;
+    let any = false; for (const d of dirs) { try { if (fs.readdirSync(d).some(n => re.test(n))) any = true; } catch {} }
+    bios = { need: 'any', ok: any, files: [], dir: dirs[0] || '' };
+  }
+  if (bios) bios.dir = bios.dir || emusetup.biosDirOf(s.kind, exe) || emusetup.sharedBiosDir();
+  return { ...s, preset: (await setupOpts()).graphics, pending: (cfg.emuSetup.pending || []).some(p => samePath(emuPath(p), exe)), sharedBios: emusetup.sharedBiosDir(), core, bios };
+});
+// (beta.7) Get this core (Settings → a RetroArch console → Set up for me), with its progress on the row
+handle('racore:get', async ({ systemId }) => {
+  const sc = cfg.systems[systemId], def = CONSOLES.find(c => c.id === systemId); if (!sc || !sc.emulator || !def || !def.raCore) throw new Error('This console doesn\'t use a RetroArch core.');
+  const exe = emuPath(sc.emulator); if (!/^retroarch\.exe$/i.test(path.basename(exe))) throw new Error('This console doesn\'t run in RetroArch.');
+  const f = await racores.get(exe, def.raCore, p => { if (alive()) win.webContents.send('racore:progress', { systemId, pct: p }); });
+  return { ok: true, file: f, name: RA_CORE_NAME[def.raCore] || def.raCore };
+});
+// Opens the folder this console's emulator reads its BIOS files from (made if it isn't there yet)
+handle('bios:open', async ({ systemId }) => {
+  const sc = cfg.systems[systemId]; if (!sc || !sc.emulator) throw new Error('Choose this console\'s emulator first.');
+  const exe = emuPath(sc.emulator), k = emusetup.kindOf(exe), d = (k && emusetup.biosDirOf(k, exe)) || emusetup.sharedBiosDir();
+  try { fs.mkdirSync(d, { recursive: true }); } catch {}
+  const e = await shell.openPath(d); if (e) throw new Error(e); return d;
+});
+handle('emusetup:plan', async ({ systemId }) => {
+  if (!setupOn()) return { ok: false, why: 'Windows only for now', changes: [] };
+  const exe = setupExe(systemId), k = emusetup.kindOf(exe); if (!k) return { ok: false, why: 'not one Boxshelf can set up yet', changes: [] };
+  const p = emusetup.plan(k, exe, await setupOpts());
+  return { ...p, changes: (p.changes || []).map(c => ({ group: c.group, file: c.file, key: (c.section ? `[${c.section}] ` : '') + c.key, value: c.value })) };
+});
+handle('emusetup:apply', async ({ systemId, on }) => {
+  if (!setupOn()) return { ok: false, why: 'Windows only for now' }; busyCheck();
+  const o = on && typeof on === 'object' ? Object.fromEntries(emusetup.GROUPS.filter(g => on[g] != null).map(g => [g, !!on[g]])) : {};
+  if (o.resume == null) o.resume = cfg.emuSetup.resume;
+  return emusetup.apply(setupExe(systemId), o, await setupOpts());
+});
+handle('emusetup:undo', ({ systemId }) => { if (!setupOn()) return { ok: false }; busyCheck(); return emusetup.undo(setupExe(systemId)); });
+// The first run's "Set up my emulators for me": each emulator the picked consoles use, once. New ones are set up now (or
+// at their next launch, if they haven't been opened yet); ones you've used before are left as they are and listed.
+handle('emusetup:auto', async () => {
+  const out = { done: [], later: [], left: [] }; if (!setupOn()) return out;
+  const seen = new Set(), opts = await setupOpts();
+  for (const [id, sc] of Object.entries(cfg.systems)) {
+    if (!sc || sc.enabled === false || !sc.emulator) continue; const exe = emuPath(sc.emulator), key = path.resolve(exe).toLowerCase(); if (seen.has(key)) continue; seen.add(key);
+    const st = emusetup.status(exe); if (!st.supported || st.done) continue;
+    if (st.used) { out.left.push(st.name); continue; }
+    if (!st.ready) { if (!cfg.emuSetup.pending.some(p => samePath(emuPath(p), exe))) cfg.emuSetup.pending.push(sc.emulator); out.later.push(st.name); continue; }
+    try { const r = emusetup.apply(exe, { resume: cfg.emuSetup.resume }, opts); if (r.ok) out.done.push(st.name); else log('Set up for me:', st.name, r.why); } catch (e) { log('Set up for me failed', st.name, e.message); }
+  }
+  try { persistCfg(cfg); } catch {}
+  out.emuSetup = cfg.emuSetup; // (the wizard keeps its own copy of the settings: it takes this one, so its next save keeps the list)
+  return out;
+});handle('emucfg:restore', () => emucfg.restoreBackups(Object.fromEntries(Object.entries(cfg.systems).map(([k, v]) => [k, v && emuPath(v.emulator)])))); // the real path: a portable "{app}\…" one finds its User\Config backups
 handle('manuals:cancel', () => { if (findToken) findToken.cancelled = true; return true; });
 handle('manuals:download', async ({ choices }) => {
   // every target must be a game the scanner could have found (inside that system's games folders)
@@ -1957,6 +2171,8 @@ if (firstInstance) app.whenReady().then(() => { try { startUp(); } catch (e) {
 function startUp() {
   if (session && session.defaultSession) denyPermissions(session.defaultSession);
   config.init(app.getPath('userData'), log);
+  arcadenames.init(app.getPath('userData'), log); // (beta.7) arcade game names, main/arcadenames.js
+  emusetup.init({ log, dataDir: app.getPath('userData'), appRoot: paths.appRoot() }); racores.init({ log }); previews.init({ log, dataDir: app.getPath('userData'), appRoot: paths.appRoot() }); ytclips.init({ log, dataDir: app.getPath('userData') }); addgames.init({ log });
   cfg = unsealed(config.load()); { const fx = fixXenia(cfg); if (fx !== cfg) { cfg = fx; try { persistCfg(cfg); } catch {} } } applyArtLibrary();
   { const here = paths.appRoot(), L = Array.isArray(cfg.ui.installs) ? cfg.ui.installs.filter(x => typeof x === 'string') : []; if (!L.some(x => x.toLowerCase() === here.toLowerCase())) { cfg.ui.installs = [here, ...L].slice(0, 6); try { persistCfg(cfg); } catch {} } } // where Boxshelf has run from: a later move can offer the magazines left here
   // consoles added in an update (PS5): found once, as setup would have (an emulator or games folder set by hand is kept)

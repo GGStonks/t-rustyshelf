@@ -19,6 +19,7 @@
 !/shared/
 !/android-app/
 !/linux/
+!/scripts/
 !/.github/
 !/README.md
 !/HANDOFF.md

@@ -14,10 +14,13 @@ module.exports = async function retroPass({ browser, base, check, newPage, OUT }
     const { CONSOLES } = require(path.join(root, 'main', 'systems.js')); // (plain data: CI has no Electron, so only files that don't need it)
     const ids = ['psx', 'nes', 'snes', 'n64', 'gb', 'gbc', 'gba', 'nds', 'megadrive', 'mastersystem', 'gamegear', 'dreamcast'];
     const R = ids.map(id => CONSOLES.find(c => c.id === id));
-    const bad = R.map((c, i) => !c ? ids[i] + ': missing' : !c.raCore ? c.id + ': no core' : !c.exeNames.includes('retroarch.exe') ? c.id + ': no RetroArch' : !c.emulatorFolders.some(f => /RetroArch/.test(f)) ? c.id + ': no RetroArch folders' : !c.extensions.length ? c.id + ': no extensions' : '').filter(Boolean);
+    // (the tables are the platform's own: retroarch.exe on Windows; on Linux, where this CI runs, retroarch / its Flatpak /
+    // AppImage, see systems.js forLinux)
+    const isRA = n => /^(retroarch(\.exe)?|org\.libretro\.retroarch|re:\^retroarch.*)$/i.test(n);
+    const bad = R.map((c, i) => !c ? ids[i] + ': missing' : !c.raCore ? c.id + ': no core' : !c.exeNames.some(isRA) ? c.id + ': no RetroArch' : !c.emulatorFolders.some(f => /RetroArch/i.test(f)) ? c.id + ': no RetroArch folders' : !c.extensions.length ? c.id + ': no extensions' : '').filter(Boolean);
     const psx = R[0], nds = R[7], snes = R[2];
     check('Retro: the 12 retro shelves each have a RetroArch core and RetroArch\'s folders; DuckStation and melonDS are looked for first',
-      !bad.length && /duckstation/i.test(psx.exeNames[0]) && /melonds/i.test(nds.exeNames[0]) && snes.exeNames[0] === 'retroarch.exe', bad.join(', '));
+      !bad.length && /duckstation/i.test(psx.exeNames[0]) && /melonds/i.test(nds.exeNames[0]) && isRA(snes.exeNames[0]), bad.join(', ') || JSON.stringify([psx.exeNames[0], nds.exeNames[0], snes.exeNames[0]]));
     const read = f => require('fs').readFileSync(path.join(root, 'main', f + '.js'), 'utf8');
     const has = (txt, id) => new RegExp('\\b' + id + ':\\s').test(txt);
     const miss = [];

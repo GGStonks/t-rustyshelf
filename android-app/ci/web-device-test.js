@@ -25,12 +25,22 @@
 //   Pass 16 "pcgames": Epic's installs, Quiver Launcher 3 / 4, games added by hand, the Custom shelf (ci/pcgames-test.js).
 //   Pass 17 "screens": the Android build on a 20:9 phone, a small phone and a 16:10 tablet (ci/screens-test.js).
 //   Pass 18 "retro": the 12 retro shelves (PlayStation … Dreamcast) through RetroArch or a standalone (ci/retro-test.js).
+//   Pass 19 "library": Details in Settings' look, filters from the library itself, collections as shelves (ci/library-test.js).
+//   Pass 20 "setup": the beta.7 consoles, arcade names, Set up for me, and a tidy first run with RetroArch (ci/setup-test.js).
+//   Pass 21 "previews": video previews found, played in Details / over YouTube / behind the shelf, Settings, first run (ci/previews-test.js).
+//   Pass 22 "whatsnew": What's new once after updating, the update card with the release's highlights, Settings → What's new (ci/whatsnew-test.js).
+//   Pass 23 "addgames": Add games: several programs at once, a scanned folder, the Playnite import (experimental), the Add games tile (ci/addgames-pass.js).
 // Writes a table to the GitHub run's Summary and screenshots to out/device-test/. Exit code 1 = failed (APK not published).
-// Usage: node ci/web-device-test.js <www dir> <out dir>
+// Usage: node ci/web-device-test.js <www dir> <out dir> [--group=thor|screens|windows]
+//   (beta.7) --group runs one third of the passes, so GitHub runs the three at once (android.yml): thor = passes 1-9 (the
+//   Thor flow on the pretend device), screens = 10-17, windows = 18-23. No group (or all) runs every pass, one after another.
 'use strict';
 const http = require('http'), fs = require('fs'), path = require('path');
 const { chromium } = require('playwright');
-const WWW = path.resolve(process.argv[2] || 'www'), OUT = path.resolve(process.argv[3] || '../out/device-test');
+const ARGS = process.argv.slice(2).filter(a => !/^--group=/.test(a)), GROUP = ((process.argv.find(a => /^--group=/.test(a)) || '').split('=')[1] || 'all').toLowerCase();
+if (!['all', 'thor', 'screens', 'windows'].includes(GROUP)) { console.error('Unknown --group ' + GROUP + ' (thor, screens, windows or all)'); process.exit(2); }
+const runs = g => GROUP === 'all' || GROUP === g;
+const WWW = path.resolve(ARGS[0] || 'www'), OUT = path.resolve(ARGS[1] || '../out/device-test');
 fs.mkdirSync(OUT, { recursive: true });
 const SUM = process.env.GITHUB_STEP_SUMMARY;
 const lines = []; const say = s => { lines.push(s); console.log(s); };
@@ -73,6 +83,7 @@ server.listen(0, async () => {
       for (let i = 0; i < 4; i++) { await p.setContent(`<body style="margin:0;background:hsl(${i * 90 + 20},60%,38%);font:bold 54px sans-serif;color:#fff;display:grid;place-items:center;height:512px">TEST ART ${i}</body>`);
         ART[`/__art/${i}.jpg`] = await p.screenshot({ type: 'jpeg', quality: 80 }); }
       await p.close(); }
+    if (runs('thor')) { // ===== group thor: passes 1-9 =====
     // ---------- pass 1: real bridge, fresh install ----------
     { const { ctx, page, errors, logs } = await newPage(browser, NATIVE_STANDIN + BRIDGE + HEADERS);
       await page.goto(base); await page.waitForTimeout(7000);
@@ -152,11 +163,16 @@ server.listen(0, async () => {
         const lib = await window.boxshelf.cachedLibrary(), before = [...document.querySelectorAll('.slot')];
         lib.filter(s => s.kind === 'console').forEach(s => s.games.forEach((g, i) => { __bsArtFound(g.id, 'front', `__art/${(i + 1) % 4}.jpg?swap`); __bsArtFound(g.id, 'spine', `__art/${i % 4}.jpg?spine`); }));
         const upd = Shelf.artUpdated; out.swapped = 0; Shelf.artUpdated = ids => (out.swapped += upd(ids)); // count what the adapter hands the shelf
-        await wait(2500); Shelf.artUpdated = upd;
+        // (beta.7) covers swap in one per frame once decoded: on a slow or busy machine that takes longer than a fixed 2.5 s, so
+        // wait (up to 15 s) until every case handed a new cover shows it
+        const fronts = () => [...document.querySelectorAll('.slot .f-front img')].filter(i => /\?swap$/.test(i.src)).length;
+        const spinesNow = () => [...document.querySelectorAll('.slot .f-left .spine-img')].filter(i => /\?spine$/.test(i.src)).length; // (full box art: a spine that came later)
+        await wait(2500); for (let i = 0; i < 50 && (fronts() < out.swapped || spinesNow() < out.swapped); i++) await wait(250);
+        Shelf.artUpdated = upd;
         const after = [...document.querySelectorAll('.slot')];
         out.same = before.length === after.length && before.every((e, i) => e === after[i]);
-        out.swapSrc = [...document.querySelectorAll('.slot .f-front img')].filter(i => /\?swap$/.test(i.src)).length;
-        out.spines = [...document.querySelectorAll('.slot .f-left .spine-img')].filter(i => /\?spine$/.test(i.src)).length; // (full box art: a spine that came later)
+        out.swapSrc = fronts();
+        out.spines = spinesNow();
         return out;
       });
       check('Box art shows on the shelf (after a restart, nothing downloaded again)', shown.real >= 2 && shown.loaded === shown.real && shown.again === 0, `${shown.loaded}/${shown.real} covers loaded, ${shown.again} new downloads`);
@@ -564,9 +580,12 @@ server.listen(0, async () => {
         Object.defineProperty(navigator, 'getGamepads', { configurable: true, writable: true, value: () => [pad] }); });
       await pause(400);
       // a short press (a tap: under 450 ms) of the d-pad; repeated, since this software-drawn page can run at a few fps and miss one
-      for (let n = 0; n < 4 && !(await page.evaluate(() => document.body.classList.contains('pad-input'))); n++) {
-        await page.evaluate(() => { __pad.buttons[15] = { pressed: true, value: 1 }; }); await pause(200);
-        await page.evaluate(() => { __pad.buttons[15] = { pressed: false, value: 0 }; }); await pause(400); }
+      // (beta.7: each tap is held until the page has read it, at most 400 ms, and up to 10 taps: four fixed 200 ms taps
+      // all fell between the controller reads on a build machine drawing a few frames a second)
+      for (let n = 0; n < 10 && !(await page.evaluate(() => document.body.classList.contains('pad-input'))); n++)
+        await page.evaluate(async () => { const t0 = performance.now(); __pad.buttons[15] = { pressed: true, value: 1 }; __pad.timestamp++;
+          while (performance.now() - t0 < 400 && !document.body.classList.contains('pad-input')) await new Promise(r => setTimeout(r, 20));
+          __pad.buttons[15] = { pressed: false, value: 0 }; __pad.timestamp++; await new Promise(r => setTimeout(r, 400)); });
       const padOn = () => page.evaluate(() => document.body.classList.contains('pad-input'));
       const c0 = await padOn(); await swipe(W - 4, H * .5, W - 240, H * .5); const c1 = await st(), c2 = await padOn();
       check('Touch: swipe Back keeps the controller prompts', c0 && c1.scr === 'shelf' && c2, `pad prompts ${c0} → ${c2}, ${c1.scr}`);
@@ -724,7 +743,9 @@ server.listen(0, async () => {
         `${sm.swaps}/${sm.accepted} swapped (${sm.showing} showing), max ${sm.perFrame} per frame, ${sm.swapBusy} mid-slide, ${sm.swapRaw} not decoded first`);
       check('Quick menu: the shelf steps aside without scaling', Math.abs(sm.sceneScale - 1) < .002 && sm.sceneX < -100, `scene scale ${sm.sceneScale}, x ${sm.sceneX}px`);
       check('Quick menu: opening it again builds no rows', sm.qmOpen && sm.qmRows === 0, `${sm.qmRows} nodes added on open`);
-      check('Inspect: zoomed in, the stick turns it as fast as at rest', sm.zoomTo >= 2.3 && sm.zoomTurnPerFrame >= 2.2 && sm.zoomTurnPerFrame <= 3.3, /* 1.15° x 2.3 per frame at any zoom (it was divided by the zoom: ~1.1° at 2.4) */
+      // (beta.7) against the speed at rest measured in this same run, not a fixed ceiling: a build machine's uneven frames
+      // put one run at 3.31° against a 3.3° limit. The bug this guards against divided the speed by the zoom (~1.1°).
+      check('Inspect: zoomed in, the stick turns it as fast as at rest', sm.zoomTo >= 2.3 && sm.zoomTurnPerFrame >= 2 && sm.turnPerFrame > 0 && sm.zoomTurnPerFrame / sm.turnPerFrame >= .7 && sm.zoomTurnPerFrame / sm.turnPerFrame <= 1.45,
         `zoom ${sm.zoomTo}: ${sm.zoomTurnPerFrame}° per frame (at rest ${sm.turnPerFrame}°)`);
       check('Inspect: the disc out turns in 3D about its own centre (side to side turns it over)', sm.discShift <= 12 && sm.discSpin != null && Math.abs(sm.discSpin) >= 60, `state ${sm.discState}: spun ${sm.discSpin}°, centre moved ${sm.discShift}px`);
       check('Inspect: the stick turns the case at the handheld speed', sm.isp === 'inspect' && sm.turnPerFrame >= 2.2, `${sm.isp}: ${Math.round(sm.turn || 0)}° in 1 s, ${sm.turnPerFrame}° per 60 Hz frame`);
@@ -735,7 +756,11 @@ server.listen(0, async () => {
         for (let i = 0; i < 6 && Shelf.getMode() !== 'browse'; i++) { key('Escape'); await wait(600); } out.mode = Shelf.getMode();
         // 1. the controller held on the shelf is read on a timer: no animation frame asked for every vsync by the reader
         window.__padOn = true; await wait(300); window.__rafBy = {}; const g0 = Shelf._qs().g;
-        window.__pad.buttons[15] = { pressed: true, touched: true, value: 1 }; await wait(1500); window.__pad.buttons[15] = { pressed: false, touched: false, value: 0 }; await wait(400);
+        // (beta.7: held until the shelf has moved, at least 1.5 s and at most 5 s, with the pad's timestamp ticking as a real
+        // controller's does; a fixed 1.5 s ended before a slow build machine's reader had acted on it)
+        window.__pad.buttons[15] = { pressed: true, touched: true, value: 1 }; window.__pad.timestamp = (window.__pad.timestamp || 0) + 1;
+        { const t0 = performance.now(); while (performance.now() - t0 < 5000 && (performance.now() - t0 < 1500 || Shelf._qs().g === g0)) { await wait(100); window.__pad.timestamp++; } }
+        window.__pad.buttons[15] = { pressed: false, touched: false, value: 0 }; window.__pad.timestamp++; await wait(400);
         out.padMoved = Shelf._qs().g !== g0; out.pollRaf = window.__rafBy.poll || 0; window.__rafBy = null; window.__padOn = false; await wait(800);
         // 2. 20 steps: a case that stays out of sight (.far, faded out) takes its place at once (.gone): no transform
         // transition on it (Chromium would run that one on the main thread: a restyle and a frame every vsync of the slide)
@@ -1184,13 +1209,33 @@ server.listen(0, async () => {
       const bar = await page.evaluate(() => { const r = document.getElementById('tabs').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, s: document.querySelector('.tab-strip').style.transform }; });
       const on0 = await page.evaluate(() => document.querySelector('#tabs .tab.on').textContent);
       await touch('touchStart', bar.x, bar.y); for (let i = 1; i <= 10; i++) { await touch('touchMove', bar.x + 30 * i, bar.y); await page.waitForTimeout(16); } await touch('touchEnd');
-      await page.waitForTimeout(700);
+      // (beta.7) wait until the strip has stopped (the same position three reads in a row) before aiming the tap. The drag is a
+      // quick flick on purpose: Chromium makes no click for the first tap after a flick (it takes it as "stop the fling"),
+      // and the tap only works because android-touch.js clicks it then ("tapped Switch → Genesis" = that tap did nothing)
+      await page.waitForTimeout(300);
+      for (let i = 0, last = '', same = 0; i < 60 && same < 3; i++) { const s = await page.evaluate(() => document.querySelector('.tab-strip').style.transform + '|' + [...document.querySelectorAll('#tabs .tab')].map(e => Math.round(e.getBoundingClientRect().left)).join(','));
+        same = s === last ? same + 1 : 0; last = s; await page.waitForTimeout(100); }
       const dragged = await page.evaluate(() => ({ s: document.querySelector('.tab-strip').style.transform, on: document.querySelector('#tabs .tab.on').textContent }));
       const tgt = await page.evaluate(() => { const r = document.getElementById('tabs').getBoundingClientRect(); const b = [...document.querySelectorAll('#tabs .tab')].find(e => { const q = e.getBoundingClientRect(); return !e.classList.contains('on') && q.left > r.left + 60 && q.right < r.right - 60; }); const q = b.getBoundingClientRect(); return { name: b.textContent, x: q.left + q.width / 2, y: q.top + q.height / 2 }; });
       await touch('touchStart', tgt.x, tgt.y); await touch('touchEnd'); await page.waitForTimeout(1500);
       const picked = await page.evaluate(() => document.querySelector('#tabs .tab.on').textContent);
       check('Console bar: a finger drags it, a tap picks a shelf (the drag picked nothing)', dragged.s !== bar.s && dragged.on === on0 && picked === tgt.name,
         `strip ${bar.s} → ${dragged.s}; tapped ${tgt.name} → ${picked}`);
+      // (beta.7) the same on the shelf: a quick flick, then one tap on the case beside the chosen one picks it (exactly once:
+      // a second click would open it). Before the fix that first tap did nothing on Android.
+      { await page.waitForTimeout(600);
+        const st = await page.evaluate(() => ({ x: innerWidth / 2, y: innerHeight * .55, cur: (Shelf._lib.cur() || {}).title }));
+        await touch('touchStart', st.x, st.y); for (let i = 1; i <= 8; i++) { await touch('touchMove', st.x - 25 * i, st.y); await page.waitForTimeout(16); } await touch('touchEnd');
+        await page.waitForTimeout(1500);
+        const before = await page.evaluate(() => (Shelf._lib.cur() || {}).title);
+        const nb = await page.evaluate(() => { const ss = [...document.querySelectorAll('.slot')].map(e => e.getBoundingClientRect()).filter(r => r.width > 20 && r.left > 40 && r.right < innerWidth - 40)
+          .sort((a, b) => Math.abs(a.left + a.width / 2 - innerWidth / 2) - Math.abs(b.left + b.width / 2 - innerWidth / 2)); const r = ss[1]; return r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null; });
+        let after = null, clicks = -1;
+        if (nb) { await page.evaluate(() => { window.__slotClicks = 0; document.addEventListener('click', e => { if (e.target.closest && e.target.closest('.slot')) window.__slotClicks++; }); });
+          await touch('touchStart', nb.x, nb.y); await touch('touchEnd'); await page.waitForTimeout(1500);
+          after = await page.evaluate(() => (Shelf._lib.cur() || {}).title); clicks = await page.evaluate(() => window.__slotClicks); }
+        check('Shelf: after a quick flick, one tap on the next case picks it (Chromium drops that tap; android-touch.js clicks it once)',
+          !!nb && !!before && !!after && after !== before && clicks === 1, `${st.cur} → flick → ${before} → tap the case beside it → ${after} (${clicks} click${clicks === 1 ? '' : 's'})`); }
       check('Less clutter pass: no script errors', !errors.length, errors.slice(0, 3).join(' | '));
       await ctx.close(); }
     // ---------- pass 7: the handheld Art Studio (top screen) and its bottom-screen companion ----------
@@ -1358,8 +1403,11 @@ server.listen(0, async () => {
       // (up to 4 jobs were already under way when you moved: those finish first, then the new shelf's games come)
       const b = await page.evaluate(async () => { const sys = Shelf.artFocus().sys, n0 = __fakeArt.fetch.length; await new Promise(r => setTimeout(r, 4500));
         const after = __fakeArt.fetch.slice(n0).map(x => x.name); let k = 0; while (k < 4 && k < after.length && !/^Snes Game/.test(after[k])) k++;
-        return { sys, was: after.slice(0, k), next: after.slice(k, k + 4) }; });
-      check('Art queue: moving to another shelf puts its games next', b.sys === 'snes' && b.next.length >= 2 && b.next.every(n => /^Snes Game/.test(n)), `${b.sys}: ${b.was.length} already under way, then ${b.next.join(', ')}`);
+        // (beta.7) the new shelf's games come first, then the queue moves on: a fast run can finish the shelf inside the window
+        // (the last SNES games, then another shelf's) and that's still right; only an SNES game after another shelf's is wrong
+        const rest = after.slice(k), firstOther = rest.findIndex(n => !/^Snes Game/.test(n)), snesLater = firstOther >= 0 && rest.slice(firstOther).some(n => /^Snes Game/.test(n));
+        return { sys, was: after.slice(0, k), next: after.slice(k, k + 4), snesFirst: firstOther === -1 ? rest.length : firstOther, snesLater }; });
+      check('Art queue: moving to another shelf puts its games next', b.sys === 'snes' && b.snesFirst >= 2 && !b.snesLater, `${b.sys}: ${b.was.length} already under way, then ${b.next.join(', ')}`);
       await page.evaluate(() => { __fakeArt.lat = 40; });
       await page.waitForFunction(() => !window.boxshelf.artProgress().running, null, { timeout: 120000, polling: 100 });
       const c = await page.evaluate(async () => { const el = document.querySelector('.bs-artcard'), done = { show: el.classList.contains('show'), text: el.innerText.replace(/\n/g, ' | ') };
@@ -1443,6 +1491,8 @@ server.listen(0, async () => {
         hud.off.view === 'off' && !hud.off.looping && !hud.off.shown && hud.a.view === 'big' && hud.b.view === 'small' && hud.c.view === 'hidden' && !hud.c.looping && hud.back.view === 'big' && hud.back.looping, JSON.stringify(hud));
       check('Heat pass: no script errors', !errors.length, errors.slice(0, 3).join(' | '));
       await ctx.close(); }
+    } // ===== end of group thor =====
+    if (runs('screens')) { // ===== group screens: passes 10-17 =====
     // ---------- pass 10: magazines & guides (0.3.2): the store, downloads, the reading corner (ci/reading-test.js) ----------
     await require('./reading-test')({ browser, base, check, newPage, OUT });
     // ---------- pass 11: RetroAchievements (0.3.5): sign-in, matching (titles, ROM hashes), badges, unlocks (ci/ra-test.js) ----------
@@ -1460,14 +1510,27 @@ server.listen(0, async () => {
     await require('./pcgames-test')({ browser, base, check, newPage, OUT });
     // ---------- pass 17: other Android screens (0.4.0): a 20:9 phone, a small phone, a 16:10 tablet (ci/screens-test.js) ----------
     await require('./screens-test')({ browser, base, check, newPage, OUT });
+    } // ===== end of group screens =====
+    if (runs('windows')) { // ===== group windows: passes 18-23 =====
     // ---------- pass 18: the retro shelves (beta.6): PlayStation, NES … Dreamcast through RetroArch (ci/retro-test.js) ----------
     await require('./retro-test')({ browser, base, check, newPage, OUT });
+    // ---------- pass 19: the library (beta.7): Details redone, filters by decade / genre / players, collections (ci/library-test.js) ----------
+    await require('./library-test')({ browser, base, check, newPage, OUT });
+    // ---------- pass 20: beta.7 consoles, the arcade list, Set up for me, the tidy first run (ci/setup-test.js) ----------
+    await require('./setup-test')({ browser, base, check, newPage, OUT });
+    // ---------- pass 21: video previews (beta.7): finding them, Details, YouTube, behind the shelf, Settings, first run (ci/previews-test.js) ----------
+    await require('./previews-test')({ browser, base, check, newPage, OUT });
+    // ---------- pass 22: What's new after updating, the update card with its highlights, the notes in Settings (ci/whatsnew-test.js) ----------
+    await require('./whatsnew-test')({ browser, base, check, newPage, OUT });
+    // ---------- pass 23: Add games: several programs, a folder, Playnite (experimental), the Custom shelf's tile (ci/addgames-pass.js) ----------
+    await require('./addgames-pass')({ browser, base, check, newPage, OUT });
+    } // ===== end of group windows =====
     check('Every file the page loads is in the APK', !missing.size, [...missing].join(', '));
   } catch (e) { check('Test ran to the end', false, e && e.stack ? e.stack.split('\n').slice(0, 2).join(' ') : e); }
   await browser.close(); server.close();
 
   const failed = checks.filter(c => !c.ok);
-  say(`### Boxshelf device test: ${failed.length ? 'FAILED' : 'PASSED'} (${checks.length - failed.length}/${checks.length})`);
+  say(`### Boxshelf device test${GROUP === 'all' ? '' : ' (' + GROUP + ')'}: ${failed.length ? 'FAILED' : 'PASSED'} (${checks.length - failed.length}/${checks.length})`);
   say(''); say('| | check | detail |'); say('|---|---|---|');
   for (const c of checks) say(`| ${c.ok ? '✅' : '❌'} | ${c.name} | ${c.detail.replace(/\|/g, '/').slice(0, 180)} |`);
   say(''); say(failed.length ? '**No APK is published for this run.** Screenshots are in the "device-test" artifact.' : '**The APK below passed and is safe to install.**');

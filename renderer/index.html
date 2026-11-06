@@ -23,6 +23,7 @@
   <div class="bg-layer on" id="bgA"><div class="tint"></div><img alt=""></div>
   <div class="bg-layer" id="bgB"><div class="tint"></div><img alt=""></div>
   <div class="theme-fx" id="themeFx" aria-hidden="true"><i></i><i></i><i></i></div>
+  <video class="pv-back" id="pvBack" muted playsinline loop preload="none" aria-hidden="true"></video>
   <div class="vignette"></div>
   <div class="floor"></div>
   <div class="sel-halo"></div>
@@ -78,29 +79,50 @@
 
   <aside class="details" id="details" aria-hidden="true">
     <div class="d-hero"><div class="d-hero-bg" id="dHeroBg"></div>
+      <button class="d-x" type="button" id="dClose" aria-label="Close" title="Close (B / Esc)">✕</button>
       <div class="d-hero-row"><img class="d-cover" id="dCover" alt=""><div class="d-head">
         <div class="d-kicker" id="dKicker"></div>
+        <img class="d-logo" id="dLogo" alt="" hidden>
         <div class="d-title" id="dTitle"></div>
         <div class="d-chips" id="dChips"></div>
       </div></div>
-    </div>
-    <div class="d-shots" id="dShots" hidden></div>
-    <div class="d-body">
-      <div class="d-ach" id="dAch" hidden><div class="ring" id="dRing"><span id="dRingTxt"></span></div><div class="d-ach-main"><b id="dAchTitle">Achievements</b><div class="d-ach-sub" id="dAchSub"></div></div><button class="btn small" type="button" id="dAchBtn">See all</button></div>
-      <p class="d-desc clamp" id="dDesc"></p>
-      <button class="d-more" id="dMore" type="button" hidden>Read more</button>
-      <dl class="d-grid" id="dGrid"></dl>
-      <div class="d-art" id="dArt" hidden><div class="d-art-h">Your copy</div><div class="d-art-row" id="dArtRow"></div></div>
-      <p class="d-how" id="dHow"></p>
-      <details class="d-adv"><summary>Launch command</summary><div class="d-cmd" id="dCmd"></div></details>
+      <div class="d-stats" id="dStats"></div>
     </div>
     <div class="d-actions">
       <button class="btn primary" type="button" id="dPlay">Play</button>
-      <button class="btn" type="button" id="dInspect">Inspect</button>
-      <button class="btn" type="button" id="dTrailer" hidden>Trailer</button>
-      <button class="btn" type="button" id="dManual">Read manual</button>
+      <button class="btn d-ico" type="button" id="dManual" title="Read the manual"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5zM4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/></svg><span>Read manual</span></button>
+      <button class="btn d-ico" type="button" id="dInspect" title="Hold the case: open it, read the booklet"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5zM3 8l9 5 9-5M12 13v8"/></svg><span>Inspect</span></button>
+      <button class="btn d-ico" type="button" id="dMoreBtn" title="More: box art, rename, collections, emulator…" aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg><span>More</span></button>
+    </div>
+    <div class="d-menu" id="dMenu" role="menu" hidden>
       <button class="btn" type="button" id="dEmu">Open emulator</button>
-      <button class="btn" type="button" id="dClose">Close</button>
+      <span id="dActEnd" hidden></span>
+    </div>
+    <div class="d-tabs" id="dTabs" role="tablist">
+      <button type="button" role="tab" data-tab="overview" class="on">Overview</button>
+      <button type="button" role="tab" data-tab="media" id="dTabMedia">Media</button>
+      <button type="button" role="tab" data-tab="copy" id="dTabCopy">Your copy</button>
+    </div>
+    <div class="d-body" data-show="overview">
+      <div class="d-pane" data-pane="overview">
+        <div class="d-ach" id="dAch" hidden><div class="ring" id="dRing"><span id="dRingTxt"></span></div><div class="d-ach-main"><b id="dAchTitle">Achievements</b><div class="d-ach-sub" id="dAchSub"></div></div><button class="btn small" type="button" id="dAchBtn">See all</button></div>
+        <div class="d-sec" id="dSecAbout">About this game</div>
+        <p class="d-desc clamp" id="dDesc"></p>
+        <button class="d-more" id="dMore" type="button" hidden>Read more</button>
+        <div class="d-sec" id="dSecInfo">Game info</div>
+        <dl class="d-grid" id="dGrid"></dl>
+        <p class="d-how" id="dHow"></p>
+        <details class="d-adv"><summary>Launch command</summary><div class="d-cmd" id="dCmd"></div></details>
+      </div>
+      <div class="d-pane" data-pane="media">
+        <div class="d-media" id="dMedia" aria-hidden="true"><div class="d-media-in" id="dMediaIn"><video id="dVideo" muted playsinline loop preload="none"></video><span class="d-media-tag" id="dMediaTag"></span></div></div>
+        <button class="btn" type="button" id="dTrailer" hidden>Watch the trailer full screen</button>
+        <div class="d-shots" id="dShots" hidden></div>
+        <p class="d-none" id="dNoMedia" hidden>No preview, trailer or screenshots for this game yet.</p>
+      </div>
+      <div class="d-pane" data-pane="copy">
+        <div class="d-art" id="dArt" hidden><div class="d-art-h">Your copy</div><div class="d-art-row" id="dArtRow"></div></div>
+      </div>
     </div>
   </aside>
 
@@ -244,6 +266,7 @@
 <script src="settings.js"></script>
 <script src="themefx.js"></script>
 <script src="companion/tv-input.js"></script>
+<script src="whatsnew.js"></script>
 <script src="systems-extra.js"></script>
 <script src="app.js"></script>
 </body>

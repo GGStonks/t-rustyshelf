@@ -556,3 +556,169 @@ html:not(.platform-android) .art-prog.done .art-fill{background:var(--ok)}
 html:not(.platform-android) .con-more{border-color:var(--line);background:rgba(255,255,255,.03)}
 .wz2-card.ready{cursor:default;opacity:1}
 .wz2-card.ready:hover{border-color:inherit}
+
+/* ---- Details (beta.7): the same family as Settings. Big type read from the couch, section labels, a clean list of
+   facts with hairlines (no boxes), the gliding blue highlight on the focused button, Close as a corner button, and a
+   panel wide enough to breathe. Sizes scale with the screen (clamp), so the Thor's 853-wide screen still fits; the
+   phone layout (under 761 px) keeps its own bottom sheet. ---- */
+@media (min-width:761px){
+  :root{--dw:clamp(440px,38vw,740px)}
+  .details{width:var(--dw)!important;background:linear-gradient(180deg,rgba(15,17,30,.97),rgba(9,11,19,.985))!important;
+    --dacc:#6b8cff;--dacc2:#a9bfff}
+  #app.details-open #scene{transform:translateX(calc(var(--dw) * -.5)) scale(.9)}
+  #app.details-open .sel-halo{transform:translate(calc(-50% - var(--dw) * .5),-50%) scale(.9)}
+  #app.details-open .info{transform:translateX(calc(var(--dw) * -.5))}
+  #app.details-open .hints{left:calc(50% - var(--dw) / 2)!important;max-width:calc(100% - var(--dw) - 32px)!important}
+  .hud-top .tabs{transition:transform .55s cubic-bezier(.22,.9,.25,1)}
+  #app.details-open .hud-top .tabs{opacity:0;pointer-events:none} /* (narrower screens: no room beside the console's name, so they step out) */
+  .hud-top .tabs{transition:transform .55s cubic-bezier(.22,.9,.25,1),opacity .3s}
+  .details .d-hero{min-height:clamp(210px,30vh,340px);padding:clamp(28px,3.6vh,46px) clamp(24px,2.4vw,44px) clamp(20px,2.6vh,30px)}
+  .details .d-hero-row{gap:clamp(16px,1.6vw,28px)}
+  .details .d-cover{width:clamp(108px,9vw,172px);border-radius:10px;box-shadow:0 18px 40px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.14)}
+  .details .d-kicker{font-size:clamp(10px,.72vw,14px);font-weight:700;letter-spacing:.26em}
+  .details .d-head .d-title{font-size:clamp(24px,2.35vw,46px);font-weight:700;line-height:1.08;margin-top:6px;letter-spacing:-.01em}
+  .details .d-chips{gap:8px;margin-top:clamp(10px,1.4vh,16px)}
+  .details .chipx{font-size:clamp(11px,.72vw,14px);padding:5px 12px}
+  .details .d-hist{font-size:clamp(12px,.8vw,15px);gap:clamp(14px,1.2vw,22px);margin-top:clamp(10px,1.4vh,16px)}
+  .d-x{position:absolute;top:clamp(14px,1.8vh,22px);right:clamp(14px,1.4vw,24px);z-index:2;width:clamp(34px,2.3vw,44px);aspect-ratio:1;border-radius:50%;
+    border:1px solid rgba(255,255,255,.2);background:rgba(10,12,20,.5);color:#f3f5fb;font-size:clamp(13px,.85vw,17px);display:grid;place-items:center;cursor:pointer;padding:0}
+  .d-x:hover{background:rgba(255,255,255,.16)}
+  .details .d-body{padding:clamp(18px,2.6vh,30px) clamp(24px,2.4vw,44px) 30px}
+  .d-sec,.details .d-art-h{font-size:clamp(10px,.68vw,13px);font-weight:700;letter-spacing:.24em;text-transform:uppercase;color:var(--ink-dim);margin:clamp(20px,2.8vh,32px) 0 clamp(8px,1.1vh,12px)}
+  .d-sec[hidden]{display:none}
+  .details .d-body>.d-sec:first-child,.details .d-ach[hidden]+.d-sec{margin-top:0}
+  .details .d-desc{font-size:clamp(14px,.95vw,18px);line-height:1.68;color:rgba(243,245,251,.88)}
+  .details .d-more{font-size:clamp(11px,.68vw,13px);margin-top:8px}
+  .details .d-grid{display:grid;grid-template-columns:1fr;gap:0;margin-top:0;border-top:1px solid rgba(255,255,255,.07)}
+  .details .d-grid>div{display:flex;justify-content:space-between;align-items:baseline;gap:18px;padding:clamp(10px,1.45vh,16px) 2px;border:0;border-bottom:1px solid rgba(255,255,255,.07);border-radius:0;background:none}
+  .details .d-grid dt{font-size:clamp(12px,.82vw,16px);letter-spacing:0;text-transform:none;color:var(--ink-dim);flex:none}
+  .details .d-grid dd{margin:0;font-size:clamp(13px,.88vw,17px);font-weight:600;text-align:right;color:#f3f5fb}
+  .details .d-grid>div.wide{flex-direction:column;align-items:flex-start;gap:4px}
+  .details .d-grid>div.wide dd{text-align:left;font-weight:500}
+  .details .d-art{margin-top:0}
+  .details .d-art-chip{font-size:clamp(11px,.74vw,14px);padding:5px 12px}
+  .details .d-art-sum{font-size:clamp(11px,.74vw,14px)}
+  .details .d-adv summary{font-size:clamp(10px,.68vw,13px)}
+  .details .d-ach{border-radius:16px;padding:clamp(12px,1.6vh,18px) clamp(14px,1.2vw,20px)}
+  /* buttons: Play across the top, the rest three to a row (a short last row shares its width), so the game's info keeps
+     the height */
+  .details .d-actions{display:flex!important;flex-wrap:wrap;gap:8px;padding:clamp(12px,1.8vh,20px) clamp(24px,2.4vw,44px) clamp(16px,2.4vh,26px)}
+  .details .d-actions .btn{flex:1 1 calc(33.333% - 8px);min-height:clamp(36px,4.1vh,48px);font-size:clamp(12px,.8vw,15px);border-radius:12px;padding:6px 10px}
+  .details .d-actions #dPlay{flex-basis:100%;min-height:clamp(46px,5.4vh,62px);font-size:clamp(15px,1.05vw,20px);font-weight:700;border-radius:14px}
+  .details .d-actions [hidden]{display:none!important}
+  /* the controller's focus: Settings' highlight (a soft accent wash, a light ring, a glow) */
+  body.pad-input .details .pad-focus:not(#dPlay){background:linear-gradient(90deg,color-mix(in srgb,var(--dacc) 32%,transparent),color-mix(in srgb,var(--dacc) 14%,transparent))!important;color:#fff!important}
+  body.pad-input .details .pad-focus{outline:none!important;box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--dacc2) 90%,transparent),0 10px 34px -10px color-mix(in srgb,var(--dacc) 80%,transparent),0 0 0 1px rgba(0,0,0,.25)!important;transform:none}
+}
+@media (min-width:1600px){#app.details-open .hud-top .tabs{opacity:1;pointer-events:auto;transform:translateX(calc(var(--dw) * -.5))}} /* (wide screens: the console tabs move over with the shelf, clear of the console's name) */
+@media (min-width:761px){
+  .details .d-actions{background:rgba(11,13,22,.985)!important;border-top:1px solid rgba(255,255,255,.07)!important;box-shadow:0 -14px 28px rgba(0,0,0,.4)!important} /* (solid: the page scrolls under it, never shows through) */
+}
+/* short screens (the Thor's 480, small laptops): a compact header and a lower button block, so the game's info still shows */
+@media (min-width:761px) and (max-height:600px){
+  .details .d-hero{min-height:0;padding-top:clamp(16px,3.4vh,24px);padding-bottom:14px}
+  .details .d-cover{width:clamp(72px,8vw,96px)}
+  .details .d-head .d-title{font-size:clamp(20px,2vw,28px)}
+  .details .d-chips{margin-top:6px}.details .d-hist{margin-top:6px}
+  .details .d-body{padding-top:12px}
+  .d-sec,.details .d-art-h{margin-top:14px;margin-bottom:6px}
+  .details .d-grid>div{padding:7px 2px}
+  .details .d-actions{gap:6px;padding:10px clamp(16px,2vw,28px) 12px}
+  .details .d-actions .btn{flex-basis:calc(25% - 6px);min-height:32px;font-size:12px;padding:4px 8px}
+  .details .d-actions #dPlay{min-height:40px;font-size:15px}
+}
+
+/* (beta.7) the first run's folded More consoles: maker headings over compact tick chips */
+.wz2-chips.wz2-more{gap:8px;margin-top:10px}
+.wz2-chips.wz2-more .wz2-chip{padding:8px 14px 8px 10px;font-size:14px}
+.wz2-more-note{margin:14px 0 0;font-size:13px;color:var(--ink-dim)}
+/* (beta.7) the first run's Set up my emulators for me */
+.wz2-rec{margin-left:auto;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ok);border:1px solid color-mix(in srgb,var(--ok) 45%,transparent)}
+.wz2-auto .hint-text{margin:6px 0 10px}
+.wz2-emudone{margin-top:14px}
+.wz2-emudone{padding:12px 16px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.03)}
+.wz2-emudone .wz2-pt{font-weight:500;font-size:13px;color:var(--ink-dim)}
+
+/* (beta.7) video previews: Details' 16:9 box opens under the title only once there's a picture; the shelf's own sits behind
+   the cases. Open / close is the box's row growing (grid 0fr → 1fr), the picture fades in on top of this game's art. */
+.d-media{display:grid;grid-template-rows:0fr;padding:0 28px;opacity:0;transition:grid-template-rows .38s cubic-bezier(.22,.9,.25,1),padding .38s cubic-bezier(.22,.9,.25,1),opacity .3s ease;flex-shrink:0}
+.d-media.on{grid-template-rows:1fr;padding-top:18px;opacity:1}
+.details .d-media{padding-left:32px;padding-right:32px}
+.d-media-in{position:relative;min-height:0;overflow:hidden;border-radius:14px;aspect-ratio:16/9;background:#05070d center/cover no-repeat;box-shadow:0 14px 34px rgba(0,0,0,.45),0 0 0 1px rgba(255,255,255,.09)}
+.d-media-in::before{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.07) 50%,transparent 70%) 0 0/250% 100%;opacity:0;transition:opacity .3s}
+.d-media.on:not(.ready) .d-media-in::before{opacity:1;animation:dmShine 1.4s linear infinite}
+@keyframes dmShine{to{background-position:-250% 0}}
+.d-media video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;opacity:0;transition:opacity .45s ease}
+.d-media.ready video{opacity:1}.d-media.yt video{display:none}
+.d-media-tag{position:absolute;left:12px;bottom:10px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#fff;background:rgba(0,0,0,.5);backdrop-filter:blur(6px);opacity:0;transition:opacity .4s .3s;pointer-events:none}
+.d-media.ready:not(.yt) .d-media-tag{opacity:.85}
+html.reduce-motion .d-media,html.reduce-motion .d-media video{transition:none}
+
+/* ---- (beta.7) Details redone like the big launchers' game pages: logo, a stats strip, one Play button and three small
+   ones (Manual, Inspect, More; the rest in the More menu), tabs (Overview, Media, Your copy, Info; LB / RB or Q / E), and
+   the game's fan art or preview video filling the background behind the case. ---- */
+.details .d-hero{flex-direction:column;align-items:stretch;justify-content:flex-end}
+.d-head.has-logo .d-title{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.d-logo{display:block;max-width:min(100%,380px);max-height:clamp(52px,9vh,112px);object-fit:contain;object-position:left center;margin-top:8px;filter:drop-shadow(0 6px 18px rgba(0,0,0,.65))}
+.d-logo[hidden]{display:none}
+.d-stats{position:relative;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:clamp(14px,2vh,20px)}
+.d-stats[hidden]{display:none}
+.d-stat{min-width:0;padding:8px 12px;border-radius:12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.07)}
+.d-stat span{display:block;font-size:clamp(10px,.62vw,12px);font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-dim)}
+.d-stat b{display:block;margin-top:2px;font-size:clamp(13px,.95vw,18px);font-weight:700;color:#f3f5fb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.details .d-actions{position:relative!important;bottom:auto!important;display:flex!important;flex-wrap:nowrap!important;align-items:stretch;gap:8px;background:none!important;border:0!important;box-shadow:none!important}
+.details .d-actions #dPlay{flex:1 1 auto}
+.details .d-actions .d-ico{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:0 16px}
+.d-ico svg{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+#dMoreBtn svg{fill:currentColor;stroke:none}
+.d-ico[aria-expanded="true"]{background:rgba(255,255,255,.14)}
+.d-menu{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin:6px 28px 0;padding:10px;border-radius:14px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);animation:dMenuIn .18s ease-out}
+.d-menu[hidden]{display:none}.d-menu [hidden]{display:none!important}
+.d-menu .btn{justify-content:flex-start;text-align:left;min-height:40px;border-radius:10px}
+@keyframes dMenuIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.d-tabs{position:sticky;top:0;z-index:3;display:flex;gap:clamp(16px,1.6vw,28px);margin-top:14px;padding:0 28px;border-bottom:1px solid rgba(255,255,255,.08);background:rgba(12,14,24,.97)}
+.d-tabs button{position:relative;padding:12px 0 10px;border:0;border-bottom:2px solid transparent;background:none;color:var(--ink-dim);font:inherit;font-size:clamp(12px,.82vw,16px);font-weight:600;cursor:pointer;border-radius:0}
+.d-tabs button:hover{color:#f3f5fb}
+.d-tabs button.on{color:#fff;border-bottom-color:var(--dacc,#6b8cff)}
+.d-tabs button.has::after{content:"";position:absolute;top:10px;right:-8px;width:5px;height:5px;border-radius:50%;background:var(--dacc,#6b8cff)}
+.d-tabs button[hidden]{display:none}
+.d-body .d-pane{display:none}
+.d-body[data-show="overview"]>[data-pane="overview"],.d-body[data-show="media"]>[data-pane="media"],.d-body[data-show="copy"]>[data-pane="copy"],.d-body[data-show="info"]>[data-pane="info"]{display:block;animation:dPaneIn .22s ease-out}
+@keyframes dPaneIn{from{opacity:0}to{opacity:1}}
+.d-pane>.d-sec:first-child{margin-top:0!important}
+.d-pane .d-media{padding-left:0!important;padding-right:0!important}
+.d-pane .d-media.on{padding-top:0}
+.d-pane #dTrailer{width:100%;margin-top:12px}
+.d-pane .d-shots{padding:12px 0 0;flex-wrap:wrap;overflow:visible}
+.d-shot{border:0;padding:0;background:none;cursor:pointer;font:inherit}
+.d-none{color:var(--ink-dim);font-size:clamp(13px,.85vw,16px)}
+.d-none[hidden]{display:none}
+/* the backdrop behind the case: fan art first (the video's poster), the preview once it plays; faded out toward the panel */
+#app.details-open .pv-back{-webkit-mask-image:linear-gradient(90deg,#000 0%,#000 30%,transparent calc(100% - var(--dw,460px)));mask-image:linear-gradient(90deg,#000 0%,#000 30%,transparent calc(100% - var(--dw,460px)))}
+#app.d-art-on .pv-back{opacity:.42}
+#app.pv-det .pv-back{opacity:.62}
+@media (min-width:761px){
+  .details .d-actions{padding:clamp(14px,2vh,20px) clamp(24px,2.4vw,44px) 0!important}
+  .details .d-actions .btn{flex-basis:auto;min-height:clamp(44px,5vh,58px)}
+  .details .d-actions #dPlay{flex-basis:auto}
+  .d-menu{margin-left:clamp(24px,2.4vw,44px);margin-right:clamp(24px,2.4vw,44px)}
+  .d-tabs{padding:0 clamp(24px,2.4vw,44px)}
+  .details .d-body{padding-top:clamp(16px,2.2vh,24px)}
+}
+@media (min-width:761px) and (max-height:600px){
+  .d-ico span{display:none}.details .d-actions .d-ico{padding:0 12px}
+  .d-logo{max-height:46px}
+  .d-stats{margin-top:8px}.d-stat{padding:5px 9px}.d-stat b{font-size:13px}
+  .details .d-actions{padding-top:10px!important}
+  .details .d-actions .btn{min-height:36px}
+  .d-tabs{margin-top:8px}.d-tabs button{padding:8px 0 7px;font-size:12px}
+}
+/* (beta.7) action row sizes: Play takes what's left; the three small buttons keep their own width (a general rule made every
+   button full width); facts move into Overview, the stats read clearly */
+.details .d-actions .btn{width:auto!important;min-width:0}
+.details .d-actions #dPlay{flex:1 1 0!important;min-width:40%}
+.details .d-actions .d-ico{flex:0 0 auto!important}
+.d-stat{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.1)}
+.d-stat span{color:rgba(233,236,245,.62)}
+.d-stat b{color:#fff}
+.d-stats{z-index:1} /* (above the header's art layer, like the cover and title) */

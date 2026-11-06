@@ -13,6 +13,9 @@ const ART_EXT = ['png', 'jpg', 'jpeg', 'webp'];
 
 // The title rules live in shared/titles.js (the Android build uses the same file)
 const Titles = require('../shared/titles');
+const Arcade = require('./arcadenames');
+// BIOS sets that sit beside the games, hidden even before the arcade list has arrived (main/arcadenames.js knows them all)
+const ARCADE_BIOS = new Set(['neogeo', 'pgm', 'skns', 'stvbios', 'decocass', 'cpzn1', 'cpzn2', 'taitofx1', 'konamigx', 'nss', 'naomi', 'awbios', 'hod2bios', 'f355bios', 'airlbios', 'megaplay', 'megatech', 'playch10', 'qsound', 'neocdz', 'isgsm', 'nmk004', 'ym2608', 'bubsys', 'cchip', 'sp-cpu']);
 function cleanTitle(file) { return Titles.cleanTitle(path.basename(file)); }
 
 function walk(dir, exts, depth, out, gameFile) {
@@ -186,6 +189,12 @@ function scanSystem(sysDef, sysCfg) {
     if (asFolder && sysDef.id === 'ps3') { fg = ps3GameInfo(f, sysCfg.romDirs); if (!fg) continue; }
     if (sysDef.id === 'sw2') { const n = /(^|[\\/])exefs[\\/]main$/i.test(f) ? nx2.info(f) : nx2.fileInfo(f); fg = { title: n.title, titleId: n.titleId || undefined, folder: n.folder || path.dirname(f), icon: null, hero: null }; }
     let info = asFolder || fg ? (fg = fg || folderGameInfo(f, sysCfg.romDirs), { title: fg.title, region: '', disc: 0, rev: '' }) : cleanTitle(isDefault ? path.dirname(f) + '.xex' : f);
+    // (beta.7) arcade / Neo Geo: "sf2.zip" is named from FinalBurn Neo's list; BIOS sets (neogeo.zip) aren't games
+    if (Arcade.SYSTEMS.has(sysDef.id)) { const set = path.basename(f, path.extname(f)).toLowerCase(), a = Arcade.lookup(set);
+      if ((a && a.bios) || (!a && ARCADE_BIOS.has(set))) continue;
+      // ("A / B": two names for one game, the first is the shelf's; versions of a game, "(World 910522)" / "(USA 910206)",
+      // are one box, the fuller zip kept)
+      if (a && a.title) { info = cleanTitle(a.title.split(' / ')[0].replace(/[\\/]/g, '-') + '.zip'); info.region = ''; } }
     if (sysDef.id === 'wiiu' && /\.tmd$/i.test(f)) {
       // NUS folder ("Game Name [0005000010xxxxxx]\title.tmd + *.app"): the folder is the game; updates (0005000E…) and DLC (0005000C…) aren't
       if (path.basename(f).toLowerCase() !== 'title.tmd') continue;

@@ -116,7 +116,7 @@
   const db = { v: 1, owned: {}, covers: {}, pend: {}, lib: [] };
   const dbReady = ready.then(async () => { const d = await load('reading.json', null); if (d && typeof d === 'object') Object.assign(db, d); }).catch(() => {});
   let saveT = 0;
-  function saveDb(soon) { clearTimeout(saveT); saveT = setTimeout(async () => { saveT = 0; await idleTurn(); store('reading.json', db); }, soon ? 300 : 2500); }
+  function saveDb(soon) { clearTimeout(saveT); saveT = setTimeout(async () => { saveT = 0; await idleTurn(20000); store('reading.json', db); }, soon ? 300 : 2500); }
 
   // ---------- where: "Boxshelf Reading" beside the ROMs (the main ROMs folder, else the first games folder), or inside Boxshelf ----------
   const ui = () => (st.config && st.config.ui) || {};
@@ -180,7 +180,7 @@
   async function rescan() {
     if (lib.scanning) return lib.scanning;
     lib.scanning = (async () => {
-      await dbReady; await idleTurn();
+      await dbReady; await idleTurn(15000); // (beta.7: at most 15 s: listing folders is the native side's work, and it must not wait forever)
       const items = await scanLib(), sig = items.map(i => i.id).join(',');
       lib.at = Date.now(); const changed = sig !== lib.sig; lib.sig = sig; adopt(items);
       if (changed) { db.lib = items; saveDb(); try { dispatchEvent(new CustomEvent('bs-library-changed')); } catch {} }
@@ -781,6 +781,9 @@
   if (document.readyState === 'loading') addEventListener('DOMContentLoaded', hook); else hook();
 
   window.BS_READING = { open, close, isOpen: () => U.open, rescan: () => { lib.at = 0; return rescan().then(l => l.map(pub)); },
+  // (beta.7) for the device test's diagnosis: where the scan looks, what that folder lists, and the scan's own state
+  diag: async () => { const t = romTree(); let top = null; try { top = t ? (((await N.listDirs({ uri: t.tree })) || {}).dirs || []).map(d => d.name) : null; } catch (e) { top = 'error: ' + (e && e.message); }
+    return { tree: t ? { path: t.path, tree: String(t.tree).slice(0, 90) } : null, top, list: lib.list.length, at: lib.at, scanning: !!lib.scanning, artWhere: ui().artWhere || '' }; },
     state: () => ({ zone: U.zone, shelf: shelf() && shelf().id, cur: U.cur, items: U.items.length, kind: U.kind, text: U.text, osk: U.osk, loading: U.loading, err: U.err, head: HEAD[U.hi], rail: U.list[U.ri] && U.list[U.ri].id,
       jobs: [...dl.jobs.values()].map(j => ({ id: j.id, state: j.state, bytes: j.bytes, total: j.total, err: j.err })) }),
     where: () => saveRoot(), _db: () => JSON.parse(JSON.stringify(db)),

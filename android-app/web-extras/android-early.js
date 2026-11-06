@@ -9,11 +9,17 @@
   const desc = Object.getOwnPropertyDescriptor(window, 'devicePixelRatio') || Object.getOwnPropertyDescriptor(Window.prototype, 'devicePixelRatio');
   const real = () => { try { return (desc && desc.get ? desc.get.call(window) : 0) || 1; } catch { return 1; } };
   window.__bsRealDpr = real;
+  // (beta.8) worked out once and kept until the window changes size: reading innerWidth on every devicePixelRatio read
+  // (cover thumbnails ask for it per case while the shelf slides) made the page lay out right then, mid-slide
+  let kept = 0;
   function effective() {
+    if (kept) return kept;
     const r = real(), sw = Math.max(screen.width || 0, screen.height || 0), iw = Math.max(innerWidth || 0, innerHeight || 0);
-    if (!sw || !iw) return r;
+    if (!sw || !iw) return r;                     // (0 sizes while loading: not kept, asked again next time)
     const e = r * sw / iw;                        // physical screen pixels across ÷ CSS pixels across
-    return e > .5 && e < r ? Math.round(e * 1000) / 1000 : r; // only ever lowers it; nonsense (0 sizes while loading) keeps the real one
+    return (kept = e > .5 && e < r ? Math.round(e * 1000) / 1000 : r); // only ever lowers it
   }
+  const forget = () => { kept = 0; };
+  addEventListener('resize', forget); addEventListener('orientationchange', forget); addEventListener('load', forget);
   try { Object.defineProperty(window, 'devicePixelRatio', { configurable: true, enumerable: true, get: effective, set() {} }); } catch {}
 })();

@@ -31,9 +31,13 @@ function defaults() {
     steam: { enabled: true, path: '', hideTools: true },
     // (beta.4) PC games beyond Steam (main/pcgames.js): Epic's installs on the PC shelf; Quiver Launcher's apps and games
     // added by hand ({ id, title, exe, args }) on the Custom shelf. quiverPath: a portable Quiver's folder, chosen or found
-    pc: { epic: true, quiver: true, quiverPath: '', custom: [] },
+    pc: { epic: true, quiver: true, quiverPath: '', custom: [], gog: true, ubisoft: true, ea: true, xbox: true },
     games: {}, // per-game choices keyed by game id ("<console>:<file>"): { emulator } = this game runs in its own emulator build
     emuSeen: [], // emulator builds used before (newest first): offered for a game a build was made for
+    // (beta.7) Set up for me (main/emusetup.js): auto = the first run sets up emulators that look new; graphics = the preset
+    // (auto: picked for this PC); resume = RetroArch carries on where you left off; pending = emulators to set up at their
+    // next launch (not opened yet when setup ran: their settings file comes with the first run)
+    emuSetup: { auto: true, graphics: 'auto', resume: false, pending: [] },
     apps,
     ra: { user: '', key: '', enabled: true },
     // autoCovers / autoManuals: downloads from the Internet are opt-in for new installs; load() keeps them on for a config
@@ -42,7 +46,7 @@ function defaults() {
     // Art Studio: styles = per console shelf style (a console without one follows defaultArtStyle(ui), i.e. the old Box art
     // region / Prefer HD settings, so nothing changes until a style is chosen); locks = per game parts auto-fetch never touches
     art: { styles: {}, locks: {} },
-    ui: { sound: true, startFullscreen: true, buttons: 'auto', performance: 'auto', quitCombo: true, quitComboKeys: 'l3+r3', soundTheme: 'aero', volume: .7, ambient: false, ambientLevel: .02, music: 'off', musicLevel: .4, rumble: true, soundRev: 4, autoCovers: false, autoManuals: false, artLibrary: '', attract: true, attractMinutes: 3, shuffleAll: true, favorites: [], background: 'blur', theme: 'spectrum', sort: 'az', filter: 'all', museumLight: 'gallery', homeMenu: true, homeLayout: 'side', hideTaskbar: true, uiScale: 1,
+    ui: { sound: true, startFullscreen: true, buttons: 'auto', performance: 'auto', quitCombo: true, quitComboKeys: 'l3+r3', soundTheme: 'aero', volume: .7, ambient: false, ambientLevel: .02, music: 'off', musicLevel: .4, rumble: true, soundRev: 4, autoCovers: false, autoManuals: false, artLibrary: '', attract: true, attractMinutes: 3, shuffleAll: true, favorites: [], collections: [], background: 'blur', theme: 'spectrum', sort: 'az', filter: 'all', museumLight: 'gallery', homeMenu: true, homeLayout: 'side', hideTaskbar: true, uiScale: 1, previews: 'off', previewSound: false, previewYoutube: true, previewClips: true, previewDirs: [], previewDelay: 1.5, previewHint: false, clipHint: false, deckHint: false, lastSeenVersion: '', // (beta.7) video previews; lastSeenVersion: the version whose What's new was shown: off / details / shelf (Details and behind the shelf); the first run asks
       // 1.55 Settings
       updateCheck: true, // (1.82) Settings → System → Check for new betas
       openInto: 'last', display: '', safeArea: 100, clock: 'full', clock24: false, reduceMotion: false, dimMinutes: 0, confirmButton: 'auto', scrollSpeed: 'normal', artRegion: 'auto', audioOut: '', hidden: [], museumStyle: { walkIn: true } }
@@ -162,10 +166,21 @@ function sanitize(cfg) {
   // per-game emulator overrides: plain paths only, a sane number of them
   const games = {}; if (isObj(cfg.games)) for (const [id, v] of Object.entries(cfg.games).slice(0, 5000)) { if (typeof id !== 'string' || id.length > 2048 || !isObj(v)) continue; const e = typeof v.emulator === 'string' ? v.emulator.trim().slice(0, 1024) : '', t = typeof v.title === 'string' ? v.title.replace(/\s+/g, ' ').trim().slice(0, 120) : ''; if (e || t) games[id] = { ...(e ? { emulator: e } : {}), ...(t ? { title: t } : {}) }; } // (beta.5: title = the name the player gave it)
   cfg.games = games;
+  // (beta.7) your collections (shelves of your own): [{ id, name, ids: [game ids] }], a sane number and size
+  ui.lastSeenVersion = typeof ui.lastSeenVersion === 'string' ? ui.lastSeenVersion.slice(0, 40) : '';
+  if (!['off', 'details', 'shelf'].includes(ui.previews)) ui.previews = 'off'; for (const k of ['previewSound', 'previewYoutube', 'previewClips']) if (typeof ui[k] !== 'boolean') ui[k] = d[k];
+  { const n = +ui.previewDelay; ui.previewDelay = [0.5, 1, 1.5, 2, 3, 5, 8, 10, 15].includes(n) ? n : 1.5; } // (beta.8: more choices, half a second to 15 seconds)
+  { if (typeof ui.clipHint !== 'boolean') ui.clipHint = false; if (typeof ui.deckHint !== 'boolean') ui.deckHint = false; }
+  ui.previewDirs = [...new Set((Array.isArray(ui.previewDirs) ? ui.previewDirs : []).filter(x => typeof x === 'string' && x && x.length <= 1024))].slice(0, 20);
+  ui.collections = (Array.isArray(ui.collections) ? ui.collections : []).filter(c => isObj(c) && typeof c.id === 'string' && c.id && typeof c.name === 'string').slice(0, 50)
+    .map(c => ({ id: c.id.slice(0, 40), name: c.name.replace(/\s+/g, ' ').trim().slice(0, 40) || 'Collection', ids: [...new Set((Array.isArray(c.ids) ? c.ids : []).filter(x => typeof x === 'string' && x && x.length <= 1024))].slice(0, 5000) }));
   // (beta.4) games added by hand: plain paths and names only, a sane number of them
   if (isObj(cfg.pc)) { const s = (v, n) => typeof v === 'string' ? v.trim().slice(0, n) : '';
-    cfg.pc.custom = (Array.isArray(cfg.pc.custom) ? cfg.pc.custom : []).filter(c => isObj(c) && s(c.exe, 1024)).slice(0, 500).map(c => ({ id: s(c.id, 80) || s(c.title, 80) || s(c.exe, 80), title: s(c.title, 120), exe: s(c.exe, 1024), args: s(c.args, 1000) }));
-    cfg.pc.quiverPath = s(cfg.pc.quiverPath, 1024); for (const k of ['epic', 'quiver']) if (typeof cfg.pc[k] !== 'boolean') cfg.pc[k] = true; }
+    cfg.pc.custom = (Array.isArray(cfg.pc.custom) ? cfg.pc.custom : []).filter(c => isObj(c) && s(c.exe, 1024)).slice(0, 2000).map(c => ({ id: s(c.id, 80) || s(c.title, 80) || s(c.exe, 80), title: s(c.title, 120), exe: s(c.exe, 1024), args: s(c.args, 1000), ...(s(c.src, 20) ? { src: s(c.src, 20) } : {}) })); // (beta.7: src 'playnite' marks an import, for Remove what was imported; up to 2000 games)
+    cfg.pc.pnDirs = isObj(cfg.pc.pnDirs) ? Object.fromEntries(Object.entries(cfg.pc.pnDirs).slice(0, 60).map(([k, v]) => [String(k).slice(0, 20), (Array.isArray(v) ? v : []).filter(x => typeof x === 'string' && x.length <= 1024).slice(0, 50)])) : {}; // (the games folders a Playnite import added)
+    cfg.pc.quiverPath = s(cfg.pc.quiverPath, 1024); for (const k of ['epic', 'quiver', 'gog', 'ubisoft', 'ea', 'xbox']) if (typeof cfg.pc[k] !== 'boolean') cfg.pc[k] = true; } // (beta.7: the four new stores)
+  { const e = isObj(cfg.emuSetup) ? cfg.emuSetup : {}; cfg.emuSetup = { auto: e.auto !== false, graphics: ['auto', 'fast', 'balanced', 'pretty'].includes(e.graphics) ? e.graphics : 'auto', resume: e.resume === true,
+    pending: [...new Set((Array.isArray(e.pending) ? e.pending : []).filter(x => typeof x === 'string' && x && x.length <= 1024))].slice(0, 40) }; }
   cfg.emuSeen = Array.isArray(cfg.emuSeen) ? [...new Set(cfg.emuSeen.filter(x => typeof x === 'string' && x && x.length <= 1024))].slice(0, 20) : [];
   for (const [k, list] of Object.entries(ONE_OF)) if (!list.includes(ui[k])) ui[k] = d[k];
   for (const k of ['clock24', 'reduceMotion']) if (typeof ui[k] !== 'boolean') ui[k] = d[k];

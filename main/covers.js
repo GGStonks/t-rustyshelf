@@ -14,10 +14,10 @@ const { isFile, artBase, artDirFor } = require('./paths');
 
 const LIBRETRO = { gc: 'Nintendo - GameCube', wii: 'Nintendo - Wii', psp: 'Sony - PlayStation Portable', wiiu: 'Nintendo - Wii U', sw: 'Nintendo - Switch', ps3: 'Sony - PlayStation 3', ps4: 'Sony - PlayStation 4', ps2: 'Sony - PlayStation 2', x360: 'Microsoft - Xbox 360', n3ds: 'Nintendo - Nintendo 3DS',
   // (beta.6) the retro shelves (folder names checked on thumbnails.libretro.com)
-  psx: 'Sony - PlayStation', nes: 'Nintendo - Nintendo Entertainment System', snes: 'Nintendo - Super Nintendo Entertainment System', n64: 'Nintendo - Nintendo 64', gb: 'Nintendo - Game Boy', gbc: 'Nintendo - Game Boy Color', gba: 'Nintendo - Game Boy Advance', nds: 'Nintendo - Nintendo DS', megadrive: 'Sega - Mega Drive - Genesis', mastersystem: 'Sega - Master System - Mark III', gamegear: 'Sega - Game Gear', dreamcast: 'Sega - Dreamcast' };
+  psx: 'Sony - PlayStation', nes: 'Nintendo - Nintendo Entertainment System', snes: 'Nintendo - Super Nintendo Entertainment System', n64: 'Nintendo - Nintendo 64', gb: 'Nintendo - Game Boy', gbc: 'Nintendo - Game Boy Color', gba: 'Nintendo - Game Boy Advance', nds: 'Nintendo - Nintendo DS', megadrive: 'Sega - Mega Drive - Genesis', mastersystem: 'Sega - Master System - Mark III', gamegear: 'Sega - Game Gear', dreamcast: 'Sega - Dreamcast', saturn: 'Sega - Saturn', pcengine: 'NEC - PC Engine - TurboGrafx 16', neogeo: 'SNK - Neo Geo', arcade: 'FBNeo - Arcade Games', segacd: 'Sega - Mega-CD - Sega CD', sega32x: 'Sega - 32X', atari2600: 'Atari - 2600', atarilynx: 'Atari - Lynx', wonderswan: 'Bandai - WonderSwan', dos: 'DOS' };
 const LAUNCHBOX = { gc: 'Nintendo GameCube', wii: 'Nintendo Wii', psp: 'Sony PSP', wiiu: 'Nintendo Wii U', sw: 'Nintendo Switch', sw2: 'Nintendo Switch 2', ps3: 'Sony Playstation 3', ps4: 'Sony Playstation 4', ps5: 'Sony Playstation 5', ps2: 'Sony Playstation 2', x360: 'Microsoft Xbox 360', n3ds: 'Nintendo 3DS',
   // (beta.6) the retro shelves: LaunchBox's own platform names (the index rebuilds once to take them in)
-  psx: 'Sony Playstation', nes: 'Nintendo Entertainment System', snes: 'Super Nintendo Entertainment System', n64: 'Nintendo 64', gb: 'Nintendo Game Boy', gbc: 'Nintendo Game Boy Color', gba: 'Nintendo Game Boy Advance', nds: 'Nintendo DS', megadrive: 'Sega Genesis', mastersystem: 'Sega Master System', gamegear: 'Sega Game Gear', dreamcast: 'Sega Dreamcast' };
+  psx: 'Sony Playstation', nes: 'Nintendo Entertainment System', snes: 'Super Nintendo Entertainment System', n64: 'Nintendo 64', gb: 'Nintendo Game Boy', gbc: 'Nintendo Game Boy Color', gba: 'Nintendo Game Boy Advance', nds: 'Nintendo DS', megadrive: 'Sega Genesis', mastersystem: 'Sega Master System', gamegear: 'Sega Game Gear', dreamcast: 'Sega Dreamcast', saturn: 'Sega Saturn', pcengine: 'NEC TurboGrafx-16', neogeo: 'SNK Neo Geo AES', arcade: 'Arcade', segacd: 'Sega CD', sega32x: 'Sega 32X', atari2600: 'Atari 2600', atarilynx: 'Atari Lynx', wonderswan: 'WonderSwan', dos: 'MS-DOS' };
 const IDX_V = 8; // 8: full box wraps (Box - Full) indexed too, to cut spines from
 const LB_ZIP = 'https://gamesdb.launchbox-app.com/Metadata.zip';
 const LB_IMG = 'https://images.launchbox-app.com/';
@@ -156,7 +156,7 @@ async function downloadEx(url, dest) {
   for (let i = 0; ; i++) {
     let r; try { r = await net.fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(45000), cache: 'no-store' }); } // saved to the covers folder: no second copy in Chromium's cache
     catch (e) { if (i === 0) { await new Promise(z => setTimeout(z, 1200)); continue; } throw e; }
-    if (r.ok) return await saveBody(r, dest) ? 'ok' : 'missing';
+    if (r.ok) { const s = await saveBody(r, dest); return s === true ? 'ok' : s === 'notimage' ? 'busy' : 'missing'; }
     if (r.status >= 500 || r.status === 429) { if (i === 0) { await new Promise(z => setTimeout(z, 1200)); continue; } return 'busy'; }
     return r.status === 404 || r.status === 410 ? 'missing' : 'busy'; // (a 403 / 401 is often a CDN's passing block: not remembered as "not there")
   }
@@ -165,6 +165,10 @@ async function download(url, dest) { return (await downloadEx(url, dest)) === 'o
 async function saveBody(r, dest) {
   const buf = Buffer.from(await r.arrayBuffer());
   if (buf.length < 1024) return false; // not a real image
+  // (beta.8) a 200 that isn't a picture (a Wi-Fi sign-in page, a CDN error page) is never saved as the cover: art that's
+  // there is never fetched again, so it would stay broken. PNG, JPEG, WebP, GIF, BMP or AVIF/HEIF only; asked again later
+  const isImg = (buf[0] === 0x89 && buf[1] === 0x50) || (buf[0] === 0xff && buf[1] === 0xd8) || (buf.toString('latin1', 0, 4) === 'RIFF' && buf.toString('latin1', 8, 12) === 'WEBP') || buf.toString('latin1', 0, 3) === 'GIF' || buf.toString('latin1', 0, 2) === 'BM' || buf.toString('latin1', 4, 8) === 'ftyp';
+  if (!isImg) return 'notimage';
   fs.mkdirSync(path.dirname(dest), { recursive: true });
   try { fs.writeFileSync(dest + '.part', buf); fs.renameSync(dest + '.part', dest); } catch (e) { try { fs.unlinkSync(dest + '.part'); } catch {} throw e; } // disk full: no half-written .part left in the covers folder
   return true;
@@ -778,6 +782,6 @@ function hasInfo() { return idxStamp() > 0; } // cheap: never parses the index j
 
 // the index, built (downloaded) if it has to be: Art Studio's "build the LaunchBox index" button
 async function buildIndex(progress) { if (lbOverride) return true; await launchboxIndex(progress || (() => {})); return true; }
-module.exports = { _setIndex: x => { lbOverride = x; }, init, matchTitle, matchName, lookupNames, sgMatch, setSpineCutter, setCartMaker, makeCart, CART_SYS, discId, downloadCovers, coverage, cancel, HD_MIN, gameInfo, flushInfoCache, hasInfo, invalidateInfo, norm, launchboxMatch, libretroMatch, pickImages,
+module.exports = { _setIndex: x => { lbOverride = x; }, LAUNCHBOX, init, matchTitle, matchName, lookupNames, sgMatch, setSpineCutter, setCartMaker, makeCart, CART_SYS, discId, downloadCovers, coverage, cancel, HD_MIN, gameInfo, flushInfoCache, hasInfo, invalidateInfo, norm, launchboxMatch, libretroMatch, pickImages,
   // Art Studio (main/artstudio.js) reuses these rather than keeping its own copies
   candidates, libretroAll, libretroIndex, readyIndex, indexState, buildIndex, refreshIndex, cancelRefresh, indexInfo, edition, lbRegion, lrRegion, tdbRegion, download, downloadEx, sizeOf, artFile, isLow, placeArt, setOnPlaced, replacedFor, cutSpine, cutBack, canCut: () => !!spineCutter, pool, KINDS, ART_EXT, REPLACED };

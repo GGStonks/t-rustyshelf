@@ -21,19 +21,24 @@ const SOFT = 'Boxshelf';
 const UA = `Boxshelf/${(() => { try { return require('../package.json').version; } catch { return '0'; } })()}`;
 const HIT_TTL = 7 * 864e5, MISS_TTL = 864e5, HASH_MAX = 64 * 1048576, TIMEOUT = 15000, DL_TIMEOUT = 45000, MAX_GAMES = 20000, MAX_HASH = 20000;
 // ScreenScraper's console numbers (systemesListe.php) for the shelves Boxshelf has; PS4 and Steam aren't covered
-const SYS = { gc: 13, wii: 16, wiiu: 18, sw: 225, n3ds: 17, psp: 61, ps2: 58, ps3: 59, x360: 33, megadrive: 1, mastersystem: 2, nes: 3, snes: 4, gb: 9, gbc: 10, gba: 12, n64: 14, nds: 15, gamegear: 21, dreamcast: 23, psx: 57 }; // (beta.6: the retro shelves)
+const SYS = { gc: 13, wii: 16, wiiu: 18, sw: 225, n3ds: 17, psp: 61, ps2: 58, ps3: 59, x360: 33, megadrive: 1, mastersystem: 2, nes: 3, snes: 4, gb: 9, gbc: 10, gba: 12, n64: 14, nds: 15, gamegear: 21, dreamcast: 23, saturn: 22, pcengine: 31, neogeo: 142, arcade: 75, segacd: 20, sega32x: 19, atari2600: 26, atarilynx: 28, wonderswan: 45, dos: 135, psx: 57 }; // (beta.6: the retro shelves)
 // media type → Art Studio part. box-texture is the whole wrap (back | spine | front): the spine is cut from it. (box-3D is a
 // rendered 3D box, not flat art: not offered, the same as LaunchBox's "Box - 3D")
 const PART_MEDIA = { front: ['box-2D'], back: ['box-2D-back'], spine: ['box-2D-side', 'box-texture'], disc: ['support-2D'] };
 const REGION = r => { r = String(r || '').toLowerCase(); return r === 'us' || r === 'cus' ? 'usa' : r === 'jp' ? 'jpn' : r === 'wor' ? 'world' : /^(eu|fr|de|es|it|uk|nl|pt|se|dk|fi|no|pl|gr|ru|au|nz)$/.test(r) ? 'eur' : ''; };
 const REGION_WORD = { usa: 'USA', eur: 'Europe', jpn: 'Japan', world: 'World' };
-const CART = new Set(['n3ds', 'sw', 'sw2', 'nes', 'snes', 'n64', 'gb', 'gbc', 'gba', 'nds', 'megadrive', 'mastersystem', 'gamegear']);
+const CART = new Set(['n3ds', 'sw', 'sw2', 'nes', 'snes', 'n64', 'gb', 'gbc', 'gba', 'nds', 'megadrive', 'mastersystem', 'gamegear', 'pcengine', 'neogeo', 'arcade', 'sega32x', 'atari2600', 'atarilynx', 'wonderswan']);
 const CRED_PARAM = /^(devid|devpassword|softname|ssid|sspassword|output)$/i;
 
 let creds = () => ({}), log = () => {}, cacheFile = null, cache = null, saveT = null, fetchFn = null, matchFn = null, discIdFn = null;
 let pausedUntil = 0, pauseWhy = '', badSig = '', maxThreads = 1, spacing = 0, lastAt = 0, active = 0; const queue = [];
 function init(o = {}) { creds = o.creds || creds; log = o.log || log; cacheFile = o.dataDir ? path.join(o.dataDir, 'ss-cache.json') : null; cache = null; fetchFn = o.fetch || null; matchFn = o.match || null; discIdFn = o.discId || null; pausedUntil = 0; pauseWhy = ''; badSig = ''; maxThreads = 1; spacing = 0; }
-const C = () => { const c = creds() || {}; return { user: String(c.user || '').trim(), pass: String(c.pass || ''), devId: String(c.devId || '').trim(), devPass: String(c.devPass || '') }; };
+// (beta.7) Boxshelf's own developer login, when this build has one: main/ss-dev.json { "devId", "devPass" }, put there for the
+// app builds only. It's never in git (the .gitignore lists it) and so never in the public source. One the player enters wins.
+const OWN_DEV = (() => { try { const j = require('./ss-dev.json'); return j && j.devId && j.devPass ? { devId: String(j.devId), devPass: String(j.devPass) } : null; } catch { return null; } })();
+const hasDevLogin = () => { const c = C(); return !!(c.devId && c.devPass); };
+const C = () => { const c = creds() || {}, own = !String(c.devId || '').trim() && OWN_DEV;
+  return { user: String(c.user || '').trim(), pass: String(c.pass || ''), devId: own ? OWN_DEV.devId : String(c.devId || '').trim(), devPass: own ? OWN_DEV.devPass : String(c.devPass || '') }; };
 const sigOf = c => crypto.createHash('sha256').update([c.user, c.pass, c.devId, c.devPass].join('\0')).digest('hex').slice(0, 16); // (a fingerprint, never the values)
 const configured = () => { const c = C(); return !!(c.user && c.pass); };
 const enabled = () => configured() && sigOf(C()) !== badSig; // a sign-in the server refused isn't sent again until it changes
@@ -207,10 +212,12 @@ async function download(url, dest) {
 async function test() {
   const c = C(); if (!c.user || !c.pass) return { ok: false, error: 'no account' };
   if (pauseWhy !== 'quota' && pauseWhy !== 'blocked') { pausedUntil = 0; pauseWhy = ''; } // a test is a fresh try (a used-up day stays used up)
-  try { const r = await api('ssuserInfos.php', {}, c); if (!r || !r.ssuser) return { ok: false, error: 'not accepted' }; if (sigOf(c) === badSig) badSig = ''; return { ok: true, left: r.limits ? r.limits.left : null }; }
-  catch (e) { return { ok: false, error: e.code === 'auth' ? (/developer/.test(e.message) ? 'developer login not accepted' : 'not accepted') : e.message }; }
+  // (beta.7) refused with no developer login at all (the usual case until Boxshelf has its own): say that, not "not accepted"
+  const noDev = !hasDevLogin();
+  try { const r = await api('ssuserInfos.php', {}, c); if (!r || !r.ssuser) return { ok: false, error: noDev ? 'no developer login' : 'not accepted' }; if (sigOf(c) === badSig) badSig = ''; return { ok: true, left: r.limits ? r.limits.left : null }; }
+  catch (e) { return { ok: false, error: e.code === 'auth' ? (noDev ? 'no developer login' : /developer/.test(e.message) ? 'developer login not accepted' : 'not accepted') : e.message }; }
 }
-const state = () => ({ configured: configured(), enabled: enabled(), paused: Date.now() < pausedUntil ? pauseWhy : '', threads: maxThreads });
+const state = () => ({ configured: configured(), enabled: enabled(), paused: Date.now() < pausedUntil ? pauseWhy : '', threads: maxThreads, devLogin: hasDevLogin() });
 
 module.exports = { init, candidates, download, test, configured, enabled, credsChanged, isMedia, clean, state, SYS, HASH_MAX, 
   _t: { cacheGet, apiUrl, lookup, hashes, mediaOf, reset: () => { cache = null; pausedUntil = 0; pauseWhy = ''; badSig = ''; maxThreads = 1; spacing = 0; lastAt = 0; }, paused: () => pausedUntil, why: () => pauseWhy, threads: () => maxThreads } };

@@ -40,8 +40,8 @@ const CONSOLES = [
   },
   {
     id: 'sw', name: 'Switch', emulatorName: 'Eden',
-    exeNames: ['eden.exe', 'Eden.exe'],
-    emulatorFolders: ['{app}\\Eden', '%LOCALAPPDATA%\\Programs\\Eden', '%ProgramFiles%\\Eden', '%APPDATA%\\Eden'],
+    exeNames: ['eden.exe', 'Eden.exe', 'citron.exe', 'Citron.exe', 'Ryujinx.exe', 'ryujinx.exe'], // (beta.8: Citron and Ryujinx too; Ryujinx gets its own options at launch)
+    emulatorFolders: ['{app}\\Eden', '%LOCALAPPDATA%\\Programs\\Eden', '%ProgramFiles%\\Eden', '%APPDATA%\\Eden', '{app}\\Citron', '%LOCALAPPDATA%\\Programs\\Citron', '{app}\\Ryujinx', '%LOCALAPPDATA%\\Programs\\Ryujinx'],
     romFolderNames: ['switch', 'nsw', 'ns'],
     extensions: ['nsp', 'xci', 'nca', 'nro'],
     // Eden comes from the yuzu family: -f = fullscreen, -g = game file.
@@ -165,6 +165,18 @@ const CONSOLES = [
     ['gamegear', 'Game Gear', 'RetroArch', [], [], ['gamegear', 'game gear', 'gg'], ['gg', 'zip', '7z'], '', 'genesis_plus_gx'],
     // Flycast 2.7 has no fullscreen option to pass: the Dreamcast starts in RetroArch's Flycast core unless Flycast itself is chosen
     ['dreamcast', 'Dreamcast', 'RetroArch', ['flycast.exe'], ['{app}\\Flycast', '{app}\\flycast'], ['dreamcast', 'dc'], ['chd', 'gdi', 'cdi', 'cue', 'm3u'], '"{rom}"', 'flycast'],
+    // (beta.7) wave 2: RetroArch only. Arcade and Neo Geo games are zips named by their set ("sf2.zip"): the shelf shows the
+    // FinalBurn Neo game name for them (main/arcadenames.js). DOS games are zips (or .dosz) that DOSBox Pure starts directly.
+    ['saturn', 'Saturn', 'RetroArch', [], [], ['saturn', 'sega saturn', 'ss'], ['cue', 'chd', 'ccd', 'm3u', 'iso', 'mds'], '', 'mednafen_saturn'],
+    ['pcengine', 'TurboGrafx-16', 'RetroArch', [], [], ['pcengine', 'pce', 'tg16', 'turbografx', 'turbografx16', 'turbografx-16', 'pcenginecd', 'tg-cd'], ['pce', 'sgx', 'cue', 'chd', 'ccd', 'm3u', 'zip', '7z'], '', 'mednafen_pce_fast'],
+    ['neogeo', 'Neo Geo', 'RetroArch', [], [], ['neogeo', 'neo geo', 'neo-geo'], ['zip', '7z'], '', 'fbneo'],
+    ['arcade', 'Arcade', 'RetroArch', [], [], ['arcade', 'mame', 'fbneo', 'fba', 'cps1', 'cps2', 'cps3'], ['zip', '7z'], '', 'fbneo'],
+    ['segacd', 'Sega CD', 'RetroArch', [], [], ['segacd', 'sega cd', 'megacd', 'mega cd'], ['cue', 'chd', 'iso', 'm3u'], '', 'genesis_plus_gx'],
+    ['sega32x', '32X', 'RetroArch', [], [], ['sega32x', '32x', 'sega 32x'], ['32x', 'zip', '7z'], '', 'picodrive'],
+    ['atari2600', 'Atari 2600', 'RetroArch', [], [], ['atari2600', 'atari 2600', '2600', 'a2600'], ['a26', 'bin', 'zip', '7z'], '', 'stella'],
+    ['atarilynx', 'Lynx', 'RetroArch', [], [], ['atarilynx', 'lynx', 'atari lynx'], ['lnx', 'zip', '7z'], '', 'handy'],
+    ['wonderswan', 'WonderSwan', 'RetroArch', [], [], ['wonderswan', 'wonderswancolor', 'wonderswan color', 'wsc', 'ws'], ['ws', 'wsc', 'zip', '7z'], '', 'mednafen_wswan'],
+    ['dos', 'DOS', 'RetroArch', [], [], ['dos', 'msdos', 'ms-dos', 'pc dos'], ['zip', 'dosz'], '', 'dosbox_pure'],
   ])
 ];
 // (beta.6) one retro shelf: [id, name, emulator name, standalone exe names, its folders, ROM folder names, extensions,
@@ -221,7 +233,7 @@ const LINUX_EMU = {
   gc: ['dolphin-emu', 'org.DolphinEmu.dolphin-emu', 're:^dolphin.*\\.appimage$'],
   wii: ['dolphin-emu', 'org.DolphinEmu.dolphin-emu', 're:^dolphin.*\\.appimage$'],
   wiiu: ['cemu', 'info.cemu.Cemu', 're:^cemu.*\\.appimage$'],
-  sw: ['eden', 're:^eden.*\\.appimage$'],
+  sw: ['eden', 're:^eden.*\\.appimage$', 'citron', 're:^citron.*\\.appimage$', 'Ryujinx', 'ryujinx', 'org.ryujinx.Ryujinx', 're:^(ryujinx|ryubing).*\\.appimage$'], // (beta.8: EmuDeck installs Citron or Ryujinx)
   sw2: ['eglantine', 're:^eglantine.*\\.appimage$'],
   psp: ['PPSSPPSDL', 'PPSSPPQt', 'ppsspp', 'org.ppsspp.PPSSPP', 're:^ppsspp.*\\.appimage$'],
   ps2: ['pcsx2-qt', 'net.pcsx2.PCSX2', 're:^pcsx2.*\\.appimage$'],

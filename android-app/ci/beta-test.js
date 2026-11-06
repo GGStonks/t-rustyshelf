@@ -46,9 +46,11 @@ module.exports = async function betaPass({ browser, base, check, newPage, OUT })
     await page.goto(base + '?platform=windows&shelf=1&update=1');
     await page.waitForFunction(() => window.Shelf && Shelf._qs && Shelf._qs().g && window.Setup, null, { timeout: 90000, polling: 250 });
     // the mock's onUpdate answers after 4 s; the note shows within 1.5 s on an idle shelf
-    const note = await page.waitForFunction(() => { const t = document.getElementById('toast'); return t && /1\.82\.0-beta\.2 is out/.test(t.textContent) ? t.textContent : null; },
+    // (beta.7: a card with the release's highlights instead of a one-line note; Esc closes it)
+    const note = await page.waitForFunction(() => { const t = document.querySelector('.note-card'); return t && /1\.82\.0-beta\.2 is out/.test(t.textContent) ? t.textContent : null; },
       null, { timeout: 25000, polling: 200 }).then(h => h.jsonValue(), () => '');
     check('Beta (Windows): the shelf says a newer beta is out', !!note, note || 'no notice');
+    await page.keyboard.press('Escape'); await page.waitForTimeout(500);
     const s = await page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms));
       Setup.open({ page: 'sys' }); for (let i = 0; i < 40 && !document.querySelector('#bss.on .bss-row'); i++) await w(150);
       let btn = '';

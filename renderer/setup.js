@@ -9,6 +9,12 @@ let coverBusy=false,legacyBack=null,dlRuns=0; // dlRuns: box art / manual downlo
 let opening=false,info=null,cfg=null,det=null,wizard=false,step=0,steps=[],saveT=null,detecting=false;
 
 const CONSOLE_HELP={
+  // (beta.7) wave 2: RetroArch runs these; only the ones with something to know get a note
+  arcade:"RetroArch's FinalBurn Neo core runs arcade games. Games are zips named by their ROM set (sf2.zip): keep them zipped and named as they are, and Boxshelf shows each game's real name. BIOS zips (like neogeo.zip, pgm.zip) go in the same folder and stay off the shelf.",
+  neogeo:"RetroArch's FinalBurn Neo core runs Neo Geo games. Games are zips named by their ROM set (mslug.zip); keep neogeo.zip (the BIOS) in the same folder. It stays off the shelf.",
+  saturn:"RetroArch's Beetle Saturn core runs Saturn games (.cue, .chd, .m3u for several discs). It needs the Saturn BIOS files in RetroArch's system folder.",
+  segacd:"RetroArch's Genesis Plus GX core runs Sega CD games (.cue, .chd). It needs the Sega CD BIOS files (bios_CD_U.bin and friends) in RetroArch's system folder.",
+  dos:"RetroArch's DOSBox Pure core runs DOS games straight from their .zip (or .dosz). One zip per game, as it came.",
   gc:"Dolphin runs GameCube games. Point to Dolphin.exe.",
   wii:"Dolphin also runs Wii games. It can be the same Dolphin.exe as GameCube.",
   sw:"Eden runs Switch games. Point to eden.exe.",
@@ -91,7 +97,7 @@ async function runDetect(applyEmpty){
   detecting=false;
   if(det&&applyEmpty){
     for(const[id,d]of Object.entries(det.systems)){const c=cfg.systems[id];if(!c)continue;const had=!!(c.emulator||c.romDirs.length);if(!c.emulator&&d.emulator)c.emulator=d.emulator;if(!c.romDirs.length&&d.romDirs.length)c.romDirs=[...d.romDirs];
-      if(winWizard()&&pickDone&&!had&&(c.emulator||c.romDirs.length))c.enabled=true} // (the Windows wizard's Search again: a console found now comes ticked)
+      if(winWizard()&&pickDone&&!had&&pickFound(c))c.enabled=true} // (the Windows wizard's Search again: a console found now comes ticked)
     if(winWizard())pickMain=null; // found ones move up top
     if(!cfg.steam.path&&det.steam.path)cfg.steam.path=det.steam.path;
     for(const[id,a]of Object.entries(det.apps))if(cfg.apps[id]&&!cfg.apps[id].path&&a.path)cfg.apps[id].path=a.path;
@@ -208,7 +214,7 @@ const OFFICIAL={gc:[["Dolphin","https://dolphin-emu.org/download/"]],wii:[["Dolp
   x360:[["Xenia","https://xenia.jp/download/"],["Xenia Manager","https://github.com/xenia-manager/xenia-manager"]],
   // (beta.6) the retro shelves: RetroArch (one download for all of them; cores from its Online Updater) and each one's best standalone
   ...(()=>{const RA=["RetroArch","https://www.retroarch.com/?page=platforms"],o={psx:[["DuckStation","https://github.com/stenzek/duckstation/releases"],RA],nds:[["melonDS","https://melonds.kuribo64.net/downloads.php"],RA],
-    gba:[RA,["mGBA","https://mgba.io/downloads.html"]],n64:[RA,["RMG","https://github.com/Rosalie241/RMG/releases"]],megadrive:[RA,["BlastEm","https://www.retrodev.com/blastem/downloads.html"]],dreamcast:[RA,["Flycast","https://github.com/flyinghead/flycast/releases"]]};
+    gba:[RA,["mGBA","https://mgba.io/downloads.html"]],n64:[RA,["RMG","https://github.com/Rosalie241/RMG/releases"]],megadrive:[RA,["BlastEm","https://www.retrodev.com/blastem/downloads.html"]],dreamcast:[RA,["Flycast","https://github.com/flyinghead/flycast/releases"]],saturn:[RA],pcengine:[RA],neogeo:[RA],arcade:[RA],segacd:[RA],sega32x:[RA],atari2600:[RA],atarilynx:[RA],wonderswan:[RA],dos:[RA]};
     for(const id of ["nes","snes","gb","gbc","mastersystem","gamegear"])o[id]=[RA];return o})(),steam:[["Steam","https://store.steampowered.com/about/"]],
   stremio:[["Stremio","https://www.stremio.com/downloads"]],nuvio:[["Nuvio","https://github.com/NuvioMedia/NuvioDesktop"]]};
 function siteLinks(id){const l=OFFICIAL[id];if(!l)return null;return el("div",{class:"row su-links"},el("span",{class:"hint-text",text:"Official site:"}),...l.map(([n,u])=>el("button",{type:"button",class:"btn small ghost",title:u,onclick:()=>openLink(u)},`Get ${n} ↗`)))}
@@ -255,17 +261,20 @@ function welcome(b){
 // Your consoles: every console plus Steam and the media apps as a card with a tick. On the very first run the ones with
 // an emulator or games found come ticked (pickInit, once); the rest wait under "More consoles". A card that started up top
 // stays there while the wizard is open (pickMain), so cards don't jump under the pointer. Unticked = no shelf.
-let pickDone=false,pickMain=null,pickMore=false,wizLook=null,artWatch=null,searched=false; // searched: Find was pressed (1.82)
+let wzPn,wzPnOn=false,emuAutoRan=false,pickDone=false,pickMain=null,pickMore=false,wizLook=null,artWatch=null,searched=false; // searched: Find was pressed (1.82)
 function pickInit(){
   if(!winWizard()||pickDone||(info.config&&info.config.setupDone))return;pickDone=true; // (Android's wizard has its own Consoles page)
-  for(const c of info.consoles){const sc=cfg.systems[c.id];if(sc)sc.enabled=!!(sc.emulator||sc.romDirs.length)}
+  for(const c of info.consoles){const sc=cfg.systems[c.id];if(sc)sc.enabled=pickFound(sc)} // (beta.7) RetroArch alone ticks nothing: it runs 22 consoles
   cfg.steam.enabled=!!cfg.steam.path;
   for(const a of info.apps||[])if(cfg.apps[a.id])cfg.apps[a.id].enabled=!!cfg.apps[a.id].path;
   changed();
 }
+// (beta.7) found = its games, or an emulator of its own. RetroArch alone runs every retro console, so it doesn't make one
+// "found": those wait, unticked, under More consoles ("RetroArch can run these") until you pick them.
+const pickFound=sc=>!!(sc&&((sc.romDirs||[]).length||(sc.emulator&&!isRA(sc.emulator))));
 function pickItems(){
   const L=info.consoles.map(c=>{const sc=cfg.systems[c.id];return {id:c.id,name:c.name,
-    found:()=>!!(sc.emulator||sc.romDirs.length),on:()=>sc.enabled!==false,set:v=>{sc.enabled=v},
+    found:()=>pickFound(sc),ra:()=>!pickFound(sc)&&isRA(sc.emulator),on:()=>sc.enabled!==false,set:v=>{sc.enabled=v},
     status:()=>{const n=sc.romDirs.length,e=c.emulatorName||"Emulator";return sc.emulator?`${e} found${n?` · ${n} game folder${n===1?"":"s"}`:""}`:n?`Games found · ${e} not found yet`:`${e} not found`}}});
   if(!window.bsPlatform||bsPlatform.has("steam"))L.push({id:"steam",name:"Steam",found:()=>!!cfg.steam.path,on:()=>!!cfg.steam.enabled,set:v=>{cfg.steam.enabled=v},status:()=>cfg.steam.path?"Steam found · your PC games":"Steam not found"});
   for(const a of info.apps||[]){const c=cfg.apps[a.id];if(c)L.push({id:"app:"+a.id,name:a.name,found:()=>!!c.path,on:()=>!!c.enabled,set:v=>{c.enabled=v},status:()=>c.path?`${a.name} found · Media shelf`:`${a.name} not found`})}
@@ -276,6 +285,13 @@ function pickCard(x,big){
   return el("button",{type:"button",class:"wz2-card"+(big?" big":"")+(on?" on":""),role:"checkbox","aria-checked":String(on),"data-pick":x.id,onclick:()=>{x.set(!x.on());changed();render()}},
     el("span",{class:"wz2-tick","aria-hidden":"true"}),el("span",{class:"wz2-name",text:x.name}),el("span",{class:"wz2-st"+(x.found()?" ok":""),text:x.status()}));
 }
+// (beta.7) the folded "More consoles" list: small tick chips grouped by maker, so 30-odd consoles stay a tidy page
+const PICK_FAMILIES=[["Nintendo",["nes","snes","n64","gc","wii","wiiu","sw","sw2","gb","gbc","gba","nds","n3ds"]],["PlayStation",["psx","ps2","ps3","ps4","ps5","psp"]],
+  ["Sega",["mastersystem","megadrive","segacd","sega32x","saturn","dreamcast","gamegear"]],["Retro & arcade",[]],["Xbox, PC & apps",["x360","steam"]]];
+function pickFamily(id){if(/^app:/.test(id))return "Xbox, PC & apps";for(const[f,ids]of PICK_FAMILIES)if(ids.includes(id))return f;return "Retro & arcade"}
+function pickChip(x){const on=x.on();
+  return el("button",{type:"button",class:"wz2-chip"+(on?" on":""),role:"checkbox","aria-checked":String(on),"data-pick":x.id,title:x.status(),onclick:()=>{x.set(!x.on());changed();render()}},
+    el("span",{class:"wz2-tick","aria-hidden":"true"}),x.name)}
 function pickSection(b){
   pickInit();
   const L=pickItems();if(!pickMain)pickMain=new Set(L.filter(x=>x.found()||x.on()).map(x=>x.id));
@@ -284,7 +300,14 @@ function pickSection(b){
   if(main.length)b.append(el("div",{class:"wz2-grid"},main.map(x=>pickCard(x,true))));
   if(rest.length){const open=pickMore||!main.length;
     b.append(el("button",{type:"button",class:"con-more","aria-expanded":String(open),onclick:()=>{pickMore=!open;render()}},el("span",{text:`More consoles and apps (${rest.length})`}),el("span",{class:"con-more-ch","aria-hidden":"true"})));
-    if(open)b.append(el("div",{class:"wz2-grid small"},rest.map(x=>pickCard(x,false))))}
+    if(open){
+      if(rest.some(x=>x.ra&&x.ra()))b.append(el("p",{class:"wz2-more-note",text:"RetroArch is installed, so it can run any of the retro consoles here. Tick only the ones you play."}));
+      for(const[fam,ids]of PICK_FAMILIES){const xs=rest.filter(x=>pickFamily(x.id)===fam);if(!xs.length)continue;
+        b.append(el("div",{class:"con-sub",text:fam}),el("div",{class:"wz2-chips wz2-more"},xs.map(pickChip)))}}}
+  // (beta.7) Playnite on this PC: its library can come over right after setup (Settings → Custom games → Add games)
+  if(winWizard()&&api.playniteFind){if(wzPn===undefined){wzPn=null;Promise.resolve(api.playniteFind()).then(f=>{wzPn=f||false;if(f)render()}).catch(()=>{wzPn=false})}
+    if(wzPn)b.append(card("","",toggle("Import my Playnite library after setup (experimental)",wzPnOn,v=>{wzPnOn=!!v},"wz-pn"),
+      el("div",{class:"hint-text",text:"Your Playnite games come over in one go: games you added by hand onto a Custom shelf, emulated games' folders onto their consoles. You see what's found before anything is added."})))}
   b.append(el("p",{class:"wz2-foot",text:n?`${n} shel${n===1?"f":"ves"} picked.`:"Nothing picked yet."}));
 }
 // Finish setting up: only what the picked consoles still need (the emulator program, a games folder). Nothing missing:
@@ -326,7 +349,16 @@ function fixSection(b){
     }
     b.append(box);
   }
+  // (beta.7) Set up for me: one switch for every emulator Boxshelf knows how to set up (main/emusetup.js)
+  if(winWizard()&&api.emuSetupAuto&&setupKinds().length){if(!cfg.emuSetup)cfg.emuSetup={auto:true,graphics:"auto",resume:false,pending:[]};
+    b.append(el("section",{class:"wz2-fix wz2-auto"},
+      el("div",{class:"wz2-fh"},el("span",{class:"wz2-fname",text:"Set up my emulators for me"}),el("span",{class:"wz2-rec",text:"Recommended"})),
+      el("p",{class:"hint-text",text:`${setupKinds().join(", ")}: your controller mapped, the Home menu's Save and Load keys, one BIOS folder and graphics that suit this PC. Emulators you've used before are left as they are. Everything is backed up first, and Settings → each console → Set up for me can undo it.`}),
+      toggle("Set them up when I finish",cfg.emuSetup.auto!==false,v=>{cfg.emuSetup.auto=!!v;changed()},"wz-emusetup")))}
 }
+// the emulators of the picked consoles that Set up for me knows (RetroArch, Dolphin, DuckStation, PCSX2, PPSSPP)
+const SETUP_KIND=[[/retroarch/i,"RetroArch"],[/dolphin/i,"Dolphin"],[/duckstation/i,"DuckStation"],[/pcsx2/i,"PCSX2"],[/ppsspp/i,"PPSSPP"]];
+function setupKinds(){const out=new Set();for(const c of info.consoles){const sc=cfg.systems[c.id];if(!sc||sc.enabled===false||!sc.emulator)continue;const n=String(sc.emulator).split(/[\\/]/).pop();const k=SETUP_KIND.find(([re])=>re.test(n));if(k)out.add(k[1])}return [...out]}
 // Box art: whether to look art up online (game titles are sent, nothing else), and in which style. The style is the Art
 // Studio's own: Original = each game's own release (the built-in default), One region = Box art region, Sharpest = the
 // HD shelf style for every picked console (set when setup finishes, first run only: an existing Studio style is never
@@ -341,7 +373,7 @@ function artLookSection(b){
   if(artChosen===null&&!(info.config&&info.config.setupDone)&&cfg.ui.autoCovers!==true){
     head(b,"Step 3 of 3","Download box art?","Boxshelf can find the covers, backs, spines, discs and manuals for your games online. To find them it sends your game titles (and GameCube / Wii disc IDs) to LaunchBox, libretro, GameTDB and the Super Mario Wiki. Nothing else about you or your PC is sent.");
     b.append(el("div",{class:"d-actions"},
-      el("button",{type:"button",class:"btn primary","data-art":"yes",onclick:()=>{artChosen=true;cfg.ui.autoCovers=true;if(cfg.ui.autoManuals==null)cfg.ui.autoManuals=true;changed();render()}},"Yes, download box art"),
+      el("button",{type:"button",class:"btn primary","data-art":"yes",onclick:()=>{artChosen=true;cfg.ui.autoCovers=true;if(cfg.ui.autoManuals==null)cfg.ui.autoManuals=true;if(!pvTouched&&api.previewFind)cfg.ui.previews="shelf";changed();render()}},"Yes, download box art"),
       el("button",{type:"button",class:"btn","data-art":"no",onclick:()=>{artChosen=false;cfg.ui.autoCovers=false;cfg.ui.autoManuals=false;changed();stepBy(1)}},"Not now")));
     b.append(el("p",{class:"wz2-foot",text:"You can change this any time in Settings → Box art & manuals."}));
     return;
@@ -357,6 +389,7 @@ function artLookSection(b){
   if(on&&look==="region"){const r=el("div",{class:"wz2-regions"});[["usa","USA"],["eur","Europe"],["jpn","Japan"]].forEach(([k,n])=>r.append(el("button",{type:"button",class:"btn small"+(cfg.ui.artRegion===k?" primary":""),onclick:()=>{cfg.ui.artRegion=k;changed();render()}},n)));b.append(r)}
   b.append(card("","",toggle("Complete the cases",cfg.ui.makeBacks!==false,v=>{cfg.ui.makeBacks=v},"wz2-mb"),el("div",{class:"hint-text",text:"Backs, spines and discs too. Boxshelf makes any that no source has, and swaps in a real scan when one turns up."}),
     toggle("Download manuals",cfg.ui.autoManuals===true,v=>{cfg.ui.autoManuals=v},"wz2-am"),el("div",{class:"hint-text",text:"Game manuals, where they're available, to read from the game's case."})));
+  if(api.previewFind)b.append(pvCard());
   const more=el("details",{class:"adv"},el("summary",{},"More options"));more.append(artLibCard("Where to keep box art & manuals"));b.append(more);
   b.append(el("p",{class:"wz2-foot",text:"You can change any console, or a single game, later in the Art Studio."}));
 }
@@ -790,7 +823,23 @@ async function iaRun(id,j){iaRunning++;j.state="run";iaPaint();
   try{const r=await api.archiveDownload(id,j.kind,j.it.title,j.series);j.state="done";j.existed=r.existed;try{dispatchEvent(new CustomEvent("bs-library-changed"))}catch{}j.name=r.count>1?`${r.name} (${r.count} files)`:r.name;Shelf.toast(r.existed?`Already have: ${j.it.title}`:`Saved to your ${j.kind==="guide"?"Guides":"Magazines"} folder: ${j.it.title}`)}
   catch(e){const m=iaMsg(e);if(/^Cancelled\.?$/.test(m)||j.stopping){j.state="cancelled"}else{j.state="err";j.err=m}}
   finally{iaRunning--;j.stopping=false;iaPaint();iaPump()}}
+// (beta.7) the first run's video previews: one switch (on when box art is downloaded), the videos already found, and
+// whether YouTube may fill in for games without one. Settings → Box art & manuals → Video previews has the rest.
+let pvTouched=false,pvFound=null;
+function pvCard(){const on=(cfg.ui.previews||"off")!=="off";
+  const found=el("div",{class:"hint-text wz2-pvfound",text:on?(pvFound==null?"Looking for videos you already have…":pvFound?`Found videos for ${pvFound} of your games. Steam games get their trailers too.`:"No video files found yet: Steam games get their trailers, and other games YouTube's."):""});
+  if(on&&pvFound==null&&api.previewCount){pvFound=-1;persist().then(()=>api.previewCount()).then(c=>{pvFound=c&&c.total||0;render()}).catch(()=>{pvFound=0;render()})}
+  return card("","",toggle("Play video previews",on,v=>{pvTouched=true;cfg.ui.previews=v?"shelf":"off";changed();render()},"wz2-pv"),
+    el("div",{class:"hint-text",text:"Rest on a game and its preview plays, on the shelf and in Details: videos you already have (ES-DE, EmuDeck, RetroBat, LaunchBox), Steam's trailers for Steam games, and YouTube trailers for the rest."}),
+    on?found:null,
+    on&&pvClipOk?toggle("Console trailers too (a short clip of each game's YouTube trailer, saved so it plays on the shelf; fetches a free 25 MB helper once)",cfg.ui.previewClips!==false,v=>{pvTouched=true;cfg.ui.previewClips=!!v;changed()},"wz2-pvclip"):null,
+    on&&api.previewYt?toggle("YouTube trailers when a game has no video",cfg.ui.previewYoutube!==false,v=>{pvTouched=true;cfg.ui.previewYoutube=!!v;changed()},"wz2-pvyt"):null)}
+// (beta.8) console trailers: offered only where clips can be made (Windows); the helper is fetched once setup is done
+let pvClipOk=false;if(api.clipStatus)Promise.resolve(api.clipStatus()).then(s=>{pvClipOk=!!(s&&s.supported)}).catch(()=>{});
+let pvClipAsked=false;
+function pvClipStart(){if(pvClipAsked)return;if(pvClipOk&&(pvClipAsked=true)&&api.clipHelper&&(cfg.ui.previews||"off")!=="off"&&cfg.ui.previewClips!==false)api.clipHelper().catch(()=>{})}
 async function doneSection(b){
+  pvClipStart(); // (beta.8) the console trailer helper, in the background (Settings → Video previews shows how it went)
   head(b,"All set","Here's your library","You can change any of this later in Settings (press S, or View on the controller: Create on a PlayStation pad, − on a Switch pad).");
   const grid=el("div",{class:"summary-grid"},el("div",{class:"sum"},el("span",{class:"scanning"}),el("span",{text:" Scanning…"})));b.append(grid);
   // Windows: the art was chosen on the Box art page; here its first download shows its progress (covers:auto from
@@ -802,14 +851,23 @@ async function doneSection(b){
     toggle("Fetch box art for new games automatically",cfg.ui.autoCovers===true,v=>{cfg.ui.autoCovers=v;persist()},"done-ac"),
     toggle("Fetch manuals automatically",cfg.ui.autoManuals===true,v=>{cfg.ui.autoManuals=v;persist()},"done-am")));
   if(!window.BS_WIZARD_EXTRA&&!winWizard())b.append(artLibCard("Where to keep box art & manuals"));
+  if(winWizard()&&artChosen===false&&api.previewFind)b.append(pvCard()); // (beta.7) "Not now" to box art skipped the page that offers previews
   await persist();
+  // (beta.7) Set up for me, once the picked consoles are saved: what was set up, what waits for its first run, what was left
+  if(winWizard()&&api.emuSetupAuto&&cfg.emuSetup&&cfg.emuSetup.auto!==false&&!emuAutoRan){emuAutoRan=true;
+    const line=el("div",{class:"wz2-prog"},el("span",{class:"scanning"}),el("span",{class:"wz2-pt",text:" Setting up your emulators…"}));b.append(el("section",{class:"card grp wz2-emudone"},line));
+    try{const r=await api.emuSetupAuto();if(r&&r.emuSetup)cfg.emuSetup=r.emuSetup;const L=[];
+      if(r&&r.done&&r.done.length)L.push(`Set up: ${r.done.join(", ")}.`);if(r&&r.later&&r.later.length)L.push(`Set up after you play once: ${r.later.join(", ")}.`);
+      if(r&&r.left&&r.left.length)L.push(`Left as you had them: ${r.left.join(", ")} (Settings → the console → Set up for me).`);
+      line.replaceChildren(el("span",{class:"wz2-pt",text:L.length?L.join(" "):"Your emulators were already set up."}))}
+    catch(e){line.replaceChildren(el("span",{class:"wz2-pt",text:"Setting up the emulators didn't work this time. Settings → each console → Set up for me can try again."}))}}
   let shelves=[];try{shelves=await api.scan()}catch(e){}
   if(!grid.isConnected)return; // left this page while it was scanning
   grid.innerHTML="";
   if(!shelves.length)grid.append(el("div",{class:"sum"},el("b",{text:"0"}),el("span",{text:"Nothing found yet. Go back and add an emulator or a games folder."})));
   shelves.forEach(s=>grid.append(el("div",{class:"sum"},el("b",{text:String(s.games.length)}),el("span",{text:`${s.name} ${s.kind==="apps"?"apps":"games"}`}))));
 }
-async function finish(){pickInit();applyLook();cfg.setupDone=true;wizard=false;await close()} // (1.82) pickInit: done from the sidebar without visiting Your consoles still ticks only the consoles found
+async function finish(){pickInit();applyLook();cfg.setupDone=true;wizard=false;await close();if(wzPnOn&&wzPn)setTimeout(()=>{try{Setup.open({page:"addgames"})}catch{}},900)} // (beta.7: then the Playnite import, if ticked) // (1.82) pickInit: done from the sidebar without visiting Your consoles still ticks only the consoles found
 // the first box art download, followed on the Done screen; finished after the wizard closed: one toast on the shelf
 let artLine=null,artDoneBox=null,artToast=false,artHooked=false,artHeard=false;
 function watchArt(line,box){artLine=line;artDoneBox=box;artToast=true;artHeard=false;

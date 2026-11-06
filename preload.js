@@ -15,6 +15,11 @@ contextBridge.exposeInMainWorld('boxshelf', {
   updateCheck: force => call('app:updateCheck', { force: !!force }), // (1.82) { current, latest, newer, url, links } or { error }
   onUpdate: cb => ipcRenderer.on('app:update', (_e, r) => cb(r)),
   restoreEmuSettings: () => call('emucfg:restore'),
+  // (beta.7) Set up for me
+  emuSetupStatus: (systemId) => call('emusetup:status', { systemId }), emuSetupPlan: (systemId) => call('emusetup:plan', { systemId }),
+  emuSetupApply: (systemId, on) => call('emusetup:apply', { systemId, on }), emuSetupUndo: (systemId) => call('emusetup:undo', { systemId }), emuSetupAuto: () => call('emusetup:auto'),
+  getCore: (systemId) => call('racore:get', { systemId }), openBiosFolder: (systemId) => call('bios:open', { systemId }),
+  onCoreProgress: (fn) => { const h = (_e, d) => fn(d); ipcRenderer.on('racore:progress', h); return () => ipcRenderer.removeListener('racore:progress', h); },
   log: msg => ipcRenderer.send('renderer:log', String(msg).slice(0, 2000)),
   uiBusy: () => ipcRenderer.send('ui:busy'),
   saveConfig: cfg => call('config:save', cfg),
@@ -109,6 +114,19 @@ contextBridge.exposeInMainWorld('boxshelf', {
   history: () => call('history:get'),
   historyTouch: id => call('history:touch', { id }),
   openTrailer: url => call('trailer:open', { url }),
+  // (beta.7) video previews
+  // (beta.7) Add games
+  scanGameFolder: (root) => call('games:scanFolder', { root }), gameTitles: (exes) => call('games:titleFor', { exes }), gameCovers: (items) => call('games:covers', { items }),
+  playniteFind: (dir) => call('playnite:find', { dir }), emulatorIn: (dir, systemId) => call('games:emuIn', { dir, systemId }), playnitePlan: (dir) => call('playnite:plan', { dir }),
+  previewFind: (o) => call('preview:find', o || {}), previewYt: (id, rect, muted) => call('preview:yt', { id, rect, muted }), previewYtMove: (rect, show) => call('preview:ytMove', { rect, show }),
+  previewYtStop: () => call('preview:ytStop'), previewCount: () => call('preview:count'), previewClearSteam: () => call('preview:clearSteam'),
+  onPreviewYt: (fn) => { const h = (_e, d) => fn(d); ipcRenderer.on('preview:yt', h); return () => ipcRenderer.removeListener('preview:yt', h); },
+  // (beta.8) console trailers: a clip became ready; the helper's status, download and progress; clearing the clips
+  onPreviewClip: (fn) => { const h = (_e, d) => fn(d); ipcRenderer.on('preview:clip', h); return () => ipcRenderer.removeListener('preview:clip', h); },
+  // (beta.8) Steam Deck: where Boxshelf runs ({ deck, steam, gameMode, canAdd, inSteam }) and Add Boxshelf to Steam
+  deckInfo: () => call('deck:info'), addToSteam: (closeSteam) => call('deck:addToSteam', { closeSteam: !!closeSteam }),
+  clipStatus: () => call('ytclip:status'), clipHelper: () => call('ytclip:helper'), clipClear: () => call('ytclip:clear'),
+  onClipProgress: (fn) => { const h = (_e, d) => fn(d); ipcRenderer.on('ytclip:progress', h); return () => ipcRenderer.removeListener('ytclip:progress', h); },
   onRaUnlocks: fn => ipcRenderer.on('ra:unlocks', (e, list) => fn(list)),
   downloadManuals: choices => call('manuals:download', { choices }),
   saveOptimizedModel: (systemId, kind, bytes) => call('models:saveOptimized', { systemId, kind, bytes }),

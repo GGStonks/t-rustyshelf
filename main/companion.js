@@ -215,7 +215,7 @@ async function serveImg(res, id, h) {
   const cache = { 'Cache-Control': 'private, max-age=86400' }, h0 = Math.round(+h || 0), H = h0 >= 64 ? THUMB_H.find(x => x >= h0) || THUMB_H[THUMB_H.length - 1] : 0;
   if (H && D.thumb) { const b = await Promise.resolve(D.thumb(f, st, H)).catch(() => null); if (b && b.length) return send(res, 200, b, 'image/jpeg', cache); } // the shelf's own cached thumbnails: a phone doesn't need a 4 MB scan for a 300 px tile
   if (st.size > 40 * 1024 * 1024) return json(res, 413, { error: 'Too big.' });
-  res.writeHead(200, { ...HEAD, 'Content-Type': type, 'Content-Length': st.size, ...cache }); const s = fs.createReadStream(f); s.on('error', () => res.destroy()); s.pipe(res);
+  res.writeHead(200, { ...HEAD, 'Content-Type': type, 'Content-Length': st.size, ...cache }); require('stream').pipeline(fs.createReadStream(f), res, () => {}); // (beta.8: a phone that drops the request closes the file too)
 }
 async function pair(req, res, ip) {
   let o; try { o = await body(req, 1024); } catch (e) { return json(res, e.code || 400, { error: e.message }); }

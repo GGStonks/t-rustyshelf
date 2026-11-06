@@ -41,6 +41,127 @@ function epicGames(dir = EPIC_DIR()) {
   return out.sort((a, b) => a.title.localeCompare(b.title));
 }
 
+// ---------- (beta.7) more stores on the PC shelf: GOG Galaxy, Ubisoft Connect, EA app, Xbox / Game Pass ----------
+// Windows only; read only. Each store's install list, the way the store itself leaves it:
+//   - GOG: HKLM\SOFTWARE\WOW6432Node\GOG.com\Games\<id> (gameName, path, exe / launchCommand, dependsOn = a DLC). GOG games
+//     have no copy protection: Boxshelf starts the game's own program (Home menu and quit work as for any app).
+//   - Ubisoft Connect: HKLM\SOFTWARE\WOW6432Node\Ubisoft\Launcher\Installs\<id>\InstallDir; started through Connect's
+//     link uplay://launch/<id>/0 (its sign-in and cloud saves).
+//   - EA app: every EA game folder has __Installer\installerdata.xml (its content ids and title); found from the
+//     uninstall list and the usual EA Games folders; started through the EA app's link origin2://game/launch?offerIds=….
+//   - Xbox / Game Pass: each drive's Xbox games folder (named in <drive>:\.GamingRoot: "RGBX", 4 bytes, then the folder
+//     in UTF-16; usually XboxGames), each game's Content\MicrosoftGame.config (its package name, title, program id);
+//     started as the Windows app it is (shell:AppsFolder\<package family>!<app id>), the family looked up once and kept.
+const { execFile } = require('child_process');
+const run = (cmd, args, ms = 20000) => new Promise(res => { try { execFile(cmd, args, { windowsHide: true, timeout: ms, maxBuffer: 64 << 20 }, (err, out) => res(err && !out ? '' : String(out || ''))); } catch { res(''); } });
+// `reg query <key> /s` → Map(full key → { value name (lower case): data })
+function parseReg(out) {
+  const m = new Map(); let cur = null;
+  for (const line of String(out).split(/\r?\n/)) {
+    if (/^HKEY_/.test(line)) { cur = {}; m.set(line.trim(), cur); continue; }
+    const v = /^ {4}(.+?) {4}(REG_\w+)(?: {4}(.*))?$/.exec(line); if (v && cur) cur[v[1].toLowerCase()] = (v[3] || '').trim();
+  }
+  return m;
+}
+const regTree = key => process.platform === 'win32' ? run('reg', ['query', key, '/s']).then(parseReg) : Promise.resolve(new Map());
+const xmlText = (x, tag) => { const m = new RegExp(`<${tag}(?:\\s[^>]*)?>([^<]*)</${tag}>`, 'i').exec(x); return m ? m[1].trim() : ''; };
+const unxml = s => String(s || '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+const splitCmd = c => { const m = /^\s*"([^"]+)"\s*(.*)$/.exec(String(c || '')) || /^\s*(\S+)\s*(.*)$/.exec(String(c || '')); return m ? { exe: m[1], args: m[2] || '' } : { exe: '', args: '' }; };
+
+async function gogGames() {
+  const out = [];
+  for (const [k, v] of await regTree('HKLM\\SOFTWARE\\WOW6432Node\\GOG.com\\Games')) {
+    const id = (/\\Games\\(\d+)$/i.exec(k) || [])[1]; if (!id || v.dependson) continue; // (dependsOn: a DLC of another game)
+    const title = String(v.gamename || v.gametitle || '').trim(), dir = v.path || '';
+    if (!title || !dir || !isDir(dir)) continue;
+    let { exe, args } = splitCmd(v.launchcommand);
+    if (!exe || !isFile(exe)) { exe = v.exe && isFile(v.exe) ? v.exe : mainExe(dir); args = v.launchparam || ''; }
+    if (!exe) continue;
+    out.push({ id: 'gog-' + id, source: 'gog', title, exe, args: String(args || '').slice(0, 1000) });
+  }
+  return out;
+}
+async function ubisoftGames() {
+  const out = [];
+  for (const [k, v] of await regTree('HKLM\\SOFTWARE\\WOW6432Node\\Ubisoft\\Launcher\\Installs')) {
+    const id = (/\\Installs\\(\d+)$/i.exec(k) || [])[1], dir = String(v.installdir || '').replace(/[\\/]+$/, '').replace(/\//g, '\\');
+    if (!id || !dir || !isDir(dir)) continue;
+    out.push({ id: 'ubisoft-' + id, source: 'ubisoft', title: path.basename(dir), uri: `uplay://launch/${id}/0`, exe: mainExe(dir) || '' });
+  }
+  return out;
+}
+async function eaGames() {
+  if (process.platform !== 'win32') return [];
+  const dirs = new Set();
+  for (const key of ['HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall', 'HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall'])
+    for (const v of (await regTree(key)).values()) { const d = String(v.installlocation || '').replace(/^"|"$/g, '').replace(/[\\/]+$/, ''); if (d && isFile(path.join(d, '__Installer', 'installerdata.xml'))) dirs.add(path.resolve(d)); }
+  for (const pf of [process.env.ProgramFiles, process.env['ProgramFiles(x86)']].filter(Boolean)) { let ents = []; try { ents = fs.readdirSync(path.join(pf, 'EA Games'), { withFileTypes: true }); } catch {} for (const e of ents) if (e.isDirectory()) { const d = path.join(pf, 'EA Games', e.name); if (isFile(path.join(d, '__Installer', 'installerdata.xml'))) dirs.add(path.resolve(d)); } }
+  return eaFromDirs([...dirs]);
+}
+// the games in these EA game folders (each with __Installer\installerdata.xml)
+function eaFromDirs(dirs) {
+  const out = [], seen = new Set();
+  for (const d of dirs) {
+    let x = ''; try { x = fs.readFileSync(path.join(d, '__Installer', 'installerdata.xml'), 'utf8'); } catch { continue; }
+    const ids = [...x.matchAll(/<contentID>\s*([^<\s]+)\s*<\/contentID>/gi)].map(m => m[1]).slice(0, 20);
+    if (!ids.length) continue;
+    const en = /<gameTitle\s+locale="en_US"\s*>([^<]+)</i.exec(x), title = unxml(en ? en[1] : xmlText(x, 'gameTitle')) || path.basename(d);
+    const id = 'ea-' + slug(ids[0]); if (seen.has(id)) continue; seen.add(id);
+    out.push({ id, source: 'ea', title: title.trim(), uri: 'origin2://game/launch?offerIds=' + encodeURIComponent(ids.join(',')) + '&autoDownload=1', exe: mainExe(d) || '' });
+  }
+  return out;
+}
+// Xbox: the package families looked up once (data\pc-xbox.json: { "<package name>": "<family>" })
+let xboxFam = null; const xboxFile = () => path.join(dataDir, 'pc-xbox.json');
+function xboxRoots() {
+  const roots = [];
+  for (const L of 'CDEFGHIJKLMNOPQRSTUVWXYZ') {
+    const drive = L + ':\\'; let rel = null;
+    try { const b = fs.readFileSync(drive + '.GamingRoot'); if (b.slice(0, 4).toString('latin1') === 'RGBX') rel = b.slice(8).toString('utf16le').split('\0')[0]; } catch { if (L !== 'C') continue; }
+    const dir = rel ? (path.isAbsolute(rel) ? rel : path.join(drive, rel)) : path.join(drive, 'XboxGames');
+    if (isDir(dir)) roots.push(dir);
+  }
+  return roots;
+}
+async function xboxGames() {
+  if (process.platform !== 'win32') return [];
+  const found = xboxScan(xboxRoots());
+  if (!found.length) return [];
+  if (!xboxFam) xboxFam = readJson(xboxFile()) || {};
+  const missing = found.filter(f => !(f.name in xboxFam)).map(f => f.name); // ('' = asked, not installed: not asked again)
+  if (missing.length) {
+    const list = missing.map(n => "'" + n.replace(/'/g, "''") + "'").join(',');
+    const outp = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `Get-AppxPackage -Name ${list} | ForEach-Object { $_.Name + '|' + $_.PackageFamilyName }`], 30000);
+    for (const n of missing) xboxFam[n] = '';
+    for (const line of outp.split(/\r?\n/)) { const [n, fam] = line.trim().split('|'); if (n && fam) xboxFam[n] = fam; }
+    try { fs.mkdirSync(dataDir, { recursive: true }); fs.writeFileSync(xboxFile(), JSON.stringify(xboxFam)); } catch {}
+  }
+  return found.filter(f => xboxFam[f.name]).map(f => ({ id: 'xbox-' + slug(f.name), source: 'xbox', title: f.title.trim(), shellApp: `${xboxFam[f.name]}!${f.appId}`, exe: '' }));
+}
+// the games in these Xbox games folders: { name (its package), appId, title, dir }
+function xboxScan(roots) {
+  const found = [];
+  for (const root of roots) {
+    let ents = []; try { ents = fs.readdirSync(root, { withFileTypes: true }); } catch { continue; }
+    for (const e of ents) {
+      if (!e.isDirectory()) continue;
+      const cfgF = path.join(root, e.name, 'Content', 'MicrosoftGame.config'); let x = ''; try { x = fs.readFileSync(cfgF, 'utf8'); } catch { continue; } // (GameSave and other parts of the Xbox app have none)
+      const name = (/<Identity\s[^>]*\bName="([^"]+)"/i.exec(x) || [])[1], appId = (/<Executable\s[^>]*\bId="([^"]+)"/i.exec(x) || [])[1] || 'Game';
+      let title = unxml((/<ShellVisuals\s[^>]*\bDefaultDisplayName="([^"]+)"/i.exec(x) || [])[1] || '');
+      if (!title || /^ms-resource:/i.test(title)) title = e.name;
+      if (name) found.push({ name, appId, title, dir: path.join(root, e.name) });
+    }
+  }
+  return found;
+}
+// all four at once; each one that fails is only logged (one store's oddity must not empty the shelf)
+async function storeGames(pc = {}) {
+  const want = { gog: pc.gog !== false, ubisoft: pc.ubisoft !== false, ea: pc.ea !== false, xbox: pc.xbox !== false };
+  const jobs = { gog: gogGames, ubisoft: ubisoftGames, ea: eaGames, xbox: xboxGames }, out = [];
+  await Promise.all(Object.keys(jobs).filter(k => want[k]).map(k => jobs[k]().then(l => out.push(...l), e => log('PC library', k, e && e.message))));
+  return out.sort((a, b) => a.title.localeCompare(b.title));
+}
+
 // ---------- the program in a game's folder ----------
 // the biggest .exe that isn't a helper (crash reporters, installers, redistributables, uninstallers, updaters), two
 // folders deep at most: recomps ship as one program beside its DLLs, some in a bin\ folder
@@ -173,4 +294,5 @@ async function matchSteam(titles) {
   return n;
 }
 
-module.exports = { init, epicGames, quiverGames, quiverFind, quiverRoots, customGames, titleFromExe, mainExe, remember, byId, steamIdOf, matchSteam, EPIC_DIR };
+module.exports = { init, epicGames, quiverGames, quiverFind, quiverRoots, customGames, titleFromExe, mainExe, remember, byId, steamIdOf, matchSteam, EPIC_DIR,
+  storeGames, gogGames, ubisoftGames, eaGames, xboxGames, parseReg, xboxRoots, eaFromDirs, xboxScan };

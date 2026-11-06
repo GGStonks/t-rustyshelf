@@ -17,10 +17,16 @@ const HOTKEYS = {
   shadps4: {},
   rpcs3: { shot: 'f12' }, // RPCS3: F12 screenshot; no default pause toggle or save-state key
   azahar: { pause: 'f4', save: 'ctrl+c', load: 'ctrl+v', shot: 'ctrl+p' }, // Azahar's defaults (save: oldest slot, load: newest)
+  // (beta.7) RetroArch's own default keys (no pause: it pauses itself when the Home menu takes the focus) and DuckStation's;
+  // Settings → <console> → Set up for me puts them back if they were changed (main/emusetup.js)
+  retroarch: { save: 'f2', load: 'f4', shot: 'f8' },
+  duckstation: { pause: 'space', save: 'f2', load: 'f1', shot: 'f10' },
   other: {}
 };
 function emulatorKind(systemId, exe) {
   const n = path.basename(exe || '').toLowerCase();
+  if (/^retroarch/.test(n)) return 'retroarch';
+  if (/duckstation/.test(n)) return 'duckstation';
   if (/dolphin/.test(n) || systemId === 'gc' || systemId === 'wii') return 'dolphin';
   if (/pcsx2/.test(n) || systemId === 'ps2') return 'pcsx2';
   if (/ppsspp/.test(n) || systemId === 'psp') return 'ppsspp';

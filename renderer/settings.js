@@ -23,6 +23,7 @@ const IC={
   museum:'<path d="M3 9l9-5 9 5M5 10v8M9 10v8M15 10v8M19 10v8M3 20h18"/>',
   pad:'<path d="M7 8h10a4 4 0 0 1 4 4v1a3 3 0 0 1-5 2l-1-1H9l-1 1a3 3 0 0 1-5-2v-1a4 4 0 0 1 4-4z"/>',
   art:'<rect x="4" y="4" width="16" height="16" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M20 15l-5-5-9 10"/>',
+  pv:'<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 9.5v5l4.5-2.5z"/>',
   reading:'<path d="M12 6c-2-1.5-5-2-8-1.5V19c3-.5 6 0 8 1.5 2-1.5 5-2 8-1.5V4.5C17 4 14 4.5 12 6z"/><path d="M12 6v14.5"/>',
   acct:'<circle cx="12" cy="9" r="4"/><path d="M4 20a8 8 0 0 1 16 0"/>',
   sys:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/>',
@@ -155,7 +156,12 @@ function build(){
     F("Steam folder","steam.path","folder","The folder that contains steam.exe. Found automatically; change it only if Steam lives somewhere unusual.",{ph:"C:\\Program Files (x86)\\Steam",rescan:true,want:"dir",pickTitle:"Choose your Steam folder"}),
     A("Get Steam","Open site","Opens Steam's download page in your browser.",()=>openLink(OFFICIAL.steam)),
     // (beta.4) Epic's installs join the PC shelf (main/pcgames.js reads its install list; Play goes through its launcher)
-    T("Show installed Epic Games","pc.epic",true,"Adds the games the Epic Games Launcher has installed to the PC shelf. They start through the Epic launcher, so its sign-in and cloud saves work as usual.",{rescan:true,keys:"epic games store fortnite launcher",sub:()=>(pcSt||setTimeout(pcStatus,0),pcSt&&pcSt.epic!=null)?{text:pcSt.epic?`${pcSt.epic} installed`:"None installed"}:null}),
+    T("Show installed Epic Games","pc.epic",true,"Adds the games the Epic Games Launcher has installed to the PC shelf. They start through the Epic launcher, so its sign-in and cloud saves work as usual.",{rescan:true,keys:"epic games store fortnite launcher",sub:()=>pcCount("epic")}),
+    // (beta.7) more stores: each one's installs join the PC shelf (main/pcgames.js storeGames)
+    T("Show installed GOG games","pc.gog",true,"Adds the games GOG Galaxy has installed to the PC shelf. GOG games have no copy protection, so Boxshelf starts them itself, with the Home menu and quit combo like any game.",{rescan:true,keys:"gog galaxy store",sub:()=>pcCount("gog")}),
+    T("Show installed Ubisoft games","pc.ubisoft",true,"Adds the games Ubisoft Connect has installed to the PC shelf. They start through Ubisoft Connect, so its sign-in and cloud saves work as usual.",{rescan:true,keys:"ubisoft connect uplay store",sub:()=>pcCount("ubisoft")}),
+    T("Show installed EA games","pc.ea",true,"Adds the games the EA app has installed to the PC shelf. They start through the EA app, so its sign-in and cloud saves work as usual.",{rescan:true,keys:"ea app origin electronic arts store",sub:()=>pcCount("ea")}),
+    T("Show installed Xbox games","pc.xbox",true,"Adds the games the Xbox app has installed (Game Pass included) to the PC shelf. They start like any Xbox app game, signed in with your Microsoft account.",{rescan:true,keys:"xbox game pass microsoft store",sub:()=>pcCount("xbox")}),
   ]},
   // (beta.4) the Custom shelf: Quiver Launcher's apps (recomps, ports) and any program added by hand
   {g:"Games",id:"custom",name:"Custom games",ic:"pc",lead:"Recomps, PC ports and any other program, on a Custom shelf of their own.",rows:[{t:"dyn",fn:customRows}]},
@@ -220,6 +226,8 @@ function build(){
   ]},
   {g:"Boxshelf",id:"shelf",name:"Shelf",ic:"shelf",lead:"How the shelf behaves: console order, shuffle and the idle show.",rows:[
     A("Console order","Reorder","The order of the consoles along the top. Home always comes first.",()=>openSub({kind:"order"}),{keys:"shelf order arrange tabs move"}),
+    // (beta.7) your own shelves (Details → Collections adds games to them): renamed and deleted here
+    M("Collections","shelf-cols","Shelves of your own, mixing games from any console (Details → Collections adds a game). Rename or delete them here.","Each one is a shelf beside Home.",[{t:"dyn",fn:colManageRows}],{keys:"collections lists playlists own shelves"}),
     T("Shuffle from every shelf","ui.shuffleAll",true,"Surprise me picks from all consoles instead of just the shelf you're on.",{keys:"random surprise"}),
     T("Attract mode","ui.attract",true,"After a few idle minutes the shelf drifts through your boxes on its own, with the HUD faded, like a store display.",{keys:"idle screensaver demo"}),
     C("Attract mode starts after","ui.attractMinutes",[[2,"2 min"],[3,"3 min"],[5,"5 min"],[10,"10 min"],[20,"20 min"]],3,"How long without input before the tour begins.",{keys:"idle",live:v=>applyUi({attractMinutes:v})}),
@@ -309,6 +317,19 @@ function build(){
     F("Art library folder","ui.artLibrary","folder","One folder for all box art and manuals, so a fresh setup finds them instead of downloading again. Art already beside your games is copied there in the background (nothing is moved or deleted).",{ph:"Beside each console's games (a covers folder)",d:"",rescan:true,want:"dir",pickTitle:"Choose a folder for your box art and manuals",keys:"covers folder path"}),
     M("Hidden games","art-hidden","Games you hid from their Details panel. Bring any of them back here.","Hidden from every shelf, the museum, shuffle and the idle show.",[],{when:()=>!!(window.Shelf&&Shelf.hiddenList),extra:hiddenRows,sub:()=>hidden&&hidden.length?{text:`${hidden.length} hidden`}:null}),
   ]},
+  // (beta.8) video previews (app.js PV, main/previews.js, main/ytclips.js): a section of its own, easy to find (it was a
+  // page inside Box art & manuals). Left out where previews don't exist yet (Android: see below SECTIONS).
+  {g:"Library",id:"previews",name:"Video previews",ic:"pv",dot:()=>clipNeed()?"warn":null,lead:"Rest on a game and its preview plays. Videos you already have come first, then Steam's trailers for Steam games, then console trailers from YouTube.",rows:[
+    C("Play previews","ui.previews",()=>window.bsPlatform&&bsPlatform.os==="android"?[["off","Off"],["details","In Details"]]:[["off","Off"],["details","In Details"],["shelf","Details and shelf"]],"off",
+      "In Details: under the game's art, or in its Media tab. Details and shelf: softly behind the cases too while you rest on a game.",{keys:"video preview trailer snap movie playnite"}),
+    // (beta.8) console trailers (main/ytclips.js): the switch, then the helper (fetched once) or what's kept
+    T("Console trailers","ui.previewClips",true,"Saves the first 20 seconds of a console game's YouTube trailer as a small clip, so it plays behind the shelf and in Details just like a Steam trailer. Made the first time you rest on a game, never in bulk, and kept in Boxshelf's data folder (the Steam and console clips share 400 MB; the oldest go first).",{when:()=>gp("ui.previews")!=="off"&&clipOk(),keys:"console trailers youtube clips download playnite video preview shelf"}),
+    {t:"dyn",fn:clipRows},
+    T("Play previews with sound","ui.previewSound",false,"Off: previews play silently (Steam's trailer clips are always silent).",{when:()=>gp("ui.previews")!=="off",keys:"video preview sound audio mute"}),
+    C("Start a preview after","ui.previewDelay",[[0.5,"Half a second"],[1,"1 second"],[1.5,"1.5 seconds"],[2,"2 seconds"],[3,"3 seconds"],[5,"5 seconds"],[8,"8 seconds"],[10,"10 seconds"],[15,"15 seconds"]],1.5,"How long you rest on a game before its preview starts (on the shelf, half a second more, so browsing quickly stays calm).",{when:()=>gp("ui.previews")!=="off",keys:"video preview delay wait"}),
+    T("YouTube's player in the Media tab","ui.previewYoutube",true,"A game's YouTube trailer plays in YouTube's own player in Details → Media (streamed: it needs the internet, and YouTube can now and then show an ad). Also covers the wait while a console trailer clip is made.",{when:()=>!!api.previewYt&&gp("ui.previews")!=="off",keys:"video preview youtube trailer online"}),
+    {t:"dyn",fn:()=>gp("ui.previews")!=="off"&&api.previewCount?pvRows():[]}
+  ]},
   // the museum's reading corner (1.68): its own page, so a deep link lands on its rows instead of below Art Studio's list
   {g:"Library",id:"reading",name:"Magazines & guides",ic:"reading",lead:"The museum's reading corner: where your magazines and strategy guides live, and finding more on the Internet Archive.",rows:[
     H("Find more"),
@@ -337,6 +358,7 @@ function build(){
     A("Forget all phones",()=>asking("phones")?"Press again":"Forget all","Unpairs every phone. Each one has to scan the code again to use Boxshelf.",()=>twice("phones",()=>forgetPhone("all"),"Press again to forget every paired phone"),{when:()=>!!(phone&&phone.phones&&phone.phones.length),warnBtn:()=>asking("phones"),keys:"phone unpair forget"}),
   ]},
   {g:"System",id:"sys",name:"System",ic:"sys",lead:"Startup, folders and housekeeping.",rows:[
+    {t:"dyn",fn:deckRows}, // (beta.8) Linux / Steam Deck: Add Boxshelf to Steam
     {t:"toggle",label:"Start Boxshelf with Windows",info:"Boots straight into the shelf when you sign in. Pair it with Start in fullscreen for a console-style setup.",get:()=>!!(autostart&&autostart.enabled),set:setAutostart,nosave:true,keys:"autostart boot login startup",when:()=>!!api.setAutostart},
     A("Use Boxshelf as the Home screen",()=>homeApp&&homeApp.isDefault?"On · change":"Off · set up","Makes the Home button open Boxshelf, like a console. Android asks you to pick the Home app on its own screen; pick Boxshelf there (or your old launcher to undo it).",async()=>{try{await api.openHomeSettings()}catch(e){toast(errMsg(e))}},{when:()=>!!api.openHomeSettings,keys:"home launcher default cocoon"}),
     A("Exit to the device's home screen",()=>homeApp&&homeApp.previousLabel?"Open "+homeApp.previousLabel:"Exit","Opens the launcher you used before Boxshelf. Boxshelf stays ready in the background.",async()=>{try{await api.power("exitHome")}catch(e){toast(errMsg(e))}},{when:()=>!!api.openHomeSettings,keys:"exit launcher home cocoon stock"}),
@@ -348,6 +370,7 @@ function build(){
     A("Report a problem","Create","Bundles the log and settings (keys removed) into one file on your Desktop, ready to send.",report,{when:()=>!!api.reportProblem,keys:"bug log help support"}),
     A("Report a bug online","Open","Opens the beta's bug form on GitHub in your browser. Attach the file Report a problem makes, and say what you were doing.",reportOnline,{when:()=>!!api.updateCheck,keys:"bug issue github feedback beta tester"}),
     A("About",()=>"Boxshelf "+(info.version||""),"Boxshelf "+(info.version||"")+". A console-style front end for your emulators, Steam and media apps.",()=>{infoOpen=!infoOpen;renderInfo()},{keys:"version",keepInfo:true,more:"Box art: LaunchBox Games Database, libretro thumbnails, GameTDB, GamesDatabase.org. Manuals, magazines and commercials: the Internet Archive. Achievements: RetroAchievements."}),
+    M("What's new","whatsnew","Each version's changes: the newest one out, and the one you have.","What changed in each version of Boxshelf. Select an item to read more about it.",[{t:"dyn",fn:wnRows}],{keys:"what's new whats new release notes patch notes changelog changes version update",sub:()=>{const e=wnFor(info.version);return {text:upd&&upd.newer?`${upd.latest} is out`:e?e.title:"Release notes"}}}),
     A("Beta updates",updBtn,"Looks on the beta page for a newer Boxshelf. When there is one, this opens its download page: unzip it over this folder and your settings are kept.",checkUpdates,{when:()=>!!api.updateCheck,keys:"update new version beta download upgrade"}),
     T("Check for new betas","ui.updateCheck",true,"Once each time Boxshelf starts, it asks the beta page on GitHub whether a newer beta is out, and says so on the shelf. Nothing downloads by itself.",{when:()=>!!api.updateCheck,keys:"update check online automatic"}),
     H("More"),
@@ -360,7 +383,8 @@ function build(){
     A("Quit Boxshelf","Quit","Closes Boxshelf completely. Sleep, Restart and Shut down are in the Home menu.",async()=>{await save();api.quit&&api.quit()},{keys:"exit close"}),
   ]},
   ];
-  if(window.bsPlatform&&bsPlatform.filterSections)SECTIONS=bsPlatform.filterSections(SECTIONS,{bind:bindb,M,H,T,A}); // Android: drop what this platform can't do (renderer/platform.js); M…A: the row makers, for a platform's own rows and sub-pages
+  if(!api.previewFind||(window.bsPlatform&&bsPlatform.os==="android"))SECTIONS=SECTIONS.filter(s=>s.id!=="previews"); // (beta.8) no video previews on Android yet (its demo api has previewFind)
+if(window.bsPlatform&&bsPlatform.filterSections)SECTIONS=bsPlatform.filterSections(SECTIONS,{bind:bindb,M,H,T,A}); // Android: drop what this platform can't do (renderer/platform.js); M…A: the row makers, for a platform's own rows and sub-pages
 }
 /* Accounts & services: each service's own page (sub {kind:"svc",id}) */
 function svcRow(id,info,keys){return {t:"action",label:SVC_N[id],status:id,open:true,info,keys,run:()=>openSub({kind:"svc",id}),...(id==="ra"?{sub:()=>{const t=raSummary();return t?{text:"Emulators: "+t}:null}}:{})}}
@@ -386,7 +410,7 @@ function svcPage0(id){const n=SVC_N[id]||id,P=(lead,rows)=>({g:"Library",id:"acc
     X("Key","keys.steamgriddb","Your SteamGridDB API key. Stored encrypted.",{secret:true,ph:"Not set",fan:true,keys:"api key steamgriddb steam grid posters"}),
     test("Test the key","Checks the key."),
     A("Get a free key","Open site","Sign in at steamgriddb.com (a free Steam sign-in), then Preferences → API → copy the key and paste it above.",()=>openLink("https://www.steamgriddb.com/profile/preferences/api"),{keys:"steamgriddb"})]);
-  return P("Box fronts, backs, full wraps (Boxshelf cuts the spine from them) and disc or cartridge art, by region, in Art Studio. Needs a free ScreenScraper account. Optional.",[
+  return P("Box fronts, backs, full wraps (Boxshelf cuts the spine from them) and disc or cartridge art, by region, in Art Studio. Needs a free ScreenScraper account. Optional. ScreenScraper also only answers apps registered with it: if the test says \"Not available yet\", Boxshelf's registration isn't done yet (or enter your own developer login below). Box art still comes from libretro, LaunchBox and SteamGridDB meanwhile.",[
     X("Username","keys.ssUser","Your screenscraper.fr username. Stored encrypted.",{ph:"Not set",fan:true,keys:"screenscraper account user login"}),
     X("Password","keys.ssPass","Your screenscraper.fr password. Stored encrypted, sent only to ScreenScraper.",{secret:true,ph:"Not set",fan:true,keys:"screenscraper password"}),
     X("Developer ID","keys.ssDevId","Only if ScreenScraper gave you developer access: the developer ID (devid). Boxshelf tries without it first.",{ph:"Optional",fan:true,keys:"screenscraper devid developer"}),
@@ -473,6 +497,8 @@ function conPages(id){
   c.romDirs.forEach((dir,i)=>rows.push({t:"folder",label:c.romDirs.length>1?`Games folder ${i+1}`:"Games folder",info:"Where this console's games are. Subfolders are searched too. Select it twice to remove it from this shelf (nothing is deleted).",more:dir,short:folderName,get:()=>dir,ns:true,
     run:()=>twice("rd:"+id+":"+i,()=>{c.romDirs.splice(i,1);changed({rescan:true});toast("Folder removed from this shelf (nothing was deleted)")},"Press again to remove this folder"),ask:"rd:"+id+":"+i,sub:()=>pathSub(dir,"dir")}));
   (d&&d.romDirs||[]).filter(x=>!c.romDirs.includes(x)).forEach(x=>rows.push(A("Add the folder found","Add","Boxshelf found games for this console here.",()=>{if(!c.romDirs.includes(x))c.romDirs.push(x);changed({rescan:true})},{sub:()=>({text:x}),ns:true})));
+  // (beta.7) Set up for me: the emulator set up the way the shelf expects, on a page of its own
+  if(esCan(c))rows.push(M(`Set up ${emu} for me`,"emusetup-"+id,`Controller, the Home menu's hotkeys, one BIOS folder and a graphics preset for ${emu}: backed up first, and Undo puts it back.`,`Boxshelf sets ${emu} up the way the shelf works best. Each switch is one kind of change; your files are backed up first, and Undo puts them back.`,[{t:"dyn",fn:()=>emuSetupRows(id)}],{keys:"setup set up configure configuration automatic easy controller pad hotkeys bios graphics resolution preset",sub:()=>(esGet(id),esSub(id)),ns:true}));
   rows.push(A(c.romDirs.length?"Add another games folder":"Add a games folder","Add",`Another folder to look in for this console's games${def.hint?` (${def.hint})`:def.extensions?` (${def.extensions.slice(0,4).map(e=>"."+e).join(", ")}…)`:""}.` /* def.hint: a console whose games aren't plain files (PS3 / PS4 game folders) says so in systems.js */,async()=>{const r=await pick({kind:"folder",title:`Choose a ${def.name} games folder`});if(r&&!c.romDirs.includes(r)){c.romDirs.push(r);changed({rescan:true})}},{keys:"roms games folder"}),
     H("When you press Play"),
     // what the two switches do (app.js play()): your boot video, when this console has one, plays first; otherwise the boot
@@ -652,6 +678,8 @@ const sw2Row=()=>!!api.sw2Builds&&!(window.bsPlatform&&bsPlatform.os==="android"
 // copy) and the programs added by hand, each named here. pcSt: what main sees ({ quiver: folder, epic: count }), asked
 // for when the page is drawn
 let pcSt=null,pcAsking=false;const customNameRows=new WeakMap();
+// (beta.7) a store row's line: "3 installed" / "None installed" once main has counted (null while asking)
+function pcCount(k){if(!pcSt)setTimeout(pcStatus,0);return pcSt&&pcSt[k]!=null?{text:pcSt[k]?`${pcSt[k]} installed`:"None installed"}:null}
 function pcStatus(){if(pcAsking||!api.pcStatus)return;pcAsking=true;Promise.resolve(api.pcStatus()).then(r=>{pcSt=r||{};pcAsking=false;bump()}).catch(()=>{pcSt={};pcAsking=false;bump()})}
 function customRows(){if(!pcSt)setTimeout(pcStatus,0);cfg.pc=cfg.pc||{epic:true,quiver:true,quiverPath:"",custom:[]};const pc=cfg.pc;if(!Array.isArray(pc.custom))pc.custom=[];const rows=[];
   const again=()=>{pcSt=null;changed({rescan:true})};
@@ -663,11 +691,9 @@ function customRows(){if(!pcSt)setTimeout(pcStatus,0);cfg.pc=cfg.pc||{epic:true,
     else{const p=await pick({kind:"folder",title:"Choose Quiver Launcher's folder (the one with QuiverLauncher.exe)"}),f=typeof p==="string"?p:p&&p.path;if(f){pc.quiverPath=f;again();toast("Quiver Launcher's folder set")}}},
     {when:()=>pc.quiver!==false,ns:true,keys:"quiver folder find",sub:()=>pcSt==null?{text:"Looking…"}:pcSt.quiver?{text:folderName(pcSt.quiver)}:{text:"Not found yet · press to find it",cls:"warn"}}));
   rows.push({t:"head",text:pc.custom.length?`Your games (${pc.custom.length})`:"Your games"});
-  rows.push(A("Add a game","Browse…","Any program: a recomp, a PC port, a game from another launcher. It gets a case on the Custom shelf and starts from its own folder.",async()=>{
-    const p=await pick({kind:"file",title:"Choose the game's program",filters:[{name:"Programs",extensions:["exe"]}]}),exe=typeof p==="string"?p:p&&p.path;if(!exe)return;
-    if(pc.custom.some(c=>String(c.exe).toLowerCase()===String(exe).toLowerCase()))return toast("That game is already on the Custom shelf");
-    const title=String(exe).split(/[\\/]/).pop().replace(/\.[^.]+$/,"").replace(/[_\-.]+/g," ").replace(/\s+/g," ").trim()||"Game";
-    pc.custom.push({id:Date.now().toString(36),title,exe,args:""});changed({rescan:true});toast(`Added ${title}. Rename it below if you like.`)},{keys:"add custom game recomp port program exe"}));
+  // (beta.7) every way of adding games on one page: several programs, a folder of games, Playnite, one program
+  rows.push(M("Add games","addgames","Several programs at once, a whole folder of games, your Playnite library, or one program.","Every way to put games on the Custom shelf. You see what was found before anything is added.",[{t:"dyn",fn:addRows}],
+    {keys:"add game games custom several many folder scan playnite import program exe recomp port",sub:()=>({text:"Several at once, a folder, Playnite or one program"})}));
   pc.custom.forEach((c,i)=>{
     // (beta.5) the name row is kept per game (the text editor finds its row by identity: a new object each draw never edited)
     let nr=customNameRows.get(c);if(!nr){nr=X(c.title||"Game","",`Its name on the shelf. Program: ${c.exe}`,{get:()=>c.title||"",set:v=>{c.title=String(v||"").slice(0,120);nr.label=c.title||"Game"},rescan:true,ns:true,keys:"rename custom game",sub:()=>({text:folderName(c.exe)})});customNameRows.set(c,nr)}
@@ -774,7 +800,7 @@ function changed(r){
 }
 function scheduleSave(){pending=true;clearTimeout(saveT);saveT=setTimeout(()=>{save()},400)}
 async function save(){clearTimeout(saveT);saveT=0;if(!pending||!cfg)return;pending=false;
-  try{const r=await api.saveConfig(cfg);if(info)info.config=r||cfg;const ci2=shelf("config");if(ci2&&typeof ci2==="object")ci2.config=clone(r||cfg)}catch(e){toast(errMsg(e))}}
+  try{const r=await api.saveConfig(cfg);if(info)info.config=r||cfg;const ci2=shelf("config");if(ci2&&typeof ci2==="object")ci2.config=clone(r||cfg)}catch(e){pending=true;toast(errMsg(e))}} // (beta.8: a failed save is tried again with the next change, not dropped)
 function change(d){const r=curRow();if(!r)return;let n;
   if(r.t==="choice"||r.t==="theme"){const o=optsOf(r),i=idxOf(r,o),j=Math.max(0,Math.min(o.length-1,i+d));if(j===i&&eq(o[i][0],r.get()))return;n=o[j][0]}
   else if(r.t==="slider"){const v=+r.get();n=Math.round(Math.max(r.min,Math.min(r.max,v+d*r.step))/r.step)*r.step;n=+n.toFixed(4);if(eq(n,v))return}
@@ -826,7 +852,7 @@ async function checkUpdates(){if(upd&&upd.newer){openLink(upd.url);return}toast(
   try{upd=await api.updateCheck(true);toast(upd.error?"Couldn't reach the beta page. Try again later":upd.newer?`Boxshelf ${upd.latest} is out: press again to get it`:upd.latest?"You have the newest beta":"No betas published yet");if(isOpen)renderPage()}catch(e){toast(errMsg(e))}}
 async function reportOnline(){try{const r=await api.updateCheck(false);openLink(r&&r.links&&r.links.issues)}catch(e){toast(errMsg(e))}}
 async function backup(){await save();try{const r=await api.backupSettings();if(r&&r.ok)toast("Saved: "+String(r.file||"").split(/[\\/]/).pop());else if(r&&r.error)toast(r.error)}catch(e){toast(errMsg(e))}}
-async function restoreBackup(){await save();try{const r=await api.restoreSettings();if(r&&r.ok){const fresh=await api.getConfig();info=fresh;cfg=clone(fresh.config);pending=false;clearTimeout(saveT);{const ci2=shelf("config");if(ci2&&typeof ci2==="object")ci2.config=clone(fresh.config)}listSig="";ensureCfg();build();needRescan=true;raChanged=true;applyTint();fit();document.body.classList.toggle("bss-reduce",gp("ui.reduceMotion")===true);{const u=cfg.ui;applyUi({safeArea:u.safeArea,clock:u.clock,clock24:u.clock24,reduceMotion:u.reduceMotion,confirmButton:u.confirmButton,scrollSpeed:u.scrollSpeed,audioOut:u.audioOut,dimMinutes:u.dimMinutes,attractMinutes:u.attractMinutes});
+async function restoreBackup(){await save();try{const r=await api.restoreSettings();if(r&&r.ok){const fresh=await api.getConfig();info=fresh;cfg=clone(fresh.config);pending=false;colRowsBy.clear();ADD.rows=null;clearTimeout(saveT);{const ci2=shelf("config");if(ci2&&typeof ci2==="object")ci2.config=clone(fresh.config)}listSig="";ensureCfg();build();needRescan=true;raChanged=true;applyTint();fit();document.body.classList.toggle("bss-reduce",gp("ui.reduceMotion")===true);{const u=cfg.ui;applyUi({safeArea:u.safeArea,clock:u.clock,clock24:u.clock24,reduceMotion:u.reduceMotion,confirmButton:u.confirmButton,scrollSpeed:u.scrollSpeed,audioOut:u.audioOut,dimMinutes:u.dimMinutes,attractMinutes:u.attractMinutes});
       // the theme / background previews set an override on the shelf that outlives the config: point them at the restored values
       shelf("setTheme",u.theme||"spectrum");shelf("setBackground",u.background||"blur");shelf("setButtons",u.buttons||"auto");shelf("setPerformance",u.performance||"auto")}toast("Settings restored");bump()}else if(r&&r.error)toast(r.error)}catch(e){toast(errMsg(e))}}
 async function report(){await save();toast("Bundling the log…");try{const r=await api.reportProblem();toast(r&&r.ok?"Saved to your Desktop: "+String(r.file||"").split(/[\\/]/).pop():"Couldn't create it"+(r&&r.error?": "+r.error:""))}catch(e){toast(errMsg(e))}}
@@ -861,7 +887,7 @@ function checkPathsSoon(){if(!pathAsk.size||!api.checkPaths)return;const L=[...p
 
 /* ---------- open / close / the classic pages ---------- */
 function ensureCfg(){cfg.ui=cfg.ui||{};cfg.steam=cfg.steam||{enabled:true,path:""};cfg.apps=cfg.apps||{};cfg.ra=cfg.ra||{user:"",key:"",enabled:true};cfg.keys=cfg.keys||{};cfg.systems=cfg.systems||{};(info.apps||[]).forEach(a=>{cfg.apps[a.id]=cfg.apps[a.id]||{enabled:true,path:""}})}
-const PAGE_MAP={bottom:["display","Bottom screen"],phone:"phone",consoles:"consoles",steam:"pc",pc:"pc",epic:"pc",custom:"custom",quiver:"custom",media:"apps",apps:"apps",ra:{svc:"ra"},connections:["acct","fanart.tv"],screenscraper:{svc:"screenscraper"},acct:"acct",accounts:"acct",display:"display",perf:"perf",performance:"perf",sound:"sound",controller:"pad",pad:"pad",museum:"museum",shelf:"shelf",library:["art","Fetch manuals for new games"],art:"art",reading:["reading","Find on the Internet Archive"],magazines:"reading",guides:"reading",manuals:"art",startup:"sys",system:"sys",sys:"sys"};
+const PAGE_MAP={bottom:["display","Bottom screen"],phone:"phone",consoles:"consoles",steam:"pc",pc:"pc",epic:"pc",custom:"custom",quiver:"custom",media:"apps",apps:"apps",ra:{svc:"ra"},connections:["acct","fanart.tv"],screenscraper:{svc:"screenscraper"},acct:"acct",accounts:"acct",display:"display",perf:"perf",performance:"perf",sound:"sound",controller:"pad",pad:"pad",museum:"museum",shelf:"shelf",library:["art","Fetch manuals for new games"],art:"art",previews:"previews",videos:"previews",trailers:"previews",reading:["reading","Find on the Internet Archive"],magazines:"reading",guides:"reading",manuals:"art",startup:"sys",system:"sys",sys:"sys"};
 // (beta.5) Details → Rename: one game's name, on a page of its own (typed, or with the on-screen keyboard on a controller).
 // Saved by main (cfg.games[key].title) the moment Enter is pressed; "Use the file's name" puts the scanned one back
 let renameState=null;
@@ -879,7 +905,213 @@ function coverSearchRows(){const s=coverSearch;if(!s)return [];
   if(!s.row)s.row=X("Search for","",`A name to look up on SteamGridDB instead of "${s.title}". Enter searches. The game's own name stays as it is (Rename changes that).`,{get:()=>s.term,set:v=>{s.term=String(v||"")},nosave:true,live:v=>coverSearchGo(v),ns:true,keys:"search cover name steamgriddb"});
   return [s.row]}
 async function coverSearchGo(v){const s=coverSearch;v=String(v||"").replace(/\s+/g," ").trim();if(!s||!v)return;play("open");await close();shelf("pcCoverSearch",s.id,v)}
+// (beta.7) Add games (main/addgames.js): what was found is listed with a tick each (a game already on the Custom shelf
+// isn't added twice); Add puts the ticked ones on the shelf. Playnite (experimental): a summary to tick (PC games,
+// each console's games folders, what's left out and why), Import, and Remove what was imported.
+const pcCfg=()=>{cfg.pc=cfg.pc||{};if(!Array.isArray(cfg.pc.custom))cfg.pc.custom=[];return cfg.pc};
+const ADD={list:null,pn:null,pnOn:{pc:true},pnPick:new Set(),busy:false,rows:null,pnFound:undefined};
+const addSlug=s=>String(s||"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,60)||"game";
+function addReset(){ADD.rows=null;bump()}
+function addFound(items){const have=new Set(pcCfg().custom.map(c=>String(c.exe).toLowerCase()));ADD.pn=null;
+  ADD.list=items.map(x=>{const h=have.has(String(x.exe).toLowerCase());return {title:String(x.title||"Game").slice(0,120),exe:String(x.exe),on:!h,have:h}});
+  if(!ADD.list.length)toast("No games found there");addReset()}
+function addCommit(){const pc=pcCfg();let n=0;for(const x of (ADD.list||[]).filter(x=>x.on&&!x.have)){if(pc.custom.some(c=>String(c.exe).toLowerCase()===x.exe.toLowerCase()))continue;pc.custom.push({id:Date.now().toString(36)+"-"+n,title:x.title,exe:x.exe,args:""});n++}
+  ADD.list=null;changed({rescan:true});play("open");toast(n?`Added ${n} game${n===1?"":"s"} to the Custom shelf`:"Nothing new to add");addReset()}
+async function addSeveral(){const p=await pick({kind:"file",multi:true,title:"Choose the games' programs (hold Ctrl to pick several)",filters:[{name:"Programs",extensions:["exe"]}]});const L=(Array.isArray(p)?p:p?[p]:[]).map(x=>typeof x==="string"?x:x&&x.path).filter(Boolean);if(!L.length)return;
+  const named=await Promise.resolve(api.gameTitles?api.gameTitles(L):L.map(e=>({exe:e,title:e.split(/[\\/]/).pop().replace(/\.exe$/i,"")}))).catch(()=>L.map(e=>({exe:e,title:e.split(/[\\/]/).pop().replace(/\.exe$/i,"")})));addFound(named)}
+async function addScan(){const p=await pick({kind:"folder",title:"Choose the folder your games are in (like D:\\Games)"}),root=typeof p==="string"?p:p&&p.path;if(!root||!api.scanGameFolder)return;
+  ADD.busy=true;ADD.list=null;addReset();try{const r=await api.scanGameFolder(root);if(r&&r.error)toast(r.error);addFound((r&&r.games)||[])}catch(e){toast(errMsg(e))}finally{ADD.busy=false;addReset()}}
+async function addOne(){const p=await pick({kind:"file",title:"Choose the game's program",filters:[{name:"Programs",extensions:["exe"]}]}),exe=typeof p==="string"?p:p&&p.path;if(!exe)return;const pc=pcCfg();
+  if(pc.custom.some(c=>String(c.exe).toLowerCase()===String(exe).toLowerCase()))return toast("That game is already on the Custom shelf");
+  const title=String(exe).split(/[\\/]/).pop().replace(/\.[^.]+$/,"").replace(/[_\-.]+/g," ").replace(/\s+/g," ").trim()||"Game";
+  pc.custom.push({id:Date.now().toString(36),title,exe,args:""});changed({rescan:true});toast(`Added ${title}. Rename it in Custom games if you like.`)}
+async function addPlaynite(dir){ADD.busy=true;ADD.list=null;ADD.pn=null;addReset();
+  try{const P=await api.playnitePlan(dir);ADD.pn=P;ADD.pnOn={pc:true};Object.keys(P.consoles||{}).forEach(k=>{ADD.pnOn[k]=true});ADD.pnPick=new Set(P.pc.filter(g=>g.there!==false).map(g=>g.key))}
+  catch(e){toast(errMsg(e))}finally{ADD.busy=false;addReset()}}
+async function pnImport(){const P=ADD.pn;if(!P||ADD.busy)return;ADD.busy=true;const pc=pcCfg(),have=new Set(pc.custom.map(c=>String(c.exe).toLowerCase())),covers=[];let n=0,dirs=0;
+  try{
+    if(ADD.pnOn.pc)for(const g of P.pc){if(!ADD.pnPick.has(g.key)||have.has(String(g.exe).toLowerCase()))continue;const id="pn-"+addSlug(g.key).slice(0,40);
+      pc.custom.push({id,title:g.title,exe:g.exe,args:g.args||"",src:"playnite"});have.add(String(g.exe).toLowerCase());n++;if(g.cover)covers.push({id,file:g.cover});
+      if(g.favorite){const fav=cfg.ui.favorites=Array.isArray(cfg.ui.favorites)?cfg.ui.favorites:[];const fid="custom-"+addSlug(id);if(!fav.includes(fid))fav.push(fid)}}
+    pc.pnDirs=pc.pnDirs||{};
+    for(const [sys,c] of Object.entries(P.consoles||{})){if(!ADD.pnOn[sys]||!cfg.systems[sys])continue;const sc=sysCfg(sys);
+      for(const d of c.dirs||[])if(!sc.romDirs.some(x=>x.toLowerCase()===d.toLowerCase())){sc.romDirs.push(d);(pc.pnDirs[sys]=pc.pnDirs[sys]||[]).push(d);dirs++}
+      sc.enabled=true;if(!sc.emulator&&c.emulatorDir&&api.emulatorIn){const e=await Promise.resolve(api.emulatorIn(c.emulatorDir,sys)).catch(()=>null);if(e)sc.emulator=e}}
+    changed({rescan:true});await save();if(covers.length&&api.gameCovers)api.gameCovers(covers).catch(()=>{});
+    play("open");toast(`From Playnite: ${n} game${n===1?"":"s"} on the Custom shelf${dirs?`, ${dirs} games folder${dirs===1?"":"s"} for your consoles`:""}`);ADD.pn=null}
+  finally{ADD.busy=false;addReset()}}
+function pnUndo(){const pc=pcCfg(),n=pc.custom.filter(c=>c.src==="playnite").length;pc.custom.splice(0,pc.custom.length,...pc.custom.filter(c=>c.src!=="playnite"));let d=0;
+  for(const [sys,L] of Object.entries(pc.pnDirs||{})){if(!cfg.systems[sys])continue;const sc=sysCfg(sys),rm=new Set(L.map(x=>x.toLowerCase())),b=sc.romDirs.length;sc.romDirs=sc.romDirs.filter(x=>!rm.has(x.toLowerCase()));d+=b-sc.romDirs.length}
+  pc.pnDirs={};changed({rescan:true});toast(`Removed ${n} imported game${n===1?"":"s"}${d?` and ${d} games folder${d===1?"":"s"}`:""}`);addReset()}
+function addRows(){if(ADD.rows)return ADD.rows;const R=[],win=!window.bsPlatform||!bsPlatform.os||bsPlatform.os==="windows"||bsPlatform.os==="web";
+  if(ADD.pnFound===undefined&&api.playniteFind&&win){ADD.pnFound=null;Promise.resolve(api.playniteFind()).then(f=>{ADD.pnFound=f||false;addReset()}).catch(()=>{ADD.pnFound=false;addReset()})}
+  R.push(A("Add several programs","Choose…","Pick many games' programs at once (hold Ctrl or Shift in the file window). You check their names before they're added.",addSeveral,{ns:true,keys:"add several many bulk multiple games programs exe"}),
+    A("Scan a folder","Choose folder…","Point at the folder your games are in (like D:\\Games). Each game folder in it becomes one game, its main program picked for you; you tick which ones to add.",addScan,{ns:true,keys:"scan folder games bulk find"}));
+  if(api.playnitePlan&&win)R.push(A("Import from Playnite (experimental)",()=>ADD.pnFound?"Import…":ADD.pnFound===false?"Find…":"…",
+    "Brings your Playnite library over in one go: games you added there by hand, with their covers, onto the Custom shelf, and your emulated games' folders onto their console's shelf. Steam, Epic, GOG Galaxy and other store games are left out: Boxshelf reads those stores itself. Experimental: it couldn't be tried with every Playnite version, so tell us if something's missing.",
+    async()=>{if(ADD.pnFound)return addPlaynite();const p=await pick({kind:"folder",title:"Choose Playnite's folder (the one with Playnite.DesktopApp.exe)"}),d=typeof p==="string"?p:p&&p.path;if(d)addPlaynite(d)},
+    {ns:true,keys:"playnite import library experimental",sub:()=>ADD.pnFound?{text:"Found in "+folderName(ADD.pnFound.app)}:ADD.pnFound===false?{text:"Not found · choose its folder"}:{text:"Looking for Playnite…"}}));
+  R.push(A("Add one program","Browse…","Any program: a recomp, a PC port, a game from another launcher. It gets a case on the Custom shelf and starts from its own folder.",addOne,{ns:true,keys:"add custom game recomp port program exe one"}));
+  if(ADD.busy)R.push(infoRow("Looking…","",{text:""}));
+  if(ADD.list&&ADD.list.length){const L=ADD.list;R.push(H(`Found ${L.length} game${L.length===1?"":"s"}`,{em:()=>`${L.filter(x=>x.on&&!x.have).length} ticked`}));
+    L.forEach(x=>R.push({t:"toggle",label:x.title,info:x.exe,ns:true,nosave:true,get:()=>x.on&&!x.have,set:v=>{if(!x.have)x.on=!!v},sub:()=>({text:x.have?"Already on the Custom shelf":x.exe.split(/[\\/]/).pop()})}));
+    R.push(A("Add the ticked games",()=>{const n=L.filter(x=>x.on&&!x.have).length;return n?`Add ${n}`:"Add"},"Puts the ticked games on the Custom shelf. Covers are found for them like for any PC game, and each can be renamed or given another cover from its Details.",addCommit,{ns:true}),
+      A("Clear this list","Clear","Forgets this list without adding anything.",()=>{ADD.list=null;addReset()},{ns:true}))}
+  if(ADD.pn){const P=ADD.pn,name=id=>((consoleList().find(c=>c.id===id)||{}).name||id);R.push(H("From Playnite",{em:()=>`${P.total} games in Playnite`}));
+    R.push({t:"toggle",label:"PC games",info:"Games you added to Playnite by hand: each gets a case on the Custom shelf with its program, launch options and cover.",ns:true,nosave:true,get:()=>!!ADD.pnOn.pc,set:v=>{ADD.pnOn.pc=!!v;addReset()},sub:()=>({text:`${P.pc.length} game${P.pc.length===1?"":"s"}`})});
+    for(const [sys,c] of Object.entries(P.consoles||{}))R.push({t:"toggle",label:`${name(sys)} games`,info:`Adds ${c.dirs.join(", ")} as ${name(sys)} games folders${c.emulatorDir?`, and Playnite's emulator if ${name(sys)} has none yet`:""}.`,ns:true,nosave:true,get:()=>!!ADD.pnOn[sys],set:v=>{ADD.pnOn[sys]=!!v},sub:()=>({text:`${c.count} game${c.count===1?"":"s"} · ${c.dirs.length} folder${c.dirs.length===1?"":"s"}`})});
+    const s=P.skipped||{},left=[s.store?`${s.store} store game${s.store===1?"":"s"} (Boxshelf reads those stores itself)`:"",s.hidden?`${s.hidden} hidden`:"",s.link?`${s.link} started by a link`:"",s.nothing?`${s.nothing} with nothing to start`:""].filter(Boolean);
+    if(left.length)R.push(infoRow("Left out","",{text:left.join(" · ")}));
+    R.push(A("Import",()=>`Import`,"Adds what's ticked above. Remove what was imported (below) takes it all away again.",pnImport,{ns:true}));
+    if(ADD.pnOn.pc&&P.pc.length){R.push(H("Its PC games"));P.pc.forEach(g=>R.push({t:"toggle",label:g.title,info:g.exe,ns:true,nosave:true,get:()=>ADD.pnPick.has(g.key),set:v=>{v?ADD.pnPick.add(g.key):ADD.pnPick.delete(g.key)},sub:()=>({text:g.there===false?"Its program isn't on this PC":g.exe.split(/[\\/]/).pop(),cls:g.there===false?"warn":""})}))}}
+  if(pcCfg().custom.some(c=>c.src==="playnite"))R.push(H(""),A("Remove what was imported from Playnite","Remove","Takes the games and games folders the Playnite import added off your shelves again (nothing is deleted from your PC).",()=>twice("pnundo",pnUndo,"Press again to remove them"),{ns:true,ask:"pnundo"}));
+  return ADD.rows=R}
+// (beta.7) What's new: the newest version on GitHub (its own notes, as plain text, and its download page) when it's newer
+// than this one, then each built-in version (renderer/whatsnew.js), newest first: a row per change, more in the side card
+const wnList=()=>Array.isArray(window.BS_WHATSNEW)?window.BS_WHATSNEW:[];
+const wnFor=v=>wnList().find(e=>window.bsPlatform&&bsPlatform.os==="android"?e.android===v:e.version===v)||null;
+function wnPlain(md){return String(md||"").split(/\r?\n/).map(l=>/^\s*[-*•]\s+(.+)$/.exec(l)).filter(Boolean).map(m=>m[1].replace(/\[([^\]]+)\]\([^)]*\)/g,"$1").replace(/\*\*|__|`/g,"").replace(/<[^>]*>/g,"").trim()).filter(Boolean)}
+let wnRowsKept=null,wnSig="";
+function wnRows(){updBtn();const sig=(upd&&upd.latest||"")+"|"+(info.version||"");if(wnRowsKept&&wnSig===sig)return wnRowsKept;wnSig=sig;const R=[],android=window.bsPlatform&&bsPlatform.os==="android";
+  if(upd&&upd.newer&&upd.latest){R.push(H(`New: Boxshelf ${upd.latest}`,{em:()=>"not installed yet"}));
+    const items=wnPlain(upd.notes);items.slice(0,12).forEach(s=>R.push(infoRow(s.length>70?s.slice(0,67)+"…":s,"",{text:""},{info:s})));
+    R.push(A("Get Boxshelf "+upd.latest,"Download","Opens its download page. Unzip it over this folder: your settings are kept.",checkUpdates,{ns:true}))}
+  const cur=info.version||"";let shown=0;
+  for(const e of wnList()){const v=android?e.android:e.version;if(!v)continue;if(shown>=4)break;shown++;
+    R.push(H(`${v===cur?"This version":"Boxshelf"} ${v}`,{em:()=>e.date||""}));
+    for(const sec of e.sections||[])for(const [h,more] of sec.items||[])R.push(infoRow(h,"",{text:sec.h},{info:more||h}))}
+  if(!R.length)R.push(infoRow("No notes yet","",{text:""}));
+  return wnRowsKept=R}
+// (beta.7) Your preview videos: how many games of each console have a video, your own videos folders (add / remove),
+// Find videos again, and Steam's trailer clips (their size, Clear). Rows kept until the answer changes.
+// (beta.8) console trailers (main/ytclips.js): the helper's state for the Video previews section. clipOk: this PC can
+// make clips (Windows). clipRows: "Get the helper" (with its progress) until it's there, then what's kept and Clear.
+const CLIP={s:null,loading:false,pct:null,err:false,hooked:false};
+function clipLoad(force){if(!api.clipStatus||(CLIP.loading&&!force))return;if(CLIP.s&&!force)return;CLIP.loading=true;
+  if(!CLIP.hooked&&api.onClipProgress){CLIP.hooked=true;api.onClipProgress(d=>{if(!d)return;if(d.done){CLIP.pct=null;CLIP.err=!d.ok;clipLoad(true)}else CLIP.pct=d.pct|0;bump()})}
+  Promise.resolve(api.clipStatus()).then(s=>{CLIP.s=s||{supported:false}}).catch(()=>{CLIP.s={supported:false}}) /* (never null again: a failed ask would ask again on every repaint) */.finally(()=>{CLIP.loading=false;bump()})}
+const clipOk=()=>{clipLoad();return !!(CLIP.s&&CLIP.s.supported)};
+// console trailers are on but can't work yet: the helper is missing (the section's dot, the switch's note)
+const clipNeed=()=>gp("ui.previews")!=="off"&&gp("ui.previewClips")!==false&&clipOk()&&!CLIP.s.helper;
+async function clipGet(){if(CLIP.pct!=null)return;CLIP.pct=0;CLIP.err=false;bump();const ok=await api.clipHelper().catch(()=>false);CLIP.pct=null;CLIP.err=!ok;clipLoad(true);
+  toast(ok?"Console trailers are ready: rest on a console game to see its trailer":"Couldn't get the trailer helper. Check the internet connection and try again.")}
+function clipRows(){if(gp("ui.previews")==="off"||gp("ui.previewClips")===false||!clipOk())return [];const s=CLIP.s;
+  if(!s.helper)return [A(CLIP.pct!=null?`Getting the trailer helper… ${CLIP.pct}%`:"Get the trailer helper (needed)",CLIP.pct!=null?"":"Get",
+    "Console trailers don't play until you get this. It's a free helper, yt-dlp (about 25 MB), that finds each trailer's video. It's fetched once from yt-dlp's own GitHub page, checked, and kept in Boxshelf's data folder; it updates itself when YouTube changes.",
+    ()=>clipGet(),{ns:true,keys:"yt-dlp helper console trailers download",sub:()=>CLIP.err?{text:"Couldn't get it last time: try again",warn:true}:{text:"Not installed yet: console trailers are waiting for it",warn:true}})];
+  return [A("Console trailer clips","Clear",`The trailer helper is ready. ${s.n?`${s.n} clip${s.n===1?"":"s"} kept (${mb(s.bytes||0)} MB).`:"No clips kept yet: rest on a console game."} Cleared clips are made again when you next rest on a game.`,
+    async()=>{await api.clipClear();clipLoad(true);toast("Console trailer clips cleared")},{ns:true,keys:"console trailers clips clear",sub:()=>({text:s.n?`${s.n} clip${s.n===1?"":"s"} · ${mb(s.bytes||0)} MB`:"Ready"})})]}
+// (beta.8) Linux / Steam Deck: Add Boxshelf to Steam (main/steamdeck.js), so it starts from Steam and Game Mode and its
+// games get the controller as a gamepad. Shown where it can work: the AppImage, outside Game Mode (it's in Steam there)
+const DECK={d:null,loading:false,busy:false};
+function deckLoad(force){if(!api.deckInfo||DECK.loading||(DECK.d&&!force))return;DECK.loading=true;
+  Promise.resolve(api.deckInfo()).then(d=>{DECK.d=d||{}}).catch(()=>{DECK.d={}}).finally(()=>{DECK.loading=false;bump()})}
+function deckRows(){deckLoad();const d=DECK.d;if(!d||!d.canAdd||d.gameMode)return [];
+  return [A(DECK.busy?"Adding Boxshelf to Steam…":"Add Boxshelf to Steam",DECK.busy?"":d.inSteam?"Update":"Add",
+    "Adds Boxshelf to Steam's Library as a non-Steam game, so you can start it from Steam and Game Mode. Started from Steam, the controller works as a gamepad in your games (outside Steam on a Steam Deck, B is the Esc key, and most emulators quit their game on it). Steam closes and opens again while it's added; its old list is backed up first.",
+    async()=>{if(DECK.busy)return;DECK.busy=true;bump();let r=null;try{r=await api.addToSteam(true)}catch{}DECK.busy=false;deckLoad(true);
+      const why={"no-steam":"Steam hasn't been set up here yet","not-appimage":"Boxshelf isn't running from its AppImage","steam-would-not-close":"Steam didn't close: close it yourself and try again","write-failed":"Steam's list couldn't be written"};
+      toast(r&&r.ok?"Boxshelf is in Steam: start it from your Library (Non-Steam), in Game Mode on a Steam Deck":"Couldn't add Boxshelf to Steam"+(r&&why[r.why]?": "+why[r.why]:""))},
+    {ns:true,keys:"steam deck game mode non-steam shortcut add to steam library controller",sub:()=>({text:d.inSteam?"In Steam already":d.deck?"Recommended on a Steam Deck":"Not in Steam yet"})})]}const PVS={c:null,loading:false,rows:null};
+function pvLoad(force){if(force){PVS.c=null;PVS.rows=null}if(PVS.c||PVS.loading||!api.previewCount)return;PVS.loading=true;
+  Promise.resolve(api.previewCount()).then(c=>{PVS.c=c||{total:0,systems:[]}}).catch(()=>{PVS.c={total:0,systems:[]}}).finally(()=>{PVS.loading=false;PVS.rows=null;bump()})}
+function pvRows(){pvLoad();if(PVS.rows)return PVS.rows;const c=PVS.c,R=[];if(!c)return [infoRow("Looking for videos…","")];
+  R.push(H("Found",{em:()=>c.total?`${c.total} game${c.total===1?"":"s"}`:""}));
+  if(!c.systems.length)R.push(infoRow("No video files yet","",{text:"Steam games still get their trailers, and YouTube's if it's on."}));
+  c.systems.forEach(s=>R.push(infoRow(s.name,`${s.n} of ${s.of}`,{text:"games with a video"})));
+  R.push(H("Your videos folders"));
+  (gp("ui.previewDirs")||[]).forEach((d,i)=>R.push({t:"folder",label:"Videos folder",info:"Videos in here (or in a subfolder named after the console) are matched to your games. Select it twice to stop using it (nothing is deleted).",more:d,short:folderName,get:()=>d,ns:true,
+    run:()=>twice("pvd:"+i,()=>{const L=(gp("ui.previewDirs")||[]).slice();L.splice(i,1);sp("ui.previewDirs",L);changed(null);pvLoad(true);bump()},"Press again to stop using this folder"),ask:"pvd:"+i,sub:()=>pathSub(d,"dir")}));
+  R.push(A("Add a videos folder","Add","A folder with game videos (named like the games, e.g. Super Mario 64 (USA).mp4), or with a folder per console.",async()=>{const p=await pick({kind:"folder",title:"Choose a folder with game videos"});
+      if(p){const L=(gp("ui.previewDirs")||[]).slice();if(!L.includes(p))L.push(p);sp("ui.previewDirs",L);changed(null);await save();pvLoad(true);bump()}},{ns:true}),
+    A("Find videos again","Find","Looks through every videos folder again (after you've added videos).",async()=>{await save();pvLoad(true);bump()},{ns:true}));
+  if(api.previewClearSteam)R.push(H("Steam trailers"),A("Clear Steam trailer clips","Clear",`The short clips kept from Steam's trailers (${mb(c.steamBytes||0)} MB). They're fetched again the next time you rest on a game.`,async()=>{await api.previewClearSteam();pvLoad(true);toast("Steam trailer clips cleared");bump()},{ns:true,when:()=>(c.steamBytes||0)>0}));
+  return PVS.rows=R}
+// (beta.7) Set up for me (main/emusetup.js), one page per console: a switch per kind of change, the graphics preset, Set
+// up, Show what will change, Undo. The switches are this page's (not saved); the preset is cfg.emuSetup.graphics. Rows are
+// kept per console until the answer changes (the editor finds its row by identity).
+const ES_NAME={controller:"Controller",hotkeys:"Home menu hotkeys",bios:"BIOS folder",graphics:"Graphics",quit:"No quit questions",resume:"Resume where you left off"};
+const ES_INFO={controller:"Maps your controller as player 1, when the emulator is still on keyboard-only controls. A mapping you made yourself is kept.",
+  hotkeys:"Puts save, load, pause and screenshot on the keys the Home menu presses, so its Save and Load work in your games.",
+  bios:"Points the emulator at one shared BIOS folder (Boxshelf\\BIOS), only when its own BIOS folder is empty.",
+  graphics:"Sets the resolution to the Graphics preset below.",quit:"No \"are you sure?\" question when a game is closed.",
+  resume:"RetroArch saves when you quit a game and carries on from there next time."};
+const ES_DEF={controller:true,hotkeys:true,bios:true,graphics:true,quit:true,resume:false};
+const ES_KINDS=/retroarch|dolphin|duckstation|pcsx2|ppsspp/i;
+const esCan=c=>!!(c&&c.emulator&&api.emuSetupStatus&&ES_KINDS.test(String(c.emulator).split(/[\\/]/).pop())&&(!window.bsPlatform||!bsPlatform.has||bsPlatform.has("emuSettings")));
+const esS={};
+function esGet(id){const s=esS[id]||(esS[id]={st:null,on:{...ES_DEF},plan:null,rows:null,busy:false,loading:false});const exe=(sysCfg(id)||{}).emulator||"";if(s.exe!==exe){s.exe=exe;s.st=null;s.plan=null;s.rows=null}
+  if(s.st==null&&!s.loading){s.loading=true;Promise.resolve(api.emuSetupStatus(id)).then(st=>{s.st=st||{supported:false}}).catch(()=>{s.st={supported:false}}).finally(()=>{s.loading=false;s.rows=null;bump()})}
+  return s}
+function esReset(id){const s=esS[id];if(s){s.st=null;s.plan=null;s.rows=null}}
+if(api.onCoreProgress)api.onCoreProgress(d=>{const s=d&&esS[d.systemId];if(s&&s.corePct!=null){s.corePct=d.pct|0;bump()}});
+function esSub(id){const s=esS[id],st=s&&s.st;if(!st)return {text:"Checking…"};if(!st.supported)return {text:st.why||"Not for this emulator yet"};
+  return st.done?{text:"✓ Set up"}:!st.ready?{text:st.pending?"Sets up after you play once":`Open ${st.name} once first`,cls:"warn"}:{text:"Not set up yet"}}
+function emuSetupRows(id){const s=esGet(id);if(s.rows)return s.rows;const st=s.st,R=[];
+  if(!st)return [infoRow("Checking the emulator…","")]; // (not kept: replaced when the answer comes)
+  if(!st.supported){R.push(infoRow(st.none?"Choose this console's emulator first":"Boxshelf can't set this emulator up yet","",{text:st.why||"RetroArch, Dolphin, DuckStation, PCSX2 and PPSSPP for now."}));return s.rows=R}
+  R.push(infoRow(!st.ready?`Open ${st.name} once first`:st.done?`${st.name} is set up`:st.used?`You've set ${st.name} up yourself`:`${st.name} isn't set up yet`,"",
+    {text:!st.ready?(st.pending?"It's set up the next time you play.":`${st.name} makes its settings file the first time it runs; set it up after that.`)
+      :st.done?`Since ${new Date(st.done.at).toLocaleDateString()}: ${st.done.groups.map(g=>ES_NAME[g]||g).join(", ")}.`
+      :st.used?"Your settings stay as they are unless you set it up here. Everything it changes is backed up first.":"Everything it changes is backed up first, and Undo puts it back."}));
+  for(const g of st.groups||[])R.push({t:"toggle",label:ES_NAME[g]||g,info:ES_INFO[g]||"",ns:true,nosave:true,get:()=>!!s.on[g],set:v=>{s.on[g]=!!v;if(s.plan){s.plan=null;s.rows=null}}});
+  if((st.groups||[]).includes("graphics"))R.push(C("Graphics preset","emuSetup.graphics",[["auto","For this PC"],["fast","Fast"],["balanced","Balanced"],["pretty","Pretty"]],"auto",
+    `Fast: the console's own resolution. Balanced: about twice that. Pretty: three to four times, for a strong graphics card. For this PC picks one from your graphics card${st.preset?` (${st.preset[0].toUpperCase()+st.preset.slice(1)} here)`:""}.`,{ns:true}));
+  for(const k of st.skipped||[])R.push(infoRow(`${ES_NAME[k.group]||k.group}: left as it is`,"",{text:k.why}));
+  R.push(H(""),
+    A(st.done?"Set up again":`Set up ${st.name}`,st.done?"Again":"Set up",`Applies the switches above to ${st.name}. Your files are backed up first.`,async()=>{
+      if(s.busy)return;s.busy=true;try{await save();const r=await api.emuSetupApply(id,s.on);
+        toast(r&&r.ok?((r.applied||[]).length?`${st.name} set up: ${r.applied.map(g=>ES_NAME[g]||g).join(", ")}`:`${st.name} already matches`):`Couldn't set up ${st.name}: ${(r&&r.why)||"unknown problem"}`)}
+      catch(e){toast(errMsg(e))}finally{s.busy=false;esReset(id);bump()}},{when:()=>!!st.ready,ns:true}),
+    A("Show what will change","Show","Lists every setting it would write, file by file, before you set anything up.",async()=>{try{s.plan=await api.emuSetupPlan(id)}catch(e){toast(errMsg(e));return}s.rows=null;bump()},{when:()=>!!st.ready&&!s.plan,ns:true}),
+    A("Undo","Undo",`Puts ${st.name}'s settings back exactly as they were before Boxshelf set it up.`,()=>twice("esundo:"+id,async()=>{try{const r=await api.emuSetupUndo(id);toast(r&&r.restored&&r.restored.length?`${st.name}'s settings are back as they were`:"Nothing to undo")}catch(e){toast(errMsg(e))}esReset(id);bump()},"Press again to undo"),{when:()=>!!st.done,ns:true,ask:"esundo:"+id}));
+  // (beta.7) RetroArch's core for this console: there or not, Get it (it's also fetched by itself the first time you play)
+  if(st.core)R.push(H("RetroArch core"),A(`${st.core.name} core`,st.core.installed?"":"Get it",
+    st.core.installed?`RetroArch has the ${st.core.name} core it uses for this console.`:`Downloads the ${st.core.name} core from libretro, the same place RetroArch's Online Updater uses. It's also fetched by itself the first time you play.`,
+    async()=>{if(st.core.installed||s.corePct!=null||!api.getCore)return;s.corePct=0;bump();
+      try{const r=await api.getCore(id);toast(`${r&&r.name||st.core.name} core is ready`)}catch(e){toast(errMsg(e))}finally{s.corePct=null;esReset(id);bump()}},
+    {ns:true,sub:()=>s.corePct!=null?{text:`Downloading… ${s.corePct}%`}:st.core.installed?{text:"✓ Ready"}:{text:"Not downloaded yet",cls:"warn"}}));
+  // the BIOS files: each one the core wants, checked against the known good copies; the folder they go in, one press away
+  if(st.bios){R.push(H("BIOS files"));
+    const miss=f=>st.bios.need==="one"?"Missing (one of these is enough)":st.bios.need==="opt"?`Missing, optional: ${st.bios.note}`:`Missing${st.bios.note?` (${st.bios.note})`:""}`;
+    if(st.bios.files.length)st.bios.files.forEach(f=>R.push(infoRow(f.name+(f.region?` · ${f.region}`:""),"",{text:f.state==="ok"?"✓ Good":f.state==="wrong"?"Wrong version: not the known good copy":miss(f),cls:f.state==="ok"||(f.state==="missing"&&(st.bios.need==="opt"||(st.bios.need==="one"&&st.bios.ok)))?"":"warn"})));
+    else R.push(infoRow(st.bios.ok?"BIOS files found":"No BIOS files yet","",{text:st.bios.ok?"✓ Good":`${st.name} needs a BIOS dumped from your own console.`,cls:st.bios.ok?"":"warn"}));
+    R.push(A("Open the BIOS folder","Open",`Opens the folder ${st.name} reads BIOS files from${st.bios.dir?`: ${st.bios.dir}`:""}. Copy the files from your own console there, then Check again.`,async()=>{try{await api.openBiosFolder(id)}catch(e){toast(errMsg(e))}},{ns:true,when:()=>!!api.openBiosFolder}),
+      A("Check again","Check","Looks in the BIOS folder again.",()=>{esReset(id);bump()},{ns:true}))}
+  if(s.plan&&s.plan.changes){const ch=s.plan.changes.filter(c=>s.on[c.group]);R.push(H("What will change"));
+    if(!ch.length)R.push(infoRow("Nothing, with these switches","",{text:""}));
+    ch.slice(0,60).forEach(c=>R.push(infoRow(`${c.key} = ${c.value}`,"",{text:`${ES_NAME[c.group]||c.group} · ${String(c.file).split(/[\\/]/).pop()}`})));
+    if(ch.length>60)R.push(infoRow(`…and ${ch.length-60} more`,""))}
+  return s.rows=R}
+// (beta.7) Details → Collections: this game on your own shelves. cfg.ui.collections: [{ id, name, ids: [game ids] }]; each is
+// a shelf of its own beside Home (app.js buildHome). A switch per collection; New collection makes one with this game on it;
+// Settings → Shelf → Collections renames and deletes them. (Rows made once per page: the editor finds its row by identity)
+let colState=null;const colRowsBy=new Map();
+const colList=()=>{cfg.ui=cfg.ui||{};if(!Array.isArray(cfg.ui.collections))cfg.ui.collections=[];return cfg.ui.collections};
+const colChanged=()=>{shelf("setCollections",colList().map(c=>({id:c.id,name:c.name,ids:[...c.ids]})))};
+function colRows(){const s=colState;if(!s)return [];const out=[];
+  for(const c of colList()){let r=colRowsBy.get("in|"+c.id+"|"+s.gid);
+    if(!r){r=T(c.name,"",false,`On: ${s.title} is on this shelf.`,{get:()=>c.ids.includes(s.gid),set:v=>{const i=c.ids.indexOf(s.gid);if(v&&i<0)c.ids.push(s.gid);if(!v&&i>=0)c.ids.splice(i,1);colChanged()},keys:"collection shelf list"});colRowsBy.set("in|"+c.id+"|"+s.gid,r)}
+    r.label=c.name;out.push(r)}
+  if(!s.newRow)s.newRow=X("New collection","","A name for a new shelf of your own. Enter makes it, with this game on it.",{get:()=>s.newName,set:v=>{s.newName=String(v||"")},nosave:true,live:v=>colNew(v),ns:true,ph:"Couch co-op, Racing, Finished…",keys:"collection new create shelf"});
+  out.push(s.newRow);return out}
+function colNew(v){const s=colState;v=String(v||"").replace(/\s+/g," ").trim().slice(0,40);if(!s||!v)return;const L=colList();if(L.length>=50){toast("That's the most collections there can be (50).");return}
+  const ex=L.find(c=>c.name.toLowerCase()===v.toLowerCase());if(ex){if(!ex.ids.includes(s.gid))ex.ids.push(s.gid)}else L.push({id:"c"+Date.now().toString(36),name:v,ids:[s.gid]});
+  s.newName="";scheduleSave();colChanged();play("tick",1);toast(`${s.title} is on ${v}`);bump()}
+// Settings → Shelf → Collections: each one's name (Enter renames) and Delete (pressed twice)
+function colManageRows(){const L=colList();if(!L.length){if(!colRowsBy.has("none"))colRowsBy.set("none",A("No collections yet","","Open a game's Details and choose Collections to make one.",()=>{},{ns:true,keys:"collections"}));return [colRowsBy.get("none")]}const out=[];
+  for(const c of L){let n=colRowsBy.get("name|"+c.id);
+    if(!n){n=X("Name","",`The shelf's name (${c.ids.length} game${c.ids.length===1?"":"s"}). Enter renames it.`,{get:()=>c.name,set:v=>{const t=String(v||"").replace(/\s+/g," ").trim().slice(0,40);if(t)c.name=t},live:()=>colChanged(),keys:"collection rename"});colRowsBy.set("name|"+c.id,n)}
+    let d=colRowsBy.get("del|"+c.id);
+    if(!d){d=A("Delete "+c.name,"Delete","Removes this shelf (the games stay everywhere else). Press twice.",()=>{if(d.armed){const i=L.indexOf(c);if(i>=0)L.splice(i,1);scheduleSave();colChanged();play("back");toast(`${c.name} deleted`)}else{d.armed=true;d.btn="Press again";setTimeout(()=>{d.armed=false;d.btn="Delete";bump()},4000)}bump()},{ns:true,keys:"collection delete remove"});colRowsBy.set("del|"+c.id,d)}
+    d.label="Delete "+c.name;out.push(H(c.name),n,d)}
+  return out}
 function route(page,o){if(!page)return;o=o||{};
+  if(page==="addgames"){MORE.addgames=MORE.addgames||{id:"addgames",name:"Add games",lead:"Every way to put games on the Custom shelf. You see what was found before anything is added.",rows:[{t:"dyn",fn:addRows}]};goSecId("custom");focus="page";rowI=0;openSub({kind:"more",id:"addgames"});return} // (beta.7) the Custom shelf's Add games tile
+  if(page==="whatsnew"){goSecId("sys");focus="page";rowI=0;openSub({kind:"more",id:"whatsnew"});return} // (beta.7) the note card's See what's new / All the notes
+  if(page==="collections"&&o.id!=null){colState={gid:String(o.id),title:String(o.title||"This game"),newName:""};
+    MORE.collections={id:"collections",name:`Collections: ${colState.title}`.slice(0,60),lead:"Put this game on shelves of your own. Each collection is a shelf beside Home.",rows:[{t:"dyn",fn:colRows}]};
+    goSecId("shelf");focus="page";rowI=0;openSub({kind:"more",id:"collections"});return}
   if(page==="coversearch"&&o.id){coverSearch={id:String(o.id),title:String(o.title||""),term:String(o.term||o.title||"")};
     MORE.coversearch={id:"coversearch",name:"Search for a cover",lead:`Covers for ${coverSearch.title} under another name.`,rows:[{t:"dyn",fn:coverSearchRows}]};
     goSecId(/^(steam|epic)-/.test(coverSearch.id)?"pc":"custom");focus="page";rowI=0;openSub({kind:"more",id:"coversearch"});return}
@@ -900,13 +1132,13 @@ function route(page,o){if(!page)return;o=o||{};
     if(k>=0)rowI=k}}
 // a deep link into one of the current section's sub-pages: B comes back to the row that opens it
 function inMore(id){const at=rowsOf(sec()).findIndex(r=>r.pg===id);if(at<0)return;subRet=at;sub={kind:"more",id};rowI=0}
-function prep(inf,opts){opts=opts||{};ensureDom();openId++;info=inf;cfg=clone(inf.config);ensureCfg();
+function prep(inf,opts){opts=opts||{};ensureDom();openId++;info=inf;cfg=clone(inf.config);ensureCfg();colRowsBy.clear();ADD.rows=null; /* (beta.8) rows built for the last visit held that visit's copy of the settings */
   studioClear();sRet=0;sInfo=null;sInfoBusy=false;sGames={};sCands={};sSets={};sBusy={};needRescan=false;raChanged=false;pending=false;raEmu=null;emuAsk=null;listSig="";edit=null;grab=null;results=null;query="";preSearch=null;sub=null;secI=0;rowI=0;ci=0;focus="side";infoOpen=false;det=null;ipl=null;pathOk={};status={};askT={};displays=null;outputs=null;hidden=null;readWhere=null;readOld=null;mInfo=null;mInfoBusy=false;mGames={};mCands={};mBusy={};mMsg={};
   device=document.body.classList.contains("pad-input")?"pad":"key";
   try{const g=window.BS_activePad?window.BS_activePad():[...(navigator.getGamepads?navigator.getGamepads():[])].find(x=>x&&x.connected);if(g)padId=g.id}catch{}
   document.body.classList.toggle("bss-reduce",gp("ui.reduceMotion")===true);
   applyTint();build();route(opts.page,opts)}
-function show(inf,opts){prep(inf,opts);E.osk.classList.remove("on");root.classList.add("on");root.setAttribute("aria-hidden","false");isOpen=true;active=true;cover(true);fit();render();startPoll();loadAsync();
+function show(inf,opts){if(window.Shelf&&Shelf.previewStop)Shelf.previewStop(); /* (beta.7: a playing preview ends when Settings opens) */prep(inf,opts);E.osk.classList.remove("on");root.classList.add("on");root.setAttribute("aria-hidden","false");isOpen=true;active=true;cover(true);fit();render();startPoll();loadAsync();
 }
 async function close(){if(closing||!isOpen)return;closing=true;
   try{if(edit)cancelEdit();active=false;stopPoll();cover(false);await save();isOpen=false;root.classList.remove("on");root.setAttribute("aria-hidden","true");E.mus.classList.remove("on");
@@ -1842,6 +2074,8 @@ const CHEV='<span class="chev">›</span>';
 const stHtml=(cls,text)=>`<span class="bss-st ${cls}"><i></i>${esc(text)}</span>`;
 function svcChip(s){const st=svcState(s);if(svcBusy[s])return stHtml("busy","Checking…");if(st.state==="none")return stHtml("none",s==="ra"?"Not set up":"Not set");if(st.state==="unknown")return stHtml("none","Not checked yet");
   if(st.state==="ok")return stHtml("ok",s==="ra"?`Connected · ${st.user||gp("ra.user")}${st.points!=null?` · ${st.points} pts`:""}`:"Working");
+  // (beta.7) "no developer login": ScreenScraper turns every app away until it's registered with them (not the player's fault)
+  if(s==="screenscraper"&&/no developer login/i.test(st.msg||""))return stHtml("bad","Not available yet");
   if(s!=="ra"&&/not accepted|refused|login/i.test(st.msg||""))return stHtml("bad",s==="screenscraper"?(/developer/i.test(st.msg)?"Developer login needed":"Login not accepted"):"Key not accepted");return stHtml("bad",truncEnd(st.msg||"Didn't work",40))}
 // the theme row's tiles (the swatch goes through esc: a custom theme's picture is url("…"), whose quotes would end the style attribute)
 function tilesHtml(i){return THEMES.map(([id,nm,sw],j)=>`<div class="bss-tile ${j===i?"on":""}" data-j="${j}"><div class="sw2" style="background:${esc(sw)}"></div><span>${esc(nm)}</span></div>`).join("")}
@@ -1996,6 +2230,7 @@ function renderHints(){const r=curRow(),L=[],R2=[];const H=(ks,label,a,cls)=>`<d
   const html=L.join("")+(R2.length?'<span class="sep"></span>'+R2.join(""):"");
   if(E.hints._h!==html){E.hints._h=html;E.hints.innerHTML=html;E.hints.querySelectorAll(".h[data-a]").forEach(e=>e.onclick=ev=>{ev.stopPropagation();device="mouse";input(e.dataset.a)})}}
 function render(){if(!root||!isOpen)return;E.root.classList.toggle("studio",!!studio);
+  if(focus==="page"&&!studio){const n=rowsOf(sec()).length;if(rowI>n-1)rowI=Math.max(0,n-1)} // (beta.8) the focused row went (the last hidden game shown again, the last collection deleted): focus the row now last, never nothing
   if(studio){renderSide();renderStudio();renderOsk();renderHints();E.mus.classList.remove("on");return}
   renderSide();renderPage();renderOsk();renderInfo();renderHints();paintJob();
   E.mus.classList.toggle("on",!results&&(!sub||sub.kind==="more")&&SECTIONS[secI]&&(SECTIONS[secI].id==="museum"||(SECTIONS[secI].alias&&SECTIONS[secI].alias.includes("museum")&&focus==="page"&&!!(curRow()||{})._mus))&&focus!=="search"); /* (a section with the museum's rows merged in: the room shows behind them) */if(E.mus.classList.contains("on"))musLook()}
@@ -2021,6 +2256,7 @@ function input(a,rep){
   if(studio&&focus==="page"&&a==="search"&&studio.v==="pick"){studioInput("flt",rep);return} // View / − / Create: the picker's filters
   if(studio&&focus==="page"&&a!=="search"){studioInput(a,rep);return}
   // X is Learn more, except on the on-screen keyboard where it's Delete (it used to toggle the info card there instead)
+  if(a==="b"&&infoOpen&&focus!=="osk"){infoOpen=false;play("back");render();return} /* (beta.8) B closes the Learn more card first, and only that */
   if(a!=="x"||focus==="osk"){const r0=curRow();if(!(r0&&r0.keepInfo&&a==="a"))infoOpen=false}else{const r0=curRow(),R0=r0&&(r0.t==="result"?r0.row:r0);if(R0&&R0.more)infoOpen=!infoOpen;render();return}
   if(focus==="edit")return;
   if(a==="search"){if(focus!=="osk")openSearch(device==="pad");return}
@@ -2036,7 +2272,7 @@ function input(a,rep){
     else if(a==="down"){if(results&&results.length){focus="page";rowI=0}else if(!results)focus="side"}
     else if(a==="b"){if(results)closeSearch();else focus="side"}
     else if(a==="right"&&results&&results.length){focus="page";rowI=0}
-    else if(a==="start"){if(!results){close();return}}
+    else if(a==="start"){close();return} /* (beta.8: Start closes Settings everywhere, search included) */
     render();return}
   const n=rowsOf(sec()).length,r=curRow();
   if(a==="start"){close();return}

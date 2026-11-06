@@ -23,14 +23,23 @@
       gamegear: S('gamegear', { ...cardboard, hue: 210, ratio: 0.83, depth: 0.22, caseColor: '#1a1b20', caseSide: '#0f1013', band: { bg: '#0b62b8', fg: '#ffffff', label: 'GAME GEAR' }, spineBand: { bg: '#0b62b8', fg: '#ffffff', label: 'GG' }, tint: ['#0b4c8a', '#04121f'], glow: '#7fc0ff' }),
       pcengine: S('pcengine', { ...jewel, hue: 30, ratio: 1.0, h: 0.72, caseColor: '#18181c', caseSide: '#0d0d10', band: { bg: '#ff8a00', fg: '#141414', label: 'TURBOGRAFX-16' }, spineBand: { bg: '#141414', fg: '#ff8a00', label: 'TG-16' }, tint: ['#7a4100', '#1c0f00'], glow: '#ffc27a' }),
       neogeo: S('neogeo', { ...cardboard, hue: 45, ratio: 0.71, depth: 0.18, caseColor: '#121214', caseSide: '#09090b', band: { bg: '#0b0b0d', fg: '#e8c14a', label: 'NEO GEO' }, spineBand: { bg: '#0b0b0d', fg: '#e8c14a', label: 'NEO GEO' }, tint: ['#5a4810', '#161104'], glow: '#ffe08a' }),
-      arcade: S('arcade', { ...cardboard, hue: 300, ratio: 0.71, depth: 0.16, caseColor: '#16131d', caseSide: '#0c0a10', band: { bg: '#1a1424', fg: '#ff5ad1', label: 'ARCADE' }, spineBand: { bg: '#1a1424', fg: '#ff5ad1', label: 'ARCADE' }, tint: ['#5c1a5a', '#150616'], glow: '#ff9ae6' })
+      arcade: S('arcade', { ...cardboard, hue: 300, ratio: 0.71, depth: 0.16, caseColor: '#16131d', caseSide: '#0c0a10', band: { bg: '#1a1424', fg: '#ff5ad1', label: 'ARCADE' }, spineBand: { bg: '#1a1424', fg: '#ff5ad1', label: 'ARCADE' }, tint: ['#5c1a5a', '#150616'], glow: '#ff9ae6' }),
+      // (beta.7) wave 2: Sega CD (its tall black clamshell), 32X, Atari 2600 and Lynx, WonderSwan (card boxes), DOS (the big box)
+      segacd: S('segacd', { ...clam, hue: 210, ratio: 0.72, caseColor: '#141418', caseSide: '#0a0a0d', band: { bg: '#0a0a0d', fg: '#ffffff', label: 'SEGA CD' }, spineBand: { bg: '#0a0a0d', fg: '#4aa3ff', label: 'SEGA CD' }, tint: ['#123a6b', '#050e1c'], glow: '#8cc4ff' }),
+      sega32x: S('sega32x', { ...clam, hue: 50, ratio: 0.72, caseColor: '#16161a', caseSide: '#0c0c0f', band: { bg: '#f2c200', fg: '#111114', label: 'SEGA 32X' }, spineBand: { bg: '#111114', fg: '#f2c200', label: '32X' }, tint: ['#6b5400', '#191300'], glow: '#ffe27a' }),
+      atari2600: S('atari2600', { ...cardboard, hue: 15, ratio: 0.72, depth: 0.2, caseColor: '#1b1b1d', caseSide: '#0e0e10', band: { bg: '#c8331a', fg: '#ffffff', label: 'ATARI 2600' }, spineBand: { bg: '#c8331a', fg: '#ffffff', label: 'ATARI' }, tint: ['#6b1a0c', '#180604'], glow: '#ff9a7a' }),
+      atarilynx: S('atarilynx', { ...cardboard, hue: 28, ratio: 0.83, depth: 0.2, caseColor: '#16161a', caseSide: '#0c0c0f', band: { bg: '#f07c1b', fg: '#111114', label: 'ATARI LYNX' }, spineBand: { bg: '#111114', fg: '#f07c1b', label: 'LYNX' }, tint: ['#6b360a', '#180c02'], glow: '#ffc08a' }),
+      wonderswan: S('wonderswan', { ...cardboard, hue: 190, ratio: 0.83, depth: 0.2, caseColor: '#eef1f4', caseSide: '#cfd5db', spineInk: '#1f3d4f', band: { bg: '#1f7fa8', fg: '#ffffff', label: 'WONDERSWAN' }, spineBand: { bg: '#1f7fa8', fg: '#ffffff', label: 'WS' }, tint: ['#14506b', '#04121a'], glow: '#8ad8ff' }),
+      dos: S('dos', { ...cardboard, hue: 120, ratio: 0.78, depth: 0.26, caseColor: '#141614', caseSide: '#0a0b0a', band: { bg: '#0a0b0a', fg: '#7dff8a', label: 'MS-DOS' }, spineBand: { bg: '#0a0b0a', fg: '#7dff8a', label: 'DOS' }, tint: ['#1f5a24', '#071408'], glow: '#9dffa8' })
     },
     wordmarks: {
       nes: ['NES', 'Home console'], snes: ['SNES', 'Home console'], n64: ['N64', 'Home console'],
       gb: ['Game Boy', 'Handheld'], gbc: ['Game Boy Color', 'Handheld'], gba: ['Game Boy Advance', 'Handheld'], nds: ['DS', 'Handheld'],
       psx: ['PlayStation', 'Home console'], dreamcast: ['Dreamcast', 'Home console'], saturn: ['Saturn', 'Home console'],
       megadrive: ['Genesis', 'Home console'], mastersystem: ['Master System', 'Home console'], gamegear: ['Game Gear', 'Handheld'],
-      pcengine: ['TurboGrafx-16', 'Home console'], neogeo: ['Neo Geo', 'Arcade'], arcade: ['Arcade', 'Coin-op']
+      pcengine: ['TurboGrafx-16', 'Home console'], neogeo: ['Neo Geo', 'Arcade'], arcade: ['Arcade', 'Coin-op'],
+      segacd: ['Sega CD', 'Home console'], sega32x: ['32X', 'Home console'], atari2600: ['Atari 2600', 'Home console'], atarilynx: ['Lynx', 'Handheld'],
+      wonderswan: ['WonderSwan', 'Handheld'], dos: ['DOS', 'PC classics']
     },
     media: {
       nes: { kind: 'cart', size: 0.5, drive: 'slot' }, snes: { kind: 'cart', size: 0.5, drive: 'slot' }, n64: { kind: 'cart', size: 0.5, drive: 'slot' },
@@ -38,7 +47,9 @@
       nds: { kind: 'cart', size: 0.42, drive: 'slot' }, megadrive: { kind: 'cart', size: 0.5, drive: 'slot' }, mastersystem: { kind: 'cart', size: 0.5, drive: 'slot' },
       gamegear: { kind: 'cart', size: 0.45, drive: 'slot' }, pcengine: { kind: 'cart', size: 0.4, drive: 'slot' }, neogeo: { kind: 'cart', size: 0.55, drive: 'slot' },
       arcade: { kind: 'cart', size: 0.5, drive: 'slot' },
-      psx: { kind: 'disc', size: 0.7, drive: 'top' }, dreamcast: { kind: 'disc', size: 0.7, drive: 'top' }, saturn: { kind: 'disc', size: 0.7, drive: 'top' }
+      psx: { kind: 'disc', size: 0.7, drive: 'top' }, dreamcast: { kind: 'disc', size: 0.7, drive: 'top' }, saturn: { kind: 'disc', size: 0.7, drive: 'top' },
+      segacd: { kind: 'disc', size: 0.7, drive: 'top' }, sega32x: { kind: 'cart', size: 0.5, drive: 'slot' }, atari2600: { kind: 'cart', size: 0.5, drive: 'slot' },
+      atarilynx: { kind: 'cart', size: 0.42, drive: 'slot' }, wonderswan: { kind: 'cart', size: 0.42, drive: 'slot' }, dos: { kind: 'disc', size: 0.7, drive: 'top' }
     }
   };
   Object.assign(window.BS_SYSTEMS_EXTRA.wordmarks, window.BS_WORDMARK_OVERRIDES || {}); // a platform can rename a shelf (Android: Media → Apps)
