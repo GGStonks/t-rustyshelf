@@ -32,6 +32,7 @@ const ownTitle = id => { const o = cfg && cfg.games && cfg.games[String(id)]; re
 const { scanSteam } = require('./main/steam');
 const steamart = require('./main/steamart');
 const pcgames = require('./main/pcgames'); // (beta.4) Epic, Quiver Launcher and games added by hand
+const linuxpc = require('./main/linuxpc'); // (Linux) Windows games through Wine / Proton, Epic Games through legendary
 const pccovers = require('./main/pccovers'); // (beta.5) choosing a PC game's cover (SteamGridDB, Steam's own, your own)
 const wiiumanual = require('./main/wiiumanual');
 const manualcoll = require('./main/manualcoll');
@@ -596,7 +597,8 @@ async function buildLibrary() {
   // are PC games with a source (kind 'steam' keeps every shelf feature); covers come from the Steam app their title
   // matched (pcgames.matchSteam, never an appid the screen could launch: Play goes through launch:pc by id)
   const pc = cfg.pc || {}, epic = [], mine = [];
-  if (pc.epic !== false) try { epic.push(...pcgames.epicGames()); } catch (e) { log('Epic library', e.message); }
+  // (Linux: the games legendary installed, Heroic's included; they play through Wine / Proton, main/linuxpc.js)
+  if (pc.epic !== false) try { epic.push(...(linux.isLinux ? linuxpc.epicGames() : pcgames.epicGames())); } catch (e) { log('Epic library', e.message); }
   // (beta.7) GOG Galaxy, Ubisoft Connect, the EA app and Xbox / Game Pass join the PC shelf too, like Epic (store games)
   try { epic.push(...await pcgames.storeGames(pc)); } catch (e) { log('PC stores', e.message); }
   if (pc.quiver !== false) try { mine.push(...pcgames.quiverGames(pc.quiverPath)); } catch (e) { log('Quiver library', e.message); }
@@ -1449,6 +1451,8 @@ handle('launch:steam', ({ appid }) => launcher.launchSteam(appid));
 // the quit buttons like any app
 handle('launch:pc', async ({ id }) => {
   const g = pcgames.byId(id); if (!g) throw new Error("That game isn't on the shelf any more. The shelf is refreshing; try again in a moment.");
+  // (Linux) Epic's games and Windows programs play through Wine / Proton, started by Boxshelf itself
+  if (linux.isLinux && (g.source === 'epic' || linuxpc.isWindowsProgram(g.exe))) return launchLinuxPc(g);
   // through its store's launcher (Epic, and from beta.7 Ubisoft Connect and the EA app: their sign-in, cloud saves, overlay)
   if (g.uri && /^(com\.epicgames\.launcher|uplay|origin2):\/\//i.test(g.uri)) { busyCheck(); log('PC launch:', g.source, g.title); return shell.openExternal(g.uri).then(() => ({ external: true })); }
   // (beta.7) an Xbox / Game Pass game is a Windows app: started as one (its package family and app id, from pcgames.xboxGames)
@@ -1462,6 +1466,77 @@ handle('launch:pc', async ({ id }) => {
   watchPad({ mouse: false, appPid: r.pid, fullscreenKey: null, home: true });
   return { ...r, cover: coverWhileStarting(10) };
 });
+// (Linux) a Windows game (Epic's, or a program added by hand) through Wine / Proton. Epic's: legendary gives the program and
+// Epic's sign-in arguments, and the Wine settings Heroic keeps for the game (its runner, prefix, environment) are used when
+// there are any; otherwise the runner chosen in Settings → PC games and a prefix of the game's own
+async function launchLinuxPc(g) {
+  busyCheck();
+  const pc = cfg.pc || {}, list = linuxpc.runners();
+  let spec, runner, prefix, env = {}, gameId, store = 'none', notice = '';
+  launching = true;
+  try {
+    if (g.source === 'epic') {
+      const bin = linuxpc.legendaryBin(pc.legendaryPath);
+      if (!bin) throw new Error("Epic games need legendary (Heroic Games Launcher brings it). Install Heroic, or choose legendary in Settings → PC games.");
+      if (alive()) win.webContents.send('launch:status', 'Getting the game ready with Epic…');
+      const info = await linuxpc.epicLaunchInfo(bin, g.appName);
+      if (info.outdated) notice = `An update for ${g.title} is waiting: Settings → PC games → Epic library updates it.`;
+      if (!linuxpc.isWindowsProgram(info.exe)) spec = { native: true, exe: info.exe, args: info.args, cwd: info.cwd, env: info.env }; // (a Linux build of the game)
+      else {
+        const h = linuxpc.heroicGame(g.appName) || {};
+        runner = (pc.runner ? null : h.runner) || linuxpc.pickRunner(pc.runner, list); prefix = h.prefix || linuxpc.prefixFor(g.id, pc.prefixDir);
+        env = { ...(h.env || {}), ...info.env }; store = 'egs'; gameId = (await linuxpc.umuId('egs', g.appName)) || undefined;
+        spec = { exe: info.exe, args: info.args, cwd: info.cwd };
+      }
+    } else {
+      if (!paths.isFile(g.exe)) throw new Error(`${g.title} isn't at ${g.exe} any more. Remove it in Settings → Custom games and add it again.`);
+      runner = linuxpc.pickRunner(g.runner || pc.runner, list); prefix = linuxpc.prefixFor(g.id, pc.prefixDir);
+      spec = { exe: g.exe, args: launcher.buildArgs(g.args || '', ''), cwd: path.dirname(g.exe) };
+    }
+  } finally { launching = false; }
+  const c = spec.native ? { cmd: spec.exe, args: spec.args, cwd: spec.cwd, env: { ...process.env, ...spec.env }, how: 'native' } : linuxpc.windowsCommand({ ...spec, runner, prefix, env, gameId, store });
+  const done = info => { if (runner) linuxpc.endPrefix(runner, prefix); onExit(info); };
+  const r = launcher.launchCommand(c.cmd, c.args, done, { env: c.env, cwd: c.cwd });
+  runKind = 'app'; pendingPower = null; linuxpad.begin(() => closeGame()); // (hold Select + Start to close it)
+  log('PC launch:', g.source, g.title, 'with', c.how, prefix ? '| prefix ' + prefix.replace(require('os').homedir(), '~') : '');
+  if (cfg.ui.homeMenu !== false) homemenu.begin({ systemId: 'pc', exe: spec.exe, systemName: g.source === 'epic' ? 'Epic Games' : 'Custom', title: g.title, hotkeys: {} });
+  watchPad({ mouse: false, appPid: r.pid, fullscreenKey: null, home: true });
+  return { ...r, cover: coverWhileStarting(20), ...(notice ? { notice } : {}) }; // (Proton's first start in a new prefix takes a while; notice: shown on the shelf)
+}
+// (Linux) Settings → PC games: Wine / Proton and the Epic account. Names and ids only reach the page; tokens never do.
+const legendaryOf = () => { const b = linuxpc.legendaryBin((cfg.pc || {}).legendaryPath); if (!b) throw new Error('legendary not found. Install Heroic Games Launcher, or choose legendary in Settings → PC games.'); return b; };
+handle('pc:linux', () => { if (!linux.isLinux) return null; const pc = cfg.pc || {}, list = linuxpc.runners(), pick = linuxpc.pickRunner(pc.runner, list), lc = linuxpc.legendaryConfig();
+  return { runners: list.map(r => ({ id: r.id, name: r.name, kind: r.kind })), runner: pick ? pick.id : '', umu: !!linuxpc.umuRun(), prefixDir: linuxpc.prefixRoot(pc.prefixDir),
+    legendary: !!linuxpc.legendaryBin(pc.legendaryPath), epicAccount: linuxpc.epicAccount(), epicShared: lc.shared, epicDir: linuxpc.epicInstallDir(pc.epicDir), job: linuxpc.epicJob() }; });
+// Epic's own sign-in page in a window of its own (a session that keeps nothing); the code it ends on goes to legendary
+const EPIC_LOGIN = 'https://www.epicgames.com/id/login?redirectUrl=' + encodeURIComponent('https://www.epicgames.com/id/api/redirect?clientId=34a02cf8f4414e29b15921876da36f9a&responseType=code');
+const EPIC_HOSTS = /^https:\/\/([\w-]+\.)*(epicgames\.com|unrealengine\.com|google\.com|googleusercontent\.com|gstatic\.com|apple\.com|facebook\.com|xbox\.com|live\.com|microsoftonline\.com|playstation\.com|sony\.com|steampowered\.com|steamcommunity\.com|nintendo\.com|nintendo\.net|lego\.com|hcaptcha\.com|arkoselabs\.com|recaptcha\.net)(\/|$)/i;
+function epicLoginCode() {
+  return new Promise(resolve => {
+    const w = new BrowserWindow({ parent: alive() ? win : undefined, modal: alive(), width: 1000, height: 780, autoHideMenuBar: true, title: 'Sign in to Epic Games', backgroundColor: '#121212',
+      webPreferences: { partition: 'epic-login', contextIsolation: true, nodeIntegration: false, sandbox: true } });
+    w.webContents.setUserAgent(w.webContents.getUserAgent().replace(/ (Boxshelf|Electron)\/\S+/g, '')); // (Epic turns away a browser it doesn't know)
+    let done = false; const finish = code => { if (done) return; done = true; resolve(code); try { if (!w.isDestroyed()) w.close(); } catch {} };
+    const check = async () => { if (done || w.isDestroyed()) return; const u = w.webContents.getURL(); if (!/^https:\/\/www\.epicgames\.com\/id\/api\/redirect/.test(u)) return;
+      try { const j = JSON.parse(await w.webContents.executeJavaScript('document.body.innerText', true)); if (j && typeof j.authorizationCode === 'string' && j.authorizationCode) finish(j.authorizationCode); } catch {} };
+    w.webContents.on('did-finish-load', check); w.webContents.on('did-navigate', check);
+    w.webContents.on('will-navigate', (e, url) => { if (!EPIC_HOSTS.test(url)) e.preventDefault(); });
+    // (Sign in with Google, Apple, Xbox… opens their page in a window of its own, in the same session)
+    w.webContents.setWindowOpenHandler(({ url }) => EPIC_HOSTS.test(url) ? { action: 'allow', overrideBrowserWindowOptions: { parent: w, autoHideMenuBar: true, webPreferences: { partition: 'epic-login', sandbox: true, contextIsolation: true } } } : { action: 'deny' });
+    w.on('closed', () => finish(null));
+    w.loadURL(EPIC_LOGIN).catch(e => { log('Epic sign-in page', e.message); finish(null); });
+  });
+}
+handle('epic:signIn', async () => { const bin = legendaryOf(); const code = await epicLoginCode(); try { await session.fromPartition('epic-login').clearStorageData(); } catch {}
+  if (!code) return { cancelled: true }; const r = await linuxpc.epicSignIn(bin, code); if (r.ok && alive()) win.webContents.send('library:changed', { epic: 1 }); return r; });
+handle('epic:signOut', async () => { const r = await linuxpc.epicSignOut(legendaryOf()); if (alive()) win.webContents.send('library:changed', { epic: 1 }); return r; });
+handle('epic:library', () => linuxpc.epicLibrary(legendaryOf()));
+// installs and updates run one at a time in the background; the page hears how far along they are, the shelf refreshes after
+const epicTell = j => { if (!alive()) return; win.webContents.send('epic:job', j); if (j && j.state !== 'installing') win.webContents.send('library:changed', { epic: 1 }); };
+handle('epic:install', ({ appName, title, update } = {}) => linuxpc.epicInstall(legendaryOf(), String(appName || ''), String(title || ''), linuxpc.epicInstallDir((cfg.pc || {}).epicDir), epicTell, !!update));
+handle('epic:cancel', () => linuxpc.epicCancel());
+handle('epic:uninstall', async ({ appName } = {}) => { if (launcher.isRunning()) throw new Error('Close the running game first.'); const r = await linuxpc.epicUninstall(legendaryOf(), String(appName || '')); if (alive()) win.webContents.send('library:changed', { epic: 1 }); return r; });
+handle('epic:job', () => linuxpc.epicJob());
 // (beta.5) a PC game's cover picker (main/pccovers.js): the page names the game by id and an option by key only
 const pcLookup = id => { id = String(id || ''); const m = /^steam-(\d{1,10})$/.exec(id); if (m) return { id, appid: m[1], title: '' }; const g = pcgames.byId(id); return g ? { id, title: g.title } : null; };
 const pcGameOf = id => { const g = pcLookup(id); if (!g) throw new Error("That game isn't on the shelf any more."); return g; };
@@ -1495,7 +1570,7 @@ handle('game:rename', ({ systemId, file, id, title }) => {
   if (systemId) { try { artstudio.forget(systemId); } catch {} }
   return { ok: true, title: t };
 });
-handle('pc:status', async () => { const pc = cfg.pc || {}; let epic = null; try { epic = pcgames.epicGames().length; } catch {}
+handle('pc:status', async () => { const pc = cfg.pc || {}; let epic = null; try { epic = (linux.isLinux ? linuxpc.epicGames() : pcgames.epicGames()).length; } catch {}
   // (beta.7) each store's installed games, counted whether its switch is on or not (Settings says what it would add)
   const n = async f => { try { return (await f()).length; } catch { return null; } };
   const [gog, ubisoft, ea, xbox] = await Promise.all([n(pcgames.gogGames), n(pcgames.ubisoftGames), n(pcgames.eaGames), n(pcgames.xboxGames)]);
@@ -2332,7 +2407,7 @@ function startUp() {
   stremio.init({ log, fanartKey: () => (cfg && cfg.keys && cfg.keys.fanart) || '', artDir: path.join(app.getPath('userData'), 'stremio-art'), fetchBuf: async url => { const r = await net.fetch(url); if (r.status === 404) return null; if (!r.ok) throw new Error('HTTP ' + r.status); return Buffer.from(await r.arrayBuffer()); } }); // null = really not there; other failures throw, so nothing "missing" is cached for them
   icons.init(app.getPath('userData'), log);
   x360.init(app.getPath('userData'), log);
-  steamart.init(app.getPath('userData'), log); pcgames.init(app.getPath('userData'), log); pccovers.init({ dataDir: app.getPath('userData'), log, fileUrl, fetchImage, steamgrid: require('./main/steamgrid'), steamCover: id => steamart.local(id).front, match: covers.sgMatch, steamSearch: (t, exact) => pcgames.steamSearch(t, exact) });
+  steamart.init(app.getPath('userData'), log); pcgames.init(app.getPath('userData'), log); if (linux.isLinux) linuxpc.init({ dataDir: app.getPath('userData'), appRoot: paths.appRoot(), log }); pccovers.init({ dataDir: app.getPath('userData'), log, fileUrl, fetchImage, steamgrid: require('./main/steamgrid'), steamCover: id => steamart.local(id).front, match: covers.sgMatch, steamSearch: (t, exact) => pcgames.steamSearch(t, exact) });
   wiiumanual.init(app.getPath('userData'), log);
   ra.init(app.getPath('userData'), log); ra.setCredentials(cfg.ra && cfg.ra.enabled !== false ? cfg.ra.user : '', cfg.ra && cfg.ra.key);
   manuals.init(log); archive.init(log); manuals.setStore(path.join(app.getPath('userData'), 'manual-auto.json')); manuals.setRejectStore(path.join(app.getPath('userData'), 'manual-rejects.json'));
