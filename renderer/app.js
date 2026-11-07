@@ -342,6 +342,7 @@ function mount(s){
       <div class="face f-left"><div class="spine-band"></div><div class="spine-title"></div></div><div class="face f-right spine2"><div class="spine-band"></div><div class="spine-title"></div></div><div class="face bev bev-fl"></div><div class="face bev bev-fr"></div><div class="face bev bev-bl"></div><div class="face bev bev-br"></div></div>`;
   const os=cur()===HOME?stOf(g):sh;if(os!==sh){slot.style.setProperty("--bw",`calc(var(--ch) * ${os.ratio})`);slot.style.setProperty("--bd",`calc(var(--ch) * ${os.ratio*os.depth})`);slot.style.setProperty("--edge",`calc(var(--ch) * ${os.ratio*os.edge})`);slot.style.setProperty("--rc",`calc(var(--ch) * ${os.ratio*(os.rc||.03)})`);slot.style.setProperty("--re",`calc(var(--ch) * ${os.ratio*os.depth*(os.re||.3)})`);slot.style.setProperty("--case",os.caseColor);slot.style.setProperty("--case-side",os.caseSide);slot.style.setProperty("--spine-ink",os.spineInk)}
   if(isFav(g))slot.classList.add("fav");
+  if(g.installed===false)slot.classList.add("notinst"); // (an Epic game the account owns but isn't installed: greyed, Play offers to install it)
   slot.querySelectorAll(".spine-band").forEach(band=>{band.style.background=os.spineBand.bg;band.style.color=os.spineBand.fg;band.textContent=g.kind==="emulator"?"EMU":g.kind==="setup"?"ADD":os.spineBand.label});
   slot.querySelectorAll(".spine-title").forEach(t=>t.textContent=g.title);
   if(g.art&&g.art.spine){slot.querySelectorAll(".f-left,.f-right").forEach(face=>{const sp=new Image();sp.className="spine-img";sp.alt="";sp.draggable=false;sp.decoding="async";sp.src=g.art.spine;sp.onerror=()=>sp.remove();face.appendChild(sp)})}
@@ -1136,26 +1137,34 @@ async function pickBuild(g){
   if(bp||(mode!=="browse"&&mode!=="details"))return null;
   // (1.82) a .nup game and no build that opens .nup: say so, instead of a picker where every row is greyed out
   if(r.nup&&!r.builds.some(b=>b.nup)){play_("error");toast("None of your Switch 2 builds can open .nup games. Add a newer build of your Switch 2 emulator.");return null}
+  // (1.82) start on the suggested build, or else the first that isn't greyed out (row 0 could be)
+  return chooseOne({title:"Start in which build?",label:"Choose a build",sub:g.title,foot:`${btnWord("a")} start · ${btnWord("back")} back`,first:r.first,
+    options:r.builds.map(b=>{const off=r.nup&&!b.nup;return {value:b.exe,label:b.label,detail:off?"can't open .nup games":new Date(b.date).toLocaleDateString(undefined,{month:"short",day:"numeric"}),disabled:off}})});
+}
+// A card in the middle of the screen with a few choices, one per row (the build picker, Install on an Epic game that isn't
+// installed). Pad (up / down, A, B), keys (arrows, Enter, Esc), mouse and touch. Resolves to the chosen option's value, or
+// null for Back. options: [{ value, label, detail, disabled }]; first: the value to start on
+function chooseOne({title,label,sub,foot,options,first}){
+  if(bp||(mode!=="browse"&&mode!=="details"))return Promise.resolve(null);
   return new Promise(res=>{
     const el=document.createElement("div");el.className="buildpick";
-    const card=document.createElement("div");card.className="bp-card";card.setAttribute("role","dialog");card.setAttribute("aria-label","Choose a build");
-    const t=document.createElement("div");t.className="bp-title";t.textContent="Start in which build?";
-    const sub=document.createElement("div");sub.className="bp-game";sub.textContent=g.title;card.append(t,sub);
-    const rows=r.builds.map((b,j)=>{const row=document.createElement("button");row.type="button";row.className="bp-row";const off=r.nup&&!b.nup;row.disabled=off;
-      const n=document.createElement("b");n.textContent=b.label;const d=document.createElement("span");d.textContent=off?"can't open .nup games":new Date(b.date).toLocaleDateString(undefined,{month:"short",day:"numeric"});row.append(n,d);
-      row.addEventListener("click",()=>{if(!off&&bp){bp.i=j;bpChoose()}});row.addEventListener("pointerenter",()=>{if(!off&&bp&&inputMode==="pointer"){bp.i=j;bpRender()}});card.append(row);return row});
-    const f=document.createElement("div");f.className="bp-foot";f.textContent=`${btnWord("a")} start · ${btnWord("back")} back`;card.append(f);
+    const card=document.createElement("div");card.className="bp-card";card.setAttribute("role","dialog");card.setAttribute("aria-label",label||title);
+    const t=document.createElement("div");t.className="bp-title";t.textContent=title;card.append(t);
+    if(sub){const d=document.createElement("div");d.className="bp-game";d.textContent=sub;card.append(d)}
+    const rows=options.map((o,j)=>{const row=document.createElement("button");row.type="button";row.className="bp-row";row.disabled=!!o.disabled;
+      const n=document.createElement("b");n.textContent=o.label;const d=document.createElement("span");d.textContent=o.detail||"";row.append(n,d);
+      row.addEventListener("click",()=>{if(!o.disabled&&bp){bp.i=j;bpChoose()}});row.addEventListener("pointerenter",()=>{if(!o.disabled&&bp&&inputMode==="pointer"){bp.i=j;bpRender()}});card.append(row);return row});
+    const f=document.createElement("div");f.className="bp-foot";f.textContent=foot||`${btnWord("a")} choose · ${btnWord("back")} back`;card.append(f);
     el.append(card);el.addEventListener("click",e=>{if(e.target===el)bpDone(null)});document.body.append(el);
-    // (1.82) start on the suggested build, or else the first that isn't greyed out (row 0 could be)
-    let i0=r.builds.findIndex(b=>b.exe===r.first);if(i0<0||rows[i0].disabled)i0=Math.max(0,rows.findIndex(x=>!x.disabled));
-    bp={el,rows,builds:r.builds,i:i0,res,prev:mode};mode="build";bpRender();
+    let i0=options.findIndex(o=>o.value===first);if(i0<0||rows[i0].disabled)i0=Math.max(0,rows.findIndex(x=>!x.disabled));
+    bp={el,rows,values:options.map(o=>o.value),i:i0,res,prev:mode};mode="build";bpRender();
     requestAnimationFrame(()=>el.classList.add("on"));sfx.flip();
   });
 }
 function bpRender(){if(bp)bp.rows.forEach((r,j)=>r.classList.toggle("on",j===bp.i))}
 function bpMove(d){if(!bp)return;const n=bp.rows.length;let j=bp.i;for(let k=0;k<n;k++){j=(j+d+n)%n;if(!bp.rows[j].disabled)break}if(j!==bp.i){bp.i=j;play_("tick",{dir:d});bpRender()}}
-function bpChoose(){if(bp&&!bp.rows[bp.i].disabled)bpDone(bp.builds[bp.i].exe)}
-function bpDone(exe){if(!bp)return;const b=bp;bp=null;mode=b.prev;b.el.classList.remove("on");setTimeout(()=>b.el.remove(),260);if(exe==null||exe==="")sfx.back();b.res(exe||null)}
+function bpChoose(){if(bp&&!bp.rows[bp.i].disabled)bpDone(bp.values[bp.i])}
+function bpDone(v){if(!bp)return;const b=bp;bp=null;mode=b.prev;b.el.classList.remove("on");setTimeout(()=>b.el.remove(),260);if(v==null||v==="")sfx.back();b.res(v||null)}
 /* (beta.5) a PC game's cover (Steam, Epic, Quiver, added by hand; console games have the Art Studio): SteamGridDB's
    posters (with the player's key), Steam's own cover, a picture of your own, or back to the automatic one. The arrows /
    D-pad move through the grid, A uses, B (Esc) closes; a click or tap uses a tile. The main side keeps the addresses:
@@ -1209,12 +1218,12 @@ async function cpChoose(){if(!cp||cp.busy)return;const it=cp.items[cp.i],g=cp.g,
     cp.note.textContent="Downloading the cover…";await api.pcCoverUse(g.id,it.key);if(B)B.done++;next();cp.changed=true;cpDone();play_("toast");if(!B)toast(`New cover for ${g.title}`);
   }catch(e){if(cp){cp.busy=false;cp.note.textContent=String(e&&e.message||e)}play_("error")}
 }
-/* Settings → Box art & manuals → PC games: every PC game (Steam, Epic, Heroic, custom) with the front it shows now and
+/* Settings → Box art & manuals → PC games: every PC game (Steam, Epic, the PC games folder, custom) with the front it shows now and
    where that comes from (your pick, the store's box art, Steam's art, or a made-up case), the console Art Studio's view
    for PC games. A (a click) opens that game's cover picker; when it closes, the gallery comes back */
 let galleryBack=false;
 const pcShelfGames=()=>allShelves.filter(s=>s.id==="pc"||s.id==="custom").flatMap(s=>(s._base||s.items||[]).filter(g=>g.kind==="steam").map(g=>({g,sh:s})));
-const artFromText=g=>g.artFrom==="yours"?"Your pick":g.artFrom==="store"?(g.source==="heroic"?"Heroic's cover":g.source==="epic"?"Epic's box art":"The store's box art"):g.artFrom==="steam"?"Steam's art":"Made-up case";
+const artFromText=g=>g.artFrom==="yours"?"Your pick":g.artFrom==="store"?(g.source==="epic"?"Epic's box art":"The store's box art"):g.artFrom==="steam"?"Steam's art":"Made-up case";
 function pcArtCount(){const L=pcShelfGames();return {total:L.length,made:L.filter(x=>!x.g.artFrom).length}}
 function pcGallery(){
   if(!api.pcCoverOptions||cp||bp||(mode!=="browse"&&mode!=="details"))return;
@@ -1820,7 +1829,13 @@ function note(parts,err){const n=$("lNote");n.textContent="";(Array.isArray(part
 // the game's window is up: the loading screen fades to black just before Boxshelf steps aside
 api.onRunReady&&api.onRunReady(()=>{if(mode==="launch"){$("launch").classList.add("ready");hideInsert()}});
 function insProgress(sec){const el0=$("insert");if(el0.classList.contains("slide")||!el0.classList.contains("on"))return; /* the slide's line runs on its own fixed time */const el=$("insert");let b=el.querySelector(".ins-bar");if(!b){b=document.createElement("div");b.className="l-bar ins-bar";b.innerHTML="<i></i>";el.querySelector(".ins-text").appendChild(b)}const i=b.querySelector("i");i.style.animation="none";void i.offsetWidth;i.style.animation=`load ${Math.max(2,+sec||6)}s cubic-bezier(.3,0,.2,1) forwards`;b.classList.add("on")}
-async function launchNow(g,underInsert){if(PV){pvStop();pvBackStop()} /* (beta.7: no preview over a starting game) */try{api.log&&api.log(`launch: ${g&&g.title} (last input: ${typeof inputMode!=="undefined"?inputMode:"?"}, screen: ${mode}${smoothTest.on?", during the smoothness test":""})`)}catch{}
+// Play on an Epic game that isn't installed: offer to install it (in the background; it un-greys on the shelf when done)
+async function offerInstall(g){
+  const v=await chooseOne({title:"Not installed yet",sub:g.title,label:"Install "+g.title,first:"install",
+    options:[{value:"install",label:"Install",detail:"from Epic Games"},{value:"later",label:"Not now",detail:""}]});
+  if(v!=="install")return;
+  try{await api.epicInstallGame(g.id);play_("toast");toast(`Installing ${g.title}… It's ready to play when it's done.`)}catch(e){play_("error");toast(String(e&&e.message||e))}}
+async function launchNow(g,underInsert){if(g&&g.installed===false){offerInstall(g);return}if(PV){pvStop();pvBackStop()} /* (beta.7: no preview over a starting game) */try{api.log&&api.log(`launch: ${g&&g.title} (last input: ${typeof inputMode!=="undefined"?inputMode:"?"}, screen: ${mode}${smoothTest.on?", during the smoothness test":""})`)}catch{}
   if(smoothTest.on)return; // nothing starts while the smoothness test runs
   // (Switch 2 started from somewhere other than Play, e.g. the museum: which build first)
   if(needsBuild(g,g._sh||shelfFor(g))&&!underInsert){const exe=await pickBuild(g);if(exe==null)return;nextBuild={id:g.id,exe}}
@@ -2411,13 +2426,13 @@ let shuffling=false;
 const shuffleAll=()=>!(cfgInfo&&cfgInfo.config.ui.shuffleAll===false);
 const isGame=g=>g.kind==="rom"||g.kind==="steam";
 // (beta.4) PC games carry their source: Steam, Epic, Quiver or added by hand (main/pcgames.js)
-const PC_SRC={epic:"Epic Games",quiver:"Quiver",custom:"Custom",gog:"GOG",ubisoft:"Ubisoft",ea:"EA",xbox:"Xbox"},PC_HOW={epic:"Starts through the Epic Games Launcher, so its sign-in, cloud saves and overlay work as usual.",quiver:"Installed with Quiver Launcher. Boxshelf starts it from its own folder; updates stay in Quiver.",custom:"Added by you in Settings → Custom games. Boxshelf starts it from its own folder.",
+const PC_SRC={epic:"Epic Games",folder:"PC games folder",quiver:"Quiver",custom:"Custom",gog:"GOG",ubisoft:"Ubisoft",ea:"EA",xbox:"Xbox"},PC_HOW={epic:"Starts through the Epic Games Launcher, so its sign-in, cloud saves and overlay work as usual.",quiver:"Installed with Quiver Launcher. Boxshelf starts it from its own folder; updates stay in Quiver.",custom:"Added by you in Settings → Custom games. Boxshelf starts it from its own folder.",folder:"A folder in your PC games folder (Settings → PC games). Boxshelf starts it from there.",
   gog:"Installed with GOG Galaxy. GOG games have no copy protection: Boxshelf starts it itself; updates stay in GOG Galaxy.",ubisoft:"Starts through Ubisoft Connect, so its sign-in and cloud saves work as usual.",ea:"Starts through the EA app, so its sign-in and cloud saves work as usual.",xbox:"An Xbox app game (Game Pass included). It starts like any Xbox app game, signed in with your Microsoft account."};
 // (beta.7) the stores whose games are handed to their own launcher (Back returns to the shelf while they run)
 const PC_EXT={epic:"Epic Games Launcher",ubisoft:"Ubisoft Connect",ea:"EA app",xbox:"Xbox app"};
 // (Linux) Epic's games are started by Boxshelf itself, through Wine / Proton (main/linuxpc.js): like any game, not handed over
-PC_SRC.heroic="Heroic";PC_HOW.heroic="Added to Heroic Games Launcher. Boxshelf starts it with Heroic's own settings for it (Wine / Proton and its prefix for a Windows game), like any game.";
-if(window.bsPlatform&&bsPlatform.os==="linux"){delete PC_EXT.epic;PC_HOW.epic="Signed in to Epic through legendary (shared with Heroic when it's set up). Boxshelf starts it through Wine / Proton, with the quit combo like any game.";PC_HOW.custom="Added by you in Settings → Custom games. Windows programs run through Wine / Proton, each in a Wine prefix of its own."}
+if(window.bsPlatform&&bsPlatform.os==="linux"){delete PC_EXT.epic;PC_HOW.epic="On your Epic account (signed in through legendary). Boxshelf starts it through Wine / Proton, with the quit combo like any game; a greyed one isn't installed: Play installs it.";
+  PC_HOW.folder="A folder in your PC games folder (Settings → PC games). A Linux game runs as it is; a Windows one through Wine / Proton, in a Wine prefix of its own.";PC_HOW.custom="Added by you in Settings → Custom games. Windows programs run through Wine / Proton, each in a Wine prefix of its own."}
 // a quick rainbow lick over the tile as each cover flips past
 function flick(el){if(!el)return;el.classList.remove("flick");void el.offsetWidth;el.classList.add("flick");setTimeout(()=>el.classList.remove("flick"),520)}
 const coverOf=(sh,g)=>(g.art&&g.art.front)||Covers.front(STYLE[sh.id]||STYLE.media,g);
@@ -2430,7 +2445,7 @@ async function shuffle(){
   if(sel!==ri)go(ri);
   const tileG=sh.items[ri];
   const pool=[];const srcs=shuffleAll()?shelves.map((x,i)=>i).filter(i=>shelves[i]!==HOME):[sysIdx];
-  srcs.forEach(i=>shelves[i].items.forEach((g,j)=>{if(isGame(g))pool.push({shelf:i,sh:shelves[i],index:j,game:g})}));
+  srcs.forEach(i=>shelves[i].items.forEach((g,j)=>{if(isGame(g)&&g.installed!==false)pool.push({shelf:i,sh:shelves[i],index:j,game:g})}));
   if(!pool.length)return;
   const rnd=n=>Math.floor(Math.random()*n);
   const target=pool[rnd(pool.length)];
@@ -3963,7 +3978,9 @@ window.Shelf={
   pcCoverSearch:(id,term)=>{const g=allShelves.flatMap(s=>s.items||[]).find(x=>x&&x.id===id);if(g)setTimeout(()=>pcCoverOpen(g,term),350)},
   // (beta.9) Settings → Custom games: covers for every custom game (one by one in the picker, or the best match for each)
   pcCoverBatch:()=>setTimeout(()=>pcCoverBatch(),350),pcGallery:()=>setTimeout(()=>pcGallery(),350),pcArtCount:()=>pcArtCount(), // (Settings → Box art → PC games)
-  _exit:{start:()=>holdExitStart(),cancel:()=>holdExitCancel(),open:()=>!!hx}, // (tests)pcCoverAuto:()=>pcCoverAuto(),pcCoverUndo:()=>pcCoverUndo(),coverUndoCount:()=>coverUndo.length,
+  _exit:{start:()=>holdExitStart(),cancel:()=>holdExitCancel(),open:()=>!!hx}, // (tests)
+  _play:id=>{const g=allShelves.flatMap(x=>x.items||x.games||[]).find(x=>x&&x.id===id);if(g)launchNow(g);return !!g}, // (tests: Play on a game by id)
+  pcCoverAuto:()=>pcCoverAuto(),pcCoverUndo:()=>pcCoverUndo(),coverUndoCount:()=>coverUndo.length,
   // (beta.7) test hooks for the library pass: the filters on offer, picking one, the shelf's games and the one in view
   _lib:{filters:()=>filterList(),filter:v=>pickSort(1,v),cur:()=>{const g=curGame();return g?{id:g.id,title:g.title,kind:g.kind}:null},
     games:()=>(cur()?cur().items.filter(isGame):[]).map(g=>({id:g.id,year:yearOf(g),genres:genresOf(g)})),shelves:()=>shelves.map(s=>({id:s.id,name:s.name,col:!!s.col,ids:(s.items||[]).filter(isGame).map(g=>g.id),last:((s.items||[])[(s.items||[]).length-1]||{}).id||null}))},

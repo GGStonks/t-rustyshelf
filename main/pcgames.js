@@ -173,7 +173,7 @@ function mainExe(dir, depth = 2) {
     for (const e of ents) {
       const p = path.join(d, e.name);
       if (e.isFile() && /\.exe$/i.test(e.name) && !HELPER.test(e.name)) { let s = 0; try { s = fs.statSync(p).size; } catch { continue; } if (s > size) { best = p; size = s; } }
-      else if (e.isDirectory() && left > 0 && !/^(redist|_commonredist|directx|vcredist|support|tools?|mods?|saves?|config|logs?)$/i.test(e.name)) walk(p, left - 1);
+      else if (e.isDirectory() && left > 0 && !/^(_?redist|_commonredist|directx|vcredist|support|tools?|mods?|saves?|config|logs?|.*_original|backups?)$/i.test(e.name)) walk(p, left - 1); // (_Redist: installers; bin_original: a modded game's untouched copy)
     }
   };
   walk(dir, depth); return best;

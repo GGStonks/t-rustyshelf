@@ -152,18 +152,19 @@ function build(){
     H("For every console"),
     A("Find emulators again",()=>detecting?"Searching…":"Search","Looks in the usual install places and your Boxshelf folder for emulators and games folders you haven't set up yet, and fills in any console that has nothing set.",runDetect,{keys:"detect scan auto find"}),
   ]},
-  {g:"Games",id:"pc",name:"PC games",ic:"pc",lead:onLinux()?"Your Steam and Epic games on the PC shelf. Windows games play through Wine / Proton.":"Your installed Steam games, on a shelf of their own.",rows:[
+  {g:"Games",id:"pc",name:"PC games",ic:"pc",lead:onLinux()?"Your Steam games, your Epic library and your PC games folder on the PC shelf. Windows games play through Wine / Proton.":"Your installed Steam games, on a shelf of their own.",rows:[
     T("Show installed Steam games","steam.enabled",true,"Adds a PC shelf with every game Steam has installed. Uninstalled games are left out.",{rescan:true,keys:"steam"}),
     T("Hide Steam tools","steam.hideTools",true,"Leaves Proton, Steamworks Common Redistributables and other tools off the shelf.",{rescan:true,keys:"redistributables proton steam"}),
     F("Steam folder","steam.path","folder","The folder that contains steam.exe. Found automatically; change it only if Steam lives somewhere unusual.",{ph:"C:\\Program Files (x86)\\Steam",rescan:true,want:"dir",pickTitle:"Choose your Steam folder"}),
     A("Get Steam","Open site","Opens Steam's download page in your browser.",()=>openLink(OFFICIAL.steam)),
     // (beta.4) Epic's installs join the PC shelf (main/pcgames.js reads its install list; Play goes through its launcher)
-    T("Show installed Epic Games","pc.epic",true,onLinux()?"Adds the Epic games installed with legendary to the PC shelf (Heroic's too, when it's set up). Boxshelf starts them through Wine / Proton, signed in to your Epic account.":"Adds the games the Epic Games Launcher has installed to the PC shelf. They start through the Epic launcher, so its sign-in and cloud saves work as usual.",{rescan:true,keys:"epic games store fortnite launcher",sub:()=>pcCount("epic")}),
+    T(onLinux()?"Show Epic Games":"Show installed Epic Games","pc.epic",true,onLinux()?"Adds every game on your Epic account to the PC shelf. The ones not installed are greyed: Play installs them. Boxshelf starts them through Wine / Proton, signed in to your Epic account.":"Adds the games the Epic Games Launcher has installed to the PC shelf. They start through the Epic launcher, so its sign-in and cloud saves work as usual.",{rescan:true,keys:"epic games store fortnite launcher",sub:()=>pcCount("epic")}),
     // (beta.7) more stores: each one's installs join the PC shelf (main/pcgames.js storeGames)
     T("Show installed GOG games","pc.gog",true,"Adds the games GOG Galaxy has installed to the PC shelf. GOG games have no copy protection, so Boxshelf starts them itself, with the Home menu and quit combo like any game.",{rescan:true,keys:"gog galaxy store",sub:()=>pcCount("gog")}),
     T("Show installed Ubisoft games","pc.ubisoft",true,"Adds the games Ubisoft Connect has installed to the PC shelf. They start through Ubisoft Connect, so its sign-in and cloud saves work as usual.",{rescan:true,keys:"ubisoft connect uplay store",sub:()=>pcCount("ubisoft")}),
     T("Show installed EA games","pc.ea",true,"Adds the games the EA app has installed to the PC shelf. They start through the EA app, so its sign-in and cloud saves work as usual.",{rescan:true,keys:"ea app origin electronic arts store",sub:()=>pcCount("ea")}),
     T("Show installed Xbox games","pc.xbox",true,"Adds the games the Xbox app has installed (Game Pass included) to the PC shelf. They start like any Xbox app game, signed in with your Microsoft account.",{rescan:true,keys:"xbox game pass microsoft store",sub:()=>pcCount("xbox")}),
+    {t:"dyn",fn:pcFolderRows}, // the PC games folder: each folder in it is a game
     {t:"dyn",fn:linuxPcRows}, // (Linux) Wine / Proton and the Epic Games account
   ]},
   // (beta.4) the Custom shelf: Quiver Launcher's apps (recomps, ports) and any program added by hand
@@ -750,10 +751,27 @@ function customRows(){if(!pcSt)setTimeout(pcStatus,0);cfg.pc=cfg.pc||{epic:true,
     rows.push(nr);
     rows.push(A("Remove "+(c.title||"this game"),"Remove","Takes it off the Custom shelf. Nothing is deleted.",()=>twice("pcx:"+i,()=>{pc.custom.splice(i,1);changed({rescan:true});toast("Removed from the Custom shelf (nothing was deleted)")},"Press again to remove it"),{ns:true,ask:"pcx:"+i}))});
   return rows}
+// Settings → PC games → PC games folder (main/pcfolder.js): every folder in it is a game. pcf: its games as main sees them,
+// with the programs each could start with (a folder holding several gets a choice)
+let pcf=null,pcfAsking=false;
+function pcfLoad(force){if(pcfAsking||!api.pcFolderGames||(pcf&&!force))return;pcfAsking=true;Promise.resolve(save()).then(()=>api.pcFolderGames()).then(r=>{pcf=Array.isArray(r)?r:[]}).catch(()=>{pcf=[]}).finally(()=>{pcfAsking=false;bump()})}
+const progText=p=>p.native?`${p.rel} · Linux`:onLinux()?`${p.rel} · Windows (Wine / Proton)`:p.rel;
+function pcFolderRows(){if(!api.pcFolderGames)return[];pcfLoad();cfg.pc=cfg.pc||{};const rows=[],again=()=>{pcf=null;pcfLoad(true)};
+  rows.push(H("PC games folder"));
+  rows.push(F("PC games folder","pc.gamesDir","folder",`Every folder in it is a game, named after the folder. ${onLinux()?"Boxshelf tells a Linux game (a start script, an AppRun, an AppImage, a Linux program) from a Windows one, which plays through Wine / Proton.":"Boxshelf starts the game's own program from it."} Epic games installed there come with your Epic account instead.`,
+    {want:"dir",pickTitle:"Choose your PC games folder",rescan:true,live:again,keys:"pc games folder directory windows linux native wine exe",sub:()=>!cfg.pc.gamesDir?{text:"Not set"}:pcf==null?{text:"Looking…"}:{text:pcf.length?`${pcf.length} game${pcf.length===1?"":"s"}`:"No games found in it"}}));
+  rows.push(F("Your own copies","pc.userGamesDir","folder","A folder of games for you alone (a game that keeps its saves in its own folder). A folder here with the same name as one in the PC games folder is used instead of the shared one.",
+    {want:"dir",pickTitle:"Choose the folder of your own copies",rescan:true,live:again,when:()=>!!cfg.pc.gamesDir,keys:"own copies personal user games folder saves"}));
+  const several=(pcf||[]).filter(g=>(g.programs||[]).length>1);
+  if(several.length)rows.push(M("Program for each game","pcprog","For a game folder with more than one program: which one Play starts.","Boxshelf picks the game's own program by itself; choose another for a game here.",[{t:"dyn",fn:()=>(pcf||[]).filter(g=>(g.programs||[]).length>1).map(g=>({t:"choice",label:g.folder,
+      info:`Which program in ${g.folder} Play starts.${g.own?" (Your own copy.)":""}`,opts:()=>[["","Found by itself"],...g.programs.map(p=>[p.rel,progText(p)])],d:"",rescan:true,ns:true,keys:"program exe start "+g.folder,
+      get:()=>(cfg.pc.programs||{})[g.folder]||"",set:v=>{const m={...(cfg.pc.programs||{})};if(v)m[g.folder]=v;else delete m[g.folder];cfg.pc.programs=m},sub:()=>({text:g.chosen})}))}],
+    {when:()=>!!cfg.pc.gamesDir,keys:"program exe choose start game folder",sub:()=>({text:`${several.length} game${several.length===1?"":"s"} with a choice`})}));
+  return rows}
 // (Linux) Settings → PC games: the Wine / Proton that Windows games run with, and the Epic Games account, library and installs
 // (main/linuxpc.js through legendary). lpc: what main sees (runners, the account's name, the install folder, the running install)
 const onLinux=()=>!!(window.bsPlatform&&bsPlatform.os==="linux");
-let lpc=null,lpcAsking=false,epicLib=null,epicLibAsking=false,epicSigning=false;
+let lpc=null,lpcAsking=false,epicLib=null,epicLibAsking=false,epicSigning=false,lgGetting=false;
 function lpcLoad(force){if(lpcAsking||!api.pcLinux||(lpc&&!force))return;lpcAsking=true;Promise.resolve(api.pcLinux()).then(r=>{lpc=r||{}}).catch(()=>{lpc={}}).finally(()=>{lpcAsking=false;bump()})}
 function epicLibLoad(force){if(epicLibAsking||!api.epicLibrary||(epicLib&&!force))return;epicLibAsking=true;epicLib=null;bump();Promise.resolve(api.epicLibrary()).then(r=>{epicLib=r||{error:"Couldn't read the Epic library."}}).catch(e=>{epicLib={error:errMsg(e)}}).finally(()=>{epicLibAsking=false;bump()})}
 if(api.onEpicJob)api.onEpicJob(j=>{if(lpc)lpc.job=j;if(j&&j.state!=="installing"){if(j.state==="done"){toast(j.update?`${j.title} is up to date`:`${j.title} is installed: it's on the PC shelf`);epicLibLoad(true)}else if(j.state==="failed")toast(`${j.title}: ${j.error||"the install stopped"}`)}bump()});
@@ -762,25 +780,27 @@ function linuxPcRows(){if(!onLinux()||!api.pcLinux)return[];lpcLoad();const L=lp
   const again=()=>{lpcLoad(true);changed({rescan:true})};
   rows.push(H("Windows games (Wine / Proton)"));
   rows.push(C("Run Windows games with","pc.runner",()=>[["","Best one found"],...(L.runners||[]).map(r=>[r.id,r.kind==="wine"?r.name+" (Wine)":r.name])],"",
-    "Epic games and the Windows programs on the Custom shelf run through this. Proton (GE-Proton, UMU-Proton) suits most games: it brings DXVK and VKD3D. An Epic game set up in Heroic keeps Heroic's own Wine settings unless you choose one here.",
+    "Windows games (Epic's, the PC games folder's, the programs on the Custom shelf) run through this. Proton (GE-Proton, UMU-Proton) suits most games: it brings DXVK and VKD3D.",
     {rescan:false,keys:"wine proton runner ge-proton umu windows exe compatibility",sub:()=>lpc==null?{text:"Looking…"}:!(L.runners||[]).length?{text:"No Wine or Proton found · install Wine or GE-Proton",cls:"warn"}:{text:`${L.runners.length} found${L.umu?" · Proton runs through umu-run":" · umu-run not found: Proton runs on its own"}`}}));
-  rows.push(F("Wine prefixes folder","pc.prefixDir","folder","Each Windows game gets a Wine prefix of its own (its own little Windows: saves, settings) in this folder. Empty: Boxshelf's own Prefixes folder.",{ph:L.prefixDir||"",want:"dir",pickTitle:"Choose a folder for Wine prefixes",keys:"wine prefix prefixes folder"}));
+  rows.push(F("Wine prefixes folder","pc.prefixDir","folder","Each Windows game gets a Wine prefix of its own (its own little Windows: saves, settings), a folder named after the game, in this folder. Empty: Boxshelf's own Prefixes folder.",{ph:L.prefixDir||"",want:"dir",pickTitle:"Choose a folder for Wine prefixes",keys:"wine prefix prefixes folder"}));
+  rows.push(H("Linux games"));
+  rows.push(F("Game data folder","pc.homeDir","folder","Linux games get this folder as their home: their saves and settings go there, kept apart from yours. Empty: your own home folder.",{want:"dir",pickTitle:"Choose a folder for Linux games' saves and settings",keys:"home saves settings data native linux games folder"}));
   rows.push(H("Epic Games"));
-  if(lpc&&!L.legendary)rows.push(F("legendary","pc.legendaryPath","file","Epic games need legendary, the Epic Games client Heroic Games Launcher uses (installing Heroic brings it). Or choose a legendary program here.",{want:"file",pickTitle:"Choose the legendary program",keys:"legendary epic heroic",sub:()=>({text:"Not found",cls:"warn"})}));
+  if(lpc&&!L.legendary){
+    rows.push(A("Get legendary",()=>lgGetting?"Downloading…":"Get","Epic games need legendary, a small open-source Epic Games client. Boxshelf downloads its official release from GitHub into its tools folder and checks it before using it.",
+      async()=>{if(lgGetting)return;lgGetting=true;bump();try{await api.getLegendary();toast("legendary is ready: sign in to Epic Games");lpcLoad(true)}catch(e){toast(errMsg(e))}finally{lgGetting=false;bump()}},{ns:true,keys:"legendary epic download get install",sub:()=>({text:"Not found",cls:"warn"})}));
+    rows.push(F("Or choose legendary","pc.legendaryPath","file","A legendary program you have already.",{want:"file",pickTitle:"Choose the legendary program",live:()=>lpcLoad(true),keys:"legendary epic"}));}
   rows.push(A("Epic Games account",()=>epicSigning?"Signing in…":L.epicAccount?"Sign out":"Sign in",
-    L.epicShared==="heroic"?"Your Epic account, shared with Heroic Games Launcher: signing in or out here does it there too, and the games Heroic installed are on the PC shelf.":"Sign in with Epic's own page. Boxshelf keeps only legendary's sign-in; your password never reaches it.",
-    async()=>{if(!L.legendary){toast("legendary not found: install Heroic Games Launcher first");return}if(epicSigning)return;
+    "Sign in with Epic's own page. Boxshelf keeps only legendary's sign-in; your password never reaches it.",
+    async()=>{if(!L.legendary){toast("Get legendary first (just above)");return}if(epicSigning)return;
       if(L.epicAccount){twice("epicout",async()=>{await api.epicSignOut();toast("Signed out of Epic Games");epicLib=null;again()},"Press again to sign out of Epic Games");return}
       epicSigning=true;bump();toast("Opening Epic's sign-in page…");try{const r=await api.epicSignIn();if(r&&r.ok){toast("Signed in to Epic Games as "+r.name);epicLib=null;again()}else if(r&&r.error)toast(r.error)}catch(e){toast(errMsg(e))}finally{epicSigning=false;bump()}},
-    {ns:true,ask:"epicout",keys:"epic games account sign in login legendary heroic",sub:()=>lpc==null?{text:"Looking…"}:L.epicAccount?{text:`Signed in as ${L.epicAccount}${L.epicShared==="heroic"?" · shared with Heroic":""}`}:{text:"Not signed in",cls:"warn"}}));
+    {ns:true,ask:"epicout",keys:"epic games account sign in login legendary",sub:()=>lpc==null?{text:"Looking…"}:L.epicAccount?{text:`Signed in as ${L.epicAccount}`}:{text:"Not signed in",cls:"warn"}}));
   const j=L.job;
   rows.push(M("Epic library","epiclib","Install, update and uninstall the games on your Epic account.","Every game on your Epic account. Installed games are on the PC shelf; installs and updates run in the background, one at a time.",[{t:"dyn",fn:epicLibRows}],
     {when:()=>!!L.epicAccount,keys:"epic library install update uninstall download games",sub:()=>j&&j.state==="installing"?{text:`${j.update?"Updating":"Installing"} ${j.title} · ${epicPct(j)}`}:{text:"Install, update and uninstall"}}));
-  rows.push(F("Epic install folder","pc.epicDir","folder","Where new Epic games are installed. Empty: Heroic's install folder when it has one, else Boxshelf's own Epic Games folder.",{ph:L.epicDir||"",want:"dir",pickTitle:"Choose where Epic games install",when:()=>!!L.epicAccount,keys:"epic install folder path"}));
-  rows.push(H("Heroic Games Launcher"));
-  rows.push(T("Show Heroic's games","pc.heroic",true,"The games added to Heroic by hand (its Add game: Windows programs, Linux games, scripts) join the PC shelf. Boxshelf starts each one with Heroic's own settings for it: its Wine / Proton, prefix and variables.",
-    {rescan:true,keys:"heroic sideload added games launcher",sub:()=>lpc==null?{text:"Looking…"}:L.heroicDir?{text:L.heroic?`${L.heroic} game${L.heroic===1?"":"s"} added in Heroic`:"None added in Heroic"}:{text:"Heroic isn't set up here"}}));
-  if(window.Shelf&&Shelf.pcGallery)rows.push(A("PC game covers","Open","Every PC game's cover and where it comes from (your pick, Epic's or Heroic's box art, Steam's, or a made-up case). Pick a game to change it. Also in Box art & manuals.",()=>{close();Shelf.pcGallery()},{ns:true,keys:"pc covers box art front gallery"}));
+  rows.push(F("Epic install folder","pc.epicDir","folder","Where new Epic games are installed. Empty: the PC games folder when there's one, else Boxshelf's own Epic Games folder.",{ph:L.epicDir||"",want:"dir",pickTitle:"Choose where Epic games install",when:()=>!!L.epicAccount,keys:"epic install folder path"}));
+  if(window.Shelf&&Shelf.pcGallery)rows.push(A("PC game covers","Open","Every PC game's cover and where it comes from (your pick, Epic's box art, Steam's, or a made-up case). Pick a game to change it. Also in Box art & manuals.",()=>{close();Shelf.pcGallery()},{ns:true,keys:"pc covers box art front gallery"}));
   return rows}
 function epicLibRows(){epicLibLoad();const rows=[],j=lpc&&lpc.job,busy=j&&j.state==="installing";
   if(busy)rows.push(A(`${j.update?"Updating":"Installing"} ${j.title}`,"Cancel","It keeps going while you play or browse the shelf. Cancel stops it; legendary picks up where it stopped next time.",()=>twice("epiccancel",async()=>{await api.epicCancel();toast("Stopped")},"Press again to stop it"),{ns:true,ask:"epiccancel",sub:()=>({text:epicPct(lpc&&lpc.job||j)})}));
@@ -1413,13 +1433,13 @@ function artNoCover(){if(!sInfo){if(api.artStudio&&isOpen)loadStudio();return 0}
 function artSummary(){if(!api.artStudio)return "";if(!sInfo){loadStudio();return ""}const C=sInfo.consoles,t=C.reduce((a,c)=>a+(c.total||0),0),n=artNoCover();
   return !t?"":n?`${t-n} of ${t} games have a cover · ${n} without`:`All ${t} games have a cover`}
 /* the Art page's rows: one per console */
-// the Art Studio's list ends with the PC games (Steam, Epic, Heroic, custom): their covers in a gallery of their own (app.js
+// the Art Studio's list ends with the PC games (Steam, Epic, the PC games folder, custom): their covers in a gallery of their own (app.js
 // pcGallery), each with where its cover comes from; consoles first, as before
 function studioRows(){const L=studioRows0(),S=window.Shelf,n=S&&S.pcArtCount?S.pcArtCount():{total:0,made:0};
   if(!n.total||!S.pcGallery)return L;
   return L.filter(r=>!(r.dim&&/No games on any shelf/.test(r.label))).concat([{t:"action",label:"PC games",btn:n.made?`${n.made} with a made-up case`:`${n.total} game${n.total===1?"":"s"}`,warnBtn:()=>n.made>0,ns:true,
-    keys:"art studio box art covers pc games steam epic heroic custom front",info:"Every PC game's cover as the shelf shows it, and where it comes from: your pick, the store's box art (Epic, Heroic), Steam's art, or a made-up case. Pick a game to change its cover.",
-    sub:()=>({text:"Steam, Epic, Heroic and custom games"}),run:()=>{close();S.pcGallery()}}])}
+    keys:"art studio box art covers pc games steam epic custom front",info:"Every PC game's cover as the shelf shows it, and where it comes from: your pick, the store's box art (Epic), Steam's art, or a made-up case. Pick a game to change its cover.",
+    sub:()=>({text:"Steam, Epic, PC folder and custom games"}),run:()=>{close();S.pcGallery()}}])}
 function studioRows0(){if(!api.artStudio)return [];
   if(!sInfo)return [{t:"action",label:"Loading your consoles…",btn:"",info:"Art Studio: how each console's box art looks.",run:()=>{},ns:true,dim:true}];
   if(sInfo.err&&!sInfo.consoles.length)return [{t:"action",label:"Couldn't load the Art Studio",btn:"Try again",info:sInfo.err,run:()=>{sInfo=null;loadStudio()},ns:true}];

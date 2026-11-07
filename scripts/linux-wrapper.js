@@ -3,7 +3,7 @@
 //
 // (beta.8) Steam Deck: an Electron AppImage started by Steam (a non-Steam game, and above all in Game Mode) needs
 // --no-sandbox, and Game Mode's compositor (gamescope) wants Chromium on X11 (Xwayland) rather than Wayland. Other
-// Electron launchers tell users to type these into Steam's launch options (Heroic's Steam Deck wiki); Boxshelf adds them
+// Electron launchers tell users to type these into Steam's launch options (their Steam Deck guides); Boxshelf adds them
 // itself. The program is renamed <name>-bin and <name> becomes this small script, which the AppImage's own AppRun starts:
 //   started by Steam (Desktop or Game Mode)  -> --no-sandbox
 //   in Game Mode (gamescope)                 -> --ozone-platform=x11

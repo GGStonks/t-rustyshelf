@@ -1,22 +1,26 @@
 // (Linux) PC games without Steam: Windows games through Wine or Proton, and Epic Games through legendary.
 // Linux only; main.js calls it behind linux.isLinux. Windows keeps main/pcgames.js exactly as it is.
 //
-//   - Runners: the Proton and Wine builds already on the PC, found where Steam, Heroic, Lutris and the distro put them.
-//     Proton runs through umu-run when it's installed (the Steam Linux Runtime and protonfixes, the way Heroic and
-//     Lutris run Proton outside Steam), else through Proton's own script. Each game gets its own Wine prefix.
-//   - Epic: legendary (the Epic Games client Heroic itself uses) does the account and the install list. When Heroic is
-//     set up, its legendary folder is shared, so its sign-in, installs and each game's Wine settings (its runner, prefix
-//     and environment from Heroic's GamesConfig) are used as they are: a game plays the same, with the same saves, from
-//     either launcher. `legendary launch --json` gives the game's program, folder and Epic's sign-in arguments; Boxshelf
-//     starts the game itself, so the quit combo, Home menu and play time work as for any game.
+//   - Runners: the Proton and Wine builds already on the PC, found where Steam, Lutris and the distro put them. Proton
+//     runs through umu-run when it's installed (the Steam Linux Runtime and protonfixes), else through Proton's own
+//     script. Each game gets a Wine prefix of its own, named after the game, in the prefixes folder.
+//   - Every Proton start gets the options a game store's launcher sets: the anti-cheat runtimes (Easy Anti-Cheat,
+//     BattlEye), NVAPI, an empty LD_PRELOAD and Steam's ids at 0.
+//   - Native games can be given a home of their own (Settings → PC games → Game data folder): their saves and settings
+//     then live there instead of in the account's home.
+//   - Epic: legendary (an open-source Epic Games client) keeps Boxshelf's own Epic sign-in and install list in
+//     data/legendary; the account's whole library is kept in data/epic-library.json so games that aren't installed can
+//     be shown too. `legendary launch --json` gives a game's program, folder and Epic's sign-in arguments; Boxshelf starts
+//     the game itself, so the quit combo, Home menu and play time work as for any game.
 // Every path Boxshelf starts comes from these lists, never from the screen.
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const https = require('https');
+const crypto = require('crypto');
 const { spawn, execFile } = require('child_process');
 
-let log = () => {}, dataDir = '', appRoot = '';
+let log = () => {}, dataDir = '', appRoot = '', fetchBuf = null;
 const isFile = p => { try { return fs.statSync(p).isFile(); } catch { return false; } };
 const isDir = p => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
 const isExec = p => { try { fs.accessSync(p, fs.constants.X_OK); return isFile(p); } catch { return false; } };
@@ -25,34 +29,38 @@ const slug = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').repl
 const H = () => os.homedir();
 const which = name => { for (const d of String(process.env.PATH || '').split(':').filter(Boolean)) { const f = path.join(d, name); if (isExec(f)) return f; } return null; };
 const ls = d => { try { return fs.readdirSync(d, { withFileTypes: true }).filter(e => e.isDirectory() || e.isSymbolicLink()).map(e => path.join(d, e.name)); } catch { return []; } };
+const APP = /^[\w.-]{1,120}$/; // (an Epic app name: the only thing the screen may name)
+const root = () => appRoot || path.join(H(), 'Boxshelf');
+const toolsDir = () => path.join(root(), 'tools');
 
-function init(opts = {}) { dataDir = opts.dataDir || ''; appRoot = opts.appRoot || ''; if (opts.log) log = opts.log; }
+// opts.fetchBuf(url) → Buffer | null: downloads (main.js gives Electron's net, which follows redirects)
+function init(opts = {}) { dataDir = opts.dataDir || ''; appRoot = opts.appRoot || ''; if (opts.log) log = opts.log; if (opts.fetchBuf) fetchBuf = opts.fetchBuf; }
 
 // ---------- Wine and Proton builds ----------
 // Proton: a folder with a `proton` script (Steam's own builds, GE-Proton, UMU-Proton, distro builds such as CachyOS's)
 const PROTON_DIRS = () => [
   path.join(H(), '.steam', 'root', 'compatibilitytools.d'), path.join(H(), '.local', 'share', 'Steam', 'compatibilitytools.d'),
   path.join(H(), '.var', 'app', 'com.valvesoftware.Steam', 'data', 'Steam', 'compatibilitytools.d'),
-  '/usr/share/steam/compatibilitytools.d', '/usr/local/share/steam/compatibilitytools.d',
-  path.join(H(), '.config', 'heroic', 'tools', 'proton'), path.join(H(), '.var', 'app', 'com.heroicgameslauncher.hgl', 'config', 'heroic', 'tools', 'proton')];
+  '/usr/share/steam/compatibilitytools.d', '/usr/local/share/steam/compatibilitytools.d', path.join(toolsDir(), 'proton')];
 const STEAM_COMMON = () => [path.join(H(), '.steam', 'steam', 'steamapps', 'common'), path.join(H(), '.local', 'share', 'Steam', 'steamapps', 'common')];
-// Wine: a build folder with bin/wine (Heroic's Wine-GE / Wine-Staging-TkG, Lutris' runners), and the system's wine
-const WINE_DIRS = () => [path.join(H(), '.config', 'heroic', 'tools', 'wine'), path.join(H(), '.var', 'app', 'com.heroicgameslauncher.hgl', 'config', 'heroic', 'tools', 'wine'),
-  path.join(H(), '.local', 'share', 'lutris', 'runners', 'wine')];
+// Wine: a build folder with bin/wine (Lutris' runners, Boxshelf's tools/wine), and the system's wine
+const WINE_DIRS = () => [path.join(H(), '.local', 'share', 'lutris', 'runners', 'wine'), path.join(toolsDir(), 'wine')];
 // newest first: "GE-Proton11-5" before "GE-Proton10-4", "Proton 9.0" before "Proton 8.0"
 const verKey = n => (String(n).match(/\d+/g) || []).map(x => x.padStart(6, '0')).join('.');
+const newestFirst = (a, b, name) => verKey(name(b)).localeCompare(verKey(name(a)));
 function runners() {
   const out = [], seen = new Set();
   const add = r => { let real = r.path; try { real = fs.realpathSync(r.path); } catch {} if (seen.has(real)) return; seen.add(real); out.push(r); };
   const protons = [];
   for (const d of PROTON_DIRS()) for (const p of ls(d)) if (isFile(path.join(p, 'proton'))) protons.push(p);
   for (const d of STEAM_COMMON()) for (const p of ls(d)) if (/^proton/i.test(path.basename(p)) && isFile(path.join(p, 'proton'))) protons.push(p);
-  protons.sort((a, b) => verKey(path.basename(b)).localeCompare(verKey(path.basename(a))));
+  protons.sort((a, b) => newestFirst(a, b, path.basename));
   for (const p of protons) add({ id: 'proton:' + p, kind: 'proton', name: path.basename(p), path: p });
+  const wineName = w => path.basename(path.dirname(path.dirname(w)));
   const wines = [];
   for (const d of WINE_DIRS()) for (const p of ls(d)) if (isExec(path.join(p, 'bin', 'wine'))) wines.push(path.join(p, 'bin', 'wine'));
-  wines.sort((a, b) => verKey(path.basename(path.dirname(path.dirname(b)))).localeCompare(verKey(path.basename(path.dirname(path.dirname(a))))));
-  for (const w of wines) add({ id: 'wine:' + w, kind: 'wine', name: path.basename(path.dirname(path.dirname(w))), path: w });
+  wines.sort((a, b) => newestFirst(a, b, wineName));
+  for (const w of wines) add({ id: 'wine:' + w, kind: 'wine', name: wineName(w), path: w });
   const sys = which('wine'); if (sys) add({ id: 'wine:' + sys, kind: 'wine', name: 'Wine (system)', path: sys });
   return out;
 }
@@ -62,27 +70,52 @@ function pickRunner(id, list = runners()) {
   if (id) { const r = list.find(x => x.id === id); if (r) return r; }
   return list.find(r => r.kind === 'proton' && /ge-proton|umu-proton/i.test(r.name)) || list.find(r => r.kind === 'proton') || list[0] || null;
 }
-// a runner Heroic named in a game's settings ({ bin, type, name }), if it's here
-function runnerFromHeroic(v) {
-  if (!v || typeof v !== 'object' || typeof v.bin !== 'string') return null;
-  if (v.type === 'proton' && isFile(v.bin)) return { id: 'proton:' + path.dirname(v.bin), kind: 'proton', name: String(v.name || path.basename(path.dirname(v.bin))), path: path.dirname(v.bin) };
-  if (v.type === 'wine' && isExec(v.bin)) return { id: 'wine:' + v.bin, kind: 'wine', name: String(v.name || 'Wine'), path: v.bin };
-  return null;
-}
 const umuRun = () => which('umu-run') || [path.join(H(), '.local', 'bin', 'umu-run'), '/usr/bin/umu-run', '/usr/local/bin/umu-run'].find(isExec) || null;
 const steamRoot = () => [path.join(H(), '.steam', 'steam'), path.join(H(), '.local', 'share', 'Steam')].find(isDir) || '';
-const prefixRoot = custom => custom && path.isAbsolute(custom) ? custom : path.join(appRoot || path.join(H(), 'Boxshelf'), 'Prefixes');
-const prefixFor = (id, custom) => path.join(prefixRoot(custom), slug(id));
+
+// ---------- prefixes ----------
+const prefixRoot = custom => custom && path.isAbsolute(custom) ? custom : path.join(root(), 'Prefixes');
+// a game's prefix folder: its name, readable ("Rocket League®" → "Rocket League"), safe as a folder name
+const prefixName = title => String(title || '').replace(/[®™©]/g, '').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 100) || 'Game';
+const prefixFor = (title, custom) => path.join(prefixRoot(custom), prefixName(title));
+
+// ---------- the environment a game starts with ----------
+// Boxshelf's environment without what belongs to Boxshelf's own AppImage (its folder on the library and program paths: a
+// game would load Boxshelf's copies of GTK, libnotify…), then the game's own variables
+function cleanEnv(extra = {}) {
+  const e = { ...process.env }, own = process.env.APPDIR;
+  for (const k of ['APPDIR', 'APPIMAGE', 'ARGV0', 'OWD']) delete e[k];
+  for (const k of ['LD_LIBRARY_PATH', 'PATH', 'XDG_DATA_DIRS', 'GSETTINGS_SCHEMA_DIR']) if (own && e[k]) { e[k] = e[k].split(':').filter(p => p && !p.startsWith(own)).join(':'); if (!e[k]) delete e[k]; }
+  return { ...e, ...extra };
+}
+// a native game's own home (Settings → PC games → Game data folder): its saves and settings go there. The XDG folders
+// follow it, so a game that uses them ends up there too. {} when there's none.
+function gameHome(dir) {
+  if (!dir || !path.isAbsolute(dir)) return {};
+  const x = { HOME: dir, XDG_CONFIG_HOME: path.join(dir, '.config'), XDG_DATA_HOME: path.join(dir, '.local', 'share'), XDG_CACHE_HOME: path.join(dir, '.cache'), XDG_STATE_HOME: path.join(dir, '.local', 'state') };
+  for (const d of Object.values(x)) { try { fs.mkdirSync(d, { recursive: true }); } catch {} }
+  return x;
+}
+// the anti-cheat runtimes: Boxshelf's tools/runtimes, or Steam's own copies
+const runtimeDir = (name, steamName) => [path.join(toolsDir(), 'runtimes', name), ...STEAM_COMMON().map(c => path.join(c, steamName))].find(isDir) || '';
+// What every Proton start gets: the anti-cheat runtimes (Easy Anti-Cheat and BattlEye: without them a game such as Rocket
+// League waits on an empty Wine window), NVAPI (DLSS / Reflex on NVIDIA), LD_PRELOAD emptied (the Steam overlay's library
+// from the session would be loaded into the game) and Steam's app ids at 0.
+function protonEnv(title) {
+  const e = { LD_PRELOAD: '', STEAM_COMPAT_APP_ID: '0', SteamAppId: '0', SteamGameId: 'boxshelf-' + slug(title).replace(/-/g, ''), PROTON_ENABLE_NVAPI: '1', DXVK_NVAPI_ALLOW_OTHER_DRIVERS: '1' };
+  const eac = runtimeDir('eac_runtime', 'Proton EasyAntiCheat Runtime'); if (eac) e.PROTON_EAC_RUNTIME = eac;
+  const be = runtimeDir('battleye_runtime', 'Proton BattlEye Runtime'); if (be) e.PROTON_BATTLEYE_RUNTIME = be;
+  return e;
+}
 
 // the command that runs a Windows program: { cmd, args, env, cwd, how }. env is the full environment for the child.
-//   proton + umu-run: WINEPREFIX / STEAM_COMPAT_DATA_PATH = the prefix, PROTONPATH = the build (as Heroic does)
+//   proton + umu-run: WINEPREFIX / STEAM_COMPAT_DATA_PATH = the prefix, PROTONPATH = the build
 //   proton alone:     <build>/proton waitforexitandrun <exe>
 //   wine:             <wine> <exe>, WINEPREFIX = the prefix
 function windowsCommand({ exe, args = [], cwd, runner, prefix, env = {}, gameId, store }) {
-  if (!runner) throw new Error('No Wine or Proton found. Install Wine, or a Proton build (GE-Proton) with Steam, Heroic or ProtonUp-Qt.');
+  if (!runner) throw new Error('No Wine or Proton found. Install Wine, or a Proton build (GE-Proton) with Steam or ProtonUp-Qt.');
   try { fs.mkdirSync(prefix, { recursive: true }); } catch (e) { throw new Error(`Can't make the Wine prefix ${prefix}: ${e.message}`); }
-  const base = cleanEnv(env);
-  const dir = cwd || path.dirname(exe);
+  const base = cleanEnv(env), dir = cwd || path.dirname(exe);
   if (runner.kind === 'proton') {
     const pe = { ...base, WINEPREFIX: prefix, STEAM_COMPAT_DATA_PATH: prefix, STEAM_COMPAT_CLIENT_INSTALL_PATH: steamRoot() || prefix, STEAM_COMPAT_INSTALL_PATH: dir, PROTONPATH: runner.path };
     const umu = umuRun();
@@ -90,33 +123,6 @@ function windowsCommand({ exe, args = [], cwd, runner, prefix, env = {}, gameId,
     return { cmd: path.join(runner.path, 'proton'), args: ['waitforexitandrun', exe, ...args], cwd: dir, env: pe, how: runner.name };
   }
   return { cmd: runner.path, args: [exe, ...args], cwd: dir, env: { ...base, WINEPREFIX: prefix }, how: runner.name };
-}
-// Boxshelf's environment for a game, without what belongs to Boxshelf's own AppImage (its folder on the library and program
-// paths: a game would load Boxshelf's copies of GTK, libnotify…), then the game's own variables
-function cleanEnv(extra = {}) {
-  const e = { ...process.env }, own = process.env.APPDIR;
-  for (const k of ['APPDIR', 'APPIMAGE', 'ARGV0', 'OWD']) delete e[k];
-  for (const k of ['LD_LIBRARY_PATH', 'PATH', 'XDG_DATA_DIRS', 'GSETTINGS_SCHEMA_DIR']) if (own && e[k]) { e[k] = e[k].split(':').filter(p => p && !p.startsWith(own)).join(':'); if (!e[k]) delete e[k]; }
-  return { ...e, ...extra };
-}
-// The Proton options Heroic sets for a game, from its Heroic settings (GamesConfig), or Heroic's defaults when it has none:
-// the anti-cheat runtimes (Easy Anti-Cheat and BattlEye: without them a game such as Rocket League waits on an empty Wine
-// window), NVAPI (DLSS / Reflex on NVIDIA), fsync / esync, Wayland, HDR, WoW64, the FPS counter; LD_PRELOAD emptied (the
-// Steam overlay's library from the session would be loaded into the game) and Steam's app ids at 0, as Heroic does.
-const runtimeDir = (heroicName, steamName) => [path.join(heroicDir() || path.join(H(), '.config', 'heroic'), 'tools', 'runtimes', heroicName), ...STEAM_COMMON().map(c => path.join(c, steamName))].find(isDir) || '';
-function protonOptions(g, title) {
-  g = g && typeof g === 'object' ? g : {}; const on = (k, d) => g[k] === undefined || g[k] === null ? d : !!g[k];
-  const e = { LD_PRELOAD: '', STEAM_COMPAT_APP_ID: '0', SteamAppId: '0', SteamGameId: 'heroic-' + String(title || 'game').toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 60) };
-  if (on('eacRuntime', true)) { const r = runtimeDir('eac_runtime', 'Proton EasyAntiCheat Runtime'); if (r) e.PROTON_EAC_RUNTIME = r; }
-  if (on('battlEyeRuntime', true)) { const r = runtimeDir('battleye_runtime', 'Proton BattlEye Runtime'); if (r) e.PROTON_BATTLEYE_RUNTIME = r; }
-  if (on('autoInstallDxvkNvapi', true)) { e.PROTON_ENABLE_NVAPI = '1'; e.DXVK_NVAPI_ALLOW_OTHER_DRIVERS = '1'; }
-  if (!on('enableFsync', true)) e.PROTON_NO_FSYNC = '1';
-  if (!on('enableEsync', true)) e.PROTON_NO_ESYNC = '1';
-  if (on('enableWineWayland', false)) e.PROTON_ENABLE_WAYLAND = '1';
-  if (on('enableHDR', false)) e.PROTON_ENABLE_HDR = '1';
-  if (on('enableWoW64', false)) e.PROTON_USE_WOW64 = '1';
-  if (on('showFps', false)) e.DXVK_HUD = 'fps';
-  return e;
 }
 // umu-run's Steam Linux Runtime isn't there yet: the first Proton start downloads it (about 700 MB) before the game shows
 const umuNeedsRuntime = () => { if (!umuRun()) return false; try { return !fs.readdirSync(path.join(H(), '.local', 'share', 'umu'), { withFileTypes: true }).some(e => e.isDirectory() && /^steamrt/.test(e.name)); } catch { return true; } };
@@ -144,62 +150,31 @@ function umuId(store, codename) {
   });
 }
 
-// ---------- Heroic ----------
-const HEROIC_DIRS = () => [path.join(H(), '.config', 'heroic'), path.join(H(), '.var', 'app', 'com.heroicgameslauncher.hgl', 'config', 'heroic')];
-const heroicDir = () => HEROIC_DIRS().find(isDir) || '';
-// a game's own Wine settings in Heroic: { runner, prefix, env } (nothing when Heroic has none, or its runner isn't here)
-function heroicGame(appName) {
-  const d = heroicDir(); if (!d || !/^[\w.-]{1,120}$/.test(appName)) return null;
-  const j = readJson(path.join(d, 'GamesConfig', appName + '.json')), g = j && j[appName]; if (!g) return null;
-  const env = {}; for (const e of Array.isArray(g.enviromentOptions) ? g.enviromentOptions : []) if (e && /^[A-Za-z_][A-Za-z0-9_]{0,80}$/.test(String(e.key || ''))) env[e.key] = String(e.value ?? '').replace(/^"(.*)"$/, '$1').slice(0, 2000);
-  return { runner: runnerFromHeroic(g.wineVersion), prefix: typeof g.winePrefix === 'string' && path.isAbsolute(g.winePrefix) ? g.winePrefix : '', env, settings: g };
-}
-// Heroic's sideloaded games (its "Add game": a Windows program or a Linux one, a script, an AppImage), read only. Each
-// keeps its Heroic settings (heroicGame by its app name) and its cover (art_cover, usually SteamGridDB's).
-function heroicSideload() {
-  const d = heroicDir(), j = d && readJson(path.join(d, 'sideload_apps', 'library.json')), out = [];
-  for (const g of j && Array.isArray(j.games) ? j.games.slice(0, 2000) : []) {
-    if (!g || typeof g !== 'object' || g.is_installed === false || !/^[\w.-]{1,120}$/.test(String(g.app_name || ''))) continue;
-    const inst = g.install && typeof g.install === 'object' ? g.install : {}, exe = String(inst.executable || '');
-    if (!exe || !path.isAbsolute(exe) || !isFile(exe)) continue; // (its program is gone, or on a drive that isn't here)
-    const folder = typeof g.folder_name === 'string' && path.isAbsolute(g.folder_name) && isDir(g.folder_name) ? g.folder_name : path.dirname(exe);
-    const cover = [g.art_cover, g.art_square].find(u => typeof u === 'string' && /^https:\/\//.test(u)) || '';
-    out.push({ id: 'heroic-' + slug(g.app_name), source: 'heroic', title: String(g.title || path.basename(exe)).trim().slice(0, 120), appName: g.app_name, exe, dir: folder,
-      platform: /^win/i.test(String(inst.platform || '')) || isWindowsProgram(exe) ? 'Windows' : 'linux', coverUrl: cover });
-  }
-  return out.sort((a, b) => a.title.localeCompare(b.title));
-}
-// where Heroic installs games (its Settings → Default install path), when it's a folder that can be written
-function heroicInstallDir() {
-  const d = heroicDir(), c = d && readJson(path.join(d, 'config.json')), p = c && c.defaultSettings && c.defaultSettings.defaultInstallPath;
-  if (typeof p !== 'string' || !p) return '';
-  const full = p.replace(/^~(?=\/|$)/, H());
-  try { fs.accessSync(full, fs.constants.W_OK); return full; } catch { return ''; }
-}
-
 // ---------- legendary (Epic Games) ----------
-// legendary itself: the one chosen in Settings, one on the PATH, then the copy inside Heroic (distro package, the
-// tarball in /opt, an extracted AppImage), then one Boxshelf was given in data/tools
-const HEROIC_LEGENDARY = ['/usr/lib/heroic-games-launcher/app.asar.unpacked/build/bin/x64/linux/legendary', '/opt/Heroic/resources/app.asar.unpacked/build/bin/x64/linux/legendary',
-  '/opt/heroic/resources/app.asar.unpacked/build/bin/x64/linux/legendary', '/usr/lib/heroic/resources/app.asar.unpacked/build/bin/x64/linux/legendary'];
+// legendary itself: the one chosen in Settings, one on the PATH, then Boxshelf's own tools/legendary (Get legendary)
+const LEGENDARY = { version: '0.21.1', url: 'https://github.com/derrod/legendary/releases/download/0.21.1/legendary_linux_x64', sha256: 'dbed33bbe96031e65858233e4badf0a1d401bb6cb0cc995d1237cf3a0c826a45' };
 function legendaryBin(custom) {
   if (custom && isExec(custom)) return custom;
-  return which('legendary') || HEROIC_LEGENDARY.find(isExec) || [path.join(dataDir, 'tools', 'legendary')].find(isExec) || null;
+  return which('legendary') || [path.join(toolsDir(), 'legendary')].find(isExec) || null;
 }
-// legendary's folder (its sign-in and install list): Heroic's when Heroic is set up, so both launchers see the same account
-// and games; otherwise Boxshelf's own data/legendary
-function legendaryConfig() {
-  if (process.env.LEGENDARY_CONFIG_PATH && isDir(process.env.LEGENDARY_CONFIG_PATH)) return { dir: process.env.LEGENDARY_CONFIG_PATH, shared: 'env' };
-  for (const d of HEROIC_DIRS()) { const l = path.join(d, 'legendaryConfig', 'legendary'); if (isDir(l)) return { dir: l, shared: 'heroic' }; }
-  return { dir: path.join(dataDir, 'legendary'), shared: '' };
+// Settings → PC games → Get legendary: its release from GitHub, checked against the SHA-256 GitHub publishes for it
+async function getLegendary() {
+  if (!fetchBuf) throw new Error("Can't download here.");
+  const buf = await fetchBuf(LEGENDARY.url);
+  if (!buf) throw new Error("Couldn't download legendary. Check the internet connection.");
+  if (crypto.createHash('sha256').update(buf).digest('hex') !== LEGENDARY.sha256) throw new Error('The legendary download was damaged. Try again.');
+  const dest = path.join(toolsDir(), 'legendary');
+  fs.mkdirSync(toolsDir(), { recursive: true }); fs.writeFileSync(dest + '.tmp', buf, { mode: 0o755 }); fs.renameSync(dest + '.tmp', dest);
+  log('legendary', LEGENDARY.version, 'downloaded to', dest); return dest;
 }
+// legendary's folder (Boxshelf's Epic sign-in and install list)
+const legendaryConfig = () => ({ dir: process.env.LEGENDARY_CONFIG_PATH && isDir(process.env.LEGENDARY_CONFIG_PATH) ? process.env.LEGENDARY_CONFIG_PATH : path.join(dataDir, 'legendary') });
 function runLegendary(bin, args, { ms = 60000, onLine } = {}) {
   let proc = null; // (the executor runs at once: the child is known before the promise is returned, for Cancel)
   const pr = new Promise(res => {
     const cfg = legendaryConfig(); try { fs.mkdirSync(cfg.dir, { recursive: true }); } catch {}
     let out = '', err = '', done = false;
-    const env = { ...process.env, LEGENDARY_CONFIG_PATH: cfg.dir, PYTHONUNBUFFERED: '1' };
-    delete env.APPDIR; delete env.APPIMAGE;
+    const env = { ...cleanEnv(), LEGENDARY_CONFIG_PATH: cfg.dir, PYTHONUNBUFFERED: '1' };
     let p; try { p = spawn(bin, args, { env, stdio: ['ignore', 'pipe', 'pipe'] }); } catch (e) { return res({ code: -1, out: '', err: e.message }); }
     proc = p;
     const t = ms ? setTimeout(() => { try { p.kill('SIGTERM'); } catch {} }, ms) : null;
@@ -215,23 +190,48 @@ function runLegendary(bin, args, { ms = 60000, onLine } = {}) {
 }
 // the signed-in account's name (never its tokens), or null
 function epicAccount() { const u = readJson(path.join(legendaryConfig().dir, 'user.json')); return u && (u.displayName || u.account_id) ? String(u.displayName || 'Epic account').slice(0, 80) : null; }
+// Epic's own box art among a game's store pictures: the tall box, else the wide one; '' when there's none
+function boxArt(keyImages) {
+  const imgs = Array.isArray(keyImages) ? keyImages : [], pick = t => imgs.find(i => i && i.type === t && typeof i.url === 'string' && /^https:\/\//.test(i.url));
+  const i = pick('DieselGameBoxTall') || pick('OfferImageTall') || pick('DieselGameBox'); return i ? i.url : '';
+}
+const epicCover = app => { const m = readJson(path.join(legendaryConfig().dir, 'metadata', app + '.json')); return boxArt(m && m.metadata && m.metadata.keyImages); };
 // the installed Epic games: legendary's installed.json (read, never written); DLC and games whose folder is gone left out
-function epicGames() {
+function epicInstalled() {
   const j = readJson(path.join(legendaryConfig().dir, 'installed.json')); if (!j || typeof j !== 'object') return [];
   const out = [];
   for (const [app, g] of Object.entries(j).slice(0, 2000)) {
-    if (!g || typeof g !== 'object' || g.is_dlc || !/^[\w.-]{1,120}$/.test(app)) continue;
+    if (!g || typeof g !== 'object' || g.is_dlc || !APP.test(app)) continue;
     const dir = String(g.install_path || ''); if (!dir || !isDir(dir)) continue;
-    out.push({ id: 'epic-' + slug(app), source: 'epic', title: String(g.title || app).trim().slice(0, 120), appName: app, dir, exe: g.executable ? path.join(dir, String(g.executable)) : '', platform: String(g.platform || 'Windows'), coverUrl: epicCover(app) });
+    out.push({ id: 'epic-' + slug(app), source: 'epic', installed: true, title: String(g.title || app).trim().slice(0, 120), appName: app, dir, exe: g.executable ? path.join(dir, String(g.executable)) : '', platform: String(g.platform || 'Windows'), coverUrl: epicCover(app) });
   }
   return out.sort((a, b) => a.title.localeCompare(b.title));
 }
-// Epic's own box art for a game (legendary keeps each game's store details in metadata/<app>.json): the tall box, else the
-// wide one; '' when there's none
-function epicCover(app) {
-  const m = readJson(path.join(legendaryConfig().dir, 'metadata', app + '.json')), imgs = m && m.metadata && Array.isArray(m.metadata.keyImages) ? m.metadata.keyImages : [];
-  const pick = t => imgs.find(i => i && i.type === t && typeof i.url === 'string' && /^https:\/\//.test(i.url));
-  const i = pick('DieselGameBoxTall') || pick('OfferImageTall') || pick('DieselGameBox'); return i ? i.url : '';
+// every game the account owns, as last read from Epic (data/epic-library.json), installed or not: the installed ones from
+// epicInstalled, the others with installed: false (the shelf shows them greyed; Play offers to install them)
+const libraryFile = () => path.join(dataDir, 'epic-library.json');
+const libraryAge = () => { const c = readJson(libraryFile()); return c && c.at ? Date.now() - c.at : Infinity; };
+function epicOwned() {
+  const inst = epicInstalled(), have = new Set(inst.map(g => g.appName)), c = readJson(libraryFile());
+  const rest = (c && Array.isArray(c.games) ? c.games : []).filter(g => g && APP.test(String(g.appName)) && !have.has(g.appName))
+    .map(g => ({ id: 'epic-' + slug(g.appName), source: 'epic', installed: false, title: String(g.title || g.appName).slice(0, 120), appName: g.appName, dir: '', exe: '', coverUrl: typeof g.cover === 'string' ? g.cover : '' }));
+  return [...inst, ...rest].sort((a, b) => a.title.localeCompare(b.title));
+}
+// ask Epic for the account's library (legendary list) and keep it; [{ appName, title, installed, cover }]
+async function epicLibrary(bin) {
+  const r = await runLegendary(bin, ['list', '--json'], { ms: 120000 });
+  if (r.code !== 0) return { error: epicAccount() ? "Couldn't get your Epic library. Check the internet connection." : 'Sign in to Epic Games first.' };
+  let list = []; try { list = JSON.parse(r.out); } catch { return { error: "Couldn't read the Epic library." }; }
+  const games = [];
+  for (const g of Array.isArray(list) ? list.slice(0, 5000) : []) {
+    const app = String(g && g.app_name || ''); if (!APP.test(app)) continue;
+    games.push({ appName: app, title: String(g.app_title || app).slice(0, 120), cover: boxArt(g.metadata && g.metadata.keyImages) });
+  }
+  games.sort((a, b) => a.title.localeCompare(b.title));
+  if (!epicAccount()) return { error: 'Sign in to Epic Games first.' }; // (signed out while Epic was answering: nothing is kept)
+  try { fs.mkdirSync(dataDir, { recursive: true }); fs.writeFileSync(libraryFile() + '.tmp', JSON.stringify({ at: Date.now(), games })); fs.renameSync(libraryFile() + '.tmp', libraryFile()); } catch (e) { log('Epic library not kept', e.message); }
+  const have = new Set(epicInstalled().map(g => g.appName));
+  return { games: games.map(g => ({ ...g, installed: have.has(g.appName) })) };
 }
 // sign in with the code from Epic's login page (main.js shows it and reads the code); { ok, name } or { error }
 async function epicSignIn(bin, code) {
@@ -242,30 +242,33 @@ async function epicSignIn(bin, code) {
   log('Epic sign-in failed', r.code, (r.err || '').split('\n').filter(l => /ERROR|error/.test(l)).slice(-2).join(' | ').replace(/[\w-]{24,}/g, '…'));
   return { error: "Couldn't sign in to Epic Games. Try again in a moment." };
 }
-async function epicSignOut(bin) { const r = await runLegendary(bin, ['auth', '--delete'], { ms: 30000 }); log('Epic: signed out', r.code); return { ok: !epicAccount() }; }
-// every game the account owns, for Settings → Epic library: [{ appName, title, installed, cover }] (legendary asks Epic)
-async function epicLibrary(bin) {
-  const r = await runLegendary(bin, ['list', '--json'], { ms: 120000 });
-  if (r.code !== 0) return { error: epicAccount() ? "Couldn't get your Epic library. Check the internet connection." : 'Sign in to Epic Games first.' };
-  let list = []; try { list = JSON.parse(r.out); } catch { return { error: "Couldn't read the Epic library." }; }
-  const have = new Set(epicGames().map(g => g.appName)), out = [];
-  for (const g of Array.isArray(list) ? list.slice(0, 5000) : []) {
-    const app = String(g && g.app_name || ''); if (!/^[\w.-]{1,120}$/.test(app)) continue;
-    const imgs = g.metadata && Array.isArray(g.metadata.keyImages) ? g.metadata.keyImages : [];
-    const cover = (imgs.find(i => i && i.type === 'DieselGameBoxTall') || imgs.find(i => i && i.type === 'DieselGameBox') || {}).url;
-    out.push({ appName: app, title: String(g.app_title || app).slice(0, 120), installed: have.has(app), cover: typeof cover === 'string' && /^https:\/\//.test(cover) ? cover : '' });
-  }
-  return { games: out.sort((a, b) => a.title.localeCompare(b.title)) };
-}
+async function epicSignOut(bin) { const r = await runLegendary(bin, ['auth', '--delete'], { ms: 30000 }); try { fs.unlinkSync(libraryFile()); } catch {} log('Epic: signed out', r.code); return { ok: !epicAccount() }; }
 // one install at a time: { appName, title, pct, speed, eta, state: 'installing' | 'done' | 'failed' | 'cancelled' }
 let job = null;
 function epicJob() { return job ? { appName: job.appName, title: job.title, pct: job.pct, speed: job.speed, eta: job.eta, state: job.state, error: job.error, update: !!job.update } : null; }
-function epicInstallDir(custom) { if (custom && path.isAbsolute(custom)) return custom; return heroicInstallDir() || path.join(appRoot || path.join(H(), 'Boxshelf'), 'Epic Games'); }
+// the folders of Epic installs not finished yet (downloading now, or stopped half way: legendary picks them up next time),
+// kept in data/epic-unfinished.json: { "<folder>": "<app name>" }. They aren't games of the PC games folder.
+const unfinishedFile = () => path.join(dataDir, 'epic-unfinished.json');
+function epicUnfinished() {
+  const m = readJson(unfinishedFile()) || {}, done = new Set(epicInstalled().map(g => path.resolve(g.dir)));
+  return [...Object.keys(m).filter(d => !done.has(path.resolve(d))), ...(job && job.state === 'installing' && job.newDirs ? job.newDirs() : [])];
+}
+function noteUnfinished(dirs, appName, finished) {
+  const m = readJson(unfinishedFile()) || {};
+  if (finished) { for (const [d, a] of Object.entries(m)) if (a === appName) delete m[d]; }
+  else for (const d of dirs) m[d] = appName; // (stopped again after picking up: the folder noted the first time stays noted)
+  try { fs.writeFileSync(unfinishedFile(), JSON.stringify(m)); } catch (e) { log('Epic: unfinished installs not kept', e.message); }
+}
+// where Epic games install: the folder chosen for them, else the PC games folder, else <Boxshelf>/Epic Games
+const epicInstallDir = (custom, gamesDir) => [custom, gamesDir].find(d => d && path.isAbsolute(d)) || path.join(root(), 'Epic Games');
 function epicInstall(bin, appName, title, baseDir, onChange, update = false) {
-  if (!/^[\w.-]{1,120}$/.test(String(appName || ''))) throw new Error('Unknown Epic game.');
+  if (!APP.test(String(appName || ''))) throw new Error('Unknown Epic game.');
   if (job && job.state === 'installing') throw new Error(`${job.title} is installing. Wait for it to finish, or cancel it.`);
   if (!update) try { fs.mkdirSync(baseDir, { recursive: true }); } catch (e) { throw new Error(`Can't use ${baseDir} for games: ${e.message}`); }
-  job = { appName, title: String(title || appName).slice(0, 120), pct: 0, speed: '', eta: '', state: 'installing', error: '', update };
+  // (the folders that appear in baseDir while it installs are this game's: left off the PC games folder's games until it's done)
+  const listDir = () => { try { return fs.readdirSync(baseDir); } catch { return []; } }, before = new Set(update ? [] : listDir());
+  const newDirs = () => update ? [] : listDir().filter(n => !before.has(n)).map(n => path.join(baseDir, n));
+  job = { appName, title: String(title || appName).slice(0, 120), pct: 0, speed: '', eta: '', state: 'installing', error: '', update, newDirs };
   const me = job, tell = () => { try { onChange(epicJob()); } catch {} };
   log(update ? 'Epic: updating' : 'Epic: installing', appName, update ? '' : 'into ' + baseDir);
   const onLine = l => {
@@ -275,6 +278,7 @@ function epicInstall(bin, appName, title, baseDir, onChange, update = false) {
   const p = runLegendary(bin, update ? ['install', appName, '--update-only', '--skip-dlcs', '--skip-sdl', '-y'] : ['install', appName, '--base-path', baseDir, '--platform', 'Windows', '--skip-dlcs', '--skip-sdl', '-y'], { ms: 0, onLine });
   me.proc = p.proc;
   p.then(r => {
+    noteUnfinished(newDirs(), appName, me.state !== 'cancelled' && r.code === 0);
     if (me.state === 'cancelled') { tell(); return; }
     me.state = r.code === 0 ? 'done' : 'failed';
     if (r.code !== 0) { const e = (r.err.match(/ERROR: (.+)/g) || []).pop(); me.error = e ? e.replace(/^ERROR: /, '').slice(0, 200) : 'The install stopped.'; log('Epic install failed', appName, me.error); }
@@ -285,18 +289,17 @@ function epicInstall(bin, appName, title, baseDir, onChange, update = false) {
 }
 function epicCancel() { if (!job || job.state !== 'installing') return false; job.state = 'cancelled'; const p = job.proc; try { if (p) p.kill('SIGTERM'); } catch {} log('Epic: install cancelled', job.appName); return true; }
 async function epicUninstall(bin, appName) {
-  if (!/^[\w.-]{1,120}$/.test(String(appName || ''))) throw new Error('Unknown Epic game.');
+  if (!APP.test(String(appName || ''))) throw new Error('Unknown Epic game.');
   const r = await runLegendary(bin, ['uninstall', appName, '-y'], { ms: 300000 });
   log('Epic: uninstall', appName, r.code); return { ok: r.code === 0 };
 }
-// how to start an installed Epic game: legendary hands over its program and Epic's sign-in arguments (online, or offline
-// when Epic can't be reached and the game allows it); { exe, args, cwd, env, offline }
+// how to start an installed Epic game: legendary hands over its program and Epic's sign-in arguments (online; an update
+// waiting is skipped for now; offline when Epic can't be reached and the game allows it); { exe, args, cwd, env, offline, outdated }
 async function epicLaunchInfo(bin, appName) {
   let outdated = false;
   const ask = async (off, skip) => { const r = await runLegendary(bin, ['launch', appName, '--json', ...(off ? ['--offline'] : []), ...(skip ? ['--skip-version-check'] : [])], { ms: 45000 });
     if (r.code !== 0) { if (/out of date/i.test(r.err)) outdated = true; return null; } try { return JSON.parse(r.out); } catch { return null; } };
   let off = !epicAccount(), j = await ask(off, false);
-  // an update is waiting: play this version anyway, still signed in (Settings → PC games → Epic library updates it)
   if (!j && !off && outdated) { j = await ask(false, true); if (j) log('Epic: an update is available, starting this version', appName); }
   if (!j && !off) { off = true; j = await ask(true, false); if (j) log('Epic: offline launch (Epic not reachable)', appName); }
   if (!j || !j.game_executable || !j.game_directory) throw new Error(epicAccount() ? "Couldn't get the game ready with Epic. Check the internet connection, or that the game is still installed." : 'Sign in to Epic Games in Settings → PC games first.');
@@ -305,5 +308,5 @@ async function epicLaunchInfo(bin, appName) {
   return { exe: path.join(String(j.game_directory), String(j.game_executable)), args: [...strs(j.game_parameters), ...strs(j.egl_parameters), ...strs(j.user_parameters)], cwd: String(j.working_directory || j.game_directory), env, offline: off, outdated };
 }
 
-module.exports = { init, runners, pickRunner, runnerFromHeroic, windowsCommand, cleanEnv, protonOptions, umuNeedsRuntime, endPrefix, isWindowsProgram, prefixFor, prefixRoot, umuRun, umuId, heroicSideload, epicCover,
-  heroicDir, heroicGame, legendaryBin, legendaryConfig, epicAccount, epicGames, epicSignIn, epicSignOut, epicLibrary, epicInstall, epicCancel, epicUninstall, epicJob, epicInstallDir, epicLaunchInfo };
+module.exports = { init, runners, pickRunner, windowsCommand, cleanEnv, gameHome, protonEnv, umuNeedsRuntime, endPrefix, isWindowsProgram, prefixFor, prefixRoot, prefixName, umuRun, umuId,
+  legendaryBin, getLegendary, legendaryConfig, epicAccount, epicInstalled, epicOwned, epicLibrary, libraryAge, epicSignIn, epicSignOut, epicInstall, epicCancel, epicUninstall, epicJob, epicInstallDir, epicUnfinished, epicLaunchInfo };

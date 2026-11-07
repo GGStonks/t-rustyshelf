@@ -30,8 +30,8 @@ async function save(id, buf, ext) {
 }
 
 // (Linux) the store's own cover of a game, downloaded once and used while no cover was chosen: Epic's box art (legendary's
-// store details), the cover Heroic shows for a game added there. data\pc-covers-auto\<game id>.<ext>; the address it came
-// from is kept beside it, so a cover Heroic or Epic changes is fetched again.
+// store details). data\pc-covers-auto\<game id>.<ext>; the address it came from is kept beside it, so a cover Epic
+// changes is fetched again.
 function autoCover(id) { const b = path.join(autoDir(), safeId(id)); for (const e of EXTS) if (isFile(b + '.' + e)) return b + '.' + e; return null; }
 const autoFrom = id => { try { return fs.readFileSync(path.join(autoDir(), safeId(id) + '.from'), 'utf8'); } catch { return ''; } };
 async function fetchAuto(id, url) {

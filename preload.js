@@ -51,6 +51,8 @@ contextBridge.exposeInMainWorld('boxshelf', {
   pcLinux: () => call('pc:linux'),
   epicSignIn: () => call('epic:signIn'), epicSignOut: () => call('epic:signOut'), epicLibrary: () => call('epic:library'),
   epicInstall: (appName, title, update) => call('epic:install', { appName, title, update: !!update }), epicCancel: () => call('epic:cancel'),
+  epicInstallGame: id => call('epic:install', { id }), // (Play on a greyed Epic game: named by its id on the shelf)
+  getLegendary: () => call('pc:getLegendary'), pcFolderGames: () => call('pc:folderGames'),
   epicUninstall: appName => call('epic:uninstall', { appName }), epicJob: () => call('epic:job'),
   onEpicJob: fn => { const h = (_e, j) => fn(j); ipcRenderer.on('epic:job', h); return () => ipcRenderer.removeListener('epic:job', h); },
   // (beta.5) a PC game's cover picker

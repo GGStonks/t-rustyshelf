@@ -49,11 +49,14 @@ piece is a new module or a `process.platform === 'linux'` branch.
 
 ### Phase 4: polish
 - Power actions (`systemctl suspend / reboot / poweroff`), autostart (`~/.config/autostart` .desktop file), the
-  problem report zip in JS, GOG through Heroic as a PC source, file pickers without the `.exe` filter.
-- Done: PC games without Steam (`main/linuxpc.js`). Windows games run through Wine or Proton (the builds Steam, Heroic,
-  Lutris and the distro installed; Proton through `umu-run` when it's there), each in a Wine prefix of its own. Epic
-  Games through legendary: sign in with Epic's page, the account's library, install / update / uninstall, and Play,
-  with Heroic's legendary folder and per-game Wine settings shared when Heroic is set up. Test:
+  problem report zip in JS, GOG as a PC source, file pickers without the `.exe` filter.
+- Done: PC games without Steam (`main/linuxpc.js`, `main/pcfolder.js`). The PC games folder (Settings → PC games): every
+  folder in it is a game; a Linux program in it (AppRun, start script, AppImage, ELF) runs natively with the game data
+  folder as its home, otherwise its Windows program runs through Wine or Proton (the builds Steam, Lutris, the distro or
+  Boxshelf's `tools/proton` hold; Proton through `umu-run` when it's there), each in a Wine prefix named after the game.
+  A folder of the player's own copies overrides the shared one. Epic Games through Boxshelf's own legendary (Get
+  legendary downloads the checked release): sign in with Epic's page; every owned game is on the shelf, the uninstalled
+  ones greyed (Play offers to install them); install / update / uninstall. Test:
   `xvfb-run -a node linux/ci/pc-test.js <AppImage>`.
 
 ## Not on Linux (hidden there)
