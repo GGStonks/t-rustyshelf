@@ -232,6 +232,7 @@ function build(){
     A("Console order","Reorder","The order of the consoles along the top. Home always comes first.",()=>openSub({kind:"order"}),{keys:"shelf order arrange tabs move"}),
     // (beta.7) your own shelves (Details → Collections adds games to them): renamed and deleted here
     M("Collections","shelf-cols","Shelves of your own, mixing games from any console (Details → Collections adds a game). Rename or delete them here.","Each one is a shelf beside Home.",[{t:"dyn",fn:colManageRows}],{keys:"collections lists playlists own shelves"}),
+    T("Show game sizes","ui.showSize",true,"Shows how much room each game takes on your drive, under its name and in Details: a console game's file, a PC game's install.",{keys:"size gb storage space disk install"}),
     T("Shuffle from every shelf","ui.shuffleAll",true,"Surprise me picks from all consoles instead of just the shelf you're on.",{keys:"random surprise"}),
     T("Attract mode","ui.attract",true,"After a few idle minutes the shelf drifts through your boxes on its own, with the HUD faded, like a store display.",{keys:"idle screensaver demo"}),
     C("Attract mode starts after","ui.attractMinutes",[[2,"2 min"],[3,"3 min"],[5,"5 min"],[10,"10 min"],[20,"20 min"]],3,"How long without input before the tour begins.",{keys:"idle",live:v=>applyUi({attractMinutes:v})}),

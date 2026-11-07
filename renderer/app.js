@@ -65,6 +65,8 @@ const saved=safe(()=>JSON.parse(localStorage.getItem("boxshelf-ui")||"{}"))||{};
 const save=()=>safe(()=>localStorage.setItem("boxshelf-ui",JSON.stringify({sys:cur()&&cur().id,sel})));
 
 /* ---------- helpers ---------- */
+// Settings → Shelf → Show game sizes (on unless turned off)
+const showSize=()=>!(cfgInfo&&cfgInfo.config&&cfgInfo.config.ui&&cfgInfo.config.ui.showSize===false);
 function fmtSize(b){if(!b)return"";const u=["B","KB","MB","GB","TB"];let i=0;while(b>=1024&&i<4){b/=1024;i++}return (i>=3?b.toFixed(1):Math.round(b))+" "+u[i]}
 function fmtDate(sec){if(!sec)return"Never";const d=new Date(sec*1000),days=Math.floor((Date.now()-d)/864e5);if(days<1)return"Today";if(days<2)return"Yesterday";if(days<7)return days+" days ago";return d.toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"})}
 const fmtDay=sec=>fmtDate(sec).replace(/^(Today|Yesterday|Never)$/,w=>w.toLowerCase()); // the same, mid-sentence ("played today")
@@ -524,9 +526,9 @@ function metaFor(g){
   if(g.kind==="setup")return [`No ${s?s.name+" ":""}games yet`,`${okWord()} opens ${s?s.name:"its"} settings to add a games folder`];
   if(g.kind==="random")return g.pick?["Surprise pick",(g.pick.sh||shelves[g.pick.shelf]).name,rerollWord()]:["Shuffle","Lands on a random game"];
   if(g.kind==="app")return ["Streaming app"];
-  if(g.kind==="steam")return [PC_SRC[g.source]||"Steam",g.minutes?`${(g.minutes/60).toFixed(1)} h played`:"Not played yet"];
+  if(g.kind==="steam")return [PC_SRC[g.source]||"Steam",g.installed===false?"Not installed":g.minutes?`${(g.minutes/60).toFixed(1)} h played`:"Not played yet",showSize()?fmtSize(g.sizeBytes):""].filter(Boolean);
   const r=raFor(g);
-  return [g.region,g.ext&&g.ext.toUpperCase(),fmtSize(g.sizeBytes),g.discs&&g.discs.length>1?`${g.discs.length} discs`:"",hasManual(g)?"Manual":"",r?(r.mastered==="mastered"?"★ Mastered":`★ ${r.earned}/${r.total}`):""].filter(Boolean);
+  return [g.region,g.ext&&g.ext.toUpperCase(),showSize()?fmtSize(g.sizeBytes):"",g.discs&&g.discs.length>1?`${g.discs.length} discs`:"",hasManual(g)?"Manual":"",r?(r.mastered==="mastered"?"★ Mastered":`★ ${r.earned}/${r.total}`):""].filter(Boolean);
 }
 function updateInfo(){pvBackSchedule();
   bsSelectSoon();
@@ -857,7 +859,7 @@ function infoRows(g){
   if(g.kind==="setup")return [["Games found","None yet"],["Fix it in","Settings → "+s.name]];
   if(g.kind==="random")return [...(g.pick?[["Picked",g.pick.game.title],["Shelf",(g.pick.sh||shelves[g.pick.shelf]).name]]:[]),["Picks from",shuffleAll()?"Every shelf":"This shelf"],["Change","Settings → Shelf"]];
   if(g.kind==="app")return [["Type","Streaming app"],["Program",g.path],["Returns","When you close the app"]];
-  if(g.kind==="steam"){const si=g.info||{};return [...(si.release||si.year?[["Released",fmtRelease(si.release,si.year)]]:[]),...(si.dev?[["Developer",si.dev]]:[]),...(si.pub&&si.pub!==si.dev?[["Publisher",si.pub]]:[]),...(si.genres?[["Genre",si.genres.replace(/;/g,", ")]]:[]),...(si.metacritic?[["Metacritic",si.metacritic+" / 100"]]:[]),["Playtime",g.minutes?`${(g.minutes/60).toFixed(1)} hours`:"Not played yet"],["Last played",fmtDate(g.lastPlayed)],["Install size",fmtSize(g.sizeBytes)],["Steam ID",g.appid]];}
+  if(g.kind==="steam"){const si=g.info||{};return [...(si.release||si.year?[["Released",fmtRelease(si.release,si.year)]]:[]),...(si.dev?[["Developer",si.dev]]:[]),...(si.pub&&si.pub!==si.dev?[["Publisher",si.pub]]:[]),...(si.genres?[["Genre",si.genres.replace(/;/g,", ")]]:[]),...(si.metacritic?[["Metacritic",si.metacritic+" / 100"]]:[]),["Playtime",g.minutes?`${(g.minutes/60).toFixed(1)} hours`:"Not played yet"],["Last played",fmtDate(g.lastPlayed)],...(showSize()&&g.sizeBytes?[["Install size",fmtSize(g.sizeBytes)]]:[]),["Steam ID",g.appid]];}
   const i=g.info||{};const rows=[];
   if(i.release||i.year)rows.push(["Released",fmtRelease(i.release,i.year)]);
   if(i.dev)rows.push(["Developer",i.dev]);if(i.pub&&i.pub!==i.dev)rows.push(["Publisher",i.pub]);
@@ -865,7 +867,7 @@ function infoRows(g){
   if(i.players)rows.push(["Players",i.players+(i.coop==="true"?" (co-op)":"")]);
   if(i.esrb)rows.push(["Rating",i.esrb.replace(/ - .*$/,"")]);
   if(i.rating)rows.push(["Community score",i.rating+" / 5"]);
-  rows.push(["Region",g.region||"Unknown"],["File",(g.ext||"").toUpperCase()+" · "+fmtSize(g.sizeBytes)+(g.discs&&g.discs.length>1?" · "+g.discs.length+" discs":"")],["Emulator",s.emulatorName]);
+  rows.push(["Region",g.region||"Unknown"],["File",[(g.ext||"").toUpperCase(),showSize()?fmtSize(g.sizeBytes):""].filter(Boolean).join(" · ")+(g.discs&&g.discs.length>1?" · "+g.discs.length+" discs":"")],["Emulator",s.emulatorName]);
   return rows;
 }
 function fmtRelease(r,y){if(r){const d=new Date(r);if(!isNaN(d))return d.toLocaleDateString(undefined,{year:"numeric",month:"long",day:"numeric"})}return y||""}
@@ -3991,7 +3993,7 @@ window.Shelf={
   refresh,flushSaves,toast,shuffle,cleanLogo,attractNow:()=>{lastInputAt=-1e9;attractCheck()},sound:(o)=>{if(o&&o.enabled!=null){soundOn=!!o.enabled;musTvVol()}if(o&&o.volume!=null&&cfgInfo){cfgInfo.config.ui.volume=+o.volume;paintVol()}if(window.Sound){Sound.set(o);if(o.preview)Sound.play(o.preview);if(o.music!=null||o.musicLevel!=null){if(o.music!=null)mmTrack=String(o.music);if(o.musicLevel!=null)mmLevel=+o.musicLevel;ambient(mmWant)}else if(o.enabled===true)ambient(mmWant)}},raReload:()=>{RA.shelf={};RA.game.clear();raInit()},
   // Settings closed without a rescan: pick up what refresh() used to re-read (sound on/off, the volume icon, prompts)
   settingsClosed:()=>{if(cpReturn){const x=cpReturn;cpReturn=null;const g=allShelves.flatMap(s=>s.items||[]).find(y=>y&&y.id===x.id);if(g)setTimeout(()=>pcCoverOpen(g,x.term),350)} /* (beta.9) back from the SteamGridDB key's page: the cover picker again */
-    if(!cfgInfo)return;const u=cfgInfo.config.ui;soundOn=u.sound!==false;paintVol();buttonsPref=u.buttons||"auto";applyUiAll();renderHints.sig="";renderHints();updateSkipText();lastInputAt=performance.now()},
+    if(!cfgInfo)return;const u=cfgInfo.config.ui;soundOn=u.sound!==false;paintVol();buttonsPref=u.buttons||"auto";applyUiAll();renderHints.sig="";renderHints();updateInfo() /* (Show game sizes) */;updateSkipText();lastInputAt=performance.now()},
   // Settings reads the controller itself: its presses count as activity (attract, dimming), and none of them act while
   // the dimmed screen is up or the press that woke it is still held
   _wake:()=>{lastInputAt=dimAt=performance.now()},padBlocked:()=>dimOn||dimSwallowPad,

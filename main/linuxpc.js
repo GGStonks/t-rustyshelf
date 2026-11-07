@@ -203,7 +203,7 @@ function epicInstalled() {
   for (const [app, g] of Object.entries(j).slice(0, 2000)) {
     if (!g || typeof g !== 'object' || g.is_dlc || !APP.test(app)) continue;
     const dir = String(g.install_path || ''); if (!dir || !isDir(dir)) continue;
-    out.push({ id: 'epic-' + slug(app), source: 'epic', installed: true, title: String(g.title || app).trim().slice(0, 120), appName: app, dir, exe: g.executable ? path.join(dir, String(g.executable)) : '', platform: String(g.platform || 'Windows'), coverUrl: epicCover(app) });
+    out.push({ id: 'epic-' + slug(app), source: 'epic', installed: true, title: String(g.title || app).trim().slice(0, 120), appName: app, dir, exe: g.executable ? path.join(dir, String(g.executable)) : '', platform: String(g.platform || 'Windows'), coverUrl: epicCover(app), installSize: +g.install_size || 0 });
   }
   return out.sort((a, b) => a.title.localeCompare(b.title));
 }

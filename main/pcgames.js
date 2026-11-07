@@ -36,7 +36,7 @@ function epicGames(dir = EPIC_DIR()) {
     const id = 'epic-' + slug(app); if (seen.has(id)) continue; seen.add(id);
     const ns = String(m.CatalogNamespace || ''), item = String(m.CatalogItemId || '');
     const uri = 'com.epicgames.launcher://apps/' + (ns && item ? encodeURIComponent(`${ns}:${item}:${app}`) : encodeURIComponent(app)) + '?action=launch&silent=true';
-    out.push({ id, source: 'epic', title, uri, exe: m.InstallLocation && m.LaunchExecutable ? path.join(m.InstallLocation, m.LaunchExecutable) : '' });
+    out.push({ id, source: 'epic', title, uri, dir: m.InstallLocation || '', exe: m.InstallLocation && m.LaunchExecutable ? path.join(m.InstallLocation, m.LaunchExecutable) : '' });
   }
   return out.sort((a, b) => a.title.localeCompare(b.title));
 }

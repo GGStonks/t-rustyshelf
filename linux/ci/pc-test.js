@@ -24,7 +24,7 @@ const gamesDir = at('Games', 'PC'), ownDir = at('Mine'), gameHome = at('GameHome
 // the Epic game, installed by legendary into the PC games folder (no .egstore: left out by its install path)
 const gameDir = at('Games', 'PC', 'Test Epic Game'); mk('Games/PC/Test Epic Game/Binaries/Game.exe', 'MZ');
 const legDir = at('Boxshelf', 'data', 'legendary');
-mk('Boxshelf/data/legendary/installed.json', JSON.stringify({ FakeApp: { app_name: 'FakeApp', title: 'Test Epic Game', install_path: gameDir, executable: 'Binaries/Game.exe', platform: 'Windows', is_dlc: false } }));
+mk('Boxshelf/data/legendary/installed.json', JSON.stringify({ FakeApp: { app_name: 'FakeApp', title: 'Test Epic Game', install_path: gameDir, executable: 'Binaries/Game.exe', platform: 'Windows', is_dlc: false, install_size: 123456789 } }));
 mk('Boxshelf/data/legendary/user.json', JSON.stringify({ displayName: 'Tester', account_id: 'x' }));
 const proton = at('.steam', 'root', 'compatibilitytools.d', 'GE-Proton-Test'); mk('.steam/root/compatibilitytools.d/GE-Proton-Test/proton', '#!/bin/sh\nexit 0\n', true);
 mk('Boxshelf/tools/runtimes/eac_runtime/v2/lib64/easyanticheat_x64.so', 'x');
@@ -79,6 +79,9 @@ const shot = async (p, name) => { try { const r = await p.send('Page.captureScre
     check('the PC shelf has the PC games folder\'s games and the Epic game (once, not also as a folder)', JSON.stringify(titles) === JSON.stringify(['Native Game:folder', 'Not Installed Game:epic', 'Test Epic Game:epic', 'Two Programs:folder', 'Win Game:folder']), JSON.stringify(titles));
     const eg = pcShelf && pcShelf.games.find(g => g.title === 'Test Epic Game');
     check('an Epic game that isn\'t installed is on the shelf, marked not installed (greyed); installed ones aren\'t', !!ng && ng.installed === false && !!eg && eg.installed !== false, JSON.stringify({ ng, eg }));
+    // sizes: Epic's own for its install, the folder's (measured in the background) for a PC games folder game
+    let wg = null; for (let i = 0; i < 20; i++) { wg = ((await p.ev('window.boxshelf.scan()')).find(s => s.id === 'pc') || { games: [] }).games.find(g => g.title === 'Win Game'); if (wg && wg.sizeBytes) break; await sleep(500); }
+    check('PC games show their size: an Epic install and a folder game', !!eg && eg.sizeBytes > 0 && !!wg && wg.sizeBytes >= 5000 && !ng.sizeBytes, JSON.stringify({ eg: eg && eg.sizeBytes, wg: wg && wg.sizeBytes, ng: ng && ng.sizeBytes }));
     check('the Windows program added by hand is on the Custom shelf', !!custom && custom.games.some(g => g.title === 'Test Tool'));
     const L = await p.ev('window.boxshelf.pcLinux()');
     check('Settings sees the Proton build, umu-run, legendary, the Epic account and installs into the PC games folder', !!L && L.runners.some(r => r.name === 'GE-Proton-Test') && L.umu && L.legendary && L.epicAccount === 'Tester' && L.epicDir === gamesDir, JSON.stringify(L));

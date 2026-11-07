@@ -34,6 +34,7 @@ const steamart = require('./main/steamart');
 const pcgames = require('./main/pcgames'); // (beta.4) Epic, Quiver Launcher and games added by hand
 const linuxpc = require('./main/linuxpc'); // (Linux) Windows games through Wine / Proton, Epic Games through legendary
 const pcfolder = require('./main/pcfolder'); // the PC games folder: each folder in it is a game
+const dirsize = require('./main/dirsize'); // how much room a game's folder takes, measured in the background
 const pccovers = require('./main/pccovers'); // (beta.5) choosing a PC game's cover (SteamGridDB, Steam's own, your own)
 const wiiumanual = require('./main/wiiumanual');
 const manualcoll = require('./main/manualcoll');
@@ -575,6 +576,8 @@ function iconQuick(exe) {
 }
 // (beta.7) store games: real store titles, so their covers come from the Steam app with the same name (not Quiver's or
 // hand-added programs: those often share a name with an unrelated game)
+// the PC games whose own folder is the game (its size is the folder's): not a program added by hand, which may sit in a shared folder
+const SIZED_SRC = new Set(['folder', 'epic']);
 const STORE_SRC = new Set(['epic', 'gog', 'ubisoft', 'ea', 'xbox', 'folder']); // (folder: a game in the PC games folder, named by its folder)
 async function buildLibrary() {
   const shelves = [];
@@ -617,7 +620,10 @@ async function buildLibrary() {
   // (Epic's), Steam's, or none: a made-up case)
   const pcGame = g => { const sid = STORE_SRC.has(g.source) ? pcgames.steamIdOf(g.title) : null, l = sid ? steamart.local(sid) : {};
     const chosen = pccovers.cover(g.id), auto = !chosen && pccovers.autoCover(g.id), front = chosen || auto || l.front;
-    return { kind: 'steam', source: g.source, id: g.id, title: g.title, ...(g.installed === false ? { installed: false } : {}), ...(sid ? { info: steamart.gameInfo(sid) } : {}), artFrom: chosen ? 'yours' : auto ? 'store' : l.front ? 'steam' : '', art: { front: fileUrl(front), hero: fileUrl(l.hero), icon: g.icon || undefined } }; };
+    // (its size: its folder as measured in the background, until then what Epic says it installed (a game can download
+    // more itself, MTG Arena does); Steam's games bring their own)
+    const sizeBytes = g.installed === false ? 0 : (SIZED_SRC.has(g.source) && g.dir ? dirsize.get(g.dir) : 0) || g.installSize || 0;
+    return { kind: 'steam', source: g.source, id: g.id, title: g.title, ...(g.installed === false ? { installed: false } : {}), ...(sizeBytes ? { sizeBytes } : {}), ...(sid ? { info: steamart.gameInfo(sid) } : {}), artFrom: chosen ? 'yours' : auto ? 'store' : l.front ? 'steam' : '', art: { front: fileUrl(front), hero: fileUrl(l.hero), icon: g.icon || undefined } }; };
   pcAutoCovers([...epic, ...mine]);
   if (epic.length) pcShelf = pcShelf.concat(epic.map(pcGame)).sort((a, b) => String(a.title).localeCompare(String(b.title), undefined, { sensitivity: 'base' }));
   pcShelf.forEach(g => { if (!g.source && g.artFrom == null) g.artFrom = g.art && g.art.front ? (pccovers.cover(g.id) ? 'yours' : 'steam') : ''; }); // (Steam's own games)
@@ -2484,7 +2490,7 @@ function startUp() {
   stremio.init({ log, fanartKey: () => (cfg && cfg.keys && cfg.keys.fanart) || '', artDir: path.join(app.getPath('userData'), 'stremio-art'), fetchBuf: async url => { const r = await net.fetch(url); if (r.status === 404) return null; if (!r.ok) throw new Error('HTTP ' + r.status); return Buffer.from(await r.arrayBuffer()); } }); // null = really not there; other failures throw, so nothing "missing" is cached for them
   icons.init(app.getPath('userData'), log);
   x360.init(app.getPath('userData'), log);
-  steamart.init(app.getPath('userData'), log); pcgames.init(app.getPath('userData'), log); if (linux.isLinux) linuxpc.init({ dataDir: app.getPath('userData'), appRoot: paths.appRoot(), log, fetchBuf: async u => { const r = await net.fetch(u); return r.ok ? Buffer.from(await r.arrayBuffer()) : null; } }); pccovers.init({ dataDir: app.getPath('userData'), log, fileUrl, fetchImage, steamgrid: require('./main/steamgrid'), steamCover: id => steamart.local(id).front, match: covers.sgMatch, steamSearch: (t, exact) => pcgames.steamSearch(t, exact) });
+  steamart.init(app.getPath('userData'), log); dirsize.init({ dataDir: app.getPath('userData'), log, onMeasured: () => { if (alive()) win.webContents.send('library:changed', { sizes: 1 }); } }); pcgames.init(app.getPath('userData'), log); if (linux.isLinux) linuxpc.init({ dataDir: app.getPath('userData'), appRoot: paths.appRoot(), log, fetchBuf: async u => { const r = await net.fetch(u); return r.ok ? Buffer.from(await r.arrayBuffer()) : null; } }); pccovers.init({ dataDir: app.getPath('userData'), log, fileUrl, fetchImage, steamgrid: require('./main/steamgrid'), steamCover: id => steamart.local(id).front, match: covers.sgMatch, steamSearch: (t, exact) => pcgames.steamSearch(t, exact) });
   wiiumanual.init(app.getPath('userData'), log);
   ra.init(app.getPath('userData'), log); ra.setCredentials(cfg.ra && cfg.ra.enabled !== false ? cfg.ra.user : '', cfg.ra && cfg.ra.key);
   manuals.init(log); archive.init(log); manuals.setStore(path.join(app.getPath('userData'), 'manual-auto.json')); manuals.setRejectStore(path.join(app.getPath('userData'), 'manual-rejects.json'));
