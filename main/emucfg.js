@@ -24,11 +24,14 @@ function edenIni(exe) {
 }
 // Read an ini for editing: { src, bom, isNew }, or null when it must be left alone. Only ENOENT means "no file yet": a
 // locked or cloud-only file read as empty would be overwritten with our one key. UTF-16 / binary files are never touched.
-function readIni(f, label) {
+function readIni(f, label, readOnly) { // readOnly (beta.10): only looked at, never written back (bytes that aren't UTF-8 are fine then)
   let buf; try { buf = fs.readFileSync(f); } catch (e) { if (e.code === 'ENOENT') return { src: '', bom: '', isNew: true }; log(label || 'Config', 'could not read', f, '(' + (e.code || e.message) + '), left alone'); return null; }
   if (buf.length >= 2 && ((buf[0] === 0xFF && buf[1] === 0xFE) || (buf[0] === 0xFE && buf[1] === 0xFF))) { log(label || 'Config', f, 'is UTF-16, left alone'); return null; }
   if (buf.includes(0)) { log(label || 'Config', f, 'has NUL bytes (not a text ini), left alone'); return null; }
   let src = buf.toString('utf8'), bom = '';
+  // (beta.10) not UTF-8 (an ANSI accented path, "C:\Jeux\Éditions"): decoded, those bytes became U+FFFD and writing the file
+  // back would have broken the emulator's own setting
+  if (!readOnly && !Buffer.from(src, 'utf8').equals(buf)) { log(label || 'Config', f, 'is not UTF-8 text, left alone'); return null; }
   if (src.charCodeAt(0) === 0xFEFF) { bom = '\uFEFF'; src = src.slice(1); } // kept aside so section matching sees "[UI]", put back on write
   return { src, bom, isNew: false };
 }
@@ -154,14 +157,28 @@ function dolphinQuitPads(exe, combo) {
   const hotDev = (/^\s*Device\s*=\s*(.+?)\s*$/m.exec(hot.src) || [])[1] || '';
   const stop = (/^\s*General\/Stop\s*=\s*(.*?)\s*$/m.exec(hot.src) || [])[1] || '';
   const devs = new Set();
-  for (const n of ['WiimoteNew.ini', 'GCPadNew.ini']) { const ini = readIni(path.join(cfgDir, n), 'Dolphin'); if (!ini) continue; for (const m of ini.src.matchAll(/^\s*Device\s*=\s*(.+?)\s*$/gm)) devs.add(m[1]); }
-  const extra = [...devs].filter(d => d && d !== hotDev && !/keyboard|mouse|^Android|^Bluetooth|^XInput2?\//i.test(d) && !d.includes('`') && !stop.includes(d + ':'));
-  if (!extra.length) return false;
+  for (const n of ['WiimoteNew.ini', 'GCPadNew.ini']) { const ini = readIni(path.join(cfgDir, n), 'Dolphin', true); if (!ini) continue; for (const m of ini.src.matchAll(/^\s*Device\s*=\s*(.+?)\s*$/gm)) devs.add(m[1]); }
+  const padOk = d => d && d !== hotDev && !/keyboard|mouse|^Android|^Bluetooth|^XInput2?\//i.test(d) && !d.includes('`');
   // Dolphin names the east face button per backend: SDL "Button E", XInput / Windows.Gaming.Input "Button B"
   const name = (d, i) => i === 'Button E' && !/^SDL\//i.test(d) ? 'Button B' : i;
+  // (beta.10) Boxshelf's own terms ("(`<pad>:<input>`&…)": one such pad, exactly one quit combo's inputs) are rebuilt on every
+  // apply: a pad already there was skipped before, so a changed combo never reached it. The user's own terms stay as they are
+  const terms = s => { const out = []; let d = 0, q = false, cur = ''; for (const ch of s) { if (ch === '`') q = !q; else if (!q && ch === '(') d++; else if (!q && ch === ')') d--; if (!q && !d && ch === '|') { out.push(cur.trim()); cur = ''; } else cur += ch; } if (cur.trim()) out.push(cur.trim()); return out.filter(Boolean); };
+  const isOwn = t => { const m = /^\(((?:`[^`]+`&)*`[^`]+`)\)$/.exec(t); if (!m) return false; const ins = m[1].split('&').map(x => x.slice(1, -1)), at = ins[0].lastIndexOf(':'), dev = at > 0 ? ins[0].slice(0, at) : '';
+    if (!padOk(dev) || !ins.every(x => x.startsWith(dev + ':'))) return false; const got = ins.map(x => x.slice(dev.length + 1)).join('&');
+    return Object.values(DOLPHIN_COMBO).some(l => l.map(i => name(dev, i)).join('&') === got); };
+  const wrapped = b => { if (b[0] !== '(') return false; let d = 0, q = false; for (let i = 0; i < b.length; i++) { const c = b[i]; if (c === '`') q = !q; else if (!q && c === '(') d++; else if (!q && c === ')' && --d === 0) return i === b.length - 1; } return false; };
+  // (beta.10) the main pad's term Boxshelf writes when Stop was empty ("(`Back`&`Button B`)": no device, exactly one quit combo's
+  // inputs as the Hotkeys device names them) is its own too when it's the only other term beside its pad terms: kept as the
+  // user's, a changed combo never reached the main pad and the old one still stopped the game
+  const isBase = t => { const m = /^\(((?:`[^`]+`&)*`[^`]+`)\)$/.exec(t); if (!m) return false; const ins = m[1].split('&').map(x => x.slice(1, -1)); if (ins.some(x => x.includes(':'))) return false;
+    return Object.values(DOLPHIN_COMBO).some(l => l.map(i => name(hotDev, i)).join('&') === ins.join('&')); };
+  const all = terms(stop), mine = all.filter(isOwn), rest = all.filter(t => !isOwn(t)), user = mine.length && rest.length === 1 && isBase(rest[0]) ? [] : rest;
+  const extra = [...devs].filter(padOk);
+  if (!extra.length && !mine.length) return false;
   const parts = extra.map(d => inputs.map(i => '`' + d + ':' + name(d, i) + '`').join('&'));
-  const base = stop || inputs.map(i => '`' + name(hotDev, i) + '`').join('&');
-  const next = [base.includes('|') || base.includes('&') ? '(' + base + ')' : base, ...parts.map(p => '(' + p + ')')].join(' | ');
+  const base = user.length > 1 ? '(' + user.join(' | ') + ')' : user[0] || inputs.map(i => '`' + name(hotDev, i) + '`').join('&');
+  const next = [(base.includes('|') || base.includes('&')) && !wrapped(base) ? '(' + base + ')' : base, ...parts.map(p => '(' + p + ')')].join(' | ');
   setIni(path.join(cfgDir, 'Hotkeys.ini'), 'Hotkeys', { 'General/Stop': next }, 'Dolphin: quit combo also stops the game from ' + extra.join(', '));
   return true;
 }

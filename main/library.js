@@ -14,7 +14,7 @@ const IMG = /\.(jpe?g|png|webp|gif)$/i, ARCH = /\.(cbz|cbr|zip|cb7|7z|rar)$/i, P
 const MAX_ITEMS = 2000, MAX_DEPTH = 3;
 
 let cacheRoot = null; // set by main: <userData>\library
-function setCacheRoot(p) { cacheRoot = p; }
+function setCacheRoot(p) { cacheRoot = p; pruneSoon(); } // (beta.10: at startup only the size cap applies, orphans wait for a listing)
 const cacheDir = () => cacheRoot;
 function folder(kind) { if (!KINDS[kind]) throw new Error('Unknown library kind.'); return path.join(readingRoot(), KINDS[kind]); }
 function roots() { return [folder('magazine'), folder('guide'), cacheRoot].filter(Boolean); }
@@ -54,8 +54,8 @@ function scan() {
   return out;
 }
 
-let last = new Map(); // id -> item, from the last scan (the renderer only ever names items by id)
-function list() { const items = scan(); last = new Map(items.map(i => [i.id, i])); return items; }
+let last = new Map(), listed = false; // id -> item, from the last scan (the renderer only ever names items by id)
+function list() { const items = scan(); last = new Map(items.map(i => [i.id, i])); listed = true; pruneSoon(); return items; }
 function get(id) { const it = last.get(String(id)); if (!it) throw new Error('Not in the library.'); return it; }
 
 const run = (cmd, args, opts = {}) => new Promise((res, rej) => execFile(cmd, args, { windowsHide: true, timeout: 120e3, maxBuffer: 16 << 20, ...opts }, (err, out) => err ? rej(err) : res(String(out))));
@@ -85,7 +85,7 @@ async function unpack(it) {
   if (!cacheRoot) throw new Error('No cache folder.');
   const out = path.join(cacheRoot, `${it.id}-${it.mtime}`);
   const done = path.join(out, '.done');
-  if (fs.existsSync(done)) return out;
+  if (fs.existsSync(done)) { touch(out); return out; }
   if (unpacking.has(out)) return unpacking.get(out);
   const p = tarSlot(async () => {
     fs.rmSync(out, { recursive: true, force: true }); fs.mkdirSync(out, { recursive: true });
@@ -95,6 +95,7 @@ async function unpack(it) {
     fs.writeFileSync(done, '');
     // old unpacks of the same item (it changed since)
     try { for (const d of fs.readdirSync(cacheRoot)) if (d.startsWith(it.id + '-') && d !== path.basename(out)) fs.rmSync(path.join(cacheRoot, d), { recursive: true, force: true }); } catch {}
+    pruneSoon(); // (beta.10: the cache stays under its cap)
     return out;
   });
   unpacking.set(out, p); p.finally(() => unpacking.delete(out)).catch(() => {});
@@ -127,7 +128,7 @@ async function cover(id, pdfPage, side) {
     // already unpacked (it was read): use that; otherwise take out just the one page instead of the whole archive
     if (!cacheRoot || fs.existsSync(path.join(cacheRoot, `${it.id}-${it.mtime}`, '.done'))) { const p = await pages(id); return (back ? p.files[p.files.length - 1] : p.files[0]) || null; }
     const cdir = path.join(cacheRoot, 'covers', `${it.id}-${it.mtime}${back ? '-back' : ''}`), have = () => fs.existsSync(path.join(cdir, '.done')) ? imagesUnder(cdir)[0] || null : null;
-    if (have()) return have();
+    { const h = have(); if (h) { touch(cdir); return h; } }
     const key = cdir; if (unpacking.has(key)) return unpacking.get(key);
     const p = tarSlot(async () => {
       if (have()) return have();
@@ -143,11 +144,37 @@ async function cover(id, pdfPage, side) {
   }
   if (!cacheRoot) return null;
   const dir = path.join(cacheRoot, 'covers'), out = path.join(dir, `${it.id}-${it.mtime}${back ? '-back' : ''}.jpg`);
-  if (fs.existsSync(out)) return out;
+  if (fs.existsSync(out)) { touch(out); return out; }
   const b = await pdfPage(it.path, back); if (!b || !b.length) return null;
   // temp + rename: the cover is reused whenever the file exists, so a cut-off write would have stayed broken
   fs.mkdirSync(dir, { recursive: true }); const tmp = `${out}.${process.pid}.tmp`; try { fs.writeFileSync(tmp, b); fs.renameSync(tmp, out); } catch (e) { try { fs.unlinkSync(tmp); } catch {} throw e; }
   return out;
 }
 
-module.exports = { setCacheRoot, cacheDir, coverPath, folder, roots, list, get, pages, cover, scan };
+// (beta.10) data\library never grows for ever: the unpacked archives and covers of items no longer in the reading folders
+// go, and the rest stays under CAP_BYTES, the least recently read going first (a read or a cover shown touches its date).
+// Async (fs.promises), a while after a listing or an unpack; anything used in the last RECENT ms, or unpacking, is kept.
+const CAP_BYTES = 2 * 1024 ** 3, RECENT = 2 * 3600e3, CACHED = /^[0-9a-f]{16}-\d+(-back)?(\.jpg)?$/;
+const touch = p => { const now = new Date(); fs.promises.utimes(p, now, now).catch(() => {}); };
+let pruneT = null, pruning = false;
+function pruneSoon() { if (!cacheRoot) return; clearTimeout(pruneT); pruneT = setTimeout(() => { prune().catch(() => {}); }, 30000); if (pruneT.unref) pruneT.unref(); }
+async function du(p) { let st; try { st = await fs.promises.lstat(p); } catch { return 0; } if (!st.isDirectory()) return st.size; let n = 0, ents = []; try { ents = await fs.promises.readdir(p); } catch {} for (const e of ents) n += await du(path.join(p, e)); return n; }
+async function prune() {
+  if (!cacheRoot || pruning) return; pruning = true;
+  try {
+    // orphans only from a listing that found something (a reading folder on a drive that's away lists nothing) and wasn't cut at MAX_ITEMS
+    const ids = listed && last.size && last.size < MAX_ITEMS ? new Set(last.keys()) : null, ents = [], now = Date.now();
+    for (const dir of [cacheRoot, path.join(cacheRoot, 'covers')]) {
+      let ns = []; try { ns = await fs.promises.readdir(dir); } catch { continue; }
+      for (const n of ns) { const p = path.join(dir, n); if (!CACHED.test(n) || unpacking.has(p)) continue; let st; try { st = await fs.promises.stat(p); } catch { continue; } ents.push({ p, id: n.slice(0, 16), t: st.mtimeMs, size: 0 }); }
+    }
+    const keep = [];
+    for (const e of ents) { if (ids && !ids.has(e.id) && now - e.t > RECENT) await fs.promises.rm(e.p, { recursive: true, force: true }).catch(() => {}); else keep.push(e); }
+    let total = 0; for (const e of keep) { e.size = await du(e.p); total += e.size; }
+    if (total <= CAP_BYTES) return;
+    keep.sort((a, b) => a.t - b.t);
+    for (const e of keep) { if (total <= CAP_BYTES) break; if (now - e.t < RECENT || unpacking.has(e.p)) continue; await fs.promises.rm(e.p, { recursive: true, force: true }).then(() => { total -= e.size; }, () => {}); }
+  } finally { pruning = false; }
+}
+
+module.exports = { setCacheRoot, cacheDir, coverPath, folder, roots, list, get, pages, cover, scan, prune };

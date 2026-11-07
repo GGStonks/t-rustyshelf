@@ -7,6 +7,7 @@ const el=(tag,attrs,...kids)=>{const e=document.createElement(tag);for(const[k,v
 
 let coverBusy=false,legacyBack=null,dlRuns=0; // dlRuns: box art / manual downloads started here (Settings rescans on close only after one)
 let opening=false,info=null,cfg=null,det=null,wizard=false,step=0,steps=[],saveT=null,detecting=false;
+const dirsGone=new Set(); // (beta.10) Android: games folders removed this session (see the Game folders card)
 
 const CONSOLE_HELP={
   // (beta.7) wave 2: RetroArch runs these; only the ones with something to know get a note
@@ -92,7 +93,11 @@ async function persist(){try{info.config=await api.saveConfig(cfg)}catch(e){Shel
 function changed(){clearTimeout(saveT);saveT=setTimeout(persist,400);renderNav()}
 
 /* ---------- auto-detect ---------- */
-async function runDetect(applyEmpty){
+// (beta.10) one search at a time: a second press (or Android's Get started tapped twice) waits for the one running instead
+// of starting another alongside
+let detectRun=null;
+function runDetect(applyEmpty){if(detectRun)return detectRun;const p=detectRun=detectNow(applyEmpty);p.finally(()=>{if(detectRun===p)detectRun=null}).catch(()=>{});return p}
+async function detectNow(applyEmpty){
   detecting=true;render();
   try{det=await api.detect()}catch(e){Shelf.toast(e.message);det=null}
   detecting=false;
@@ -257,7 +262,7 @@ function welcome(b){
   else head(b,"Welcome to Boxshelf","Let's find your games","Boxshelf looks for your emulators, games, Steam library and streaming apps. Next you pick which consoles you play, and it's ready in a minute.");
   if(onAndroid()){const root=info.appRoot;b.append(el("div",{class:"field"},el("div",{class:"lbl"},"Boxshelf folder"),el("div",{class:"d-cmd",text:root})))}
   b.append(el("div",{class:"d-actions"},
-    el("button",{type:"button",class:"btn primary",onclick:async()=>{await runDetect(true);searched=true;pickInit();step=1;render()}},detecting?el("span",{class:"scanning"}):null,detecting?" Looking…":winWizard()?"Find my emulators and games":"Find automatically"),
+    el("button",{type:"button",class:"btn primary",onclick:async()=>{if(detecting)return;await runDetect(true);searched=true;pickInit();if(step===0)step=1;render()}} /* (beta.10) only moves on if you're still on Welcome */,detecting?el("span",{class:"scanning"}):null,detecting?" Looking…":winWizard()?"Find my emulators and games":"Find automatically"),
     el("button",{type:"button",class:"btn",onclick:()=>{pickInit();step=1;render()}},winWizard()?"I'll pick them myself":"Set up by hand")));
 }
 
@@ -475,12 +480,15 @@ async function acctTest(s){
   acctBusy[s.id]=false;const st=acctSt[s.id]||{};
   Shelf.toast(st.state==="ok"?`${s.name} connected`:"That didn't work: "+(st.msg||"not accepted"));
   if(onAcct())render()}
-// setup finishing (first run): "Sharpest" becomes the HD style for every picked console that has no style yet
+// setup finishing (first run): "Sharpest" becomes the HD style for every picked console that has no style yet. Returns
+// those consoles: (beta.10) finish() sets each through api.artStyle, the path main (and Android's art store) honours: a
+// config save keeps main's own cfg.art, so the copy written here alone was dropped. Original / One region write no style
+// (they're the default look, which follows cfg.ui.artRegion, saved as usual)
 function applyLook(){
-  if(info.config&&info.config.setupDone)return;if(lookNow()!=="hd"||cfg.ui.autoCovers!==true)return;
-  const art=cfg.art&&typeof cfg.art==="object"?cfg.art:{styles:{},locks:{}};const styles={...(art.styles||{})};
-  for(const c of info.consoles){const sc=cfg.systems[c.id];if(sc&&sc.enabled!==false&&!styles[c.id])styles[c.id]={preset:"hd",region:"usa",parts:{}}}
-  cfg.art={...art,styles};
+  if(info.config&&info.config.setupDone)return [];if(lookNow()!=="hd"||cfg.ui.autoCovers!==true)return [];
+  const art=cfg.art&&typeof cfg.art==="object"?cfg.art:{styles:{},locks:{}};const styles={...(art.styles||{})},ids=[];
+  for(const c of info.consoles){const sc=cfg.systems[c.id];if(sc&&sc.enabled!==false&&!styles[c.id]){styles[c.id]={preset:"hd",region:"usa",parts:{}};ids.push(c.id)}}
+  cfg.art={...art,styles};return ids
 }
 
 function consoleSection(b,def){
@@ -497,10 +505,12 @@ function consoleSection(b,def){
   // Game folders
   const list=el("div",{class:"field folders"});
   if(!c.romDirs.length)list.append(el("div",{class:"hint-text",text:`No folders yet. Add the folder that holds your ${def.name} games (${def.hint||def.extensions.slice(0,4).map(e=>"."+e).join(", ")+"…"}). Subfolders are searched too.`}));
-  c.romDirs.forEach((d,i)=>{const st=el("span");list.append(el("div",{class:"folder"},el("span",{class:"p",text:d}),st,el("button",{type:"button",class:"btn small",onclick:()=>{c.romDirs.splice(i,1);changed();render()}},"Remove")));badge(st,d,"dir")});
-  const sugg=det&&det.systems[def.id]?det.systems[def.id].romDirs.filter(d=>!c.romDirs.includes(d)):[];
+  c.romDirs.forEach((d,i)=>{const st=el("span");list.append(el("div",{class:"folder"},el("span",{class:"p",text:d}),st,el("button",{type:"button",class:"btn small",onclick:()=>{c.romDirs.splice(i,1);if(window.bsPlatform&&bsPlatform.os==="android")dirsGone.add(d);changed();render()}},"Remove")));badge(st,d,"dir")});
+  // (beta.10) Android gives a removed folder's permission back at once: it's not offered again as "Found" (added back that
+  // way it couldn't be read); picking it again works
+  const sugg=det&&det.systems[def.id]?det.systems[def.id].romDirs.filter(d=>!c.romDirs.includes(d)&&!dirsGone.has(d)):[];
   sugg.forEach(d=>list.append(el("div",{class:"suggest"},el("span",{class:"p",text:"Found: "+d}),el("button",{type:"button",class:"btn small",onclick:()=>{c.romDirs.push(d);changed();render()}},"Add"))));
-  list.append(el("div",{class:"row"},el("button",{type:"button",class:"btn small",onclick:async()=>{const p=await api.pick({kind:"folder",title:`Choose a ${def.name} games folder`}).catch(()=>null);if(p&&!c.romDirs.includes(p)){c.romDirs.push(p);changed();render()}}},"Add folder")));
+  list.append(el("div",{class:"row"},el("button",{type:"button",class:"btn small",onclick:async()=>{const p=await api.pick({kind:"folder",title:`Choose a ${def.name} games folder`}).catch(()=>null);if(p)dirsGone.delete(p);if(p&&!c.romDirs.includes(p)){c.romDirs.push(p);changed();render()}}},"Add folder")));
   b.append(card("Game folders","",list));
 
   // Cover art
@@ -511,7 +521,7 @@ function consoleSection(b,def){
     el("div",{class:"hint-text",text:"The console's start-up look with the game's cover and a progress line while the emulator opens."}),
     toggle("Your boot video before games",c.bootOnLaunch!==false,v=>{c.bootOnLaunch=v},"boot-"+def.id),
     el("div",{class:"hint-text",text:"Plays the boot video you added for this console (Customize) instead of the boot screen. Without a video, the built-in intro plays only when the boot screen is off."})));
-  if(def.id==="gc"){
+  if(def.id==="gc"&&api.findIpl&&(!window.bsPlatform||bsPlatform.has("dolphinIpl"))){ /* (beta.10) Windows only: Android has no findIpl (stuck on "Checking…"), Linux's Dolphin folders differ */
     const st=el("div",{class:"hint-text",text:"Checking for IPL.bin…"});
     const ic=el("input",{class:"text",type:"number",min:"0",max:"15",step:"0.5",value:String(c.iplCoverSeconds??2.5),style:"max-width:110px;flex:none","aria-label":"Seconds to hide Dolphin when the startup is on"});ic.addEventListener("change",()=>{c.iplCoverSeconds=Math.max(0,Math.min(15,+ic.value||0));changed()});
     const f=card("GameCube startup","",
@@ -949,7 +959,10 @@ async function doneSection(b){
   if(!shelves.length)grid.append(el("div",{class:"sum"},el("b",{text:"0"}),el("span",{text:"Nothing found yet. Go back and add an emulator or a games folder."})));
   shelves.forEach(s=>grid.append(el("div",{class:"sum"},el("b",{text:String(s.games.length)}),el("span",{text:`${s.name} ${s.kind==="apps"?"apps":"games"}`}))));
 }
-async function finish(){pickInit();applyLook();cfg.setupDone=true;wizard=false;await close();if(wzPnOn&&wzPn)setTimeout(()=>{try{Setup.open({page:"addgames"})}catch{}},900)} // (beta.7: then the Playnite import, if ticked) // (1.82) pickInit: done from the sidebar without visiting Your consoles still ticks only the consoles found
+async function finish(){pickInit();const hd=applyLook();cfg.setupDone=true;wizard=false;
+  // (beta.10) "Sharpest art": saved first (the consoles you picked must exist for main), then each console's style through api.artStyle, before the shelf's rescan
+  if(hd.length&&api.artStyle){clearTimeout(saveT);await persist();for(const id of hd){try{await api.artStyle({systemId:id,style:{preset:"hd",region:"usa",parts:{}}})}catch(e){console.warn("setup: art style",id,e&&e.message)}}}
+  await close();if(wzPnOn&&wzPn)setTimeout(()=>{try{Setup.open({page:"addgames"})}catch{}},900)} // (beta.7: then the Playnite import, if ticked) // (1.82) pickInit: done from the sidebar without visiting Your consoles still ticks only the consoles found
 // the first box art download, followed on the Done screen; finished after the wizard closed: one toast on the shelf
 let artLine=null,artDoneBox=null,artToast=false,artHooked=false,artHeard=false;
 function watchArt(line,box){artLine=line;artDoneBox=box;artToast=true;artHeard=false;
@@ -1011,7 +1024,7 @@ function paneMove(a){
   const line=cands.filter((e,k)=>Math.abs(ny[k]-targetY)<18);
   line.sort((x,y)=>Math.abs(x.getBoundingClientRect().left-r.left)-Math.abs(y.getBoundingClientRect().left-r.left));focusEl(line[0]);
 }
-function goBack(){if(wizard){if(step>0)stepBy(-1);else if(cfg&&cfg.setupDone)close()}else close()} // B on the first step of a re-run wizard leaves (a first run can't: nothing is set up yet)
+function goBack(){if(wizard){if(step>0)stepBy(-1);else if(cfg&&cfg.setupDone)close();else Shelf.toast("Finish setup to reach your shelf")}else close()} // B on the first step of a re-run wizard leaves (a first run can't: nothing is set up yet; (beta.10) it says so now instead of doing nothing)
 function key(e){
   if(opening)return;
   if(e.key==="Escape"&&acctOsk){e.preventDefault();acctOskClose();return} // (the Accounts page's on-screen keyboard first)

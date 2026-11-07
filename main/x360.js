@@ -100,7 +100,25 @@ function isoTitleId(file) {
   finally { if (fd != null) try { fs.closeSync(fd); } catch {} }
   return null;
 }
-function titleIdOf(file) {
+// (beta.10) Games on Demand, Xbox Live Arcade and indie games: an STFS package ("CON " / "LIVE" / "PIRS"), a file with no
+// extension (a 40-character hash) in a folder named after its content type: <title id>\00007000\<hash> (plus a <hash>.data
+// folder beside it). Xenia starts the package file itself. Its header says what it is (content type at 0x344), the title id
+// (0x360) and the game's name (display name, UTF-16 big-endian, at 0x411; else the title name at 0x1691).
+// { titleId, title, type } for a game package; null for anything else (saves, DLC, title updates, themes, demos…)
+const STFS_GAME = { 0x00007000: 'god', 0x000D0000: 'arcade', 0x00001000: 'title', 0x02000000: 'indie' };
+const isStfsCandidate = file => !path.extname(file) && /^[0-9A-F]{8}$/i.test(path.basename(path.dirname(file))); // (no extension, in a content-type folder)
+function stfsInfo(file) {
+  let fd = null;
+  try {
+    fd = fs.openSync(file, 'r'); const h = readAt(fd, 0, 0x1712);
+    if (h.length < 0x1712 || !/^(CON |LIVE|PIRS)$/.test(h.toString('latin1', 0, 4))) return null;
+    const type = STFS_GAME[h.readUInt32BE(0x344)]; if (!type) return null;
+    const titleId = h.readUInt32BE(0x360).toString(16).toUpperCase().padStart(8, '0');
+    const u16 = (at, len) => { const b = Buffer.from(h.subarray(at, at + len)); b.swap16(); return b.toString('utf16le').replace(/\0[\s\S]*$/, '').replace(/\s+/g, ' ').trim(); };
+    return { titleId, title: u16(0x411, 0x80) || u16(0x1691, 0x80), type };
+  } catch { return null; } finally { if (fd != null) try { fs.closeSync(fd); } catch {} }
+}
+function titleIdOf(file, stfs) { // stfs (beta.10): the package's stfsInfo, already read (the scanner's): not read twice
   const ext = path.extname(file).toLowerCase();
   let st; try { st = fs.statSync(file); } catch { return null; }
   const c = idCache.get(file); if (c && c.at === st.mtimeMs) return c.id;
@@ -108,17 +126,18 @@ function titleIdOf(file) {
   try {
     if (ext === '.xex') { const fd = fs.openSync(file, 'r'); try { let h = readAt(fd, 0, 0x4000); const hs = h.length >= 12 ? h.readUInt32BE(8) : 0; if (hs > h.length && hs <= 0x100000) h = readAt(fd, 0, hs); id = xexTitleId(h); } finally { fs.closeSync(fd); } }
     else if (ext === '.iso') id = isoTitleId(file);
+    else if (!ext) { const s = stfs || stfsInfo(file); id = s ? s.titleId : null; } // (beta.10: a Games on Demand / Arcade package)
   } catch {}
   idCache.set(file, { id, at: st.mtimeMs });
   return id;
 }
 // { titleId, title, compat } for a game file; title/compat only when the id is in the table
-function lookup(file) {
-  const titleId = titleIdOf(file); if (!titleId) return null;
+function lookup(file, stfs) { // stfs: as titleIdOf
+  const titleId = titleIdOf(file, stfs || undefined); if (!titleId) return null;
   const hit = db && db[titleId]; if (!hit && db && Object.keys(db).length && !unknownLogged.has(titleId)) { unknownLogged.add(titleId); log('x360', path.basename(file), 'title id', titleId, 'not in the title list'); }
   return { titleId, title: hit ? hit.title : null, compat: hit ? hit.state : null };
 }
 
 // (beta.9) changes whenever the title list is (re)loaded: part of the scanner's key, so kept scans pick up the new titles
 const stamp = () => (db ? 1 : 0) + ':' + dbAt;
-module.exports = { init, ensureDb, lookup, titleIdOf, xexTitleId, stamp };
+module.exports = { init, ensureDb, lookup, titleIdOf, xexTitleId, stamp, stfsInfo, isStfsCandidate };

@@ -24,6 +24,9 @@
     ppsspp: { name: 'PPSSPP', packages: ['org.ppsspp.ppssppgold', 'org.ppsspp.ppsspp'], match: /ppsspp/i, launch: { activity: ['org.ppsspp.ppsspp.PpssppActivity'], action: VIEW, category: 'android.intent.category.DEFAULT', data: 'doc' } },
     nethersx2: { name: 'NetherSX2', packages: ['xyz.aethersx2.android', 'xyz.aethersx2.custom'], match: /aethersx2|nethersx2/i,
       launch: { activity: ['xyz.aethersx2.android.EmulationActivity', '*EmulationActivity'], action: MAIN, extras: { bootPath: '$DOC' }, flags: ['clearTask', 'clearTop'] } },
+    // (beta.10) ARMSX2 (armsx2.org, PCSX2 for ARM): its main screen takes the game as a VIEW content:// document (its manifest's
+    // .Main and the .MainActivity alias); an older build with neither gets its own start screen, still with the game
+    armsx2: { name: 'ARMSX2', packages: ['come.nanodata.armsx2'], match: /armsx2/i, launch: { activity: ['*.MainActivity', '*.Main'], action: VIEW, data: 'doc', flags: ['clearTop'] } },
     play: { name: 'Play!', packages: ['com.virtualapplications.play'], launch: { activity: ['com.virtualapplications.play.MainActivity'], action: VIEW, data: 'doc' } },
     azahar: { name: 'Azahar', packages: ['org.azahar_emu.azahar', 'io.github.lime3ds.android', 'org.citra.citra_emu', 'io.github.mandarine3ds.mandarine', 'org.cytrus.cytrus_emu'], match: /azahar|lime3ds|citra|mandarine|cytrus|borked3ds/i,
       launch: { activity: ['*activities.EmulationActivity', '*EmulationActivity'], data: 'doc', flags: ['clearTask', 'clearTop'] } },
@@ -63,7 +66,7 @@
     sys('sw', 'Switch', ['eden'], [], ['nsp', 'xci', 'nca', 'nro', 'nso']),
     sys('n3ds', '3DS', ['azahar'], ['citra'], ['3ds', 'cci', 'cxi', '3dsx', 'app', 'z3dsx', 'zcci', 'zcxi']),
     sys('nds', 'DS', ['melonds', 'drastic', 'retroarch'], ['melondsds', 'melonds', 'desmume'], ['nds', 'zip', '7z']),
-    sys('ps2', 'PS2', ['nethersx2', 'play'], [], ['iso', 'chd', 'bin', 'cso', 'zso', 'gz', 'm3u', 'elf']),
+    sys('ps2', 'PS2', ['nethersx2', 'armsx2', 'play'], [], ['iso', 'chd', 'bin', 'cso', 'zso', 'gz', 'm3u', 'elf']),
     sys('psp', 'PSP', ['ppsspp', 'retroarch'], ['ppsspp'], ['iso', 'cso', 'chd', 'pbp', 'elf', 'prx']),
     sys('psx', 'PlayStation', ['duckstation', 'retroarch'], ['swanstation', 'pcsx_rearmed', 'mednafen_psx_hw'], ['chd', 'cue', 'm3u', 'pbp', 'iso', 'img', 'ccd', 'mds', 'ecm', 'exe']),
     sys('n64', 'N64', ['m64plus', 'retroarch'], ['mupen64plus_next_gles3', 'parallel_n64'], ['z64', 'n64', 'v64', 'zip', '7z']),

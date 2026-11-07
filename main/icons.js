@@ -62,9 +62,11 @@ function iconFor(exe) {
   if (pending.has(out)) return pending.get(out);
   if (failed.has(out)) return Promise.resolve(null);
   fs.mkdirSync(dir, { recursive: true });
+  const tmp = `${out}.${process.pid}.tmp`; // (beta.10) PowerShell saves here, renamed in only once it exited cleanly: a cut-off PNG was the icon from then on
   const p = new Promise(resolve => {
-    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', ENCODED], { windowsHide: true, timeout: 30000, env: { ...process.env, BS_ICON_SRC: exe, BS_ICON_DST: out } }, (err, stdout, stderr) => {
-      if (err || !fs.existsSync(out)) { if (err) { try { fs.unlinkSync(out); } catch {} } /* timed out mid-save: a cut-off PNG would be taken as the icon from then on */ const msgs = [...String(stderr || '').matchAll(/<S S="Error">([^<]*)<\/S>/g)].map(m => m[1]).join(' ').replace(/_x000D__x000A_/g, ' ').slice(0, 400); log('icon failed for', exe, msgs || (err && err.message || '').slice(0, 200)); failed.add(out); resolve(null); }
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', ENCODED], { windowsHide: true, timeout: 30000, env: { ...process.env, BS_ICON_SRC: exe, BS_ICON_DST: tmp } }, (err, stdout, stderr) => {
+      let ok = !err && fs.existsSync(tmp); if (ok) { try { fs.renameSync(tmp, out); } catch (e) { ok = false; err = e; } }
+      if (!ok) { try { fs.unlinkSync(tmp); } catch {} const msgs = [...String(stderr || '').matchAll(/<S S="Error">([^<]*)<\/S>/g)].map(m => m[1]).join(' ').replace(/_x000D__x000A_/g, ' ').slice(0, 400); log('icon failed for', exe, msgs || (err && err.message || '').slice(0, 200)); failed.add(out); resolve(null); }
       else { log('icon', path.basename(exe), String(stdout).trim()); resolve(out); }
     });
   }).finally(() => pending.delete(out));

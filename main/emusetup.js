@@ -145,6 +145,7 @@ function plan(kind, exe, opts = {}) {
 function setCfg(f, want) {
   let buf = null; try { buf = fs.readFileSync(f); } catch (e) { if (e.code !== 'ENOENT') { log('RetroArch config could not be read, left alone:', e.code || e.message); return false; } }
   if (buf && buf.includes(0)) return false;
+  if (buf && !Buffer.from(buf.toString('utf8'), 'utf8').equals(buf)) { log('RetroArch config is not UTF-8 text (an ANSI path?), left alone:', f); return false; } // (beta.10: written back, those bytes would have become U+FFFD)
   const src = buf ? buf.toString('utf8') : '', nl = src.includes('\r\n') ? '\r\n' : '\n', lines = src ? src.split(/\r?\n/) : [], seen = new Set(); let changed = false;
   for (let i = 0; i < lines.length; i++) { const m = /^\s*([A-Za-z0-9_]+)\s*=/.exec(lines[i]); if (!m || want[m[1]] === undefined) continue; seen.add(m[1]); const v = `${m[1]} = "${want[m[1]]}"`; if (lines[i] !== v) { lines[i] = v; changed = true; } }
   for (const k of Object.keys(want)) if (!seen.has(k)) { if (lines.length && lines[lines.length - 1] === '') lines.pop(); lines.push(`${k} = "${want[k]}"`); changed = true; }

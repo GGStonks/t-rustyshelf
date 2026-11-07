@@ -8,7 +8,11 @@
   const SKIP_NAME = /\b(update|dlc)\b|\[(upd|dlc)\]/i;
   const baseName = s => String(s).split(/[\\/]/).pop();
 
-  function cleanTitle(fileName) {
+  // opts.updateWords: the bare words update / dlc / patch / booster / pass mark an update package (Switch, where those sit
+  // beside the games). (beta.10) Off for every other console: "Hall Pass" or a "Booster" game was hidden there. Bracket
+  // tags ("(Update)", "[DLC]") count everywhere. Left out: on (as before) for callers that don't say
+  function cleanTitle(fileName, opts) {
+    const words = !opts || opts.updateWords !== false;
     const name = baseName(fileName);
     let base = name.replace(/\.[^.]+$/, '').replace(/\.?\s*\b(nkit|wia|rvz|gcz|ciso|iso|wbfs|part\d+)\s*$/i, '').replace(/\s*\((nkit|wbfs|iso)\)/gi, '');
     const meta = { region: '', disc: 0, rev: '' };
@@ -36,8 +40,8 @@
       .replace(/[\s-]+$/, '');
     // "Legend of Zelda, The - Wind Waker" -> "The Legend of Zelda - Wind Waker"
     base = base.replace(/^(.+?),\s+(The|A|An)(\s+-\s+.*)?$/i, (m, a, art, rest) => `${art} ${a}${rest || ''}`);
-    meta.extra = !!(/\b(update|dlc|patch|booster|pass)\b/i.test(base) || (meta.titleId && !/000$/.test(meta.titleId)) || meta.bigVersion || meta.tagExtra);
-    if (meta.extra) base = base.replace(/\b(update|dlc|patch)\b.*$/i, '').trim();
+    meta.extra = !!((words && /\b(update|dlc|patch|booster|pass)\b/i.test(base)) || (meta.titleId && !/000$/.test(meta.titleId)) || meta.bigVersion || meta.tagExtra);
+    if (meta.extra && words) base = base.replace(/\b(update|dlc|patch)\b.*$/i, '').trim();
     return { title: base || name, ...meta };
   }
 

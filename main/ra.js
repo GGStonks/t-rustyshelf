@@ -46,7 +46,7 @@ function cached(name, maxAgeMs, fetch) {
   const p = fetch().then(data => { const j = { at: Date.now(), data }; mem.set(name, j); failed.delete(name); try { fs.writeFileSync(f, JSON.stringify(j)); } catch {} return data; })
     .catch(e => { let old; try { const j = JSON.parse(fs.readFileSync(f, 'utf8')); if (j && j.data !== undefined) old = j.data; } catch {}
       failed.set(name, { at: Date.now(), err: e, data: old }); if (failed.size > 200) failed.delete(failed.keys().next().value);
-      if (old !== undefined) { log('RA: using the saved copy of', name, '(' + e.message + ')'); return old; } throw e; }) // offline / site down: the last copy rather than an error
+      if (old !== undefined) { log('RA: using the saved copy of', ((/^(game-\d+|profile|completed)/.exec(String(name)) || ['a list'])[0]), '(' + e.message + ')'); /* (beta.10: the cache name ends in the account name, which stays out of the log) */ return old; } throw e; }) // offline / site down: the last copy rather than an error
     .finally(() => inflight.delete(name));
   inflight.set(name, p); return p;
 }

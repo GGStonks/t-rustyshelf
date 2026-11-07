@@ -208,7 +208,7 @@ async function gameArg(a) {
 async function gamesFor(sysId, fresh) {
   const m = gamesMemo.get(sysId); if (m && !fresh && Date.now() - m.at < 60000) return m;
   const item = env.consoles().find(x => x.def.id === sysId); if (!item) throw new Error('Unknown system.');
-  await yieldNow(); const list = env.scan(item.def, item.sc, !!fresh).filter(g => g.kind !== 'app'); // (beta.9: fresh reads the folders again, past the scanner's kept scan)
+  await yieldNow(); const list = (await env.scan(item.def, item.sc, !!fresh)).filter(g => g.kind !== 'app'); // (beta.9: fresh reads the folders again, past the scanner's kept scan; beta.10: env.scan is the async scan)
   const byFile = new Map(list.map(g => [path.resolve(g.file).toLowerCase(), g]));
   const r = { at: Date.now(), list, byFile }; gamesMemo.set(sysId, r); return r;
 }

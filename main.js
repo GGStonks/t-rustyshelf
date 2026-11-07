@@ -18,18 +18,19 @@ paths.setAppRoot(linux.isLinux ? linux.appRoot(app.isPackaged, __dirname) : app.
 
 const config = require('./main/config');
 const { CONSOLES, APPS } = require('./main/systems');
-const { detectAll, detectSystem } = require('./main/detect');
-const { scanSystem: scanFolders, forget: scanForget } = require('./main/scanner'); // (beta.9: scanForget clears the scanner's kept scans)
+const { detectAll, detectSystem, findSteam } = require('./main/detect');
+const { scanSystem: scanFolders, scanSystemAsync: scanFoldersAsync, forget: scanForget, setLog: scanSetLog } = require('./main/scanner'); // (beta.9: scanForget clears the scanner's kept scans)
 const arcadenames = require('./main/arcadenames');
 // (beta.5) a game's own name (Details → Rename: cfg.games["<console>:<file>"].title) replaces the scanned one wherever main
 // reads games: the shelf, box art and manual lookups, matching. fileTitle keeps the scanned one. Copies, never the
 // scanner's own objects (a reset must bring the file's name back)
-function scanSystem(def, sc, fresh) { // fresh (beta.9): past the scanner's kept scan (main/scanner.js)
-  const gs = scanFolders(def, sc, fresh), G = cfg && cfg.games; if (!G) return gs;
+function scanSystem(def, sc, fresh) { return ownNames(def, scanFolders(def, sc, fresh)); } // fresh (beta.9): past the scanner's kept scan (main/scanner.js)
+async function scanSystemAsync(def, sc, fresh) { return ownNames(def, await scanFoldersAsync(def, sc, fresh)); } // (beta.10) the same, without holding the main process up
+function ownNames(def, gs) { const G = cfg && cfg.games; if (!G) return gs;
   return gs.map(g => { const o = G[def.id + ':' + g.file]; return o && o.title && o.title !== g.title ? { ...g, fileTitle: g.title, title: o.title } : g; });
 }
 const ownTitle = id => { const o = cfg && cfg.games && cfg.games[String(id)]; return o && o.title ? o.title : ''; }; // (PC games, by id)
-const { scanSteam } = require('./main/steam');
+const { scanSteam, steamRoot, isMainSteam } = require('./main/steam');
 const steamart = require('./main/steamart');
 const pcgames = require('./main/pcgames'); // (beta.4) Epic, Quiver Launcher and games added by hand
 const pccovers = require('./main/pccovers'); // (beta.5) choosing a PC game's cover (SteamGridDB, Steam's own, your own)
@@ -152,12 +153,32 @@ try { app.setPath('crashDumps', path.join(paths.appRoot(), 'data', 'Crashpad'));
 const LOG = path.join(paths.appRoot(), 'data', 'boxshelf.log');
 // the user's home folder is written as ~ (logs get shared for help); the log is rotated at 2 MB (one older copy kept)
 const HOME_RE = (() => { const h = require('os').homedir(); return h ? new RegExp(h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi') : null; })();
+// (beta.10) everything that could name the person, in every form a path takes: the home folder with \ / \\ (JSON) %5C %2F
+// separators (file:/// addresses, URL-encoded, a config written as JSON), the user name as a folder anywhere (a NAS share,
+// /run/media/<user>, an 8.3 short name like JOHNSM~1), Steam account numbers (userdata\<id>), home-network addresses, and
+// the phone names older builds wrote in phone-companion lines. Used for every log line and everything in a problem report
+const privacyScrub = (() => {
+  const os = require('os'), SEP = '(?:\\\\\\\\|\\\\|/|%5[cC]|%2[fF])+', esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '(?: |%20)');
+  let user = ''; try { user = os.userInfo().username || ''; } catch {}
+  const home = os.homedir() || '', rules = [];
+  // (beta.10) each part also as a URL writes it (bsfile:// and file:/// addresses): "J%C3%BCrgen", the drive as "C%3A"
+  const alt = s => { const v = new Set([s]); for (const f of [encodeURIComponent, encodeURI]) { try { v.add(f(s)); } catch {} } return v.size > 1 ? '(?:' + [...v].map(esc).join('|') + ')' : esc(s); };
+  const parts = home.split(/[\\/]+/).filter(Boolean);
+  if (parts.length) rules.push([new RegExp((home.startsWith('/') ? SEP : '') + parts.map(alt).join(SEP), 'gi'), '~']);
+  const seg = n => new RegExp(`(?<=${SEP})${n}(?=${SEP}|["'\\s,;)]|$)`, 'gi');
+  if (user.length >= 2) rules.push([seg(alt(user)), '<user>']);
+  const short = user.replace(/[^A-Za-z0-9]/g, '').slice(0, 6); if (short.length >= 2 && (user.length > 8 || /\s/.test(user))) rules.push([seg(esc(short) + '~\\d'), '<user>']);
+  rules.push([new RegExp(`(userdata${SEP})\\d{3,}`, 'gi'), '$1<id>']);
+  rules.push([/\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})\b/g, '<lan ip>']);
+  rules.push([/(Phone companion:) paired .*$/gm, '$1 a phone paired'], [/(Phone companion:) (?!a phone )(.{1,80}?) (asked to quit|quit|started) /g, '$1 a phone $3 ']);
+  return t => { t = String(t); for (const [re, to] of rules) t = t.replace(re, to); return t; };
+})();
 let logChecked = false, logWrites = 0;
 function log(...a) {
   try {
     if (++logWrites % 500 === 0) logChecked = false; // a long session re-checks the size now and then (once at start grew without limit)
     if (!logChecked) { logChecked = true; fs.mkdirSync(path.dirname(LOG), { recursive: true }); try { if (fs.statSync(LOG).size > 2 * 1024 * 1024) fs.renameSync(LOG, LOG + '.old'); } catch {} }
-    let line = a.join(' '); if (HOME_RE) line = line.replace(HOME_RE, '~');
+    let line = privacyScrub(a.join(' '));
     fs.appendFileSync(LOG, `[${new Date().toISOString()}] ${line}\n`);
   } catch {}
 }
@@ -213,7 +234,7 @@ function computeRoots() {
   if (paths.artLibrary()) roots.push(paths.artLibrary());
   if (artstudio.cacheDir()) roots.push(artstudio.cacheDir()); // Art Studio's downloaded candidates (the picker's thumbnails)
   if (manualstudio.cacheDir()) roots.push(manualstudio.cacheDir()); // Manual Studio's first-page previews and PDFs (also read by the PDF helper by address)
-  if (cfg.steam.path) roots.push(path.join(cfg.steam.path, 'appcache', 'librarycache'), path.join(app.getPath('userData'), 'steam-art')); // Steam's art cache only, not its config files
+  if (cfg.steam.path) roots.push(path.join(steamMain || steamRoot(cfg.steam.path) || cfg.steam.path, 'appcache', 'librarycache'), path.join(app.getPath('userData'), 'steam-art')); // Steam's art cache only, not its config files
   roots.push(path.join(app.getPath('userData'), 'steam-art'), path.join(app.getPath('userData'), 'pc-covers'), path.join(app.getPath('userData'), 'pc-cover-cache')); // (beta.5) Epic games' Steam art (even without Steam), chosen PC covers and the cover picker's thumbnails
   return roots.filter(Boolean).map(r => { r = path.resolve(r).toLowerCase(); return r.endsWith(path.sep) ? r : r + path.sep; });
 }
@@ -224,7 +245,7 @@ const MIME = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg
 // scaled once, kept in data\thumbs and served from there, so the shelf never decodes or holds full-size images.
 const THUMB_EXT = /\.(jpe?g|png)$/i; // (not webp: nativeImage can't decode it, so it was retried on every request)
 let thumbQ = Promise.resolve(); const thumbTurn = () => { const p = thumbQ.then(() => new Promise(r => setTimeout(r, 4))); thumbQ = p; return p; };
-let thumbTmpN = 0; const thumbOriginal = new Set(), thumbBusy = new Map(); // covers already small enough (no decode next time); decodes in flight
+let thumbTmpN = 0, thumbHelperFails = 0; const thumbOriginal = new Set(), thumbBusy = new Map(); // covers already small enough (no decode next time); decodes in flight
 function thumbFor(file, stat, h) {
   const key = file + '|' + Math.floor(stat.mtimeMs) + '|' + stat.size + '|' + h;
   if (thumbOriginal.has(key)) return Promise.resolve(null);
@@ -234,12 +255,18 @@ function thumbFor(file, stat, h) {
     const out = path.join(dir, crypto.createHash('sha1').update(file + '|' + Math.floor(stat.mtimeMs) + '|' + h).digest('hex').slice(0, 24) + '.jpg');
     try { return await fs.promises.readFile(out); } catch {}
     // the size check reads only the file header; the decode + scale happens off this thread where Windows can (shell thumbnailer)
-    const sz = spreads.sizeOf(file); if (sz && sz[1] <= h * 1.2) { if (thumbOriginal.size > 5000) thumbOriginal.clear(); thumbOriginal.add(key); return null; } // already about the right size: serve the original
+    const sz = await spreads.sizeOfAsync(file); /* (beta.10: async, art on a NAS) */ if (sz && sz[1] <= h * 1.2) { if (thumbOriginal.size > 5000) thumbOriginal.clear(); thumbOriginal.add(key); return null; } // already about the right size: serve the original
     let img = null;
     if (process.platform === 'win32' && sz) { try { img = await nativeImage.createThumbnailFromPath(file, { width: Math.max(1, Math.round(sz[0] * h / sz[1])), height: h }); if (img && img.getSize().height < h * .9) img = null; /* a cached smaller shell thumbnail would look blurry */ } catch { img = null; } }
+    // (beta.10) no shell thumbnailer (Linux): scaled in a hidden image window of its own (img-tools 'shrink', its own queue,
+    // never behind a manual), off this thread; the decode here below is only what's left when that fails
+    let buf = null;
+    if (process.platform !== 'win32' && sz && sz[1] > 0 && thumbHelperFails < 3) { const r = await helperJob('img-tools.html', async () => { const b = await fs.promises.readFile(file); return { data: new Uint8Array(b.buffer, b.byteOffset, b.length), mode: 'shrink', w: Math.max(1, Math.round(sz[0] * h / sz[1])) }; }, 15000, false, 'thumbs');
+      const m = !r.err && /^data:image\/jpeg;base64,(.+)$/.exec(String((r.pages || [])[0] || '')); if (m) buf = Buffer.from(m[1], 'base64'); else if (r.err && /timed out|gone|did not load/.test(r.err) && ++thumbHelperFails >= 3) log('thumbnails: the image window keeps failing (' + r.err + '), scaling them here from now on'); }
+    if (!buf) {
     if (!img || img.isEmpty()) await thumbTurn(); // decoding here blocks the app: one at a time, with a breath in between (a burst of new art used to hold it up)
     if (!img || img.isEmpty()) { img = nativeImage.createFromPath(file); const s2 = img.isEmpty() ? null : img.getSize(); if (!s2 || s2.height <= h * 1.2) { if (thumbOriginal.size > 5000) thumbOriginal.clear(); thumbOriginal.add(key); return null; } /* undecodable: serve the original from now on */ img = img.resize({ height: h, quality: 'best' }); }
-    const buf = img.toJPEG(90);
+    buf = img.toJPEG(90); }
     const tmp = out + '.' + process.pid + '-' + (++thumbTmpN) + '.tmp'; // temp + rename: a crash mid-write left a cut-off thumbnail that was served from then on
     fs.promises.mkdir(dir, { recursive: true }).then(() => fs.promises.writeFile(tmp, buf)).then(() => fs.promises.rename(tmp, out)).catch(() => { fs.promises.unlink(tmp).catch(() => {}); });
     return buf;
@@ -524,7 +551,8 @@ function watchPad(opts) {
   // with the quit combo turned off, use a mask no pad can press so only the other duties remain
   const combo = cfg.ui.quitCombo === false ? null : (cfg.ui.quitComboKeys || 'l3+r3');
   padwatch.start(combo || 'none', 900, () => { log('Quit combo: closing', launcher.isRunning() ? 'emulator' : 'nothing'); if (launcher.isRunning()) coverForQuit(); closeGame(); },
-    { ...opts, home, nin: true, taskbarHidden: tbHidden, onWindow: opts.appPid ? onGameWindow : undefined, cmdFile: path.join(app.getPath('temp'), `boxshelf-pad-${process.pid}.txt`), onHome: kind => { homemenu.setMeta({ glyphs: kind || shelfGlyphs }); /* the menu shows the buttons of the pad that opened it (an XInput pad: the shelf's last prompts) */ Promise.resolve(homemenu.open()).catch(e => log('home menu', e && e.message)); }, onButton: (b, d) => homemenu.button(b, d), isMenuOpen: () => homemenu.isOpen(), onFullscreen: opts.appPid ? liftCover : undefined });
+    { ...opts, home, nin: true, taskbarHidden: tbHidden, onWindow: opts.appPid ? onGameWindow : undefined, cmdFile: path.join(app.getPath('temp'), `boxshelf-pad-${process.pid}.txt`), onHome: kind => { homemenu.setMeta({ glyphs: kind || shelfGlyphs }); /* the menu shows the buttons of the pad that opened it (an XInput pad: the shelf's last prompts) */ Promise.resolve(homemenu.open()).catch(e => log('home menu', e && e.message)); }, onButton: (b, d) => homemenu.button(b, d), isMenuOpen: () => homemenu.isOpen(), onFullscreen: opts.appPid ? liftCover : undefined,
+      keepUp: () => launcher.isRunning() && !quitCover }); // (beta.10: a helper that dies mid-game is started again, not during a Quit)
 }
 function onExit(info) {
   linuxpad.end(); // (beta.9: the Linux pad watcher only runs during a game)
@@ -559,7 +587,10 @@ const markEvent = e => { lastEvent = e + ' @' + new Date().toISOString().slice(1
 setInterval(() => { const now = Date.now(), lag = now - lagAt - 100; lagAt = now; if (lag > 250) log('freeze watch: main process blocked', lag, 'ms (last:', lastEvent + ')'); }, 100).unref();
 // (beta.9) what the freeze watch can't see: a helper process of the screen that died (the graphics process above all: a
 // black flash or a stall on screen), and memory use every 15 minutes (a slow leak shows long before it ends in a crash)
-app.on('child-process-gone', (e, d) => { if (!d || d.reason === 'clean-exit') return; log('Helper process gone:', d.type, d.reason, 'code', d.exitCode, d.serviceName || d.name || ''); });
+app.on('child-process-gone', (e, d) => { if (!d || d.reason === 'clean-exit') return; log('Helper process gone:', d.type, d.reason, 'code', d.exitCode, d.serviceName || d.name || '');
+  // (beta.10) the graphics process comes back on its own, but the shelf could stay black until it next moved: once it's back,
+  // a fresh frame, and the screen puts its cases up again (renderer/app.js gpuBack)
+  if (d.type === 'GPU') for (const ms of [1500, 4000]) setTimeout(() => { try { if (alive() && !launcher.isRunning()) { win.webContents.invalidate(); win.webContents.send('gpu:back'); } } catch {} }, ms); });
 setInterval(() => { try { let all = 0, gpu = 0, screen = 0; for (const p of app.getAppMetrics()) { const k = ((p.memory && p.memory.workingSetSize) || 0) / 1024; all += k; if (p.type === 'GPU') gpu += k; else if (p.type === 'Tab') screen += k; }
   log('Memory:', Math.round(all), 'MB in all (screens', Math.round(screen), 'MB, graphics', Math.round(gpu), 'MB, main', Math.round(process.memoryUsage().rss / 1048576), 'MB)'); } catch {} }, 15 * 60e3).unref();
 // ---------- library ----------
@@ -582,15 +613,27 @@ async function buildLibrary() {
     if (!sc.emulator && !(sc.romDirs || []).length) continue;
     markEvent('scan ' + def.id); // (beta.9) the freeze watch names the console being scanned (these showed up as "start")
     if (def.id === 'x360') { let t; try { await Promise.race([x360.ensureDb(), new Promise(r => { t = setTimeout(r, 15000); })]); } catch {} finally { clearTimeout(t); } }
-    const games = scanSystem(def, sc).map(g => ({ ...g, info: covers.gameInfo(def.id, g.title), manualMiss: manualMiss(def.id, g), art: { front: fileUrl(g.art.front), hero: fileUrl(g.art.hero), back: fileUrl(g.art.back), madeBack: g.art.madeBack || undefined, spine: fileUrl(g.art.spine), madeSpine: g.art.madeSpine || undefined, disc: fileUrl(g.art.disc), manual: withCover(def.id, g, (g.art.manual || []).map(fileUrl)), manualPdf: fileUrl(g.art.manualPdf) } }));
+    // (beta.10) the folders read with fs.promises (a games folder on a NAS held the whole app up: no pictures, no input),
+    // and the per-game details with a breath every 25 ms (thousands of games' info lookups in one go stalled it too)
+    const games = []; let t0 = Date.now();
+    for (const g of await scanSystemAsync(def, sc)) { if (Date.now() - t0 > 25) { await new Promise(r => setImmediate(r)); t0 = Date.now(); }
+      games.push({ ...g, info: covers.gameInfo(def.id, g.title), manualMiss: manualMiss(def.id, g), art: { front: fileUrl(g.art.front), hero: fileUrl(g.art.hero), back: fileUrl(g.art.back), madeBack: g.art.madeBack || undefined, spine: fileUrl(g.art.spine), madeSpine: g.art.madeSpine || undefined, disc: fileUrl(g.art.disc), manual: def.id === 'wiiu' ? await withCoverAsync(def.id, g, (g.art.manual || []).map(fileUrl)) /* (beta.10: async) */ : (g.art.manual || []).map(fileUrl), manualPdf: fileUrl(g.art.manualPdf) } }); }
     // (beta.7) arcade zips are named from FinalBurn Neo's list: fetched once in the background, then the shelf refreshes
     if (games.length && arcadenames.SYSTEMS.has(def.id) && !arcadenames.ready()) arcadenames.fetchNames().then(ok => { if (ok && alive()) win.webContents.send('library:changed', { arcade: 1 }); });
     shelves.push({ id: def.id, kind: 'console', name: def.name, emulatorName: def.emulatorName, hasEmulator: !!sc.emulator && paths.isFile(emuPath(sc.emulator)) /* (1.82) an uninstalled one gets no Open tile */, emulator: sc.emulator, emulatorIcon: fileUrl(await iconQuick(sc.emulator)), gameArgs: sc.gameArgs, bootOnLaunch: sc.bootOnLaunch !== false, useIpl: def.id === 'gc' && !!sc.useIpl, insertAnim: sc.insertAnim !== false, games });
   }
   let pcShelf = [];
+  // (beta.10) Steam was only looked for in the first-run setup: one installed later, moved, or not found then never showed.
+  // While Steam is on and its folder is unset or wrong, look again (once per session) and keep what's found
+  if (cfg.steam.enabled && !steamRoot(cfg.steam.path) && !steamLooked) { steamLooked = true;
+    try { const p = await findSteam(); if (p && steamRoot(p)) { cfg = persistCfg(config.normalize({ ...cfg, steam: { ...cfg.steam, path: p } })); log('Steam: found it, set as the Steam folder'); } else log('Steam: not found (not in the registry or the usual folders); choose its folder in Settings → PC games'); } catch (e) { log('Steam: looking for it failed', e.message); } }
+  // (beta.10) the folder set is a library on another drive, not Steam's own: Steam's own folder is looked for once a
+  // session too, so every drive's library, playtimes and covers come along
+  const steamGiven = cfg.steam.enabled && steamRoot(cfg.steam.path);
+  if (steamGiven && !isMainSteam(steamGiven) && steamMain === undefined) { steamMain = null; try { const p = await findSteam(); if (p && steamRoot(p) && isMainSteam(steamRoot(p))) { steamMain = p; log('Steam: the folder set is a library; using Steam\'s own folder for the list of libraries'); } } catch {} }
   if (cfg.steam.enabled && cfg.steam.path) {
     // Steam's own cached art first, then anything Boxshelf fetched from the Steam store for games Steam has no cover for
-    pcShelf = scanSteam(cfg.steam.path, { hideTools: cfg.steam.hideTools !== false }).map(g => { const l = steamart.local(g.appid); return { ...g, ...(ownTitle(g.id) ? { title: ownTitle(g.id), fileTitle: g.title } : {}), info: steamart.gameInfo(g.appid), art: { front: fileUrl(pccovers.cover(g.id) || g.art.front || l.front), hero: fileUrl(g.art.hero || l.hero) } }; }); // (beta.5: a cover chosen in the picker wins)
+    pcShelf = scanSteam(cfg.steam.path, { hideTools: cfg.steam.hideTools !== false, log, mainPath: steamMain || '' }).map(g => { const l = steamart.local(g.appid); return { ...g, ...(ownTitle(g.id) ? { title: ownTitle(g.id), fileTitle: g.title } : {}), info: steamart.gameInfo(g.appid), art: { front: fileUrl(pccovers.cover(g.id) || g.art.front || l.front), hero: fileUrl(g.art.hero || l.hero) } }; }); // (beta.5: a cover chosen in the picker wins)
   }
   // (beta.4) Epic's installs join the PC shelf; Quiver Launcher's apps and games added by hand get the Custom shelf. They
   // are PC games with a source (kind 'steam' keeps every shelf feature); covers come from the Steam app their title
@@ -607,9 +650,11 @@ async function buildLibrary() {
   // unrelated Steam game, "Quarantine" got a puzzle game's cover; they keep the made-up case)
   const pcGame = g => { const sid = STORE_SRC.has(g.source) ? pcgames.steamIdOf(g.title) : null, l = sid ? steamart.local(sid) : {};
     return { kind: 'steam', source: g.source, id: g.id, title: g.title, ...(sid ? { info: steamart.gameInfo(sid) } : {}), art: { front: fileUrl(pccovers.cover(g.id) || l.front), hero: fileUrl(l.hero), icon: g.icon || undefined } }; };
-  if (epic.length) pcShelf = pcShelf.concat(epic.map(pcGame)).sort((a, b) => String(a.title).localeCompare(String(b.title), undefined, { sensitivity: 'base' }));
+  // (beta.10) a game added by hand can be moved to the PC shelf (Settings → Custom games → the game → Shelf)
+  const toPc = mine.filter(g => g.shelf === 'pc'), onCustom = mine.filter(g => g.shelf !== 'pc');
+  if (epic.length || toPc.length) pcShelf = pcShelf.concat([...epic, ...toPc].map(pcGame)).sort((a, b) => String(a.title).localeCompare(String(b.title), undefined, { sensitivity: 'base' }));
   if (pcShelf.length) shelves.push({ id: 'pc', kind: 'steam', name: 'PC', games: pcShelf });
-  if (mine.length) shelves.push({ id: 'custom', kind: 'steam', name: 'Custom', games: mine.map(pcGame).sort((a, b) => String(a.title).localeCompare(String(b.title), undefined, { sensitivity: 'base' })) });
+  if (onCustom.length) shelves.push({ id: 'custom', kind: 'steam', name: 'Custom', games: onCustom.map(pcGame).sort((a, b) => String(a.title).localeCompare(String(b.title), undefined, { sensitivity: 'base' })) });
   const apps = [];
   for (const a of APPS) { const c = cfg.apps[a.id]; if (!c || !c.enabled || !c.path) continue; apps.push({ kind: 'app', id: 'app-' + a.id, appId: a.id, title: a.name, path: c.path, art: { icon: fileUrl(await iconQuick(c.path)) } }); }
   if (apps.length) shelves.push({ id: 'media', kind: 'apps', name: 'Media', games: apps });
@@ -798,6 +843,12 @@ function withCover(sysId, g, pages) { return sysId === 'wiiu' && pages.length &&
 // tall. The marker generated() looks for lives in the data folder that made them, so the same games folder used from
 // another copy of Boxshelf (the exe in another folder) opened on the e-manual's contents page instead of the box front.
 function emanualPages(g) { try { const f = (g.art.manual || [])[0]; if (!f) return false; const z = require('./main/spreads').sizeOf(f); return !!z && z[0] % 688 === 0 && z[0] <= 2064 && z[1] > z[0] * 1.2; } catch { return false; } }
+// (beta.10) the same for the library scan, with fs.promises (a games folder on a NAS held the scan up, a read per Wii U
+// game), the answer kept by file + date + size
+const emanualSeen = new Map();
+async function emanualPagesAsync(g) { try { const f = (g.art.manual || [])[0]; if (!f) return false; const st = await fs.promises.stat(f), k = Math.floor(st.mtimeMs) + '|' + st.size, c = emanualSeen.get(f); if (c && c.k === k) return c.v;
+  const z = await spreads.sizeOfAsync(f), v = !!z && z[0] % 688 === 0 && z[0] <= 2064 && z[1] > z[0] * 1.2; if (emanualSeen.size > 5000) emanualSeen.clear(); emanualSeen.set(f, { k, v }); return v; } catch { return false; } }
+async function withCoverAsync(sysId, g, pages) { return sysId === 'wiiu' && pages.length && g.art.front && (wiiumanual.generated(g.title) || await emanualPagesAsync(g)) && !manualstudio.chosen(sysId, g.file) ? [fileUrl(g.art.front), ...pages] : pages; }
 const libCacheFile = () => path.join(app.getPath('userData'), 'library-cache.json');
 // temp (own name per write: two scans can finish together) + rename: a crash mid-write never leaves a cut-off file behind
 let atomicN = 0;
@@ -931,7 +982,7 @@ async function fixSpreads() {
   for (const { def, cfg: sc } of sysList(CONSOLES.map(c => c.id))) {
     if (def.id === 'wiiu') continue;
     await yieldNow(); await uiQuiet(); // (beta.9) between consoles too: consoles without manuals were scanned back to back, one long freeze
-    let games = []; try { games = scanSystem(def, sc); } catch { continue; }
+    let games = []; try { games = await scanSystemAsync(def, sc); } catch { continue; } // (beta.10: async)
     for (const g of games) {
       if (!(g.art && (g.art.manual || []).length)) continue;
       if (manualUser) return n; // (beta.9: a Wrong game / Repair press goes first)
@@ -948,7 +999,7 @@ async function convertPdfManuals(done) {
   let n = 0;
   for (const { def, cfg: sc } of sysList(CONSOLES.map(c => c.id))) {
     await yieldNow(); await uiQuiet(); // (beta.9: a breath between consoles, as in fixSpreads)
-    let games = []; try { games = scanSystem(def, sc); } catch { continue; }
+    let games = []; try { games = await scanSystemAsync(def, sc); } catch { continue; } // (beta.10: async)
     for (const g of games) {
       if (!g.art || !g.art.manualPdf || (g.art.manual || []).length || !alive()) continue;
       if (manualUser) return n; // (beta.9: a Wrong game / Repair press goes first)
@@ -1062,7 +1113,7 @@ async function autoManuals(lib) {
   const fresh = ids && manualSeen ? [...ids].some(id => !manualSeen.has(id)) : false;
   if (manualsBusy) { if (fresh) manualAgain = true; return; } // one is running: go again when it's done
   if (autoManualsDone && !fresh) return;
-  if (autoJob) { try { await autoJob; } catch {} }
+  while (autoJob && !covers.isPaused('auto')) { try { await Promise.race([autoJob, new Promise(r => setTimeout(r, 1000))]); } catch { break; } } // (beta.10) a paused background art run isn't waited on
   if (manualsBusy) { if (fresh) manualAgain = true; return; }
   if (ids) manualSeen = manualSeen ? new Set([...manualSeen, ...ids]) : ids;
   if (autoManualsDone) log('Auto manuals: new games since the last look, searching again');
@@ -1092,8 +1143,12 @@ async function manualTurn(run) {
   // (beta.9) the screen says what it's waiting for: the background pass to stop at its next step, then the fix itself
   const tell = d => { try { if (alive()) win.webContents.send('manuals:turn', d); } catch {} };
   try { if (autoManualJob) { tell({ wait: true }); try { await autoManualJob; } catch {} } if (manualsBusy) throw new Error('Already downloading manuals.'); manualsBusy = true; tell({ go: true }); try { return await run(); } finally { manualsBusy = false; } }
-  finally { manualUser--; if (!manualUser && manualResume && alive()) { manualResume = false; setTimeout(() => scanOnce().then(l => autoManuals(l)).catch(() => {}), 4000); } }
+  finally { manualUser--; manualResumeSoon(); }
 }
+function manualResumeSoon() { if (!manualUser && manualResume && alive()) { manualResume = false; setTimeout(() => scanOnce().then(l => autoManuals(l)).catch(() => {}), 4000); } }
+// (beta.10) manuals:find / :download wait for the background pass the same way, stopping it at its next step (bgStop),
+// but only while they wait: their own work (PDF pages, spreads) checks manualUser too. manualResumeSoon() after them.
+async function manualBgWait(tell) { if (!autoManualJob) return; if (tell) tell(); manualUser++; try { await autoManualJob; } catch {} finally { manualUser--; } }
 // one game's manual PDF into pages (the whole-library pass looked at every game for this)
 async function pdfToPages(sc, g) {
   const pdf = path.join(paths.manualDirFor(sc, g.file), paths.artBase(g.file) + '-manual.pdf'); if (!paths.isFile(pdf)) return 0;
@@ -1124,20 +1179,33 @@ async function autoCovers(lib) {
   if (!ids.length) return;
   const list = CONSOLES.filter(d => ids.includes(d.id) && cfg.systems[d.id] && (cfg.systems[d.id].romDirs || []).length).map(def => ({ def, cfg: cfg.systems[def.id] }));
   if (!list.length) return;
-  autoRunning = true; coversBusy = true; let done; autoJob = new Promise(r => { done = r; });
+  autoRunning = true; coversBusy = true; let done, cut = false; autoJob = new Promise(r => { done = r; });
   try {
     log('Auto covers for', ids.join(','));
     // (its progress goes to the page too, a few times a second at most: the first-run Done screen shows "Getting box art")
-    let sentAt = 0; const tell = info => { const now = Date.now(); if (now - sentAt < 300 || !alive()) return; sentAt = now; try { win.webContents.send('covers:auto', { stage: String(info && info.stage || ''), done: +(info && info.done) || 0, total: +(info && info.total) || 0, system: String(info && info.system || '') }); } catch {} };
-    const rep = await covers.downloadCovers(list, tell, ['front', 'back', 'spine', 'disc'], { only, region: cfg.ui.artRegion, hd: cfg.ui.artHD !== false, ...artOpts(false) }); // just the games that are due, not their whole consoles; "HD only" (Settings → Box art) applies here too; a console with an Art Studio style follows it, locked parts are left alone
+    // (beta.10) …with the whole run's count (allDone of allTotal) and whether it's paused, for the shelf's art card
+    let sentAt = 0; const doneBy = {}, st = autoState = { paused: false, last: null, t: 0 };
+    st.send = () => { try { if (alive()) win.webContents.send('covers:auto', { ...st.last, allDone: Object.values(doneBy).reduce((a, b) => a + b, 0), allTotal: only.size, paused: st.paused }); } catch {} };
+    const tell = info => { if (info && info.systemId && info.total) doneBy[info.systemId] = +info.done || 0; st.last = { stage: String(info && info.stage || ''), done: +(info && info.done) || 0, total: +(info && info.total) || 0, system: String(info && info.system || '') };
+      const now = Date.now(); if (now - sentAt < 300 || !alive()) return; sentAt = now; st.send(); };
+    const rep = await covers.downloadCovers(list, tell, ['front', 'back', 'spine', 'disc'], { only, region: cfg.ui.artRegion, hd: cfg.ui.artHD !== false, ...artOpts(false), tag: 'auto' }); // just the games that are due, not their whole consoles; "HD only" (Settings → Box art) applies here too; a console with an Art Studio style follows it, locked parts are left alone
+    cut = !!rep.cancelled;
     try { if (alive()) win.webContents.send('covers:auto', { end: true, got: (rep.systems || []).reduce((a, r) => a + (r.front || 0), 0) }); } catch {}
     artstudio.forget(); // the Studio's game lists show the new pictures (Settings may hold off the shelf's rescan)
     const n = (rep.systems || []).reduce((a, r) => a + (r.front || 0) + (r.back || 0) + (r.spine || 0) + (r.disc || 0) + (r.upgraded || 0), 0);
     // the toast counts games that got a front cover (one per game); backs, spines, discs and sharper copies only refresh the shelf
     if (n && alive()) win.webContents.send('library:changed', { covers: (rep.systems || []).reduce((a, r) => a + (r.front || 0), 0) });
   } catch (e) { log('Auto covers failed', e.message); try { if (alive()) win.webContents.send('covers:auto', { end: true, got: 0, failed: true }); } catch {} }
-  finally { coversBusy = false; autoRunning = false; autoJob = null; saveBackMemo(); done(); setTimeout(() => makeBacks(ids).then(() => makeSpines(ids)), 3000); }
+  finally { const st = autoState; autoState = null; if (st) clearInterval(st.t); coversBusy = false; autoRunning = false; autoJob = null;
+    if (cut || (st && st.stopped)) for (const id of only) if (backMemo) delete backMemo[id]; // (beta.10: a cancelled run's games are looked at again next start, not in a week)
+    saveBackMemo(); done(); if (!(st && st.stopped)) setTimeout(() => makeBacks(ids).then(() => makeSpines(ids)), 3000); } // (beta.10: Cancel on the art card stops the made backs and spines too)
 }
+// (beta.10) the shelf's art card: Pause / Resume the background run (covers:cancel { auto } cancels it). Paused, its state is
+// sent again every few seconds (a screen that reloads meanwhile still shows the card, with Resume). false: nothing running
+let autoState = null;
+function autoPause(on) { const st = autoState; if (!st || st.stopped) return false; if (st.paused === !!on) return true; if (!covers.pause('auto', on)) return false; st.paused = !!on; clearInterval(st.t); st.t = on ? setInterval(() => st.send(), 5000) : 0; st.send(); log('Auto covers', on ? 'paused' : 'resumed'); return true; }
+handle('covers:pause', () => ({ ok: autoPause(true) }));
+handle('covers:resume', () => ({ ok: autoPause(false) }));
 // Made backs: a game with a front but no scanned back anywhere (new consoles above all: hardly any Switch 2 backs are
 // scanned yet) gets one drawn from its own pictures and LaunchBox's details (renderer/img-tools.js back()), saved as
 // "<name>-backmade.jpg" beside its art. The scanner uses it only while there's no real back, and the weekly art check
@@ -1155,7 +1223,7 @@ async function makeBacks(ids) {
     for (const id of ids) {
       const def = CONSOLES.find(c => c.id === id), sc = cfg.systems[id]; if (!def || !sc || !(sc.romDirs || []).length) continue;
       await yieldNow(); await uiQuiet(); // (beta.9: a breath between consoles)
-      let games = []; try { games = scanSystem(def, sc); } catch { continue; }
+      let games = []; try { games = await scanSystemAsync(def, sc); } catch { continue; } // (beta.10: async)
       for (const g of games) {
         if (!g.art || !g.art.front || (g.art.back && !g.art.madeBack) || g.art.madeBack) continue; // a real back, or one already made
         if (launcher.isRunning() || launching) return; // a game started: not now (the next art check carries on)
@@ -1177,7 +1245,7 @@ async function makeSpines(ids) {
     for (const id of ids) {
       const def = CONSOLES.find(c => c.id === id), sc = cfg.systems[id]; if (!def || !sc || !(sc.romDirs || []).length || !CASE[id]) continue;
       await yieldNow(); await uiQuiet(); // (beta.9: a breath between consoles)
-      let games = []; try { games = scanSystem(def, sc); } catch { continue; }
+      let games = []; try { games = await scanSystemAsync(def, sc); } catch { continue; } // (beta.10: async)
       for (const g of games) {
         if (!g.art || !g.art.front || g.art.spine) continue; // a real spine, or one already made
         if (launcher.isRunning() || launching) return; // a game started: not now (the next art check carries on)
@@ -1287,7 +1355,7 @@ handle('game:emulator', async ({ id }) => {
   const r = await dialog.showMessageBox(alive() ? win : undefined, { type: 'question', title: 'Emulator for this game', message: 'Which emulator should this game use?', detail, buttons, defaultId: 0, cancelId: buttons.length - 1, noLink: true });
   const act = acts[r.response] || 'cancel'; let exe = '';
   if (act === 'cancel') return { ok: false, canceled: true, games: cfg.games };
-  if (act === 'pick') { const f = await dialog.showOpenDialog(alive() ? win : undefined, { title: `Emulator for this game (${def.emulatorName} or a build of it)`, defaultPath: cur || shelfExe || undefined, properties: ['openFile'], filters: [{ name: 'Programs', extensions: ['exe'] }, { name: 'All files', extensions: ['*'] }] }); if (f.canceled || !f.filePaths || !f.filePaths[0]) return { ok: false, canceled: true, games: cfg.games }; exe = f.filePaths[0]; }
+  if (act === 'pick') { const f = await dialog.showOpenDialog(alive() ? win : undefined, { title: `Emulator for this game (${def.emulatorName} or a build of it)`, defaultPath: cur || shelfExe || undefined, properties: ['openFile'], filters: linux.isLinux ? undefined : [{ name: 'Programs', extensions: ['exe'] }, { name: 'All files', extensions: ['*'] }] }); if (f.canceled || !f.filePaths || !f.filePaths[0]) return { ok: false, canceled: true, games: cfg.games }; exe = f.filePaths[0]; }
   if (act === 'sugg') exe = sugg;
   const games = { ...(cfg.games || {}) };
   if (act === 'default' || (exe && path.resolve(exe).toLowerCase() === path.resolve(shelfExe || '.').toLowerCase())) { const o = { ...(games[id] || {}) }; delete o.emulator; if (Object.keys(o).length) games[id] = o; else delete games[id]; } else games[id] = { ...(games[id] || {}), emulator: exe }; // (beta.8: the game's own name stays)
@@ -1342,7 +1410,7 @@ handle('launch:game', async ({ systemId, file, emulator }) => {
   // (Switch 2 started without a choice, its shelf build gone: the newest build that can open the game)
   if (systemId === 'sw2' && !paths.isFile(sc.emulator)) { const b = (await nx2.builds(sw2Roots())).filter(x => !/\.nup$/i.test(file) || x.nup).sort((a, c) => c.date - a.date)[0]; if (b) sc = { ...sc, emulator: b.exe }; }
   }
-  if (launching || launcher.isRunning()) throw new Error('Something is already running. Close it first.');
+  if (launching || launcher.isRunning()) throw new Error(launcher.busyMessage()); // (beta.10: names what's running)
   launching = true; try { return await launchGameNow(systemId, file, sc); } finally { launching = false; }
 });
 // (beta.6) RetroArch's cores: <its folder>\cores\<core>_libretro.dll, or the folder its own settings name
@@ -1384,7 +1452,7 @@ async function launchGameNow(systemId, file, sc) {
   if (systemId === 'ps5' && /^(kyty_)?launcher\.exe$/i.test(path.basename(sc.emulator || ''))) { const emu = path.join(path.dirname(sc.emulator), 'kyty_emulator.exe'); if (paths.isFile(emu)) sc.emulator = emu; else sc.viaLauncher = true; }
   // (PS5, "Start games through Kyty's launcher" on: the launcher itself, where the game is started; it takes no game to open)
   if (systemId === 'ps5' && sc.viaLauncher) { const ui = ['kyty_launcher.exe', 'launcher.exe'].map(n => path.join(path.dirname(sc.emulator || ''), n)).find(paths.isFile); if (!ui) throw new Error("Kyty's launcher (kyty_launcher.exe) isn't next to kyty_emulator.exe. Turn off \"Start games through Kyty's launcher\" in Settings → PS5, or check the emulator path."); log('PS5 launch: through the launcher'); sc.emulator = ui; sc.gameArgs = ''; sc.coverSeconds = 1; extra.length = 0; } // (the launcher applies the preset itself)
-  else if (systemId === 'ps5') { const k = kyty.spec(sc.emulator, file); extra.push(...k.args); env = k.env; rom = k.dir; log('PS5 launch:', path.basename(rom), k.args.filter(x => /^--/.test(x)).join(' '), env ? '(preset)' : ''); }
+  else if (systemId === 'ps5') { const k = await kyty.spec(sc.emulator, file); /* (beta.10: async, the build's options probe no longer blocks) */ extra.push(...k.args); env = k.env; rom = k.dir; log('PS5 launch:', path.basename(rom), k.args.filter(x => /^--/.test(x)).join(' '), env ? '(preset)' : ''); }
   // (beta.8) Switch through Ryujinx (EmuDeck's usual pick): its own options, not Eden's / Citron's "-f -g" (an edited
   // command line is left as it is)
   if (systemId === 'sw' && /ryujinx|ryubing/i.test(path.basename(sc.emulator || '')) && /^\s*-f\s+-g\s+"\{rom\}"\s*$/.test(sc.gameArgs || '')) { sc = { ...sc, gameArgs: '--fullscreen "{rom}"' }; log('Switch launch: Ryujinx options'); }
@@ -1401,7 +1469,7 @@ async function launchGameNow(systemId, file, sc) {
   // Dolphin: the Wii remote is let go first, so Dolphin finds it as it always does
   if (systemId === 'gc' || systemId === 'wii' || /dolphin/i.test(path.basename(sc.emulator || ''))) await wiimote.pause();
   await taskbarHide(); // (beta.6) gone before the emulator's first window can show
-  let r; try { r = launcher.launchGame(sc, rom, onExit, extra, env); } catch (e) { wiimote.resume(); taskbarShow('the game did not start'); throw e; } runKind = 'game'; pendingPower = null; if (linux.isLinux) linuxpad.begin(() => closeGame()); // (beta.9: hold Select + Start to close it)
+  let r; try { r = launcher.launchGame(sc, rom, onExit, extra, env); } catch (e) { wiimote.resume(); taskbarShow('the game did not start'); throw e; } runKind = 'game'; pendingPower = null; launcher.setRunningName(gameTitleOf(systemId, file)); if (linux.isLinux) linuxpad.begin(() => closeGame()); // (beta.9: hold Select + Start to close it)
   // (Dolphin: once it has the remote, Boxshelf listens alongside for a held Home; listening only, nothing is sent)
   if (systemId === 'gc' || systemId === 'wii' || /dolphin/i.test(path.basename(sc.emulator || ''))) setTimeout(() => { if (launcher.isRunning()) wiimote.watch(); }, 4000);
   lastLaunch = { systemId, at: Date.now() }; historyStart(systemId + ':' + file);
@@ -1427,15 +1495,19 @@ async function launchGameNow(systemId, file, sc) {
   return { ...r, cover };
 }
 // (busy check first: a .cia still installing, or a game running, must not have its emulator's settings rewritten under it)
-const busyCheck = () => { if (launching || launcher.isRunning()) throw new Error('Something is already running. Close it first.'); };
-handle('launch:emulator', async ({ systemId }) => { let sc = cfg.systems[systemId]; if (!sc) throw new Error('Unknown system.'); busyCheck(); sc = { ...sc, emulator: emuPath(sc.emulator) }; const wii = systemId === 'gc' || systemId === 'wii' || /dolphin/i.test(path.basename(sc.emulator || '')); if (wii) { launching = true; try { await wiimote.pause(); } finally { launching = false; } } /* (beta.8: a second press while the Wii remote lets go is refused, as for games) */ /* (Dolphin: the Wii remote is its) */ if (systemId === 'ps5') { const ui = ['kyty_launcher.exe', 'launcher.exe'].map(n => path.join(path.dirname(sc.emulator || ''), n)).find(paths.isFile); if (ui) sc.emulator = ui; } /* (PS5: kyty_emulator needs a game; the emulator on its own is Kyty's launcher) */ emucfg.beforeLaunch(systemId, sc.emulator, { quitCombo: cfg.ui.quitCombo === false ? null : (cfg.ui.quitComboKeys || 'l3+r3') }); let r; try { r = launcher.launchEmulator(sc, onExit); } catch (e) { if (wii) wiimote.resume(); throw e; } /* (1.82: a missing exe no longer leaves the remote paused) */ runKind = 'emulator'; pendingPower = null; watchPad(); return r; });
+const busyCheck = () => { if (launching || launcher.isRunning()) throw new Error(launcher.busyMessage()); }; // (beta.10: names what's running)
+// (beta.10) a game's title for that message: the shelf's (the last scan), else its file or folder name, never a path
+function gameTitleOf(systemId, file) { try { const s = (lastLib || []).find(x => x.id === systemId), lo = String(file).toLowerCase(), g = s && (s.games || []).find(x => String(x.file || '').toLowerCase() === lo); if (g && g.title) return String(g.title); } catch {}
+  const f = String(file || ''), b = path.basename(f); return /^(main|.+\.rpx)$/i.test(b) ? path.basename(path.dirname(path.dirname(f))) : /^(eboot\.bin|default\.xex)$/i.test(b) ? path.basename(path.dirname(f)) : path.basename(b, path.extname(b)); } // (a Wii U code\x.rpx, a Switch 2 exefs\main: the game's folder)
+handle('launch:emulator', async ({ systemId }) => { let sc = cfg.systems[systemId]; if (!sc) throw new Error('Unknown system.'); busyCheck(); sc = { ...sc, emulator: emuPath(sc.emulator) }; const wii = systemId === 'gc' || systemId === 'wii' || /dolphin/i.test(path.basename(sc.emulator || '')); if (wii) { launching = true; try { await wiimote.pause(); } finally { launching = false; } } /* (beta.8: a second press while the Wii remote lets go is refused, as for games) */ /* (Dolphin: the Wii remote is its) */ if (systemId === 'ps5') { const ui = ['kyty_launcher.exe', 'launcher.exe'].map(n => path.join(path.dirname(sc.emulator || ''), n)).find(paths.isFile); if (ui) sc.emulator = ui; } /* (PS5: kyty_emulator needs a game; the emulator on its own is Kyty's launcher) */ emucfg.beforeLaunch(systemId, sc.emulator, { quitCombo: cfg.ui.quitCombo === false ? null : (cfg.ui.quitComboKeys || 'l3+r3') }); taskbarShow('an emulator in its own window'); /* (beta.10: still hidden from the last game, it stayed gone over the emulator's window) */ let r; try { r = launcher.launchEmulator(sc, onExit); } catch (e) { if (wii) wiimote.resume(); throw e; } /* (1.82: a missing exe no longer leaves the remote paused) */ runKind = 'emulator'; pendingPower = null; { const def = CONSOLES.find(c => c.id === systemId); if (def && def.emulatorName) launcher.setRunningName(def.emulatorName); } watchPad(); return r; });
 handle('launch:app', async ({ appId, link }) => {
   const a = cfg.apps[appId]; if (!a) throw new Error('Unknown app.'); busyCheck();
   const args = appId === 'stremio' && /^stremio:\/\/\/detail\/[^\s"]+$/.test(String(link || '')) ? [String(link)] : []; // a title from the museum's movie shelves opens on its page
   if (a.fullscreen !== false) { launching = true; try { await taskbarHide(); } finally { launching = false; } } // (beta.6; an app kept in a window keeps the taskbar. launching: a second press meanwhile is refused)
+  else taskbarShow('an app in a window'); // (beta.10: still hidden from the last game, it stayed gone over the app's window)
   let r; try { r = launcher.launchApp(a.path, onExit, args); } catch (e) { taskbarShow('the app did not start'); throw e; } runKind = 'app'; pendingPower = null;
   // Media apps don't speak controller: drive the pointer from the pad and press the fullscreen key once the window is up.
-  const meta = APPS.find(x => x.id === appId);
+  const meta = APPS.find(x => x.id === appId); if (meta && meta.name) launcher.setRunningName(meta.name);
   if (cfg.ui.homeMenu !== false) homemenu.begin({ systemId: 'media', exe: a.path, systemName: 'Media', title: meta ? meta.name : appId, hotkeys: {} });
   watchPad({ mouse: a.padMouse === true, appPid: r.pid, fullscreenKey: a.fullscreen === false ? null : (a.fullscreenKey || 'F11'), home: true });
   // Same loading screen as the games: it stays in front while the app's window opens (windowed at first) and goes
@@ -1457,7 +1529,7 @@ handle('launch:pc', async ({ id }) => {
   if (!paths.isFile(g.exe)) throw new Error(`${g.title} isn't at ${g.exe} any more. ${g.source === 'quiver' ? 'Check it in Quiver Launcher.' : g.source === 'gog' ? 'Check it in GOG Galaxy.' : 'Remove it in Settings → Custom games and add it again.'}`);
   busyCheck();
   launching = true; try { await taskbarHide(); } finally { launching = false; } // (beta.6)
-  let r; try { r = launcher.launchApp(g.exe, onExit, launcher.buildArgs(g.args || '', '')); } catch (e) { taskbarShow('the game did not start'); throw e; } runKind = 'app'; pendingPower = null; log('PC launch:', g.source, g.title);
+  let r; try { r = launcher.launchApp(g.exe, onExit, launcher.buildArgs(g.args || '', '')); } catch (e) { taskbarShow('the game did not start'); throw e; } runKind = 'app'; pendingPower = null; launcher.setRunningName(g.title); log('PC launch:', g.source, g.title);
   if (cfg.ui.homeMenu !== false) homemenu.begin({ systemId: 'pc', exe: g.exe, systemName: g.source === 'quiver' ? 'Quiver' : g.source === 'gog' ? 'GOG' : 'Custom', title: g.title, hotkeys: {} });
   watchPad({ mouse: false, appPid: r.pid, fullscreenKey: null, home: true });
   return { ...r, cover: coverWhileStarting(10) };
@@ -1516,7 +1588,7 @@ handle('tv:scan', async () => { if (tvScanning) return false; tvScanning = true;
   try { const games = [];
     // the shelves as last scanned (a full re-scan of every games folder here blocked the main process on each museum visit)
     if (lastLib) { for (const s of lastLib) if (s && s.kind === 'console' && Array.isArray(s.games)) s.games.forEach(g => games.push({ sysId: s.id, file: g.file, title: g.title })); }
-    else for (const { def, cfg: sc } of sysList(CONSOLES.map(c => c.id))) { let gs = []; try { gs = scanSystem(def, sc); } catch {} gs.forEach(g => games.push({ sysId: def.id, file: g.file, title: g.title })); }
+    else for (const { def, cfg: sc } of sysList(CONSOLES.map(c => c.id))) { let gs = []; try { gs = await scanSystemAsync(def, sc); } catch {} gs.forEach(g => games.push({ sysId: def.id, file: g.file, title: g.title })); } // (beta.10: async scan)
     const n = await commercials.scan(games, { cancelled: () => !alive(), idle: async () => { await uiQuiet(); await gameIdle(); } }); if (n && alive()) win.webContents.send('tv:found', { n }); return true; }
   catch (e) { log('TV ads scan', e.message); return false; } finally { tvScanning = false; } });
 handle('tv:list', () => commercials.list());
@@ -1617,7 +1689,8 @@ handle('customThemes:create', ({ file, name }) => customThemes.create(file, name
 handle('customThemes:open', () => { customThemes.ensureExamples(); fs.mkdirSync(customThemes.root(), { recursive: true }); return shell.openPath(customThemes.root()); });
 handle('themes:open', ({ systemId }) => { fs.mkdirSync(themes.dir(systemId), { recursive: true }); return shell.openPath(themes.dir(systemId)); });
 handle('dolphin:ipl', ({ systemId }) => dolphin.findIpl(emuPath((cfg.systems[systemId || 'gc'] || {}).emulator)));
-handle('dolphin:iplFolder', async ({ systemId, region }) => { const d = dolphin.ensureIplFolder(emuPath((cfg.systems[systemId || 'gc'] || {}).emulator), region); await shell.openPath(d); return d; });
+// (beta.10) Linux: Dolphin's folders there aren't the Windows ones these look in, so no stray ~/AppData folder is made
+handle('dolphin:iplFolder', async ({ systemId, region }) => { if (linux.isLinux) throw new Error('Not available on Linux yet.'); const d = dolphin.ensureIplFolder(emuPath((cfg.systems[systemId || 'gc'] || {}).emulator), region); await shell.openPath(d); return d; });
 let coversBusy = false, autoJob = null;
 // the screen's list of console ids: a real array of strings (a plain string would match by substring: "gcwii".includes("gc"))
 const idList = v => (Array.isArray(v) ? v : []).filter(x => typeof x === 'string');
@@ -1625,7 +1698,7 @@ handle('covers:download', async ({ systemIds, types, hd }) => {
   systemIds = idList(systemIds);
   // the quiet background download may be running: wait for it (it shares the same files) rather than refusing
   coversUserCancel = false;
-  if (autoRunning && autoJob) { if (alive()) win.webContents.send('covers:progress', { stage: 'Finishing the background cover download first…' }); await autoJob; }
+  if (autoRunning && autoJob) { if (alive()) win.webContents.send('covers:progress', { stage: 'Finishing the background cover download first…' }); autoPause(false); /* (beta.10: a paused one carries on, or this would wait for ever) */ await autoJob; }
   if (coversUserCancel) return { systems: [], hd: !!hd, cancelled: true }; // Cancel pressed while it waited for the background run
   if (coversBusy) throw new Error('Covers are already downloading.');
   coversBusy = true;
@@ -1643,8 +1716,9 @@ handle('covers:download', async ({ systemIds, types, hd }) => {
   } finally { coversBusy = false; }
 });
 let coversUserCancel = false;
-handle('covers:cancel', () => { coversUserCancel = true; covers.cancel(); return true; });
-handle('covers:coverage', async () => { const out = []; for (const s of sysList(CONSOLES.map(c => c.id))) { await yieldNow(); out.push(...covers.coverage([s])); } return out; }); // (beta.9: a console at a time, with a breath between: every console's pictures in one go froze Settings' Box art page)
+handle('covers:cancel', (a) => { if (a && a.auto) { const st = autoState; if (st) { st.stopped = true; st.paused = false; clearInterval(st.t); } covers.cancel('auto'); return true; } // (beta.10) the art card: only the background run
+  coversUserCancel = true; covers.cancel(); return true; });
+handle('covers:coverage', async () => { const out = []; for (const s of sysList(CONSOLES.map(c => c.id))) { await yieldNow(); out.push(...(await covers.coverage([s]))); } return out; }); // (beta.9: a console at a time, with a breath between: every console's pictures in one go froze Settings' Box art page; beta.10: coverage is async)
 // New games while Boxshelf is open: watch the game folders, and once nothing has changed in them for 8 s (a big copy is
 // finished) tell the shelf to look again. A new game then shows up on the shelf, and in the museum it arrives as a parcel.
 // Never during a game (it waits), and at most one rescan per quiet spell.
@@ -1654,24 +1728,64 @@ function watchRoms() {
   // only when the watched folders really changed (every settings save calls this); a pending rescan (romWatchT) stays due
   const key = [...dirs].sort().join('\n'); if (key === romWatchKey) return; romWatchKey = key;
   romWatchers.forEach(w => { try { w.close(); } catch {} }); romWatchers = [];
-  const poke = () => { scanForget(); /* (beta.9: a games folder changed, so the kept scans are out of date) */ clearTimeout(romWatchT); romWatchT = setTimeout(function fire() { if (launcher.isRunning()) { romWatchT = setTimeout(fire, 15000); return; } if (alive()) win.webContents.send('library:changed', { watch: 1 }); }, 8000); };
-  for (const d of dirs) { try { const w = fs.watch(d, { recursive: true }, (ev, name) => { if (name && /(^|[\\/])(covers|\.optimized|\.manual-originals)([\\/]|$)|-manual-|\.(png|jpe?g|json|txt|ini|tmp|part|srm|sav|sra|state(\d+|\.auto)?|st\d|ss\d|mcd|mcr|ps2|dsv|eep|fla|flash|mpk|bkr|brm|rtc|bak|log|cfg|lock|db|sqlite|db-journal|crdownload)$/i.test(name)) return; poke(); }); /* (beta.9: an emulator's saves, save states and memory cards beside the games aren't new games: they rescanned the whole library just after every game. Never .bin, .img or .zip: those are games) */ w.on('error', () => {}); romWatchers.push(w); if (romMissing.has(d)) { romMissing.delete(d); log('Games folder is back, watching it:', d); poke(); } } catch { romMissing.add(d); } }
+  for (const d of dirs) romWatchDir(d);
   // (beta.9) a folder that isn't there yet (its drive not plugged in) is tried again every minute; once it's there, it's
   // watched and the shelf looks at it at once
   for (const d of [...romMissing]) if (!dirs.has(d)) romMissing.delete(d);
-  clearTimeout(romRetryT); if (romMissing.size) romRetryT = setTimeout(() => { romWatchKey = null; watchRoms(); }, 60000);
+  romRetrySoon();
+}
+function romPoke() { scanForget(); /* (beta.9: a games folder changed, so the kept scans are out of date) */ clearTimeout(romWatchT); romWatchT = setTimeout(function fire() { if (launcher.isRunning()) { romWatchT = setTimeout(fire, 15000); return; } if (alive()) win.webContents.send('library:changed', { watch: 1 }); }, 8000); }
+const romWatchEv = (ev, name) => { if (name && /(^|[\\/])(covers|\.optimized|\.manual-originals)([\\/]|$)|-manual-|\.(png|jpe?g|json|txt|ini|tmp|part|srm|sav|sra|state(\d+|\.auto)?|st\d|ss\d|mcd|mcr|ps2|dsv|eep|fla|flash|mpk|bkr|brm|rtc|bak|log|cfg|lock|db|sqlite|db-journal|crdownload)$/i.test(name)) return; romPoke(); }; /* (beta.9: an emulator's saves, save states and memory cards beside the games aren't new games: they rescanned the whole library just after every game. Never .bin, .img or .zip: those are games) */
+// (beta.10) Linux has no native recursive watch: Node's fallback walked the whole tree with readdirSync on this thread (an SD
+// card of extracted PS3 / Switch games held the app up). There the folder itself is watched, and its direct subfolders
+// (a game in its own folder) are added a few at a time from an async listing
+async function romWatchSubs(d, top) {
+  let ents = []; try { ents = await fs.promises.readdir(d, { withFileTypes: true }); } catch { return; }
+  let k = 0;
+  for (const e of ents) {
+    if (!e.isDirectory() || e.name.startsWith('.') || /^(covers|manuals)$/i.test(e.name)) continue;
+    if (!romWatchers.includes(top) || ++k > 2000) return;
+    if (k % 8 === 0) { await new Promise(r => setImmediate(r)); if (!romWatchers.includes(top)) return; }
+    try { const s = fs.watch(path.join(d, e.name), romWatchEv); s.bsSubOf = d; s.on('error', () => { try { s.close(); } catch {} romWatchers = romWatchers.filter(x => x !== s); }); romWatchers.push(s); } catch {}
+  }
+}
+function romWatchDir(d) {
+  try { const w = fs.watch(d, { recursive: !linux.isLinux }, romWatchEv);
+    w.bsDir = d; if (linux.isLinux) setImmediate(() => romWatchSubs(d, w).catch(() => {}));
+    // (beta.10) a watch that fails (its USB / network drive gone) was dead for good: it's closed and the folder joins the
+    // ones tried again every minute (a stale watcher, already replaced, is left alone)
+    w.on('error', e => { if (!romWatchers.includes(w)) return; try { w.close(); } catch {} romWatchers = romWatchers.filter(x => x !== w); romMissing.add(d); romWatchKey = null; log('Games folder watch stopped (' + ((e && e.code) || 'error') + '), trying it again every minute:', d); romRetrySoon(); });
+    romWatchers.push(w); if (romMissing.has(d)) { romMissing.delete(d); log('Games folder is back, watching it:', d); romPoke(); } } catch { romMissing.add(d); }
+}
+// (beta.10) the retry looks at the missing folders only (it rebuilt every watcher, and fs.watch opens a folder on this
+// thread: an offline share could hold the app up), each checked with fs.promises first; never during a game
+let romRetrying = false;
+function romRetrySoon() { clearTimeout(romRetryT); romRetryT = 0; if (romMissing.size) romRetryT = setTimeout(romRetry, 60000); }
+async function romRetry() {
+  romRetryT = 0; if (romRetrying) return; if (launcher.isRunning() || launching) return romRetrySoon();
+  romRetrying = true;
+  try { for (const d of [...romMissing]) { let ok = false; try { ok = (await fs.promises.stat(d)).isDirectory(); } catch {}
+    if (ok && romMissing.has(d) && !launcher.isRunning() && !romWatchers.some(w => w.bsDir === d)) romWatchDir(d); } }
+  finally { romRetrying = false; }
+  if (!romRetryT) romRetrySoon();
 }
 const sysList = ids => CONSOLES.filter(d => ids.includes(d.id) && cfg.systems[d.id] && (cfg.systems[d.id].romDirs || []).length).map(def => ({ def, cfg: cfg.systems[def.id] }));
 let manualsBusy = false, findToken = null;
 handle('manuals:recent', () => manualcoll.recent(30));
-handle('manuals:coverage', async () => { const out = []; for (const s of sysList(CONSOLES.map(c => c.id))) { await yieldNow(); out.push(...manuals.coverage([s])); } return out; }); // (beta.9: a console at a time, as covers:coverage)
+handle('manuals:coverage', async () => { const out = []; for (const s of sysList(CONSOLES.map(c => c.id))) { await yieldNow(); out.push(...(await manuals.coverage([s]))); } return out; }); // (beta.9: a console at a time, as covers:coverage; beta.10: coverage is async)
 handle('manuals:find', async ({ systemIds }) => {
   systemIds = idList(systemIds);
-  if (autoManualJob) { if (alive()) win.webContents.send('covers:progress', { stage: 'Finishing the background manual download first…' }); await autoManualJob; }
-  if (manualsBusy) throw new Error('Already searching for manuals.');
-  manualsBusy = true; const token = findToken = { cancelled: false };
-  try { const list = sysList(systemIds); if (!list.length) throw new Error('Add a games folder first.'); log('Manual search for', systemIds.join(',')); return await manuals.findAll(list, info => { if (alive()) win.webContents.send('covers:progress', info); }, token); }
-  finally { manualsBusy = false; if (findToken === token) findToken = null; }
+  // (beta.10) the token is made before waiting for the background pass (a Cancel meanwhile was lost), and that pass is asked
+  // to stop at its next step (manualUser, as a Wrong game / Repair press does); it carries on afterwards
+  const token = findToken = { cancelled: false };
+  try {
+    await manualBgWait(() => { if (alive()) win.webContents.send('covers:progress', { stage: 'Finishing the background manual download first…' }); });
+    if (token.cancelled) return [];
+    if (manualsBusy) throw new Error('Already searching for manuals.');
+    manualsBusy = true;
+    try { const list = sysList(systemIds); if (!list.length) throw new Error('Add a games folder first.'); log('Manual search for', systemIds.join(',')); return await manuals.findAll(list, info => { if (alive()) win.webContents.send('covers:progress', info); }, token); }
+    finally { manualsBusy = false; }
+  } finally { if (findToken === token) findToken = null; manualResumeSoon(); }
 });
 // ---------- RetroAchievements ----------
 let lastLaunch = null;
@@ -1762,7 +1876,7 @@ handle('preview:ytStop', () => ytStop());
 handle('preview:count', async () => {
   previews.forget(); const out = []; let total = 0;
   for (const def of CONSOLES) { const sc = cfg.systems[def.id]; if (!sc || sc.enabled === false || !(sc.romDirs || []).length) continue;
-    await new Promise(r => setImmediate(r)); let games = []; try { games = scanSystem(def, sc); } catch {}
+    await new Promise(r => setImmediate(r)); let games = []; try { games = await scanSystemAsync(def, sc); } catch {} // (beta.10: async)
     const n = previews.countFiles(def, sc, games, previewOpts(sc)); if (n) out.push({ id: def.id, name: def.name, n, of: games.length }); total += n; }
   return { total, systems: out, steamBytes: previews.steamSize(), clips: ytclips.status() };
 });
@@ -1849,7 +1963,10 @@ handle('manuals:cancel', () => { if (findToken) findToken.cancelled = true; retu
 handle('manuals:download', async ({ choices }) => {
   // every target must be a game the scanner could have found (inside that system's games folders)
   choices = (Array.isArray(choices) ? choices : []).filter(c => { try { return c && typeof c.id === 'string' && !!gameFile(c.systemId, c.file); } catch { return false; } });
-  if (autoManualJob) await autoManualJob;
+  const token = findToken = { cancelled: false }; // (beta.10: as manuals:find, a Cancel while the background pass stops isn't lost)
+  try {
+  await manualBgWait();
+  if (token.cancelled) return [];
   if (manualsBusy) throw new Error('Already downloading manuals.');
   manualsBusy = true;
   try {
@@ -1860,10 +1977,12 @@ handle('manuals:download', async ({ choices }) => {
     return rep;
   }
   finally { manualsBusy = false; }
+  } finally { if (findToken === token) findToken = null; manualResumeSoon(); }
 });
 // (beta.9) Wrong game / Repair work on this one game only, right away
 const collOpts = () => ({ renderPdf: (p, size) => renderPdfPages(p, size || 1600, undefined, undefined, true), crop: makeCropper() });
-function oneGame(systemId, file) { const s = sysList([systemId])[0]; if (!s) throw new Error('Unknown system.'); const g = scanSystem(s.def, s.cfg).find(x => x.file.toLowerCase() === String(file).toLowerCase()); if (!g) throw new Error('Game not found.'); return { def: s.def, sc: s.cfg, g }; }
+// (beta.10) async: the whole-console walk behind it held the main process up (a games folder on a NAS)
+async function oneGame(systemId, file) { const s = sysList([systemId])[0]; if (!s) throw new Error('Unknown system.'); const g = (await scanSystemAsync(s.def, s.cfg)).find(x => x.file.toLowerCase() === String(file).toLowerCase()); if (!g) throw new Error('Game not found.'); return { def: s.def, sc: s.cfg, g }; }
 handle('manuals:reject', async ({ systemId, file }) => {
   const gf = gameFile(systemId, file);
   return manualTurn(async () => {
@@ -1871,29 +1990,29 @@ handle('manuals:reject', async ({ systemId, file }) => {
     // a scan collection's copy of this game first (not the one just rejected), then the search's next best
     const r = await manuals.rejectManual(sysList(CONSOLES.map(c => c.id)), systemId, gf.file, { collSrc, tryFirst: (def, sc, g) => manualcoll.fetchFor(def, sc, g, collOpts()),
       progress: info => { if (alive()) win.webContents.send('covers:progress', info); } });
-    const { sc, g } = oneGame(systemId, gf.file);
+    const { sc, g } = await oneGame(systemId, gf.file);
     if (r.pdf) r.got = await pdfToPages(sc, g);
     if (r.got && !r.from) { try { await spreads.splitManual(paths.manualDirFor(sc, g.file), paths.artBase(g.file), makeCropper()); } catch (e) { log('Manual spreads', path.basename(g.file), e.message); } }
     if (alive()) win.webContents.send('library:changed', { manuals: 1 });
-    r.pages = manualPagesOf(systemId, gf.file); // (beta.9: the reader reopens with these, no whole-library scan)
+    r.pages = await manualPagesOf(systemId, gf.file); // (beta.9: the reader reopens with these, no whole-library scan)
     return r;
   });
 });
 // (beta.9) one game's manual pages as the shelf has them (addresses, the box front first where the library puts it there)
-function manualPagesOf(systemId, file) { try { const { def, g } = oneGame(systemId, file); return withCover(def.id, g, ((g.art && g.art.manual) || []).map(fileUrl)); } catch { return null; } }
+async function manualPagesOf(systemId, file) { try { const { def, g } = await oneGame(systemId, file); return await withCoverAsync(def.id, g, ((g.art && g.art.manual) || []).map(fileUrl)); } catch { return null; } }
 // Repair: the right game's manual that looks wrong (no cover, thumbnails, two pages side by side, huge pages). A scan
 // collection's copy replaces it when one has the game (unless that's the copy already there); otherwise it's put right
 // where it is (manuals.repairInPlace). The pages as they were are kept in .manual-originals.
 handle('manuals:repair', async ({ systemId, file }) => {
   const gf = gameFile(systemId, file);
   return manualTurn(async () => {
-    const { def, sc, g } = oneGame(systemId, gf.file), key = systemId + '|' + g.file.toLowerCase();
+    const { def, sc, g } = await oneGame(systemId, gf.file), key = systemId + '|' + g.file.toLowerCase();
     if (manualstudio.isLocked(systemId, g.file)) throw new Error('This manual was chosen in Manual Studio: change it there.');
     const had = manualcoll.info(key), c = await manualcoll.fetchFor(def, sc, g, Object.assign(collOpts(), { force: true, skipSrc: had && had.src }));
     let r = c && c.got ? { changed: true, what: 'swapped for the clean scan from ' + c.from } : null;
-    if (!r) { const fresh = oneGame(systemId, gf.file).g; r = await manuals.repairInPlace(sc, fresh, { crop: makeCropper(), front: fresh.art && fresh.art.front, sysId: systemId }); }
+    if (!r) { const fresh = (await oneGame(systemId, gf.file)).g; r = await manuals.repairInPlace(sc, fresh, { crop: makeCropper(), front: fresh.art && fresh.art.front, sysId: systemId }); }
     if (r.changed && alive()) win.webContents.send('library:changed', { manuals: 1 });
-    if (r.changed) r.pages = manualPagesOf(systemId, gf.file);
+    if (r.changed) r.pages = await manualPagesOf(systemId, gf.file);
     return r;
   });
 });
@@ -1919,13 +2038,22 @@ handle('manuals:check', async () => { checkStop = false; return manualTurn(async
   // (one scan per console for all its set-aside games, a pause between consoles: a scan per game froze main for seconds)
   let replaced = 0; const bySys = new Map(); for (const x of rc.list || []) { if (!bySys.has(x.sysId)) bySys.set(x.sysId, new Set()); bySys.get(x.sysId).add(String(x.file).toLowerCase()); }
   for (const [sysId, files] of bySys) { await yieldNow(); const s = sysList([sysId])[0]; if (!s) continue;
-    try { for (const g of scanSystem(s.def, s.cfg)) if (files.has(g.file.toLowerCase()) && g.art && g.art.manual && g.art.manual.length) replaced++; } catch {} }
+    try { for (const g of await scanSystemAsync(s.def, s.cfg)) if (files.has(g.file.toLowerCase()) && g.art && g.art.manual && g.art.manual.length) replaced++; } catch {} } // (beta.10: async scan)
   if ((rc.moved || rc.shrunk || coll || got) && alive()) win.webContents.send('library:changed', { onlineManuals: got, manualUpdates: changed });
   log('Check my manuals:', rc.checked, 'looked at,', rc.moved, 'set aside,', replaced, 'replaced,', rc.shrunk || 0, 'made smaller,', got + coll, 'found in all', stop() ? '(cancelled)' : '');
   return { checked: rc.checked, moved: rc.moved, shrunk: rc.shrunk || 0, got: replaced, found: got + coll, cancelled: !!(rc.cancelled || checkStop) };
 }); });
 handle('manuals:checkCancel', () => { checkStop = true; return true; });
-handle('fs:check', list => (list || []).map(p => ({ path: p, file: paths.isFile(paths.expand(p)), dir: paths.isDir(paths.expand(p)) })));
+// (beta.10) async, two at a time, one stat per path: a sync stat of a sleeping network share held main up until the SMB
+// timeout (10 s or more) per path. A path that hasn't answered in 2.5 s is reported offline (and not missing)
+handle('fs:check', async list => {
+  const ps = Array.isArray(list) ? list : [], out = new Array(ps.length); let i = 0;
+  const one = p => new Promise(res => { const t = setTimeout(() => res({ path: p, file: false, dir: false, offline: true }), 2500);
+    let q; try { q = fs.promises.stat(paths.expand(p)); } catch (e) { q = Promise.reject(e); }
+    q.then(s => ({ path: p, file: s.isFile(), dir: s.isDirectory() }), () => ({ path: p, file: false, dir: false })).then(r => { clearTimeout(t); res(r); }); });
+  await Promise.all([0, 1].map(async () => { while (i < ps.length) { const k = i++; out[k] = await one(ps[k]); } }));
+  return out;
+});
 handle('app:quit', o => { log('Quit: asked by the shelf (' + String((o && o.why) || 'no reason given').slice(0, 60) + ')'); app.quit(); }); // (why: the quick menu's Exit, or the quit combo held on the shelf)
 handle('app:power', kind => { if (['sleep', 'restart', 'shutdown'].includes(kind)) powerAction(kind); return true; }); // the Quick Shelf's Power card
 // Box art (quick menu → Box art): an image you pick becomes this game's front cover. It's copied into the game's art
@@ -1967,13 +2095,13 @@ function saveArt(art) { cfg = persistCfg(config.normalize({ ...cfg, art })); }
 const artOpts = explicit => ({ styleFor: id => (cfg.art && cfg.art.styles && cfg.art.styles[id] ? artstudio.styleFor(cfg, id) : null), lockedFor: (id, file) => artstudio.lockedFor(id, file), serial: (id, file, fn) => artstudio.serial(id, file, fn), mayReplace: f => artstudio.mayReplace(f, !!explicit), isPoster: f => artstudio.isPoster(f) });
 let artChangedT = null;
 function initArtStudio() {
-  artstudio.init({ dataDir: app.getPath('userData'), log, getCfg: () => cfg, setArt: saveArt, consoles: () => sysList(CONSOLES.map(c => c.id)).map(x => ({ def: x.def, sc: x.cfg })), scan: (def, sc, fresh) => scanSystem(def, sc, fresh),
+  artstudio.init({ dataDir: app.getPath('userData'), log, getCfg: () => cfg, setArt: saveArt, consoles: () => sysList(CONSOLES.map(c => c.id)).map(x => ({ def: x.def, sc: x.cfg })), scan: (def, sc, fresh) => scanSystemAsync(def, sc, fresh),
     count: id => { const sh = lastLib && lastLib.find(x => x.id === id && x.kind === 'console'); return sh ? sh.games.length : null; },
     gameFile, fileUrl, send: (ch, d) => { if (alive()) win.webContents.send(ch, d); },
     placed: dest => { artVer.set(path.resolve(dest).toLowerCase(), Date.now()); },
     // one shelf refresh for a burst of changes (a Use, then another a second later)
     changed: info => { clearTimeout(artChangedT); artChangedT = setTimeout(() => { if (alive()) win.webContents.send('library:changed', { artStudio: 1, ...info }); }, 300); },
-    idle: gameIdle, coversBusy: () => coversBusy,
+    idle: gameIdle, coversBusy: () => { if (coversBusy && autoState && autoState.paused) autoPause(false); return coversBusy; }, // (beta.10: the Studio waiting on a paused background run carries it on)
     // "Use my own picture…": main opens the picker; the screen never sends a path
     pickImage: async ({ title }) => { const r = await dialog.showOpenDialog(alive() ? win : undefined, { title, properties: ['openFile'], filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg', 'webp'] }] }); return r.canceled || !r.filePaths || !r.filePaths[0] ? null : r.filePaths[0]; } });
 }
@@ -1995,12 +2123,12 @@ handle('art:release', a => artstudio.release(a)); // a console's kept pictures h
 let artIndexing = null, artRefreshing = null;
 // Settings → Art & manuals → Refresh art database (1.71): a forced rebuild of the index (newer picture types appear), through
 // covers' single-build guard; progress { phase, pct, got, total } on art:indexProgress; art:refreshCancel stops it, old index kept
-handle('art:refreshIndex', () => { if (!artRefreshing && coversBusy) throw new Error('Box art is downloading right now. Try again when it finishes.'); if (!artRefreshing) artRefreshing = covers.refreshIndex(p => { if (alive()) win.webContents.send('art:indexProgress', p); }).then(() => { artstudio.forget(); return covers.indexInfo(); }).finally(() => { artRefreshing = null; }); return artRefreshing; });
+handle('art:refreshIndex', () => { if (!artRefreshing && coversBusy && !covers.isPaused('auto')) throw new Error('Box art is downloading right now. Try again when it finishes.'); if (!artRefreshing) artRefreshing = covers.refreshIndex(p => { if (alive()) win.webContents.send('art:indexProgress', p); }).then(() => { artstudio.forget(); return covers.indexInfo(); }).finally(() => { artRefreshing = null; }); return artRefreshing; });
 handle('art:refreshCancel', () => ({ cancelled: covers.cancelRefresh() }));
 handle('art:indexInfo', () => covers.indexInfo());
 // ---------- Manual Studio (Settings → Art & manuals → Manuals; Details → Choose manual…; the Art Studio's Manual part) ----------
 function initManualStudio() {
-  manualstudio.init({ dataDir: app.getPath('userData'), log, consoles: () => sysList(CONSOLES.map(c => c.id)).map(x => ({ def: x.def, sc: x.cfg })), scan: (def, sc, fresh) => scanSystem(def, sc, fresh), gameFile, fileUrl,
+  manualstudio.init({ dataDir: app.getPath('userData'), log, consoles: () => sysList(CONSOLES.map(c => c.id)).map(x => ({ def: x.def, sc: x.cfg })), scan: (def, sc, fresh) => scanSystemAsync(def, sc, fresh), gameFile, fileUrl,
     send: (ch, d) => { if (alive()) win.webContents.send(ch, d); }, idle: gameIdle,
     changed: info => { if (alive()) win.webContents.send('library:changed', info); },
     renderPdf: p => renderPdfPages(p, 1600), renderFirst: async p => { const d = (await renderPdfCover(p))[0]; const m = /^data:image\/jpeg;base64,(.+)$/.exec(String(d || '')); return m ? Buffer.from(m[1], 'base64') : null; },
@@ -2017,7 +2145,7 @@ handle('manual:lock', a => manualstudio.lock(a));
 handle('manual:own', a => manualstudio.own(a));
 handle('manual:pref', a => manualstudio.setPref(a));
 handle('manual:cancel', a => manualstudio.cancel(a));
-handle('art:index', () => { if (!artIndexing && coversBusy) throw new Error('Box art is downloading right now: it builds the index too. Try again when it finishes.'); if (!artIndexing) artIndexing = covers.buildIndex(info => { if (alive()) win.webContents.send('covers:progress', info); }).then(() => { artstudio.forget(); return { index: covers.indexState() }; }).finally(() => { artIndexing = null; }); return artIndexing; });
+handle('art:index', () => { if (!artIndexing && coversBusy && !covers.isPaused('auto')) throw new Error('Box art is downloading right now: it builds the index too. Try again when it finishes.'); if (!artIndexing) artIndexing = covers.buildIndex(info => { if (alive()) win.webContents.send('covers:progress', info); }).then(() => { artstudio.forget(); return { index: covers.indexState() }; }).finally(() => { artIndexing = null; }); return artIndexing; });
 // the smoothness test (1.73.5): full screen, a maximized window, or a window half the screen's size, to tell whether full-screen
 // presentation or the number of pixels is what costs frames. { mode } → whether it's full screen now
 handle('app:winMode', async ({ mode } = {}) => {
@@ -2032,19 +2160,31 @@ handle('app:fullscreen', () => { if (alive()) win.setFullScreen(!win.isFullScree
 // The RetroAchievements key is kept encrypted for this Windows user (DPAPI via safeStorage), not as plain text in
 // config.json: a copied or shared Boxshelf folder doesn't carry a usable key
 // personal API keys (Settings → Connections) are kept encrypted too, the same way
-function sealKeys(c) { if (!c || !c.keys || !Object.values(c.keys).some(Boolean)) return c; try { if (!safeStorage.isEncryptionAvailable()) return c; const enc = {}; for (const [k, v] of Object.entries(c.keys)) enc[k] = v ? safeStorage.encryptString(String(v)).toString('base64') : ''; return { ...c, keys: Object.fromEntries(Object.keys(c.keys).map(k => [k, ''])), keysEnc: enc }; } catch (e) { log('API keys: encryption failed, kept as before', e.message); return c; } }
-function unsealKeys(c) { if (c && c.keysEnc) { c.keys = c.keys || {}; for (const [k, v] of Object.entries(c.keysEnc)) { if (v && !c.keys[k]) { try { c.keys[k] = safeStorage.decryptString(Buffer.from(v, 'base64')); } catch { log('API key', k, 'could not be unlocked here (moved to another PC?): enter it again'); } } } delete c.keysEnc; } return c; }
+let sealWarned = false; // (beta.10: once a session, when keys can only be kept unencrypted (Linux with no keyring); the file is then owner-only)
+function sealKeys(c) { if (!c || !c.keys || !Object.values(c.keys).some(Boolean)) return c; try { if (!safeStorage.isEncryptionAvailable()) { if (!sealWarned) { sealWarned = true; log('API keys: no system keyring, so they are kept unencrypted in the settings file (readable by this user only)'); } return c; } const enc = {}; for (const [k, v] of Object.entries(c.keys)) enc[k] = v ? safeStorage.encryptString(String(v)).toString('base64') : ''; return { ...c, keys: Object.fromEntries(Object.keys(c.keys).map(k => [k, ''])), keysEnc: enc }; } catch (e) { log('API keys: encryption failed, kept as before', e.message); return c; } }
+// (beta.10) sealed keys this session can't unlock (a Steam Deck's Game Mode has no KWallet, a folder moved to another PC)
+// are kept as they are and written back while their key stays empty: dropped, they were gone for good, even where they open
+const keptSealed = { keys: {}, ra: '' };
+function unsealKeys(c) { if (c && c.keysEnc) { c.keys = c.keys || {}; for (const [k, v] of Object.entries(c.keysEnc)) { if (v && !c.keys[k]) { try { c.keys[k] = safeStorage.decryptString(Buffer.from(v, 'base64')); delete keptSealed.keys[k]; } catch { keptSealed.keys[k] = v; log('API key', k, 'could not be unlocked here (moved to another PC?): kept as it was; enter it again to use it here'); } } } delete c.keysEnc; } return c; }
+function keepSealed(c) {
+  if (!c) return c; const extra = {};
+  for (const [k, v] of Object.entries(keptSealed.keys)) { if (c.keys && c.keys[k]) delete keptSealed.keys[k]; else extra[k] = v; } // a key entered again replaces the one kept
+  if (Object.keys(extra).length) c = { ...c, keysEnc: { ...(c.keysEnc || {}), ...extra } };
+  if (keptSealed.ra) { if (c.ra && c.ra.key) keptSealed.ra = ''; else if (c.ra) c = { ...c, ra: { ...c.ra, keyEnc: keptSealed.ra } }; }
+  return c;
+}
 function sealed(c) {
-  c = sealKeys(c);
+  c = keepSealed(sealKeys(c));
   if (!c || !c.ra || !c.ra.key) return c;
   try { if (!safeStorage.isEncryptionAvailable()) return c; } catch { return c; }
   try { return { ...c, ra: { ...c.ra, key: '', keyEnc: safeStorage.encryptString(String(c.ra.key)).toString('base64') } }; } catch (e) { log('RetroAchievements key: encryption failed, kept as before', e.message); return c; }
 }
 function unsealed(c) {
   unsealKeys(c);
-  if (c && c.ra && c.ra.keyEnc && !c.ra.key) { try { c.ra.key = safeStorage.decryptString(Buffer.from(c.ra.keyEnc, 'base64')); } catch (e) { log('RetroAchievements key could not be unlocked here (moved to another PC?): enter it again'); } }
+  if (c && c.ra && c.ra.keyEnc && !c.ra.key) { try { c.ra.key = safeStorage.decryptString(Buffer.from(c.ra.keyEnc, 'base64')); keptSealed.ra = ''; } catch (e) { keptSealed.ra = c.ra.keyEnc; log('RetroAchievements key could not be unlocked here (moved to another PC?): kept as it was; enter it again to use it here'); } }
   if (c && c.ra) delete c.ra.keyEnc; return c;
 }
+let steamLooked = false, steamMain; // (beta.10: Steam looked for again at most once a session, see buildLibrary; steamMain: Steam's own folder when the one set is a library elsewhere)
 function persistCfg(next) { config.save(sealed(next)); return next; }
 // What changed in a save that main has to act on: the display, Steam's tools, the accounts (re-checked on their own)
 function cfgChanged(prev, next) {
@@ -2110,7 +2250,10 @@ function stripSecrets(v, depth = 0) {
 // the values themselves, to blank out of any text that goes out (the log)
 function secretValues() { const out = []; const add = x => { if (typeof x === 'string' && x.length >= 6) out.push(x); };
   try { add(cfg.ra && cfg.ra.key); for (const x of Object.values(cfg.keys || {})) add(x); } catch {} return out; }
-function scrubText(t) { for (const x of secretValues()) t = t.split(x).join('[removed]'); if (HOME_RE) t = t.replace(HOME_RE, '~'); return t; }
+function scrubText(t) { for (const x of secretValues()) t = t.split(x).join('[removed]');
+  // (beta.10) the RetroAchievements account name too (older logs had it in cache names), then every path / name form
+  try { const u = cfg && cfg.ra && String(cfg.ra.user || '').trim(); if (u && u.length >= 3) t = t.replace(new RegExp('(?<![A-Za-z0-9])' + u.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![A-Za-z0-9])', 'gi'), '[ra user]'); } catch {}
+  return privacyScrub(t); }
 const isPlain = v => !!v && typeof v === 'object' && !Array.isArray(v);
 function deepMerge(base, over) { if (!isPlain(base) || !isPlain(over)) return over === undefined ? base : over; const out = { ...base }; for (const [k, v] of Object.entries(over)) out[k] = isPlain(v) && isPlain(base[k]) ? deepMerge(base[k], v) : v; return out; }
 const stamp = () => { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
@@ -2323,15 +2466,18 @@ function startUp() {
   { const e = cfg.systems.sw2 && cfg.systems.sw2.emulator; if (e && !paths.isFile(emuPath(e))) nx2.builds(sw2Roots()).then(l => { const b = l.sort((a, c) => c.date - a.date)[0]; if (b && cfg.systems.sw2 && !paths.isFile(emuPath(cfg.systems.sw2.emulator))) { log('Switch 2: shelf build gone, now', b.label); applyCfg({ ...cfg, systems: { ...cfg.systems, sw2: { ...cfg.systems.sw2, emulator: b.exe } } }); } }).catch(() => {}); }
   if (cfg.ra && cfg.ra.key) { try { const raw = JSON.parse(fs.readFileSync(config.file(), 'utf8')); if (raw && raw.ra && raw.ra.key) persistCfg(cfg); } catch {} } // an older plain-text key: encrypt it now
   covers.init(app.getPath('userData'), log); require('./main/steamgrid').init({ dataDir: app.getPath('userData'), log, key: () => (cfg && cfg.keys && cfg.keys.steamgriddb) || '' }); require('./main/screenscraper').init({ dataDir: app.getPath('userData'), log, creds: () => { const k = (cfg && cfg.keys) || {}; return { user: k.ssUser || '', pass: k.ssPass || '', devId: k.ssDevId || '', devPass: k.ssDevPass || '' }; } }); initArtStudio(); initManualStudio(); // (SteamGridDB: the Art Studio's optional poster source)
-  commercials.init({ log, dir: path.join(app.getPath('userData'), 'commercials'), memoFile: path.join(app.getPath('userData'), 'commercials.json'), fetchBuf: async url => { const r = await net.fetch(url); if (r.status === 404) return null; if (!r.ok) throw new Error('archive.org answered ' + r.status); return Buffer.from(await r.arrayBuffer()); }, // (busy / down: a failure, so no game is noted as "no ad" for a month)
+  commercials.init({ log, dir: path.join(app.getPath('userData'), 'commercials'), memoFile: path.join(app.getPath('userData'), 'commercials.json'), fetchBuf: async url => { const r = await net.fetch(url, { signal: AbortSignal.timeout(30000) }); /* (beta.10: a stalled answer gives up) */ if (r.status === 404) return null; if (!r.ok) throw new Error('archive.org answered ' + r.status); return Buffer.from(await r.arrayBuffer()); }, // (busy / down: a failure, so no game is noted as "no ad" for a month)
     // url → file, streamed; resolves to the bytes written (0: not found), rejects past max bytes
-    fetchFile: async (url, dest, max) => { const r = await net.fetch(url); if (!r.ok || !r.body) return 0; let n = 0;
-      const { Readable, Transform } = require('stream');
-      await require('stream/promises').pipeline(Readable.fromWeb(r.body), new Transform({ transform(c, e, cb) { n += c.length; cb(n > max ? new Error('too big') : null, c); } }), fs.createWriteStream(dest));
-      return n; } });
-  stremio.init({ log, fanartKey: () => (cfg && cfg.keys && cfg.keys.fanart) || '', artDir: path.join(app.getPath('userData'), 'stremio-art'), fetchBuf: async url => { const r = await net.fetch(url); if (r.status === 404) return null; if (!r.ok) throw new Error('HTTP ' + r.status); return Buffer.from(await r.arrayBuffer()); } }); // null = really not there; other failures throw, so nothing "missing" is cached for them
+    // (beta.10) gives up when nothing arrives for 60 s or it takes over 15 minutes in all (a stalled storage server hung it
+    // for the whole session: that ad never played or retried); the rejection makes commercials.local() drop the .part
+    fetchFile: async (url, dest, max) => { const ac = new AbortController(); let idle = setTimeout(() => ac.abort(), 60000); const all = setTimeout(() => ac.abort(), 15 * 60000);
+      try { const r = await net.fetch(url, { signal: ac.signal }); if (!r.ok || !r.body) { try { if (r.body) await r.body.cancel(); } catch {} return 0; } let n = 0;
+        const { Readable, Transform } = require('stream');
+        await require('stream/promises').pipeline(Readable.fromWeb(r.body), new Transform({ transform(c, e, cb) { clearTimeout(idle); idle = setTimeout(() => ac.abort(), 60000); n += c.length; cb(n > max ? new Error('too big') : null, c); } }), fs.createWriteStream(dest));
+        return n; } finally { clearTimeout(idle); clearTimeout(all); } } });
+  stremio.init({ log, fanartKey: () => (cfg && cfg.keys && cfg.keys.fanart) || '', artDir: path.join(app.getPath('userData'), 'stremio-art'), fetchBuf: async url => { const r = await net.fetch(url, { signal: AbortSignal.timeout(30000) }); /* (beta.10: a stalled answer gives up) */ if (r.status === 404) return null; if (!r.ok) throw new Error('HTTP ' + r.status); return Buffer.from(await r.arrayBuffer()); } }); // null = really not there; other failures throw, so nothing "missing" is cached for them
   icons.init(app.getPath('userData'), log);
-  x360.init(app.getPath('userData'), log);
+  x360.init(app.getPath('userData'), log); scanSetLog(log); // (beta.10: games folders that can't be read go in the log)
   steamart.init(app.getPath('userData'), log); pcgames.init(app.getPath('userData'), log); pccovers.init({ dataDir: app.getPath('userData'), log, fileUrl, fetchImage, steamgrid: require('./main/steamgrid'), steamCover: id => steamart.local(id).front, match: covers.sgMatch, steamSearch: (t, exact) => pcgames.steamSearch(t, exact) });
   wiiumanual.init(app.getPath('userData'), log);
   ra.init(app.getPath('userData'), log); ra.setCredentials(cfg.ra && cfg.ra.enabled !== false ? cfg.ra.user : '', cfg.ra && cfg.ra.key);

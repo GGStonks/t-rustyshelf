@@ -189,7 +189,7 @@ async function handle(req, res) {
     if (p === '/api/text') { if (typeof o.key === 'string') { if (!KEYS.has(o.key)) return json(res, 400, { error: 'Unknown key.' }); D.input && D.input({ key: o.key }); return json(res, 200, { ok: true }); }
       const t = String(o.text == null ? '' : o.text).replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 200); if (!t) return json(res, 400, { error: 'Nothing to type.' }); D.input && D.input({ text: t }); return json(res, 200, { ok: true }); }
     if (p === '/api/play') return play(res, o, phone);
-    if (p === '/api/quit') { const r = titleOfRunning(); if (!r) return json(res, 200, { ok: true, running: null }); D.log('Phone companion:', phone.name, 'asked to quit', r.title || 'the game'); await D.quit(); return json(res, 200, { ok: true }); }
+    if (p === '/api/quit') { const r = titleOfRunning(); if (!r) return json(res, 200, { ok: true, running: null }); D.log('Phone companion: a phone asked to quit', r.title || 'the game'); await D.quit(); return json(res, 200, { ok: true }); }
     if (p === '/api/unpair') { forget(phone.id, 'unpaired itself'); return json(res, 200, { ok: true }, { 'Set-Cookie': `${COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict` }); }
     return json(res, 404, { error: 'Not found.' });
   } catch (e) { const c4 = typeof e.code === 'number' && e.code >= 400 && e.code < 500; return json(res, c4 ? e.code : 500, { error: c4 ? e.message : 'Something went wrong.' }); } // only our own 4xx messages go out: a file error's text ('ENOENT', …) carries a path
@@ -198,8 +198,8 @@ async function play(res, o, phone) {
   const e = gameById(o.id); if (!e) return json(res, 404, { error: 'That game is gone. Pull to refresh.' });
   let r = titleOfRunning();
   if (r && !o.quit) return json(res, 409, { running: r }); // the phone asks "Quit <game>?" and comes back with quit: true
-  if (r) { D.log('Phone companion:', phone.name, 'quit', r.title || 'the game', 'to play', e.g.title); await D.quit(); for (let i = 0; i < 60 && titleOfRunning(); i++) await wait(250); if (titleOfRunning()) return json(res, 409, { running: titleOfRunning(), stuck: true }); }
-  D.log('Phone companion:', phone.name, 'started', e.g.title);
+  if (r) { D.log('Phone companion: a phone quit', r.title || 'the game', 'to play', e.g.title); await D.quit(); for (let i = 0; i < 60 && titleOfRunning(); i++) await wait(250); if (titleOfRunning()) return json(res, 409, { running: titleOfRunning(), stuck: true }); }
+  D.log('Phone companion: a phone started', e.g.title);
   const ok = await D.play({ shelf: e.s.id, id: e.g.id, title: e.g.title }); return json(res, ok === false ? 503 : 200, ok === false ? { error: 'Boxshelf is busy. Try again in a moment.' } : { ok: true });
 }
 function serveStatic(res, p) {
@@ -222,7 +222,7 @@ async function pair(req, res, ip) {
   const now = Date.now(); if (now < lockUntil) return json(res, 429, { error: 'Too many wrong PINs. Try again in a few minutes.', retry: Math.ceil((lockUntil - now) / 1000) });
   const given = Buffer.from(String(o.pin == null ? '' : o.pin).replace(/\D/g, '').slice(0, 6).padEnd(6, 'x')), want = Buffer.from(pin.padEnd(6, '-'));
   if (!pin || !crypto.timingSafeEqual(given, want)) {
-    bad++; const left = PIN_TRIES - bad; D.log('Phone companion: wrong PIN from', ip, `(${bad} of ${PIN_TRIES})`);
+    bad++; const left = PIN_TRIES - bad; D.log('Phone companion: wrong PIN', `(${bad} of ${PIN_TRIES})`);
     // each lockout in a row lasts twice as long (10 min up to about 5 h): someone guessing on the Wi-Fi gets ~5 tries an
     // hour instead of 30; a pairing, or New PIN on the TV (you're there), starts again from 10 minutes
     if (left <= 0) { bad = 0; const ms = LOCK_MS * 2 ** Math.min(locks++, 5), min = Math.round(ms / 60e3); lockUntil = now + ms; D.log('Phone companion: pairing locked for', min, 'minutes after', PIN_TRIES, 'wrong PINs'); changed(); return json(res, 429, { error: `Too many wrong PINs. Pairing is locked for ${min} minutes.`, retry: ms / 1000 }); }
@@ -231,7 +231,7 @@ async function pair(req, res, ip) {
   bad = 0; locks = 0; const token =crypto.randomBytes(32).toString('base64url'), phone = { id: crypto.randomBytes(6).toString('hex'), name: phoneName(o.name, req.headers['user-agent']), hash: sha(token), added: now, seen: now };
   store.phones.push(phone); while (store.phones.length > MAX_PHONES) store.phones.shift(); save(true);
   newPin(); // a PIN pairs one phone: someone who saw it over your shoulder can't use it again
-  D.log('Phone companion: paired', phone.name, 'from', ip); changed();
+  D.log('Phone companion: a phone paired'); changed(); // (beta.10: its name and address stay out of the log, which goes into problem reports)
   return json(res, 200, { ok: true, name: phone.name }, { 'Set-Cookie': `${COOKIE}=${token}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Strict` });
 }
 
@@ -251,7 +251,7 @@ async function start() {
     if (!ip) { startErr = 'No home network found. Connect this PC to your router (Wi-Fi or cable).'; D.log('Phone companion: no home network address'); return; }
     const want = store.port || DEFAULT_PORT;
     for (let port = want; port < want + 10 && port <= 65535; port++) {
-      try { server = await listenOn(ip, port); bound = { ip, port }; if (port !== want) note = `Port ${want} is used by another program, so ${port} is used instead.`; newPin(); bad = 0; D.log('Phone companion: on at', `http://${ip}:${port}`); break; }
+      try { server = await listenOn(ip, port); bound = { ip, port }; if (port !== want) note = `Port ${want} is used by another program, so ${port} is used instead.`; newPin(); bad = 0; D.log('Phone companion: on, port', port); break; }
       catch (e) { if (e.code !== 'EADDRINUSE' && e.code !== 'EACCES') { startErr = `Couldn't start: ${e.message}`; D.log('Phone companion:', e.message); break; } }
     }
     if (!server && !startErr) startErr = `Ports ${want}–${want + 9} are all in use. Choose another port.`;
@@ -284,7 +284,7 @@ async function set(o) { o = o || {}; let restart = false;
 }
 function forget(id, why) {
   if (id === 'all') { const n = store.phones.length; store.phones = []; D.log('Phone companion: forgot all phones', `(${n})`); }
-  else { const p = store.phones.find(x => x.id === id); if (!p) return state(); store.phones = store.phones.filter(x => x !== p); D.log('Phone companion:', why || 'forgot', p.name); }
+  else { const p = store.phones.find(x => x.id === id); if (!p) return state(); store.phones = store.phones.filter(x => x !== p); D.log('Phone companion:', why || 'forgot', 'a phone'); }
   save(true); changed(); return state();
 }
 function renewPin() { if (server) { newPin(); bad = 0; locks = 0; lockUntil = 0; /* asked for on the TV itself: a lockout from wrong guesses ends with the old PIN */ D.log('Phone companion: new PIN'); changed(); } return state(); }

@@ -48,23 +48,27 @@ const num = (v, lo, hi) => { const n = parseInt(v, 10); return Number.isFinite(n
 // The options this build of kyty_emulator understands, read from its own help: builds differ (KytyJets U59 takes
 // "--skip-notice-screen true", has no --shader-cache, and its --amd-cpu is an Intel compatibility mode), and an option a
 // build doesn't know makes it print its help and quit. { name: value spec ('' = a plain switch) }, kept per exe + date.
+// (beta.10) asked with execFile, not execFileSync: the probe (up to 8 s) held the whole app up on every PS5 launch. The
+// promise is kept, so two launches close together share one probe.
 const optsMemo = new Map();
-function optionsOf(exe) {
+async function optionsOf(exe) {
   if (!/kyty_emulator\.exe$/i.test(String(exe))) return null; // (only the emulator prints its options; the launcher would open its window)
-  let key = String(exe); try { key += '|' + fs.statSync(exe).mtimeMs; } catch { return null; }
+  let key = String(exe); try { key += '|' + (await fs.promises.stat(exe)).mtimeMs; } catch { return null; }
   if (optsMemo.has(key)) return optsMemo.get(key);
-  let text = '';
-  try { require('child_process').execFileSync(exe, ['--boxshelf-probe'], { cwd: path.dirname(exe), timeout: 8000, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] }); }
-  catch (e) { text = String(e.stdout || '') + '\n' + String(e.stderr || ''); } // (the unknown option: help, exit 1)
-  const o = {}; for (const m of text.matchAll(/^\s{2}(--[a-z0-9][a-z0-9-]*)(?:\s+<([^>]*)>)?/gm)) o[m[1]] = m[2] || '';
-  const r = Object.keys(o).length > 5 ? o : null; // (no help text: the build's options can't be known; the safe few are used)
-  optsMemo.set(key, r); return r;
+  const p = new Promise(resolve => {
+    try { const c = require('child_process').execFile(exe, ['--boxshelf-probe'], { cwd: path.dirname(exe), timeout: 8000, windowsHide: true }, (e, stdout, stderr) => resolve(e ? String(stdout || '') + '\n' + String(stderr || '') : '')); /* (the unknown option: help, exit 1) */ if (c.stdin) { c.stdin.on('error', () => {}); c.stdin.end(); } }
+    catch { resolve(''); }
+  }).then(text => {
+    const o = {}; for (const m of text.matchAll(/^\s{2}(--[a-z0-9][a-z0-9-]*)(?:\s+<([^>]*)>)?/gm)) o[m[1]] = m[2] || '';
+    return Object.keys(o).length > 5 ? o : null; // (no help text: the build's options can't be known; the safe few are used)
+  });
+  optsMemo.set(key, p); return p;
 }
 
-// the options for one launch: { args (before --game), env }
-function spec(exe, file) {
+// the options for one launch: { args (before --game), env } (beta.10: async, see optionsOf)
+async function spec(exe, file) {
   const ini = readIni(iniPath()) || {}, g = ini.GlobalConfiguration || {}, L = ini.Launcher || {}, a = [];
-  const O = optionsOf(exe) || { '--screen-width': 'num', '--screen-height': 'num', '--fullscreen': '', '--hide-cursor': '', '--addcont-dir': 'dir', '--game-patch': 'json' };
+  const O = (await optionsOf(exe)) || { '--screen-width': 'num', '--screen-height': 'num', '--fullscreen': '', '--hide-cursor': '', '--addcont-dir': 'dir', '--game-patch': 'json' };
   const has = n => Object.prototype.hasOwnProperty.call(O, n);
   // a value option, a switch, or a yes / no in the form this build wants (true|false, on|off, or the switch alone)
   const val = (n, v) => { if (v != null && v !== '' && has(n) && O[n]) a.push(n, String(v)); };

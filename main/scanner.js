@@ -18,20 +18,61 @@ const Arcade = require('./arcadenames');
 const ARCADE_BIOS = new Set(['neogeo', 'pgm', 'skns', 'stvbios', 'decocass', 'cpzn1', 'cpzn2', 'taitofx1', 'konamigx', 'nss', 'naomi', 'awbios', 'hod2bios', 'f355bios', 'airlbios', 'megaplay', 'megatech', 'playch10', 'qsound', 'neocdz', 'isgsm', 'nmk004', 'ym2608', 'bubsys', 'cchip', 'sp-cpu']);
 function cleanTitle(file) { return Titles.cleanTitle(path.basename(file)); }
 
-function walk(dir, exts, depth, out, gameFile) {
-  const ents = readDir(dir);
+// (beta.10) the walk and the scan ask for each folder listing and file check (yield [op, path]) and their caller answers:
+// at once (scanSystem) or through fs.promises (scanSystemAsync: a games folder on a NAS never holds the main process up)
+function* walkG(dir, exts, depth, out, gameFile) {
+  const ents = yield ['dir', dir];
   // (0.3.5) a PS4 / PS5 game folder: its eboot.bin is the game, and its data folders (thousands of files) hold no other
-  if (gameFile === 'eboot.bin' && !/^usrdir$/i.test(path.basename(dir)) && ents.some(e => e.isFile() && e.name.toLowerCase() === 'eboot.bin') && (isFile(path.join(dir, 'sce_sys', 'param.sfo')) || isFile(path.join(dir, 'sce_sys', 'param.json')))) {
+  if (gameFile === 'eboot.bin' && !/^usrdir$/i.test(path.basename(dir)) && ents.some(e => e.isFile() && e.name.toLowerCase() === 'eboot.bin') && ((yield ['file', path.join(dir, 'sce_sys', 'param.sfo')]) || (yield ['file', path.join(dir, 'sce_sys', 'param.json')]))) {
     out.push(path.join(dir, ents.find(e => e.isFile() && e.name.toLowerCase() === 'eboot.bin').name)); return out; }
+  // (beta.10) an extracted Xbox 360 game's folder (default.xex): its subfolders are the game's data, never another game
+  const xexHere = !gameFile && exts.includes('xex') && ents.some(e => e.isFile() && e.name.toLowerCase() === 'default.xex');
   for (const ent of ents) {
     const full = path.join(dir, ent.name);
-    if (ent.isDirectory()) { if (gameFile && /^usrdir$/i.test(path.basename(dir))) continue; // a PS3 game's data folder: thousands of files, never another game
-      if (depth > 0 && !ent.name.startsWith('.') && !/^(dlc|updates?|patches|mods|sce_sys|sce_module|romfs|exefs)$/i.test(ent.name)) walk(full, exts, depth - 1, out, gameFile); continue; } // (romfs / exefs: an unpacked Switch game's data, thousands of files)
+    // (beta.10) a link or junction to a folder or game elsewhere (another drive, a NAS) was skipped: followed now, by what it
+    // points at (the depth limit stops a link that loops)
+    let isDir = ent.isDirectory(), isFileE = ent.isFile();
+    if (ent.isSymbolicLink && ent.isSymbolicLink()) { const st = yield ['stat', full]; if (!st) continue; isDir = st.isDirectory(); isFileE = st.isFile(); }
+    if (isDir) { if (gameFile && /^usrdir$/i.test(path.basename(dir))) continue; // a PS3 game's data folder: thousands of files, never another game
+      if (xexHere || /\.data$/i.test(ent.name) && exts.includes('stfs')) continue; // (a Games on Demand package's data folder: "<hash>.data")
+      if (depth > 0 && !ent.name.startsWith('.') && !/^(dlc|updates?|patches|mods|sce_sys|sce_module|romfs|exefs)$/i.test(ent.name)) yield* walkG(full, exts, depth - 1, out, gameFile); continue; } // (romfs / exefs: an unpacked Switch game's data, thousands of files)
+    if (!isFileE) continue;
     if (gameFile) { if (ent.name.toLowerCase() === gameFile) out.push(full); continue; }
     const ext = path.extname(ent.name).slice(1).toLowerCase();
     if (exts.includes(ext) && !SKIP_NAME.test(ent.name)) out.push(full);
+    // (beta.10) Xbox 360 Games on Demand / Arcade: a package with no extension in a content-type folder (…\00007000\<hash>);
+    // its header decides later (x360.stfsInfo) whether it's a game
+    else if (!ext && exts.includes('stfs') && x360.isStfsCandidate(full)) out.push(full);
   }
   return out;
+}
+// the answers: sync, the way the scan always read the disk…
+const statOrNull = p => { try { return fs.statSync(p); } catch { return null; } };
+// (beta.10) a games folder that can't be read (a NAS that dropped out, no permission) left its games out without a word:
+// now it's in the log (each folder at most once in ten minutes), so a problem report says why games are missing
+let log = () => {}; const unreadable = new Map();
+function setLog(fn) { if (typeof fn === 'function') log = fn; }
+function noteUnreadable(p, e) { const now = Date.now(); if (now - (unreadable.get(p) || 0) < 600e3) return; unreadable.set(p, now); if (unreadable.size > 500) unreadable.clear();
+  log('Scan: couldn\'t read', p, '-', (e && (e.code || e.message)) || 'unknown error'); }
+const readDirLogged = p => { try { return fs.readdirSync(p, { withFileTypes: true }); } catch (e) { noteUnreadable(p, e); return []; } };
+function runSync(g) { let r = g.next(); while (!r.done) { const [op, p] = r.value; r = g.next(op === 'dir' ? readDirLogged(p) : op === 'file' ? isFile(p) : op === 'stat' ? statOrNull(p) : undefined); } return r.value; }
+// …or async: 16 file details at a time ('prefetch': every game file's, before the per-game pass), and a breath for the
+// event loop whenever the scan has held it for 25 ms (covers, IPC and the freeze watch get through between)
+const ASYNC_N = 16, SLICE_MS = 25;
+// (beta.10) the shelf's title order: localeCompare with options built an ICU collator for every comparison (65 ms per 2,000 titles)
+const COLL = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
+async function statAll(list, into) { let i = 0; const one = async () => { while (i < list.length) { const f = list[i++]; into.set(f, await fs.promises.stat(f).catch(() => null)); } };
+  await Promise.all(Array.from({ length: Math.min(ASYNC_N, list.length) }, one)); }
+async function runAsync(g) {
+  const stats = new Map(); let r = g.next(), t = Date.now();
+  while (!r.done) { const [op, p] = r.value; let v;
+    if (op === 'dir') v = await fs.promises.readdir(p, { withFileTypes: true }).catch(e => { noteUnreadable(p, e); return []; });
+    else if (op === 'file') v = await fs.promises.stat(p).then(s => s.isFile(), () => false);
+    else if (op === 'stat') v = stats.has(p) ? stats.get(p) : await fs.promises.stat(p).catch(() => null);
+    else if (op === 'prefetch') await statAll(p, stats);
+    if (Date.now() - t > SLICE_MS) { await new Promise(z => setImmediate(z)); t = Date.now(); }
+    r = g.next(v); }
+  return r.value;
 }
 
 // PlayStation param.sfo: a small key/value table with TITLE and TITLE_ID
@@ -95,7 +136,15 @@ function ps3GameInfo(file, romDirs) {
   if (!title) title = path.basename(folder);
   title = title.replace(/[™®]/g, '').trim();
   const icon = path.join(base, 'ICON0.PNG'), pic = path.join(base, 'PIC1.PNG');
-  return { title, titleId: sfo && (sfo.TITLE_ID || ''), folder, icon: isFile(icon) ? icon : null, hero: isFile(pic) ? pic : null };
+  const titleId = sfo && (sfo.TITLE_ID || '') || ((/\b([A-Z]{4}\d{5})\b/.exec(path.basename(folder) + ' ' + path.basename(base)) || [])[1] || '');
+  return { title, titleId, region: ps3Region(titleId), folder, icon: isFile(icon) ? icon : null, hero: isFile(pic) ? pic : null };
+}
+// (beta.10) a PS3 game's region from its id (BLUS / BCUS / NPUB… USA, BLES / NPEB… Europe, BLJM / NPJB… Japan, BLAS… Asia):
+// a US and a European copy of a game are two boxes, as they are for every other console (they were one, and one went missing)
+function ps3Region(id) {
+  const m = /^[BN][CLP]([A-Z])([A-Z])/i.exec(String(id || '')); if (!m) return '';
+  const r = (m[1] + m[2]).toUpperCase();
+  return /^(US|UB|UA)$/.test(r) ? 'USA' : /^(ES|EB|EA)$/.test(r) ? 'Europe' : /^(JS|JM|JB|JA|JJ)$/.test(r) ? 'Japan' : /^(AS|HA|HB)$/.test(r) ? 'Asia' : /^(KS|KB)$/.test(r) ? 'Korea' : '';
 }
 // For folder games (PS4): title from param.sfo, else the folder name; icon0/pic1 as fallback art
 function folderGameInfo(file, romDirs) {
@@ -177,26 +226,51 @@ function scanSystem(sysDef, sysCfg, fresh) { // fresh: read the folders again no
   const k = fileKey(sysDef, sysCfg), now = Date.now();
   for (const [mk, mv] of scanMemo) if (now - mv.at > SCAN_TTL) scanMemo.delete(mk); // (old entries never pile up)
   let m = fresh ? null : scanMemo.get(k);
-  if (!m) { m = { at: now, list: scanFiles(sysDef, sysCfg) }; scanMemo.set(k, m); }
+  if (!m) { m = { at: now, list: runSync(scanFilesG(sysDef, sysCfg)) }; scanMemo.set(k, m); }
   return withArt(m.list, sysCfg);
 }
-function forget() { scanMemo.clear(); }
+// (beta.10) the same scan, the same list, without holding the main process up: the shelf's library scan (main.js
+// buildLibrary) and the background art passes. Two at once for the same folders share one walk; a forget() while one runs
+// keeps its (older) result out of the kept scans
+let scanGen = 0; const scanFlight = new Map();
+async function scanSystemAsync(sysDef, sysCfg, fresh) {
+  const k = fileKey(sysDef, sysCfg), now = Date.now();
+  for (const [mk, mv] of scanMemo) if (now - mv.at > SCAN_TTL) scanMemo.delete(mk);
+  let m = fresh ? null : scanMemo.get(k);
+  if (!m) { let p = fresh ? null : scanFlight.get(k);
+    if (!p) { const gen = scanGen; p = runAsync(scanFilesG(sysDef, sysCfg)).then(list => { const v = { at: now, list }; if (gen === scanGen) scanMemo.set(k, v); return v; });
+      if (!fresh) { scanFlight.set(k, p); p.then(() => {}, () => {}).then(() => { if (scanFlight.get(k) === p) scanFlight.delete(k); }); } }
+    m = await p; }
+  return withArt(m.list, sysCfg, await artListings(artDirsFor(sysCfg)));
+}
+function forget() { scanMemo.clear(); scanFlight.clear(); scanGen++; }
+// the art folders' listings read ahead with fs.promises (withArt then looks everything up in memory)
+async function artListings(dirs) { const pre = new Map();
+  await Promise.all([...new Set(dirs)].map(d => fs.promises.readdir(d).then(names => { const m = new Map(); for (const n of names) m.set(n.toLowerCase(), n); pre.set(d, m); }, () => pre.set(d, null))));
+  return pre; }
 // the art for each game, fresh: new objects every time, so a caller changing a game never changes the kept list
-function withArt(list, sysCfg) {
-  dirCache.clear(); manualCache.clear();
+function withArt(list, sysCfg, pre) { // pre: listings read ahead (scanSystemAsync)
+  dirCache.clear(); manualCache.clear(); if (pre) for (const [d, m] of pre) dirCache.set(d, m);
   const artDirs = artDirsFor(sysCfg);
   return list.map(g => { const { _art, ...o } = g, a = findArt(g.file, _art.title, artDirs), fg = _art.fg;
     if (fg) { if (!a.front && fg.icon) a.front = fg.icon; if (fg.hero) a.hero = fg.hero; if (!a.disc && fg.icon) a.disc = fg.icon; }
     o.art = a; if (Array.isArray(o.discs)) o.discs = o.discs.slice(); return o; }); // (art keeps its place among the keys)
 }
-function scanFiles(sysDef, sysCfg) {
+function* scanFilesG(sysDef, sysCfg) {
   const files = [];
-  for (const dir of sysCfg.romDirs || []) walk(dir, sysDef.extensions, sysDef.gameFile || sysDef.deep ? 4 : 3, files, sysDef.gameFile);
+  // (beta.10) one folder deeper everywhere (games sorted into genre or series folders went missing), and two more for
+  // consoles whose games are folders (PS3 <group>\<game>\PS3_GAME\USRDIR, Xbox 360 Content\<profile>\<title id>\00007000).
+  // Games' own data folders are never walked (USRDIR, romfs, an extracted 360 game, a package's .data)
+  const deep = !!(sysDef.gameFile || sysDef.deep || sysDef.id === 'x360'), DEPTH = deep ? 6 : 4;
+  const exts = sysDef.id === 'x360' ? [...sysDef.extensions, 'stfs'] : sysDef.extensions; // ('stfs': Games on Demand / Arcade packages, which have no extension)
+  // the bare words update / dlc / patch / pass mean an update package only on the Switch shelves (shared/titles.js)
+  const ct = f => Titles.cleanTitle(path.basename(f), { updateWords: sysDef.id === 'sw' || sysDef.id === 'sw2' });
+  for (const dir of sysCfg.romDirs || []) yield* walkG(dir, exts, DEPTH, files, sysDef.gameFile);
   const byTitle = new Map(), byName = new Map(), discOf = new Map(); // discOf: file → { n: disc number, size }
   // PS4: .pkg packages too (shown as "not installed" until shadPS4 has installed them, unless the installed copy is here)
-  const pkgs = []; if (sysDef.id === 'ps4') for (const dir of sysCfg.romDirs || []) walk(dir, ['pkg'], 3, pkgs, null);
+  const pkgs = []; if (sysDef.id === 'ps4') for (const dir of sysCfg.romDirs || []) yield* walkG(dir, ['pkg'], 4, pkgs, null);
   // systems whose games are folders but that also take loose disc images (PS3: .iso)
-  if (sysDef.alsoFiles) for (const dir of sysCfg.romDirs || []) walk(dir, sysDef.alsoFiles, 3, files, null);
+  if (sysDef.alsoFiles) for (const dir of sysCfg.romDirs || []) yield* walkG(dir, sysDef.alsoFiles, 4, files, null);
   // Switch 2: unpacked game folders (exefs\main), besides any .nsp / .xci
   if (sysDef.id === 'sw2') {
     const packed = files.splice(0), roots = [];
@@ -205,6 +279,7 @@ function scanFiles(sysDef, sysCfg) {
     // a .nsp / .xci / .nup kept inside an unpacked game's folder (DKB's base [id]\*.nsp) is that game again, not another
     for (const f of packed) if (!roots.some(r => f.toLowerCase().startsWith(r))) files.push(f);
   }
+  yield ['prefetch', files]; // (beta.10: every game file's details at once, async; nothing sync)
   // extracted Xbox 360 games: a folder with default.xex (plus other .xex helpers we don't want as separate boxes)
   const xexDirs = new Set(files.filter(f => path.basename(f).toLowerCase() === 'default.xex').map(f => path.dirname(f)));
   for (const f of files) {
@@ -214,31 +289,34 @@ function scanFiles(sysDef, sysCfg) {
     const asFolder = sysDef.gameFile && path.basename(f).toLowerCase() === sysDef.gameFile;
     if (asFolder && sysDef.id === 'ps3') { fg = ps3GameInfo(f, sysCfg.romDirs); if (!fg) continue; }
     if (sysDef.id === 'sw2') { const n = /(^|[\\/])exefs[\\/]main$/i.test(f) ? nx2.info(f) : nx2.fileInfo(f); fg = { title: n.title, titleId: n.titleId || undefined, folder: n.folder || path.dirname(f), icon: null, hero: null }; }
-    let info = asFolder || fg ? (fg = fg || folderGameInfo(f, sysCfg.romDirs), { title: fg.title, region: '', disc: 0, rev: '' }) : cleanTitle(isDefault ? path.dirname(f) + '.xex' : f);
+    // (beta.10) an Xbox 360 Games on Demand / Arcade package: a game only if its header says so (not a save, DLC or update)
+    const stfs = sysDef.id === 'x360' && !path.extname(f) ? x360.stfsInfo(f) : null; if (sysDef.id === 'x360' && !path.extname(f) && !stfs) continue;
+    let info = stfs ? { title: stfs.title || 'Xbox 360 game ' + stfs.titleId, region: '', disc: 0, rev: '' }
+      : asFolder || fg ? (fg = fg || folderGameInfo(f, sysCfg.romDirs), { title: fg.title, region: fg.region || '', disc: 0, rev: '' }) : ct(isDefault ? path.dirname(f) + '.xex' : f);
     // (beta.7) arcade / Neo Geo: "sf2.zip" is named from FinalBurn Neo's list; BIOS sets (neogeo.zip) aren't games
     if (Arcade.SYSTEMS.has(sysDef.id)) { const set = path.basename(f, path.extname(f)).toLowerCase(), a = Arcade.lookup(set);
       if ((a && a.bios) || (!a && ARCADE_BIOS.has(set))) continue;
       // ("A / B": two names for one game, the first is the shelf's; versions of a game, "(World 910522)" / "(USA 910206)",
       // are one box, the fuller zip kept)
-      if (a && a.title) { info = cleanTitle(a.title.split(' / ')[0].replace(/[\\/]/g, '-') + '.zip'); info.region = ''; } }
+      if (a && a.title) { info = ct(a.title.split(' / ')[0].replace(/[\\/]/g, '-') + '.zip'); info.region = ''; } }
     if (sysDef.id === 'wiiu' && /\.tmd$/i.test(f)) {
       // NUS folder ("Game Name [0005000010xxxxxx]\title.tmd + *.app"): the folder is the game; updates (0005000E…) and DLC (0005000C…) aren't
       if (path.basename(f).toLowerCase() !== 'title.tmd') continue;
       const dir = path.dirname(f), idm = /\b(0005000[0-9A-F])([0-9A-F]{8})\b/i.exec(path.basename(dir));
       if (idm && /^0005000[CE]$/i.test(idm[1])) continue;
-      info = cleanTitle(dir + '.tmd'); info.extra = false; /* the Switch update rule doesn't apply to Wii U ids */ if (!info.title || /^[0-9A-F]{16}$/i.test(info.title)) info.title = 'Wii U game ' + (idm ? idm[0] : path.basename(dir));
+      info = ct(dir + '.tmd'); info.extra = false; /* the Switch update rule doesn't apply to Wii U ids */ if (!info.title || /^[0-9A-F]{16}$/i.test(info.title)) info.title = 'Wii U game ' + (idm ? idm[0] : path.basename(dir));
       try { info.nusBytes = fs.readdirSync(dir).reduce((a, n) => { try { return a + fs.statSync(path.join(dir, n)).size; } catch { return a; } }, 0); } catch {}
     }
     if (sysDef.id === 'wiiu' && /\.rpx$/i.test(f)) { const w = wiiuFolderInfo(f); if (!w) continue; // a loose .rpx outside a game's code folder isn't a game
-      info = cleanTitle(w.root + '.rpx'); if (w.title) info.title = w.title.replace(/[™®]/g, '').trim(); }
+      info = ct(w.root + '.rpx'); if (w.title) info.title = w.title.replace(/[™®]/g, '').trim(); }
     let x = null;
     if (sysDef.id === 'x360') {
       // "DVD.iso" / "game.iso" inside a folder: the folder is the name; then the title id inside the image beats any file name
       // "DVD.iso" / "DVD1.iso" / "game.iso" inside a folder: the folder is the name (a digit in the file name is the disc number)
-      const gen = /^(dvd|disc|game|image|iso|default|xbox ?360)\s*(\d*)$/i.exec(info.title);
-      if (gen && !(sysCfg.romDirs || []).some(d => path.resolve(d) === path.resolve(path.dirname(f)))) { Object.assign(info, cleanTitle(path.dirname(f) + path.extname(f))); if (!info.disc && gen[2]) info.disc = +gen[2]; }
+      const gen = !stfs && /^(dvd|disc|game|image|iso|default|xbox ?360)\s*(\d*)$/i.exec(info.title);
+      if (gen && !(sysCfg.romDirs || []).some(d => path.resolve(d) === path.resolve(path.dirname(f)))) { Object.assign(info, ct(path.dirname(f) + path.extname(f))); if (!info.disc && gen[2]) info.disc = +gen[2]; }
       else if (gen && gen[2] && !info.disc) info.disc = +gen[2];
-      x = x360.lookup(f);
+      x = x360.lookup(f, stfs); // (beta.10: a package's header, read just above, isn't read again for its title id)
       // FFxxxxxx ids are generic (bonus / downloadable-content discs share FFED2000): never trust the title list for them
       if (x && /^FF/i.test(x.titleId || '')) x = null;
       if (x && x.title) info.title = x.title.replace(/[™®]/g, '').trim();
@@ -248,9 +326,9 @@ function scanFiles(sysDef, sysCfg) {
     if (sysDef.id === 'wiiu') { const wid = /\b0005000([0-9A-F])[0-9A-F]{8}\b/i.exec(f); info.extra = !!(wid && /[CE]/i.test(wid[1])) || /\b(update|dlc)\b/i.test(info.title); }
     if (info.extra) continue; // Switch updates / DLC packages are not games on the shelf
     // added: when the game arrived in your folder (file creation time), for the museum's "in your collection since"
-    let size = info.nusBytes || 0, added = 0; try { const st = fs.statSync(f); added = Math.round(st.birthtimeMs || st.mtimeMs) || 0; if (!fg && !size) size = st.size; } catch {}
+    let size = info.nusBytes || 0, added = 0; const st = yield ['stat', f]; if (st) { added = Math.round(st.birthtimeMs || st.mtimeMs) || 0; if (!fg && !size) size = st.size; }
     const key = x && x.titleId ? 'x360:' + x.titleId : info.title.toLowerCase() + '|' + (info.region || '');
-    if (sysDef.id === 'x360') { const nt = cleanTitle(f).title; if (!/^(dvd|disc|game|image|iso|default|xbox ?360)\s*\d*$/i.test(nt)) byName.set(key, nt.toLowerCase()); } // file-name title, to pair later discs with disc 1 (never a generic "DVD1")
+    if (sysDef.id === 'x360' && !stfs) { const nt = ct(f).title; if (!/^(dvd|disc|game|image|iso|default|xbox ?360)\s*\d*$/i.test(nt)) byName.set(key, nt.toLowerCase()); } // file-name title, to pair later discs with disc 1 (never a generic "DVD1")
     const prev = byTitle.get(key); discOf.set(f, { n: info.disc || 1, size });
     // One box per game: prefer disc 1, then the larger (fuller) dump.
     if (prev) {
@@ -282,7 +360,7 @@ function scanFiles(sysDef, sysCfg) {
       if (id && installed.has(id)) continue; // already installed: the installed copy is the one on the shelf
       const title = (sfo.TITLE ? String(sfo.TITLE).replace(/\s+/g, ' ').replace(/[™®]/g, '').trim() : '') || pkgTitleFromName(f) || path.basename(f);
       const key = title.toLowerCase() + '|pkg'; if (byTitle.has(key)) continue;
-      let size = 0; try { size = fs.statSync(f).size; } catch {}
+      let size = 0; const st = yield ['stat', f]; if (st) size = st.size;
       byTitle.set(key, { kind: 'rom', id: sysDef.id + ':' + f, title, region: 'Not installed', disc: 0, file: f, ext: 'pkg', sizeBytes: size, notInstalled: true, titleId: id || undefined, art: null, _art: { title, fg: null }, discs: [f] });
     }
   }
@@ -297,7 +375,7 @@ function scanFiles(sysDef, sysCfg) {
     for (const [k, g] of [...byTitle]) { if (!(g.disc > 1)) continue; const host = firsts.get(byName.get(k)) || inFolder(g);
       if (host) { (host.discs = host.discs || [host.file]).push(g.file); byTitle.delete(k); } else if (!/\(disc \d+\)$/i.test(g.title)) g.title += ` (Disc ${g.disc})`; }
   }
-  return [...byTitle.values()].sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true }));
+  return [...byTitle.values()].sort((a, b) => COLL.compare(a.title, b.title)); // (beta.10: one collator, the same order as localeCompare with these options)
 }
 
-module.exports = { scanSystem, forget, cleanTitle, SKIP_NAME }; // (SKIP_NAME for the device test; forget: main.js clears the kept scans)
+module.exports = { scanSystem, scanSystemAsync, forget, cleanTitle, SKIP_NAME, setLog, ps3Region }; // (SKIP_NAME for the device test; forget: main.js clears the kept scans)

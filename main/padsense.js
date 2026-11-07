@@ -7,7 +7,7 @@
 const { execFile } = require('child_process');
 
 let memo = null, memoAt = 0, flight = null;
-const STYLE = { '054c': 'ps', '057e': 'nintendo', '045e': 'xbox', '28de': 'xbox', '2dc8': 'nintendo' };
+const STYLE = { '054c': 'ps', '057e': 'nintendo', '045e': 'xbox', '28de': 'xbox' }; // (beta.10: 8BitDo pads count as Xbox-style: most run in X-input mode, and in Switch mode they show up as Nintendo's own pad)
 const PS = '(Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue | Where-Object { $_.InstanceId -match "VID_(054C|057E|045E|28DE|2DC8)|VID&0002(054C|057E|045E|28DE|2DC8)" -or $_.FriendlyName -match "Virtual Gamepad Emulation Bus" } | ForEach-Object { $_.InstanceId + "|" + $_.Class + "|" + $_.FriendlyName }) -join "`n"';
 
 function parse(out) {

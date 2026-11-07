@@ -3,7 +3,7 @@
 // that matter on Android: settings, finding emulators, picking folders, scanning, launching and coming back.
 // In a normal browser it does nothing (the demo stays), unless the page has ?fakeNative=1 (a pretend phone, for testing).
 (function () {
-  const status = m => { window.__bsAndroid = m; try { console.log('[boxshelf] status ' + m); } catch {} }; // the device test reads this line
+  const status = m => { window.__bsAndroid = m; try { console.log('[boxshelf] status ' + m); } catch {} try { if (status.note) status.note(); } catch {} }; // the device tests read this (beta.10: the emulator test from status.note's file)
   // on the device: Capacitor says so, or Android's bridge object is there (it exists from the first line of the page)
   const isNative = !!((window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform()) || window.androidBridge ||
     (window.Capacitor && Capacitor.getPlatform && Capacitor.getPlatform() === 'android'));
@@ -19,17 +19,27 @@
   const N = isNative ? reg('BoxshelfNative') : fakeNative();
   if (!isNative) window.__fakeN = N; // browser tests only
   window.BS_NATIVE = N; // android-bottom.js (the bottom screen) talks to the same plugin
+  // (beta.10) the emulator test's channel (ci/emulator-test.sh reads it with run-as): the app logs nothing to Android's log
+  // ("loggingBehavior": "none"), so the status, whether the adapter started, and the first script errors go into a small
+  // file in the app's own folder. Only those words: never settings, keys or paths it was handed
+  if (isNative) { const errs = []; let t = 0;
+    const put = () => { clearTimeout(t); t = setTimeout(() => { N.writeText({ name: 'device-test.txt', text: ['status ' + (window.__bsAndroid || ''), 'ready ' + (status.ready ? 'device' : 'no'), ...errs.map(e => 'error ' + e)].join('\n') }).catch(() => {}); }, 300); };
+    const err = m => { m = String(m || '').replace(/\s+/g, ' ').trim().slice(0, 200); if (!m || /net::ERR_/.test(m) || errs.length >= 8) return; errs.push(m); put(); };
+    addEventListener('error', e => err(e && (e.message || (e.error && e.error.message))));
+    addEventListener('unhandledrejection', e => { const r = e && e.reason; err('Unhandled: ' + ((r && r.message) || (typeof r === 'string' ? r : 'rejection'))); });
+    const ce = console.error; console.error = function (...a) { try { err(a.map(x => typeof x === 'string' ? x : x && x.message ? x.message : '').filter(Boolean).join(' ')); } catch {} return ce.apply(this, a); };
+    status.note = put; }
   const E = A.EMULATORS, SYS = A.SYSTEMS, sysById = Object.fromEntries(SYS.map(s => [s.id, s]));
   const log = (...m) => { try { console.log('[boxshelf]', ...m); } catch {} };
 
   // ---------- storage ----------
   const load = async (name, def) => { try { const r = await N.readText({ name }); return r && r.text ? JSON.parse(r.text) : def; } catch { return def; } };
   const store = (name, obj) => N.writeText({ name, text: JSON.stringify(obj) }).catch(e => log('save failed', name, e && e.message));
-  const st = { config: null, folders: {}, library: null, history: {}, home: {} }; // folders: shown path → SAF tree uri; home: { prev: {pkg,label} }
+  const st = { config: null, folders: {}, foldersOff: [], library: null, history: {}, home: {} }; // folders: shown path → SAF tree uri; home: { prev: {pkg,label} }; foldersOff (beta.10): games folders removed in Settings (detect() leaves them out)
   const ready = (async () => {
     st.config = await load('config.json', null) || defaultConfig();
     for (const s of SYS) if (!st.config.systems[s.id]) st.config.systems[s.id] = sysDefaults();
-    st.folders = await load('folders.json', {}); st.library = await load('library.json', null); st.history = await load('history.json', {}); st.home = await load('home.json', {});
+    st.folders = await load('folders.json', {}); st.foldersOff = [].concat(await load('folders-off.json', [])).filter(x => typeof x === 'string'); st.library = await load('library.json', null); st.history = await load('history.json', {}); st.home = await load('home.json', {});
     { const f = histFix(st.history); st.history = f.h; if (f.changed) store('history.json', st.history); } // (0.3.2) the PC's shape
     st.config.ui = st.config.ui || {}; if (st.config.ui.autoCovers === undefined) st.config.ui.autoCovers = true; // box art comes on its own on Android unless switched off
     if (st.config.ui.fullArt === undefined) st.config.ui.fullArt = true; // backs and spines too, where a source has them
@@ -107,12 +117,15 @@
     const games = new Map();
     for (const f of files) {
       if (hidden.has(f) || !s.extensions.includes(f.ext) || T.skipFile(f.name)) continue;
-      const info = T.cleanTitle(f.name); if (info.extra) continue;
+      const info = T.cleanTitle(f.name, { updateWords: s.id === 'sw' }); if (info.extra) continue; // (beta.10: the bare word rule is the Switch's only)
       const key = info.title.toLowerCase() + '|' + (info.region || ''), prev = games.get(key);
       if (prev) { prev.discs.push(f.path); if ((info.disc || 1) >= (prev.disc || 1)) continue; }
       games.set(key, { kind: 'rom', id: s.id + ':' + f.path, title: info.title, region: info.region, disc: info.disc, file: f.path, uri: f.uri, ext: f.ext,
         sizeBytes: f.size || 0, added: f.mtime || 0, art: {}, romTree: f.tree, discs: prev ? prev.discs : [f.path] });
     }
+    // (beta.10) Details → Rename (renameGame): a game's own name, kept as the PC keeps it (config.games["<console>:<file>"].title); fileTitle keeps the scanned one
+    const own = (st.config && st.config.games) || {};
+    for (const g of games.values()) { const o = own[s.id + ':' + g.file]; if (o && o.title && o.title !== g.title) { g.fileTitle = g.title; g.title = String(o.title); } }
     return [...games.values()].sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true }));
   }
   async function scanAll() {
@@ -171,8 +184,10 @@
     let pkg = pkgOf(c.emulator);
     if (!pkg) { const inst = await apps(); for (const id of s.emus) { pkg = findInstalled(id, inst); if (pkg) break; } }
     if (!pkg) throw new Error(`No emulator for ${s ? s.name : systemId} is installed. Pick one in Settings → ${s ? s.name : 'Consoles'}.`);
-    const e = emuFor(pkg); if (!e) throw new Error(`Boxshelf doesn't know how to start ${pkg} yet.`);
-    let spec = Object.assign({}, e.launch, (e.variants || {})[pkg] || {});
+    // (beta.10) an app Boxshelf has no launch data for: its own start screen, handed the game the standard way (VIEW with
+    // the game's document), which most emulators take; one that doesn't simply opens on its own screen
+    const e = emuFor(pkg); if (!e) log('launch: no launch data for', pkg, '- handing it the game as VIEW');
+    let spec = e ? Object.assign({}, e.launch, (e.variants || {})[pkg] || {}) : { action: 'android.intent.action.VIEW', data: 'doc' };
     const ctx = { doc: game && game.uri, path: game && game.file,
       core: s && s.cores.length ? `/data/data/${pkg}/cores/${(c.core || s.cores[0])}_libretro_android.so` : '',
       cfg: `/storage/emulated/0/Android/data/${pkg}/files/retroarch.cfg` };
@@ -540,18 +555,23 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
     } finally { art.sharpening = false; }
   }
   // the copies the sharper ones replaced (last session): deleted, unless an Art Studio Undo still points at one
+  // (beta.10) also Art Studio's: the copy a new pick replaced, and the ones its Undo history lets go. One an Undo still points
+  // at stays in the list for a later pass (it used to be dropped from it, and its file was never deleted); one that's in use
+  // again (put back by Undo) leaves the list: it comes back to it when it's replaced
   function dropOldDisplays() {
-    const L = art.db.trash; if (!L || !L.length) return; art.db.trash = [];
-    const keep = new Set(); for (const rec of Object.values(art.db.games)) for (const v of Object.values(rec || {})) if (v && v.d) { keep.add(v.d); for (const p of Object.values(v.s || {})) keep.add(p); }
-    for (const S of Object.values(art.db.studio.games || {})) for (const H of Object.values((S && S.hist) || {})) for (const h of H || []) if (h && h.rec && h.rec.d) keep.add(h.rec.d);
-    const paths = L.filter(p => p && !keep.has(p));
+    const L = art.db.trash; if (!L || !L.length) return;
+    const live = new Set(), hist = new Set(); for (const rec of Object.values(art.db.games)) for (const v of Object.values(rec || {})) if (v && v.d) { live.add(v.d); for (const p of Object.values(v.s || {})) live.add(p); }
+    for (const S of Object.values(art.db.studio.games || {})) for (const H of Object.values((S && S.hist) || {})) for (const h of H || []) if (h && h.rec && h.rec.d) hist.add(h.rec.d);
+    const all = [...new Set(L.filter(Boolean))], paths = all.filter(p => !live.has(p) && !hist.has(p));
+    art.db.trash = all.filter(p => hist.has(p) && !live.has(p));
     if (paths.length && N.artForget) N.artForget({ paths }).catch(e => log('box art: tidy', e && e.message));
     saveArt();
   }
+  const trashRec = r => { if (!r) return; const T = art.db.trash = art.db.trash || [], add = p => { if (p && !T.includes(p)) T.push(p); }; add(r.d); for (const p of Object.values(r.s || {})) add(p); }; // (deleted next start, if nothing points at it then; each once)
   // a part's picture is in place (rec null: forgotten): remembered, and on every copy of the game the page was handed (a rescan made new objects)
   function applyRec(g, part, rec) {
     const recs = art.db.games[g.id] = art.db.games[g.id] || {};
-    const was = recs[part]; if (was && was.s && (!rec || rec.d !== was.d)) for (const p of Object.values(was.s)) (art.db.trash = art.db.trash || []).push(p); // its small copies go with it
+    const was = recs[part]; if (was && (!rec || rec.d !== was.d)) trashRec(was); // the copy replaced, and its small copies with it (beta.10: the display copy too; kept while an Undo points at it)
     if (rec && rec.s && (!was || was.d !== rec.d || was.s !== rec.s)) { rec = Object.assign({}, rec); delete rec.s; } // (a record carried over or put back: its small copies are made again)
     if (rec) { recs[part] = rec; urlRec.set(fileUrl(rec.d), rec); smallSoon(g.id, part); } else delete recs[part];
     const url = rec ? fileUrl(rec.d) : null, apply = x => { if (!x) return; x.art = x.art || {}; if (url) x.art[part] = url; else delete x.art[part]; };
@@ -802,8 +822,9 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
   // ----- PDF manuals (0.3.1): an Archive item with only a PDF, or GamesDatabase.org's PDF (the Windows build's search,
   // main/manuals.js), drawn into page pictures here with pdf.js (renderer/vendor) and saved beside the games like any other
   // manual. One page at a time, only while the shelf is still; the JPEG encode runs in a worker.
-  function iaPdf(id, meta) {
-    const f = ((meta && meta.files) || []).find(x => /\.pdf$/i.test(x.name || '') && !/_text\.pdf$/i.test(x.name) && !/encrypted/i.test(x.format || ''));
+  const PDF_MAX = 80 * 1024 * 1024; // (the native side's limit for a PDF manual: fetchFile)
+  function iaPdf(id, meta) { // (beta.10: one the Archive lists as over the limit is never downloaded just to be refused)
+    const f = ((meta && meta.files) || []).find(x => /\.pdf$/i.test(x.name || '') && !/_text\.pdf$/i.test(x.name) && !/encrypted/i.test(x.format || '') && !(+x.size > PDF_MAX));
     return f ? `https://archive.org/download/${encodeURIComponent(id)}/${String(f.name).split('/').map(encodeURIComponent).join('/')}` : null;
   }
   const GDB_SYSTEM = { gc: 'nintendo-gamecube', wii: 'nintendo-wii', wiiu: 'nintendo-wii-u', psp: 'sony-psp', sw: 'nintendo-switch', ps3: 'sony-playstation-3', ps4: 'sony-playstation-4',
@@ -850,7 +871,10 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
     const { g, sysId } = j, tree = g.romTree, sub = subFor(sysId, tree), host = /archive\.org/.test(url) ? 'archive' : 'gdb';
     const lib = await pdfLib(); if (!lib) return 'none';
     const f = await gated(host, () => N.fetchFile({ url, name: base + '-manual', key: 'manual-' + sysId, pdf: true }));
-    if (!f || !f.ok) { if (f && f.busy) { slowDown(host); return 'busy'; } return 'missing'; }
+    if (!f || !f.ok) { if (f && f.busy) { slowDown(host); return 'busy'; }
+      // (beta.10) too big to use: that copy is set aside for the game (never downloaded again), like a wrong one
+      if (f && f.toobig) { const r0 = man.db.games[g.id] || rec; man.db.games[g.id] = Object.assign({}, r0, { no: [...new Set([...(r0.no || []), id])] }); saveMan(); log('manuals: PDF too big', g.title); }
+      return 'missing'; }
     slowDown(host, true);
     let doc = null;
     try {
@@ -874,7 +898,9 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
       }
       manIn(g, out); man.added++; return 'ok';
     } catch (e) { log('manuals: PDF', g.title, e && e.message); return 'none'; }
-    finally { if (doc) try { doc.destroy(); } catch {} }
+    finally { if (doc) try { doc.destroy(); } catch {}
+      // (beta.10) the PDF (up to 80 MB in the cache) goes once it's been read: its pages are saved, and a new try downloads it again anyway
+      if (N.dropPdf && f.file && !/^data:/.test(f.file)) N.dropPdf({ path: f.file }).catch(() => {}); }
   }
   const manSub = () => man.running ? { text: `Fetching manuals ${man.done}/${man.total}`, cls: 'warn' } : man.total ? { text: `Last run: ${man.added} of ${man.total} game${man.total === 1 ? '' : 's'} got a manual` } : null;
 
@@ -1109,7 +1135,11 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
   const ssKeys = () => { const k = (st.config && st.config.keys) || {}; return { user: String(k.ssUser || '').trim(), pass: String(k.ssPass || ''), devId: String(k.ssDevId || '').trim(), devPass: String(k.ssDevPass || '') }; };
   const ssSig = () => { const c = ssKeys(); return fp([c.user, c.pass, c.devId, c.devPass].join('\0')); };
   const ssConfigured = () => { const c = ssKeys(); return !!(c.user && c.pass); };
-  const ssEnabled = () => ssConfigured() && ssSig() !== ss.bad;
+  // (beta.10) ScreenScraper turns away every app without a developer login: the player's own, or this build's (native
+  // assets/ss-dev.json, yes / no only). Without one nothing is sent, and the Test says so plainly (as on Windows)
+  let ssOwnDev = false; Promise.resolve().then(async () => { try { ssOwnDev = !!(N.ssOwnDev && (await N.ssOwnDev()).has); } catch { ssOwnDev = false; } });
+  const ssDevOk = () => !!ssKeys().devId || ssOwnDev;
+  const ssEnabled = () => ssConfigured() && ssDevOk() && ssSig() !== ss.bad;
   const ssOn = sysId => !!SS_SYS[sysId] && ssEnabled();
   const ssErr = (code, msg) => Object.assign(new Error(msg), { code });
   const ssPause = (ms, why) => { ss.until = Math.max(ss.until, Date.now() + ms); ss.why = why; };
@@ -1231,6 +1261,7 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
     await ready; const at = Date.now();
     if (s === 'screenscraper') {
       if (!ssConfigured()) return (apiSt[s] = { state: 'none', at: 0, msg: 'Not set up' });
+      if (!ssDevOk()) return (apiSt[s] = { state: 'fail', at, msg: 'no developer login' }); // (beta.10: not the player's password)
       ssCredsChanged(); if (ss.why !== 'quota' && ss.why !== 'blocked') { ss.until = 0; ss.why = ''; } // a test is a fresh try (a used-up day stays used up)
       try { const r = await ssApi('ssuserInfos.php', {}); apiSt[s] = r && r.ssuser ? { state: 'ok', at, msg: 'Working', left: r.limits ? r.limits.left : null } : { state: 'fail', at, msg: 'not accepted' }; }
       catch (e) { apiSt[s] = { state: 'fail', at, msg: e.code === 'auth' ? (/developer/.test(e.message) ? 'developer login not accepted' : 'not accepted') : e.message }; }
@@ -1326,11 +1357,12 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
   // a version (or a picked / kept picture: src) into place for one part → the game's art
   async function usePic(sysId, g, part, o) {
     const tree = g.romTree || '', base = baseOf(g.file), name = base + SUFFIX[part];
-    const r = await N.saveArt(Object.assign({ src: o.src, tree: saveTree(tree), sub: tree ? subFor(sysId, tree) : '', name, key: sysId, dname: name + '~' + Date.now().toString(36), maxH: DISPLAY_H, cut: o.cut || '' }, caseShape(sysId)));
-    if (!r || !r.ok || !r.display) throw new Error("Couldn't save that picture");
+    const noSave = e => Object.assign(e instanceof Error ? e : new Error(String((e && e.message) || e || "Couldn't save that picture")), { noSave: true }); // (beta.10: nothing changed yet, so it may be tried again)
+    const r = await N.saveArt(Object.assign({ src: o.src, tree: saveTree(tree), sub: tree ? subFor(sysId, tree) : '', name, key: sysId, dname: name + '~' + Date.now().toString(36), maxH: DISPLAY_H, cut: o.cut || '' }, caseShape(sysId))).catch(e => { throw noSave(e); });
+    if (!r || !r.ok || !r.display) throw noSave(new Error("Couldn't save that picture"));
     if (r.saved === 'folder' && tree) { const m = art.folders[tree + '|' + (tree ? subFor(sysId, tree) : '')]; if (m && r.name) m.set(String(r.name).toLowerCase(), r.file); }
     const S = sgOf(g.id), prev = (art.db.games[g.id] || {})[part] || null;
-    if (!o.undo) { const H = S.hist[part] = S.hist[part] || []; H.push({ rec: prev, old: r.old || null }); if (H.length > 10) H.shift(); }
+    if (!o.undo) { const H = S.hist[part] = S.hist[part] || []; H.push({ rec: prev, old: r.old || null }); if (H.length > 10) { const h0 = H.shift(); if (h0) trashRec(h0.rec); } } // (beta.10: the copy the history lets go is tidied too)
     if (!o.set) delete lastSet[g.id]; // (a change of its own after a set: Undo set no longer applies)
     applyRec(g, part, { d: r.display, f: r.file || '', w: r.saved || '', h: DISPLAY_H }); delete art.db.miss[g.id + '|' + part];
     if (part === 'back' || part === 'spine') delete art.db.miss[g.id + '|wrap'];
@@ -1338,7 +1370,16 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
   }
   async function useCand(sysId, g, part, c) {
     const got = await candGet(c, caseShape(sysId)); if (!got) throw new Error("That version couldn't be downloaded");
-    return usePic(sysId, g, part, { src: got.file, cut: c.cut });
+    return useGot(sysId, g, part, c, got, {});
+  }
+  // (beta.10) a version downloaded earlier this session whose cached file the native cache has since let go (trimCache keeps
+  // 300): that download is forgotten and the version fetched again, once, instead of failing with "Couldn't save that picture"
+  async function useGot(sysId, g, part, c, got, o) {
+    try { return await usePic(sysId, g, part, Object.assign({ src: got.file, cut: c.cut }, o)); }
+    catch (e) { const k = c.id + '|' + (c.cut || ''); if (!(e && e.noSave) || cands.got[k] !== got) throw e;
+      delete cands.got[k]; const again = await candGet(c, caseShape(sysId)); if (!again) throw e;
+      if (again.thumb) Object.assign(c, { thumb: again.thumb, w: again.w, h: again.h });
+      return usePic(sysId, g, part, Object.assign({ src: again.file, cut: c.cut }, o)); }
   }
   // ----- matching sets (0.3.3; the PC's main/artstudio.js buildSets): front, back, spine and disc that belong together -----
   // One source and region with all four parts (LaunchBox / GameTDB / ScreenScraper), the best of each source in one region,
@@ -1374,9 +1415,9 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
     const shape = caseShape(sysId), got = await Promise.all(PARTS.map(p => candGet(set.parts[p], shape).catch(() => null)));
     const miss = PARTS.filter((p, i) => !got[i]); if (miss.length) throw new Error(`The ${miss.join(' and ')} of that set couldn't be downloaded. Nothing was changed.`);
     const S = sgOf(g.id), prev = JSON.parse(JSON.stringify(S.lock || {})), done = [];
-    try { for (let i = 0; i < PARTS.length; i++) { const p = PARTS[i]; await usePic(sysId, g, p, { src: got[i].file, cut: set.parts[p].cut, set: true }); S.lock[p] = { look: 'exact', key: set.parts[p].key }; done.push(p); } }
+    try { for (let i = 0; i < PARTS.length; i++) { const p = PARTS[i]; await useGot(sysId, g, p, set.parts[p], got[i], { set: true }); S.lock[p] = { look: 'exact', key: set.parts[p].key }; done.push(p); } }
     catch (e) { // all four or none: the parts already in go back as they were
-      for (const p of done) { const H = S.hist[p] || [], h = H[H.length - 1]; if (!h) continue; try { if (h.old) await usePic(sysId, g, p, { src: h.old, undo: true, set: true }); else applyRec(g, p, h.rec); } catch {} H.pop(); }
+      for (const p of done) { const H = S.hist[p] || [], h = H[H.length - 1]; if (!h) continue; try { if (h.old) await usePic(sysId, g, p, { src: h.old, undo: true, set: true }); else applyRec(g, p, h.rec); } catch {} H.pop(); trashRec(h.rec); }
       S.lock = prev; saveArt(); throw new Error(`That set couldn't be put in (${e && e.message}). Nothing was changed.`);
     }
     saveArt(); return { prev, len: Object.fromEntries(PARTS.map(p => [p, (S.hist[p] || []).length])) }; // (len: Undo set checks nothing came after it)
@@ -1462,7 +1503,7 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
       const S = sgOf(g.id);
       if (m.len && PARTS.some(p => (S.hist[p] || []).length !== m.len[p])) { delete lastSet[g.id]; throw new Error('Something changed since that set went in. Undo it one part at a time.'); }
       for (const p of PARTS) { const H = S.hist[p] || [], h = H[H.length - 1]; if (!h) continue;
-        if (h.old) await usePic(systemId, g, p, { src: h.old, undo: true }); else applyRec(g, p, h.rec); H.pop(); }
+        if (h.old) await usePic(systemId, g, p, { src: h.old, undo: true }); else applyRec(g, p, h.rec); H.pop(); trashRec(h.rec); } // (beta.10: tidied unless in use again)
       S.lock = m.prev || {}; delete lastSet[g.id]; saveArt();
       return { art: artOf(g), lock: JSON.parse(JSON.stringify(S.lock)) }; },
     // (0.3.1) the free sources that could add versions of this part but aren't set up: Art Studio's "More art sources" card
@@ -1496,7 +1537,7 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
     artUndo: async ({ systemId, file, part }) => { await ready; const g = gameFor(systemId, file), S = sgOf(g.id), H = S.hist[part] || [], h = H[H.length - 1];
       if (!h || (!h.old && !h.rec)) throw new Error('Nothing to undo');
       let a; if (h.old) a = await usePic(systemId, g, part, { src: h.old, undo: true }); else { applyRec(g, part, h.rec); a = artOf(g); }
-      H.pop(); S.lock[part] = { look: 'exact' }; saveArt(); return { art: a, lock: S.lock[part] }; },
+      H.pop(); trashRec(h.rec); S.lock[part] = { look: 'exact' }; saveArt(); return { art: a, lock: S.lock[part] }; },
     artLock: async ({ systemId, file, lock }) => { await ready; const g = gameFor(systemId, file), S = sgOf(g.id); S.frozen = !!lock; saveArt();
       if (!lock) setTimeout(() => queueArt('unlock'), 500); // anything missing follows the shelf again
       return { frozen: S.frozen, lock: JSON.parse(JSON.stringify(S.lock)), repick: 0, jobId: null }; },
@@ -1650,13 +1691,43 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
     return { path, found: found.sort((a, b) => SYS.indexOf(sysById[a.id]) - SYS.indexOf(sysById[b.id])), other };
   }
 
+  // (beta.10) a picked folder Android wouldn't let Boxshelf keep reads now but not after a restart: said plainly (on
+  // Settings' message line while it's open, else the shelf's) instead of the pick quietly "working"
+  const sayNow = m => { try { const t = document.querySelector('#bss.on .bss-toast'); if (t) { t.textContent = m; t.classList.add('on'); clearTimeout(sayNow.t); sayNow.t = setTimeout(() => t.classList.remove('on'), 7000); return; }
+    if (window.Shelf && Shelf.toast) Shelf.toast(m); } catch {} };
+  async function pickTree() { const r = await N.pickFolder(); if (!r || r.canceled || !r.uri) return null;
+    if (r.persisted === false) { log('folder: Android kept no lasting permission', r.persistError || ''); sayNow("Android didn't let Boxshelf keep access to that folder: it works now, but not after a restart. Pick a folder on the device's storage or SD card instead."); }
+    const p = idToPath(r.docId || treeIdOf(r.uri)); st.folders[p] = r.uri;
+    if (st.foldersOff.includes(p)) { st.foldersOff = st.foldersOff.filter(x => x !== p); store('folders-off.json', st.foldersOff); } // (picked again: wanted again)
+    await store('folders.json', st.folders); return p; }
+  // (beta.10) games folders removed in Settings: remembered (detect() doesn't add them back) and, once nothing in the settings
+  // still uses that folder (or one inside it), Android's lasting permission is given back (it keeps only so many)
+  const cfgDirs = c => { const s = new Set(); for (const x of Object.values((c && c.systems) || {})) for (const d of (x && x.romDirs) || []) s.add(d); if (c && c.romRoot) s.add(c.romRoot); return s; };
+  function foldersDropped(before, c) {
+    const now = cfgDirs(c), gone = [...before].filter(d => !now.has(d)), off = new Set(st.foldersOff.filter(d => !now.has(d)));
+    for (const d of gone) off.add(d);
+    if (off.size !== st.foldersOff.length || st.foldersOff.some(d => !off.has(d))) { st.foldersOff = [...off].slice(-200); store('folders-off.json', st.foldersOff); }
+    if (!gone.length || !N.releaseFolder) return;
+    const text = JSON.stringify(c), used = Object.entries(st.folders).filter(([p]) => text.includes(JSON.stringify(p))).map(([, u]) => String(u)); // (any setting: games, videos…)
+    for (const u of new Set(gone.map(d => st.folders[d]).filter(u => u && /\/tree\/[^/]+$/.test(u)))) { // (a picked folder itself, never one inside it)
+      if (used.some(x => x === u || x.startsWith(u + '/document/'))) continue;
+      N.releaseFolder({ uri: u }).then(r => log('folder: permission given back', !!(r && r.released))).catch(e => log('folder: release', e && e.message)); }
+  }
+  // (beta.10) the start-up "anything new?" check: a few numbers per game compared (shelves, games, files, sizes, dates,
+  // names), not the whole library as JSON on the page's thread; the same → { unchanged: true } and the shelf stays as it is
+  const libSig = lib => { const p = []; for (const sh of lib || []) { const G = sh.games || [];
+    p.push('#' + [sh.id, sh.kind, sh.name, sh.emulator || '', sh.emulatorName || '', sh.hasEmulator ? 1 : 0, sh.bootOnLaunch === false ? 0 : 1, G.length].join('|'));
+    for (const g of G) p.push([g.id, g.title, g.fileTitle || '', g.region || '', g.sizeBytes || 0, g.added || 0, (g.discs || []).length, g.appId || ''].join('|')); } return p.join('\n'); };
   // ---------- the API ----------
   const consoles = () => SYS.map(s => { const e = E[s.emus[0]] || {}; return { id: s.id, name: s.name, emulatorName: e.name || '', exeNames: [e.name || 'emulator app'], extensions: s.extensions, gameArgs: '', android: true }; });
   const over = {
     platform: { os: 'android', caps: { steam: false, power: false, homeMenu: false, emuSettings: false, autostart: false, displays: false, folders: false, companionServer: false, winMode: false, dolphinIpl: false, raAutoConfig: false } },
     getConfig: async () => { await ready; return { config: JSON.parse(JSON.stringify(st.config)), consoles: consoles(), apps: [], appRoot: 'This device', version: 'Android' }; },
-    saveConfig: async c => { await ready; const was = st.config.ui && st.config.ui.autoCovers, wasFull = fullOn(), wasSs = ssSig();
-      st.config = JSON.parse(JSON.stringify(c)); await store('config.json', st.config);
+    saveConfig: async c => { await ready; const was = st.config.ui && st.config.ui.autoCovers, wasFull = fullOn(), wasSs = ssSig(), dirsWas = cfgDirs(st.config);
+      const games = st.config.games; st.config = JSON.parse(JSON.stringify(c)); // (beta.10) games' own names are renameGame's alone, as on the PC (an older copy of the settings never undoes one)
+      if (games) st.config.games = games; else delete st.config.games;
+      await store('config.json', st.config);
+      try { foldersDropped(dirsWas, st.config); } catch (e) { log('folders', e && e.message); }
       const on = st.config.ui && st.config.ui.autoCovers !== false, ssNow = ssSig();
       if (ssNow !== wasSs) { ssCredsChanged(); delete apiSt.screenscraper; }
       // just switched on (or full box art, or a new ScreenScraper sign-in): start now, not at the next scan
@@ -1665,6 +1736,7 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
     detect: async () => {
       await ready; const inst = await apps(true), systems = {};
       let granted = []; try { granted = ((await N.folderAccess()).uris || []).map(u => ({ uri: u, path: idToPath(treeIdOf(u)) })); } catch {}
+      const off = new Set(st.foldersOff || []); granted = granted.filter(g => !off.has(g.path)); // (beta.10) a folder removed in Settings stays removed
       for (const s of SYS) {
         let emulator = null; for (const id of s.emus) { const p = findInstalled(id, inst); if (p) { emulator = fmtEmu(E[id], p); break; } }
         const names = [s.id, s.name.toLowerCase(), ...(ALIASES[s.id] || [])];
@@ -1673,30 +1745,31 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
       }
       // the main ROMs folder picked before (still allowed): its console folders, found again
       const root = st.config.romRoot; if (root && st.folders[root] && granted.some(g => g.uri === st.folders[root]))
-        try { const off = st.config.romRootOff || []; // folders switched off in the wizard stay off
-          for (const f of (await mapRoot(root, false)).found) if (!off.includes(f.dir) && !systems[f.id].romDirs.includes(f.dir)) systems[f.id].romDirs.push(f.dir); } catch (e) { log('main ROMs folder', e && e.message); }
+        try { const offW = st.config.romRootOff || []; // folders switched off in the wizard stay off (and those removed in Settings, beta.10)
+          for (const f of (await mapRoot(root, false)).found) if (!offW.includes(f.dir) && !off.has(f.dir) && !systems[f.id].romDirs.includes(f.dir)) systems[f.id].romDirs.push(f.dir); } catch (e) { log('main ROMs folder', e && e.message); }
       store('folders.json', st.folders);
       return { systems, steam: { path: null }, apps: {}, appRoot: 'This device' };
     },
     pick: async o => {
       await ready;
-      if (o && o.kind === 'folder') {
-        const r = await N.pickFolder(); if (!r || r.canceled || !r.uri) return null;
-        const p = idToPath(r.docId || treeIdOf(r.uri)); st.folders[p] = r.uri; await store('folders.json', st.folders); return p;
-      }
+      if (o && o.kind === 'folder') return pickTree();
       // an emulator: the known emulator apps for this console first, then every other app
       const inst = await apps(true), want = (o && o.filters && o.filters[0] && o.filters[0].name) || '';
       const sys = SYS.find(s => (E[s.emus[0]] || {}).name === want) || null;
       const known = new Set(); const items = [];
       for (const id of (sys ? sys.emus : Object.keys(E))) { const e = E[id]; for (const [p, label] of inst) if ((e.packages || []).includes(p) || (e.match && e.match.test(p))) if (!known.has(p)) { known.add(p); items.push({ pkg: p, label: `${label} — ${e.name}` }); } }
-      for (const [p, label] of [...inst].sort((a, b) => String(a[1]).localeCompare(String(b[1])))) if (!known.has(p) && p !== 'io.github.boxshelf') items.push({ pkg: p, label });
+      // (beta.10) the rest: Boxshelf hands them the game the standard way, which not every app takes; the label says so
+      for (const [p, label] of [...inst].sort((a, b) => String(a[1]).localeCompare(String(b[1])))) if (!known.has(p) && p !== 'io.github.boxshelf') items.push({ pkg: p, label: emuFor(p) ? label : `${label} (may open without the game)` });
       const r = await N.chooseApp({ title: o && o.title || 'Choose the emulator app', items }); if (!r || r.canceled) return null;
-      const e = emuFor(r.pkg); return e ? fmtEmu(e, r.pkg) : `${String(r.label || r.pkg).replace(/ — .*$/, '')} (${r.pkg})`;
+      const e = emuFor(r.pkg); return e ? fmtEmu(e, r.pkg) : `${String(r.label || r.pkg).replace(/ — .*$/, '').replace(/ \(may open without the game\)$/, '')} (${r.pkg})`;
     },
     checkPaths: async list => { await ready; const inst = await apps();
       return (list || []).map(p => { const pkg = pkgOf(p); return { path: p, file: !!(pkg && inst.has(pkg)), dir: !!st.folders[p] }; }); },
     scan: () => scanAll().then(handOut),
-    scanIfChanged: () => scanAll().then(handOut),
+    // (beta.10) the start-up check (app.js treats unchanged as nothing new): the library the page already has, compared by libSig
+    scanIfChanged: async () => { await ready; const had = handed[0] || null, sig = had ? libSig(had) : null, fresh = await scanAll();
+      if (had && sig === libSig(fresh)) { applyArt(had); applyManuals(had); return { unchanged: true }; } // (its art brought up to date, as the fresh copy's)
+      return handOut(fresh); },
     // (beta.9) video previews (app.js PV): a video beside the game (copied once into the app's cache: the page can't open
     // the games folder's documents), else its YouTube trailer (LaunchBox's link) in the Media tab. Details only on Android
     // (no video behind the moving shelf: 60 fps first)
@@ -1767,13 +1840,27 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
       man.looked.delete(g.id); delete man.db.miss[g.id]; saveMan(); return { ok: true, queued: manQueue('wrong', true, new Set([g.id])) }; },
     // the setup wizard's "Pick your main ROMs folder": pick it (or look at the one picked before) → its consoles, with game counts
     romRoot: async o => { await ready; let path = o && o.path;
-      if (!path) { const r = await N.pickFolder(); if (!r || r.canceled || !r.uri) return null;
-        path = idToPath(r.docId || treeIdOf(r.uri)); st.folders[path] = r.uri; await store('folders.json', st.folders); }
+      if (!path) { path = await pickTree(); if (!path) return null;
+        const under = path + '/', keep = st.foldersOff.filter(d => !d.startsWith(under)); // (beta.10) the main folder picked again: its console folders are offered again too
+        if (keep.length !== st.foldersOff.length) { st.foldersOff = keep; store('folders-off.json', keep); } }
       return mapRoot(path, true); },
+    // (beta.10) Details → Rename, as the PC (main.js game:rename): kept in config.games["<console>:<file>"].title; '' = back to the file's name
+    renameGame: async ({ systemId, file, title } = {}) => { await ready;
+      const g = gameFor(systemId, file); // (one the scan found: throws "That game isn't on the shelf" otherwise)
+      const key = systemId + ':' + g.file, t = String(title || '').replace(/\s+/g, ' ').trim().slice(0, 120), games = Object.assign({}, st.config.games || {}), cur = Object.assign({}, games[key] || {});
+      if (t) cur.title = t; else delete cur.title;
+      if (Object.keys(cur).length) games[key] = cur; else delete games[key];
+      st.config.games = games; await store('config.json', st.config); log('game renamed:', systemId, t ? 'to a name of its own' : 'back to its file name');
+      return { ok: true, title: t }; },
+    // (beta.10) Settings' "Open site" links: https addresses only, in the device's browser (the demo's pretend one said "Opened" and opened nothing)
+    openExternal: async url => { const u = String(url || '').trim(); if (!/^https:\/\/[^\s/]+/i.test(u)) throw new Error('Only https links can be opened'); await N.openUrl({ url: u }); return true; },
     consoleForFolder: (name, files) => consoleForName(name) || (files ? consoleForFiles(files) : null) // tests
   };
   // Settings shows these only when they exist; Android doesn't have them (yet)
   for (const k of ['backupSettings', 'restoreSettings', 'reportProblem', 'companionSet', 'companionState', 'getAutostart', 'setAutostart', 'moveToDisplay', 'winMode', 'raEmulators', 'findIpl']) delete api[k];
+  // (beta.10) more of the demo's pretend features that Settings would show as real on the device: a "newer beta" to get, a
+  // manual check, console trailer clips, custom themes. (openExternal and renameGame are real on Android: in over, below)
+  for (const k of ['updateCheck', 'checkManuals', 'onManualCheck', 'clipStatus', 'clipHelper', 'customThemes', 'customThemeCreate', 'customThemesOpen']) delete api[k];
   // Art Studio: the parts Android backs with real pictures (studioApi above). LaunchBox's index, matching sets and console
   // re-fetch jobs are Windows-only: the demo's pretend versions of those must not show up on the device as real choices
   for (const k of ['artSets', 'artUseSet', 'artUndoSet', 'artBuildIndex', 'artRefreshIndex', 'artRefreshCancel', 'artIndexInfo', 'onArtIndex', 'artRelease']) delete api[k];
@@ -1797,7 +1884,7 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
   }, true);
   // (0.3.2) what android-reading.js (magazines & guides) shares with the adapter: the plugin, settings, the download gates
   window.BS_ANDROID_CTX = { N, st, ready, gated, slowDown, GATE, idleTurn, quiet, fileUrl, pdfLib, toJpegB64, load, store, log, isNative, idToPath, treeIdOf };
-  log('Android adapter ready', isNative ? '(device)' : '(pretend device)');
+  log('Android adapter ready', isNative ? '(device)' : '(pretend device)'); status.ready = isNative; // (beta.10: for the emulator test's file)
   status(isNative ? 'active' : 'active (pretend device)');
   ready.then(() => status((isNative ? 'active' : 'active (pretend device)') + ' · setup ' + (st.config && st.config.setupDone ? 'done' : 'not done'))).catch(e => status('storage error: ' + (e && e.message)));
   } // setup()
@@ -1861,7 +1948,11 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
       apps: async () => ({ apps: [{ pkg: 'org.dolphinemu.dolphinemu', label: 'Dolphin' }, { pkg: 'com.retroarch.aarch64', label: 'RetroArch' }, { pkg: 'com.github.stenzek.duckstation', label: 'DuckStation' }, { pkg: 'org.azahar_emu.azahar', label: 'Azahar' }] }),
       activities: async ({ pkg }) => ({ activities: pkg.includes('azahar') ? ['org.citra.citra_emu.activities.EmulationActivity', 'org.citra.citra_emu.ui.main.MainActivity'] : [] }),
       folderAccess: async () => ({ uris: [] }),
-      pickFolder: async () => { const id = window.__fakePickNext || order[pickN++ % order.length]; window.__fakePickNext = null; return { uri: 'content://com.android.externalstorage.documents/tree/' + encodeURIComponent(id), docId: id }; },
+      pickFolder: async () => { const id = window.__fakePickNext || order[pickN++ % order.length]; window.__fakePickNext = null; const keep = !window.__fakePersistFail; window.__fakePersistFail = false;
+        return Object.assign({ uri: 'content://com.android.externalstorage.documents/tree/' + encodeURIComponent(id), docId: id, persisted: keep }, keep ? {} : { persistError: 'pretend: no lasting permission' }); }, // (beta.10: __fakePersistFail, the warning's test)
+      releaseFolder: async ({ uri }) => { (window.__fakeReleased = window.__fakeReleased || []).push(String(uri)); return { released: true }; }, // (beta.10)
+      openUrl: async ({ url }) => { window.__fakeCalls = (window.__fakeCalls || []).concat(['openUrl:' + url]); }, // (beta.10)
+      dropPdf: async ({ path }) => { (__fakeMan.dropped = __fakeMan.dropped || []).push(String(path)); return { removed: true }; }, // (beta.10)
       copyPreview: async ({ uri }) => { window.__copied = (window.__copied || []).concat(String(uri)); return { ok: true, path: window.__previewUrl || '/__test/preview.webm' }; }, // (beta.9: the video played from the app's cache)
     listFiles: async ({ uri }) => { const id = idOfTree(uri); return { files: (lib[id] || []).map(n => ({ name: n, docId: id + '/' + n, dir: '', ext: n.split('.').pop().toLowerCase(), uri: treeOnly(uri) + '/document/' + encodeURIComponent(id + '/' + n), size: 1e8, mtime: 1.7e12 })) }; },
       listDirs: async ({ uri }) => { const id = idOfTree(uri), kids = new Set();

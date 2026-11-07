@@ -80,7 +80,9 @@ contextBridge.exposeInMainWorld('boxshelf', {
   pathForFile: file => { try { return webUtils.getPathForFile(file); } catch { return null; } },
   checkPaths: list => call('fs:check', list),
   downloadCovers: (systemIds, types, hd) => call('covers:download', { systemIds, types, hd }),
-  cancelCovers: () => call('covers:cancel'),
+  cancelCovers: o => call('covers:cancel', o && o.auto ? { auto: true } : undefined), // (beta.10) { auto: true }: only the background run (the shelf's art card)
+  pauseCovers: () => call('covers:pause'), resumeCovers: () => call('covers:resume'), // (beta.10) the background run: { ok } (false: nothing running)
+  onGpuBack: fn => ipcRenderer.on('gpu:back', () => fn()), // (beta.10) the graphics process came back after it went away
   manualCoverage: () => call('manuals:coverage'),
   artCoverage: () => call('covers:coverage'),
   onCoversProgress: fn => ipcRenderer.on('covers:progress', (e, info) => fn(info)),

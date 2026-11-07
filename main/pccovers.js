@@ -16,6 +16,7 @@ const dir = () => path.join(o.dataDir, 'pc-covers'), cacheDir = () => path.join(
 const isFile = p => { try { return fs.statSync(p).isFile(); } catch { return false; } };
 const sha = s => crypto.createHash('sha1').update(String(s)).digest('hex').slice(0, 24);
 const steamArt = (appid, name) => [`https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${appid}/${name}`, `https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/${name}`]; // (Steam's public store CDN, as steamart.js)
+const { isImageBuf: isImg } = require('./imgcheck'); // (beta.10: PNG / JPEG / WebP / GIF / BMP / AVIF by its first bytes)
 const extOf = (u, buf) => { if (buf && buf[0] === 0x89 && buf[1] === 0x50) return 'png'; if (buf && buf.slice(8, 12).toString() === 'WEBP') return 'webp'; const m = /\.(png|webp|jpe?g)(?:$|\?)/i.exec(String(u || '')); return m ? m[1].toLowerCase().replace('jpeg', 'jpg') : 'jpg'; };
 
 function init(opts) { o = Object.assign(o, opts || {}); }
@@ -36,7 +37,9 @@ async function thumb(url) {
   if (!url) return null;
   const f = path.join(cacheDir(), sha(url));
   for (const e of EXTS) if (isFile(f + '.' + e)) return f + '.' + e;
-  return slot(async () => { const b = await o.fetchImage(url); if (!b) return null; fs.mkdirSync(cacheDir(), { recursive: true }); const p = f + '.' + extOf(url, b); await fs.promises.writeFile(p, b); return p; });
+  // (beta.10) only a picture is kept, and through a temp name: a cached thumbnail is trusted whenever it's there
+  return slot(async () => { const b = await o.fetchImage(url); if (!b || !isImg(b)) return null; fs.mkdirSync(cacheDir(), { recursive: true }); const p = f + '.' + extOf(url, b), tmp = p + '.tmp';
+    try { await fs.promises.writeFile(tmp, b); await fs.promises.rename(tmp, p); } catch (e) { await fs.promises.unlink(tmp).catch(() => {}); o.log('PC cover: thumbnail not saved', e.message); return null; } return p; });
 }
 
 // the options for one game: { list: [{ key, thumb, source, label, sub }], sgdb: has a SteamGridDB key, current: chosen? }
@@ -68,7 +71,7 @@ async function use(id, key) {
   id = String(id); const k = (last.get(id) || {})[String(key || '')]; if (!k) throw new Error('That cover isn\'t in the list any more. Open the picker again.');
   let buf = null, ext = 'jpg';
   if (k.file) { buf = await fs.promises.readFile(k.file); ext = extOf(k.file, buf); }
-  else if (k.url || k.urls) { const us = k.urls || [k.url]; let u = null; for (const x of us) { buf = await o.fetchImage(x); if (buf) { u = x; break; } } // (the sharpest first: Steam's 2x cover, then its 1x)
+  else if (k.url || k.urls) { const us = k.urls || [k.url]; let u = null; for (const x of us) { buf = await o.fetchImage(x); if (buf && isImg(buf)) { u = x; break; } buf = null; } // (the sharpest first: Steam's 2x cover, then its 1x; beta.10: an error page is never the cover)
     if (!buf) throw new Error("Couldn't download that cover. Check the connection and try again."); ext = extOf(u, buf); }
   const dest = await save(id, buf, ext); o.log('PC cover chosen:', id, key.startsWith('sg') ? 'SteamGridDB' : key.startsWith('st') ? "Steam's store" : key); return dest;
 }

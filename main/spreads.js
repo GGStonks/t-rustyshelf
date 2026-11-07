@@ -25,6 +25,18 @@ function sizeOf(file) {
   } catch {} finally { if (fd != null) try { fs.closeSync(fd); } catch {} }
   return null;
 }
+// (beta.10) the same, with fs.promises (the shelf's cover thumbnails and the art download's checks: art on a NAS)
+async function sizeOfAsync(file) {
+  let fh; try {
+    fh = await fs.promises.open(file, 'r'); const b = Buffer.alloc(4096), n = (await fh.read(b, 0, b.length, 0)).bytesRead; let h = b.subarray(0, n);
+    if (n >= 24 && h[0] === 0x89 && h.toString('latin1', 1, 4) === 'PNG') return [h.readUInt32BE(16), h.readUInt32BE(20)];
+    if (h[0] === 0xFF && h[1] === 0xD8) {
+      const z = jpegSize(h); if (z || n < b.length) return z;
+      const b2 = Buffer.alloc(65536); h = b2.subarray(0, (await fh.read(b2, 0, b2.length, 0)).bytesRead); return jpegSize(h);
+    }
+  } catch {} finally { if (fh) await fh.close().catch(() => {}); }
+  return null;
+}
 const isSpread = s => !!s && s[0] > s[1] * SPREAD && s[0] < s[1] * SPREAD_MAX;
 
 // crop(file, 'left'|'right') -> JPEG Buffer (Electron's nativeImage in the app)
@@ -98,4 +110,4 @@ function medianWidth(dir, base) {
   try { w = fs.readdirSync(dir).filter(f => f.toLowerCase().startsWith(pre) && /\.(jpe?g|png)$/i.test(f)).map(f => (sizeOf(path.join(dir, f)) || [0])[0]).filter(Boolean).sort((a, b) => a - b); } catch {}
   return w.length ? w[w.length >> 1] : 0;
 }
-module.exports = { sizeOf, isSpread, splitManual, medianWidth, backupDir };
+module.exports = { sizeOf, sizeOfAsync, isSpread, splitManual, medianWidth, backupDir };

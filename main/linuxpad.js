@@ -12,7 +12,7 @@ const HOLD_MS = 1500;
 let log = () => {}, dir = '/dev/input', sysDir = '/sys/class/input', force = false;
 function init(o) { log = o.log || log; if (o.dir) dir = o.dir; if (o.sysDir) sysDir = o.sysDir; force = !!o.force; }
 
-let on = null; // { onQuit, devs: Map(name -> { stream, down: Set, sel, start }), timer, scan, fired }
+let on = null; // { onQuit, devs: Map(name -> { fd, down: Set, sel, start }), timer, scan, fired }
 function layout(name) {
   let n = ''; try { n = fs.readFileSync(path.join(sysDir, name, 'device', 'name'), 'utf8'); } catch {}
   return /sony|playstation|dualsense|dualshock|wireless controller/i.test(n) ? { sel: 8, start: 9, label: n.trim() } : { sel: 6, start: 7, label: n.trim() || 'gamepad' };
@@ -23,15 +23,29 @@ function check() {
   if (held && !on.timer) on.timer = setTimeout(() => { if (!on) return; on.timer = null; if ([...on.devs.values()].some(d => d.down.has(d.sel) && d.down.has(d.start))) { on.fired = true; log('Linux pad: Select + Start held, closing the game'); try { on.onQuit(); } catch (e) { log('Linux pad: quit failed', e.message); } } }, HOLD_MS);
   if (!held && on.timer) { clearTimeout(on.timer); on.timer = null; }
 }
+// (beta.10) opened non-blocking and read in short polls: a read stream parked a libuv threadpool worker in read() on a silent
+// pad for good (destroy() can't cancel it), and after ~4 games all four were stuck and every fs.promises call hung. Here a
+// read with nothing waiting returns EAGAIN at once, so no worker is ever held, and closing is immediate. (A net.Socket on
+// the fd isn't possible: libuv takes a character device for a file.)
+const POLL_MS = 40;
 function open(name) {
   if (!on || on.devs.has(name)) return;
-  const L = layout(name), d = { ...L, down: new Set(), stream: null, rest: Buffer.alloc(0) };
-  let s; try { s = fs.createReadStream(path.join(dir, name), { highWaterMark: 512 }); } catch { return; }
-  d.stream = s; on.devs.set(name, d);
-  s.on('data', chunk => feed(d, chunk));
-  s.on('error', () => { on && on.devs.delete(name); });
-  s.on('close', () => { if (on && on.devs.get(name) === d && !d.keep) on.devs.delete(name); });
+  const L = layout(name), d = { ...L, down: new Set(), fd: -1, t: null, reading: false, gone: false, rest: Buffer.alloc(0) };
+  try { d.fd = fs.openSync(path.join(dir, name), fs.constants.O_RDONLY | fs.constants.O_NONBLOCK); } catch { return; }
+  on.devs.set(name, d); const buf = Buffer.alloc(512);
+  const pump = () => { d.t = null; if (d.gone) return shut(d); d.reading = true;
+    fs.read(d.fd, buf, 0, buf.length, null, (err, n) => { d.reading = false;
+      if (d.gone) return shut(d);
+      if (err && err.code !== 'EAGAIN' && err.code !== 'EWOULDBLOCK' && err.code !== 'EINTR') { shut(d); if (on && on.devs.get(name) === d) on.devs.delete(name); return; } // (unplugged: ENODEV; a stale device can't remove the next one's entry)
+      if (!err && n > 0) { feed(d, Buffer.from(buf.subarray(0, n))); d.t = setTimeout(pump, 0); return; } // (copied: the buffer is reused; more may be waiting)
+      if (!err && n === 0) { shut(d); if (on && on.devs.get(name) === d) on.devs.delete(name); return; }
+      d.t = setTimeout(pump, POLL_MS); });
+  };
+  pump();
 }
+// stop reading a device and close it (after a read in flight comes back: never closed under it)
+function stopDev(d) { d.gone = true; clearTimeout(d.t); d.t = null; if (!d.reading) shut(d); }
+function shut(d) { d.gone = true; if (d.fd >= 0) { const fd = d.fd; d.fd = -1; fs.close(fd, () => {}); } }
 function feed(d, chunk) { const b = d.rest.length ? Buffer.concat([d.rest, chunk]) : chunk; let i = 0;
   for (; i + 8 <= b.length; i += 8) { const value = b.readInt16LE(i + 4), type = b[i + 6], num = b[i + 7];
     if ((type & 0x7f) !== 1) continue; // buttons only
@@ -39,7 +53,7 @@ function feed(d, chunk) { const b = d.rest.length ? Buffer.concat([d.rest, chunk
     if (!(type & 0x80)) check(); } // (the opening "how it is now" report never starts a hold)
   d.rest = b.subarray(i); }
 // (tests) events for a pretend pad that stays plugged in
-function _feed(name, buf, sysName) { if (!on) return; let d = on.devs.get(name); if (!d) { d = { ...layout(sysName || name), down: new Set(), stream: null, rest: Buffer.alloc(0) }; on.devs.set(name, d); } feed(d, buf); }
+function _feed(name, buf, sysName) { if (!on) return; let d = on.devs.get(name); if (!d) { d = { ...layout(sysName || name), down: new Set(), fd: -1, rest: Buffer.alloc(0) }; on.devs.set(name, d); } feed(d, buf); }
 function scan() { if (!on) return; let names = []; try { names = fs.readdirSync(dir).filter(n => /^js\d+$/.test(n)); } catch {} for (const n of names) open(n); }
 // a game started: watch the pads until end()
 function begin(onQuit) {
@@ -48,7 +62,7 @@ function begin(onQuit) {
   scan(); on.scan = setInterval(scan, 3000); // (a pad plugged in during the game)
   return true;
 }
-function end() { if (!on) return; const o = on; on = null; clearTimeout(o.timer); clearInterval(o.scan); for (const d of o.devs.values()) { d.keep = true; try { d.stream.destroy(); } catch {} } }
+function end() { if (!on) return; const o = on; on = null; clearTimeout(o.timer); clearInterval(o.scan); for (const d of o.devs.values()) { try { stopDev(d); } catch {} } }
 const watching = () => !!on;
 
 module.exports = { init, begin, end, watching, HOLD_MS, _feed };

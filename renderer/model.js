@@ -35,23 +35,29 @@ window.ConsoleModel = (() => {
   }
   let lost = false;
   function teardown() {
-    try { cancelAnimationFrame(raf); renderer && renderer.dispose(); } catch {}
+    // (beta.10) the cached models' geometry / textures and the room light are freed too, and the context is let go (like Inspect's)
+    // when it isn't already lost: browsers cap live WebGL contexts, so a dropped one used to linger until the page went
+    try { cache.forEach(e => { kill(e.holder); kill(e.lidPivot); kill(e.disc); }); } catch {}
+    try { if (scene && scene.environment) scene.environment.dispose(); } catch {}
+    try { cancelAnimationFrame(raf); raf = 0; if (renderer) { const ctxLost = lost || renderer.getContext().isContextLost(); renderer.dispose(); if (!ctxLost && renderer.forceContextLoss) renderer.forceContextLoss(); } } catch {}
     try { canvas && canvas.remove(); } catch {}
-    renderer = scene = camera = canvas = root = lidPivot = disc = discMat = null; loaded = null; loadedUrl = null; loading = null; lost = false; cache.clear();
+    renderer = scene = camera = canvas = root = lidPivot = disc = discMat = null; loaded = null; loadedUrl = null; loading = null; lost = false; cache.clear(); ++loadSeq; mode = null;
   }
   function gone() { return lost || (renderer && renderer.getContext().isContextLost()); }
   // the cap is per 1080p-sized pixel like the museum's and Inspect's (BS_AUTOZOOM: the page is zoomed 2× on a 4K TV at 100 %
   // scaling), so a 4K TV gets the same sharpness, not three quarters of it; set on every resize so a zoom change is picked up
   function resize() { const s = SIZE(); renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5 * (window.BS_AUTOZOOM || 1))); renderer.setSize(s, s, false); canvas.style.width = canvas.style.height = s + 'px'; camera.aspect = 1; camera.updateProjectionMatrix(); }
 
-  // Load (or reuse) the model. Resolves true when ready, false (with .error()) when it can't be used.
+  // Load (or reuse) the model. Resolves true when ready, false (with .error()) when it can't be used, null when a newer
+  // load (or swap) took over before it finished (superseded: not an error, nothing to tell anyone)
   let loadSeq = 0;
   function load(url, opts) {
-    if (!url) { detach(); return Promise.resolve(false); }
+    if (!url) { ++loadSeq; loading = null; detach(); return Promise.resolve(false); }
     if (gone()) teardown();
     const key = JSON.stringify(opts || {});
-    if (url === loadedUrl && loaded && cache.has(url) && cache.get(url).key === key) return Promise.resolve(true);
-    if (cache.has(url) && cache.get(url).key === key && renderer) { ++loadSeq; detach(); attach(url); return Promise.resolve(true); } // built earlier: just swap it back in
+    // (beta.10) already shown / built: a load still downloading for another console is superseded, so it can't land on top later
+    if (url === loadedUrl && loaded && cache.has(url) && cache.get(url).key === key) { if (loading) { ++loadSeq; loading = null; } return Promise.resolve(true); }
+    if (cache.has(url) && cache.get(url).key === key && renderer) { ++loadSeq; loading = null; detach(); attach(url); return Promise.resolve(true); } // built earlier: just swap it back in
     if (loading && loading.url === url) return loading.p;
     const ticket = ++loadSeq;
     const p = (async () => {
@@ -60,14 +66,16 @@ window.ConsoleModel = (() => {
       try {
         const gltf = await new window.BS3D.GLTFLoader().loadAsync(url);
         // a newer load started while this one was downloading (quick shelf switches): drop this one
-        if (ticket !== loadSeq) { kill(gltf.scene); return false; }
-        detach(); drop(url); // the previous model stays cached (off the scene); an older build of this url (other options) goes
+        if (ticket !== loadSeq) { kill(gltf.scene); return null; }
         const o = Object.assign({ yaw: 0, pitch: 0, roll: 0, scale: 1, lift: 0, lid: '', lidHinge: 'back', lidAxis: 'x', lidAngle: -70, discX: 0, discZ: 0, discHeight: 0, discScale: 1, exposure: 1, slot: 'top', hide: 'controller|gamepad|joystick|cable|memory.?card|wire' }, opts || {});
-        if (o.error) throw new Error(o.error);
+        if (o.error) { detach(); drop(url); kill(gltf.scene); throw new Error(o.error); }
         const m = gltf.scene;
         // old Sketchfab materials, then only the console itself (a bundled controller, disc or cable is split off by
         // ConsoleFit; parts you switched on for the museum show here too, the controller never does)
         await ConsoleFit.fixMaterials(gltf);
+        // (beta.10) checked again after the last await, and only then the shown model comes off: a newer load could have finished meanwhile (two consoles on the stage)
+        if (ticket !== loadSeq || !renderer || !root) { kill(m); return null; }
+        detach(); drop(url); // the previous model stays cached (off the scene); an older build of this url (other options) goes
         { const fa = ConsoleFit.analyze(m, o.hide); ConsoleFit.show(m, fa, o, 'console'); }
         m.traverse(n => { if (n.isMesh) { n.frustumCulled = false; } });
         m.rotation.set(THREE.MathUtils.degToRad(o.pitch), THREE.MathUtils.degToRad(o.yaw), THREE.MathUtils.degToRad(o.roll));
@@ -113,7 +121,7 @@ window.ConsoleModel = (() => {
         cache.set(url, { key, holder, lidPivot, disc, discMat, state: snap() }); trim();
         resize(); renderer.render(scene, camera);
         lastError = null; return true;
-      } catch (e) { lastError = e && e.message || String(e); console.warn('console model', e); return false; }
+      } catch (e) { if (ticket !== loadSeq) return null; lastError = e && e.message || String(e); console.warn('console model', e); return false; }
     })();
     loading = { url, p }; p.finally(() => { if (loading && loading.p === p) loading = null; });
     return p;

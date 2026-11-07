@@ -19,7 +19,26 @@ const TOOL_IDS = new Set([ // the well-known ones; anything else is caught by it
 function isTool(appid, name) { return TOOL_IDS.has(String(appid)) || TOOL_NAMES.test(String(name || '')); }
 
 function readVdf(file) {
-  try { return vdf.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
+  try { return vdf.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '')); } catch { return null; } // (beta.10: a byte-order mark made the first key unreadable)
+}
+// (beta.10) the folder the user gave: Steam's own folder, or by mistake its steamapps folder or another library
+// ("D:\SteamLibrary"): all of them lead to the games. Returns the folder that holds steamapps, or null
+function steamRoot(p) {
+  if (!p) return null;
+  let s = String(p).trim().replace(/^"(.*)"$/, '$1').replace(/[\\/]+$/, '');
+  if (/\.(exe|sh)$/i.test(s) || /[\\/]steam$/i.test(s) && !isDir(s)) s = path.dirname(s); // (beta.10: steam.exe itself picked, or pasted with quotes)
+  if (/^steamapps$/i.test(path.basename(s)) && isDir(s)) return path.dirname(s);
+  if (isDir(path.join(s, 'steamapps'))) return s;
+  return null;
+}
+// installed: Steam's "fully installed" flag, or a game whose update is waiting / paused / running (flags like 6, 1026,
+// 1542 drop the 4 while an update is queued): it's on disk and still plays
+function installedState(st, lib) {
+  const flags = +(vdf.get(st, 'StateFlags') || 0);
+  if (flags & 4) return true;
+  if (flags & 1) return false; // uninstalled
+  const dir = vdf.get(st, 'installdir');
+  return +(vdf.get(st, 'SizeOnDisk') || 0) > 0 && !!dir && isDir(path.join(lib, 'steamapps', 'common', String(dir)));
 }
 
 function libraryFolders(steamPath) {
@@ -80,24 +99,30 @@ function findArt(steamPath, appid) {
   };
 }
 
-function scanSteam(steamPath, opts = {}) {
-  const hideTools = opts.hideTools !== false;
-  if (!steamPath || !isDir(steamPath)) return [];
+// Steam's own folder (the one with the list of every library, playtimes and its cover cache), not just a library on
+// another drive: it has userdata or appcache beside steamapps
+const isMainSteam = p => !!p && (isDir(path.join(p, 'userdata')) || isDir(path.join(p, 'appcache')));
+function scanSteam(givenPath, opts = {}) {
+  const hideTools = opts.hideTools !== false, log = typeof opts.log === 'function' ? opts.log : () => {};
+  const given = steamRoot(givenPath);
+  if (!given) { log('Steam: no steamapps folder in the Steam folder set in Settings'); return []; }
+  // (beta.10) a library on another drive set as "the Steam folder" (D:\SteamLibrary): Steam's own folder (opts.mainPath,
+  // found by main.js) still lists every library on every drive, so games on the other drives, playtimes and covers show too
+  const main = steamRoot(opts.mainPath), steamPath = isMainSteam(given) || !main ? given : main;
   const stats = userStats(steamPath);
-  const games = [], seen = new Set();
-  for (const lib of libraryFolders(steamPath)) {
+  const games = [], seen = new Set(); let manifests = 0, notInstalled = 0, tools = 0;
+  const libs = libraryFolders(steamPath); if (steamPath !== given && !libs.some(l => path.resolve(l).toLowerCase() === path.resolve(given).toLowerCase())) libs.push(given);
+  for (const lib of libs) {
     const apps = path.join(lib, 'steamapps');
     for (const ent of readDir(apps)) {
       if (!/^appmanifest_\d+\.acf$/i.test(ent.name)) continue;
       const m = readVdf(path.join(apps, ent.name));
       const st = m && vdf.get(m, 'AppState');
-      if (!st) continue;
+      if (!st) continue; manifests++;
       const appid = String(vdf.get(st, 'appid') || '');
       const name = vdf.get(st, 'name') || '';
-      if (!appid || NEVER_GAMES.test(name) || (hideTools && isTool(appid, name))) continue;
-      // StateFlags 4 = fully installed
-      const flags = +(vdf.get(st, 'StateFlags') || 0);
-      if (!(flags & 4)) continue;
+      if (!appid || NEVER_GAMES.test(name) || (hideTools && isTool(appid, name))) { tools++; continue; }
+      if (!installedState(st, lib)) { notInstalled++; continue; } // (beta.10: a game with an update waiting counts as installed)
       if (seen.has(appid)) continue; seen.add(appid);
       const s = stats[appid] || {};
       games.push({
@@ -113,7 +138,10 @@ function scanSteam(steamPath, opts = {}) {
     }
   }
   games.sort((a, b) => a.title.localeCompare(b.title));
+  // (beta.10) what was found, so a problem report says why the PC shelf is empty (counts only, no paths)
+  const key = [libs.length, manifests, games.length, notInstalled, tools].join('/'); if (key !== lastLogKey) { lastLogKey = key; log(`Steam: ${libs.length} ${libs.length === 1 ? 'library' : 'libraries'}, ${manifests} installed items, ${games.length} games (${tools} tools / soundtracks left out, ${notInstalled} not installed)`); }
   return games;
 }
+let lastLogKey = '';
 
-module.exports = { scanSteam, isTool };
+module.exports = { scanSteam, isTool, steamRoot, isMainSteam };

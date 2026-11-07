@@ -128,8 +128,9 @@ async function addToSteam(o) {
       // the Library's artwork: Boxshelf's icon as the tile, until a proper one is chosen in Steam
       try { const grid = path.join(u.dir, 'grid'); fs.mkdirSync(grid, { recursive: true }); if (icon) for (const n of [r.id + '_icon.png']) fs.copyFileSync(icon, path.join(grid, n)); } catch {}
       done.push(u.id); if (r.had) updated++;
-      log('Steam: Boxshelf', r.had ? 'updated in' : 'added to', 'the shortcuts of Steam user', u.id, '(id ' + r.id + ')');
-    } catch (e) { log('Steam: shortcuts for user', u.id, 'not changed:', e.message); }
+      // (beta.10: the account number stays out of the log, which goes into problem reports: "Steam user 1 of 2")
+      log('Steam: Boxshelf', r.had ? 'updated in' : 'added to', 'the shortcuts of Steam user', (users.indexOf(u) + 1) + ' of ' + users.length);
+    } catch (e) { log('Steam: shortcuts for user', (users.indexOf(u) + 1) + ' of ' + users.length, 'not changed:', e.code || 'error'); } // (e.code only: the message holds the path, with the account number in it)
   }
   if (reopened) startSteam();
   return done.length ? { ok: true, users: done.length, updated: updated > 0, reopened } : { ok: false, why: 'write-failed' };
