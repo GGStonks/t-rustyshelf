@@ -40,7 +40,9 @@ function defaults() {
       // best one found), prefixDir = where each game's Wine prefix goes ('' = <Boxshelf>/Prefixes); homeDir = the home a
       // Linux game gets (its saves and settings; '' = the player's own); Epic through legendary (legendaryPath: '' = found
       // by itself; epicDir: where Epic games install, '' = the PC games folder, else <Boxshelf>/Epic Games)
-      runner: '', prefixDir: '', homeDir: '', legendaryPath: '', epicDir: '' },
+      runner: '', prefixDir: '', homeDir: '', legendaryPath: '', epicDir: '',
+      // (Linux) a game's own way of running, by game id: { runner: a runner id, prefix: its Wine prefix's folder, env: { NAME: value } }
+      run: {} },
     games: {}, // per-game choices keyed by game id ("<console>:<file>"): { emulator } = this game runs in its own emulator build
     emuSeen: [], // emulator builds used before (newest first): offered for a game a build was made for
     // (beta.7) Set up for me (main/emusetup.js): auto = the first run sets up emulators that look new; graphics = the preset
@@ -215,6 +217,10 @@ function sanitize(cfg) {
     cfg.pc.custom = (Array.isArray(cfg.pc.custom) ? cfg.pc.custom : []).filter(c => isObj(c) && s(c.exe, 1024)).slice(0, 2000).map(c => ({ id: s(c.id, 80) || s(c.title, 80) || s(c.exe, 80), title: s(c.title, 120), exe: s(c.exe, 1024), args: s(c.args, 1000), ...(s(c.src, 20) ? { src: s(c.src, 20) } : {}), ...(s(c.runner, 1024) ? { runner: s(c.runner, 1024) } : {}) })); // (Linux: runner = this game's own Wine / Proton) // (beta.7: src 'playnite' marks an import, for Remove what was imported; up to 2000 games)
     cfg.pc.pnDirs = isObj(cfg.pc.pnDirs) ? Object.fromEntries(Object.entries(cfg.pc.pnDirs).slice(0, 60).map(([k, v]) => [String(k).slice(0, 20), (Array.isArray(v) ? v : []).filter(x => typeof x === 'string' && x.length <= 1024).slice(0, 50)])) : {}; // (the games folders a Playnite import added)
     for (const k of ['gamesDir', 'userGamesDir', 'runner', 'prefixDir', 'homeDir', 'legendaryPath', 'epicDir']) cfg.pc[k] = s(cfg.pc[k], 1024); // (the PC games folder; Linux: Wine / Proton and Epic)
+    const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,80}$/;
+    cfg.pc.run = isObj(cfg.pc.run) ? Object.fromEntries(Object.entries(cfg.pc.run).filter(([, v]) => isObj(v)).slice(0, 2000).map(([id, v]) => [String(id).slice(0, 200), {
+      ...(s(v.runner, 1024) ? { runner: s(v.runner, 1024) } : {}), ...(s(v.prefix, 1024) && path.isAbsolute(s(v.prefix, 1024)) ? { prefix: s(v.prefix, 1024) } : {}),
+      ...(isObj(v.env) ? { env: Object.fromEntries(Object.entries(v.env).filter(([k, x]) => ENV_NAME.test(k) && typeof x === 'string' && x.length <= 4096).slice(0, 50)) } : {}) }])) : {};
     cfg.pc.programs = isObj(cfg.pc.programs) ? Object.fromEntries(Object.entries(cfg.pc.programs).filter(([k, v]) => typeof v === 'string' && v && v.length <= 1024 && !path.isAbsolute(v) && !v.split(/[\\/]/).includes('..')).slice(0, 2000).map(([k, v]) => [String(k).slice(0, 200), v])) : {};
     cfg.pc.quiverPath = s(cfg.pc.quiverPath, 1024); for (const k of ['epic', 'quiver', 'gog', 'ubisoft', 'ea', 'xbox']) if (typeof cfg.pc[k] !== 'boolean') cfg.pc[k] = true; } // (beta.7: the four new stores)
   { const e = isObj(cfg.emuSetup) ? cfg.emuSetup : {}; cfg.emuSetup = { auto: e.auto !== false, graphics: ['auto', 'fast', 'balanced', 'pretty'].includes(e.graphics) ? e.graphics : 'auto', resume: e.resume === true,

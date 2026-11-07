@@ -33,7 +33,7 @@ const listJson = JSON.stringify([{ app_name: 'FakeApp', app_title: 'Test Epic Ga
 const installArgs = at('legendary-install.txt');
 mk('.local/bin/legendary', `#!/bin/sh\necho "$LEGENDARY_CONFIG_PATH" > "${HOME}/legendary-config.txt"\ncase "$*" in\n  *launch*--json*) echo '${launchJson}' ;;\n  *list*--json*) echo '${listJson}' ;;\n  install*) echo "$*" > "${installArgs}" ;;\n  *) exit 0 ;;\nesac\n`, true);
 const umuOut = at('umu-run.txt');
-mk('.local/bin/umu-run', `#!/bin/sh\necho "umu-run: starting $1"\n{ echo "PWD=$PWD"; echo "WINEPREFIX=$WINEPREFIX"; echo "PROTONPATH=$PROTONPATH"; echo "STORE=$STORE"; echo "GAMEID=$GAMEID"; echo "FROM_LEGENDARY=$FROM_LEGENDARY"; echo "PROTON_EAC_RUNTIME=$PROTON_EAC_RUNTIME"; echo "LD_PRELOAD=[$LD_PRELOAD]"; echo "SteamGameId=$SteamGameId"; echo "PROTON_ENABLE_NVAPI=$PROTON_ENABLE_NVAPI"; for a in "$@"; do echo "ARG=$a"; done; } >> "${umuOut}"\necho --- >> "${umuOut}"\nsleep 6\necho x >> "${umuOut}.ended"\nexit 0\n`, true);
+mk('.local/bin/umu-run', `#!/bin/sh\necho "umu-run: starting $1"\n{ echo "PWD=$PWD"; echo "WINEPREFIX=$WINEPREFIX"; echo "PROTONPATH=$PROTONPATH"; echo "STORE=$STORE"; echo "GAMEID=$GAMEID"; echo "FROM_LEGENDARY=$FROM_LEGENDARY"; echo "PROTON_EAC_RUNTIME=$PROTON_EAC_RUNTIME"; echo "LD_PRELOAD=[$LD_PRELOAD]"; echo "SteamGameId=$SteamGameId"; echo "PROTON_ENABLE_NVAPI=$PROTON_ENABLE_NVAPI"; echo "OWN_VAR=$OWN_VAR"; for a in "$@"; do echo "ARG=$a"; done; } >> "${umuOut}"\necho --- >> "${umuOut}"\nsleep 6\necho x >> "${umuOut}.ended"\nexit 0\n`, true);
 // the PC games folder
 const winExe = mk('Games/PC/Win Game/WinGame.exe', 'MZ'); mk('Games/PC/Win Game/Data/Plugins/BigHelper.exe', 'MZ' + 'x'.repeat(5000));
 mk('Games/PC/Two Programs/a.exe', 'MZ'); const twoB = mk('Games/PC/Two Programs/b.exe', 'MZ');
@@ -42,7 +42,7 @@ const nativeOut = at('native-ran.txt'), ownNative = mk('Mine/Native Game/start.s
 const tool = mk('Tools/Tool.exe', 'MZ');
 mk('Boxshelf/data/config.json', JSON.stringify({ setupDone: true,
   ui: { bootIntro: 'off', sound: false, music: 'off', startFullscreen: true, openInto: 'last', autoCovers: false, lastSeenVersion: require('../../package.json').version },
-  steam: { enabled: false }, pc: { epic: true, quiver: false, gamesDir, userGamesDir: ownDir, homeDir: gameHome, programs: { 'Two Programs': 'b.exe' }, custom: [{ id: 'tool', title: 'Test Tool', exe: tool, args: '' }] }, systems: {} }, null, 2));
+  steam: { enabled: false }, pc: { epic: true, quiver: false, gamesDir, userGamesDir: ownDir, homeDir: gameHome, programs: { 'Two Programs': 'b.exe' }, run: { 'pc-two-programs': { prefix: at('Own Prefix'), env: { OWN_VAR: 'yes' } } }, custom: [{ id: 'tool', title: 'Test Tool', exe: tool, args: '' }] }, systems: {} }, null, 2));
 const ended = () => { try { return fs.readFileSync(umuOut + '.ended', 'utf8').split('\n').filter(Boolean).length; } catch { return 0; } };
 // the n-th game has closed, and Boxshelf has had a moment to see it go
 const gameOver = async n => { for (let i = 0; i < 40 && ended() < n; i++) await sleep(500); await sleep(1500); return ended() >= n; };
@@ -105,6 +105,7 @@ const shot = async (p, name) => { try { const r = await p.send('Page.captureScre
     const r3 = await play(byTitle('Two Programs'));
     await sleep(2500); const c = runs()[2] || {};
     check('a folder game with several programs starts the one chosen in Settings', !!r3 && r3.ok && c.args && c.args[0] === twoB, JSON.stringify({ r3, c }));
+    check('…with its own way of running (pc.run): its own prefix and variables', c.WINEPREFIX === at('Own Prefix') && c.OWN_VAR === 'yes' && b.OWN_VAR === '', JSON.stringify({ c, b }));
     await gameOver(3);
     // the program added by hand
     const tg = custom && custom.games.find(g => g.title === 'Test Tool');

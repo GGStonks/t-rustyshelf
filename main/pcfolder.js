@@ -53,14 +53,16 @@ function linuxPrograms(dir, folder) {
 }
 // the Windows programs in a game's folder (two folders deep), best first: the shallowest (a game's own program sits at its
 // top or in bin\win_x64; a bigger helper hides deeper, like MTGA_Data\Plugins\ZFGameBrowser.exe), then one sharing a word
-// with the folder's name, then the biggest
+// with the folder's name, then the biggest. On Linux a batch file can be chosen too (Wine runs it: a game's own launch
+// script, setting things up before the game), after the programs; on Windows Node can't start one without a shell.
+const WIN_PROGRAM = isLinux ? /\.(exe|bat)$/i : /\.exe$/i;
 function windowsPrograms(dir, folder) {
   const found = [];
   const walk = (d, depth) => { for (const e of entries(d)) { const p = path.join(d, e.name);
-    if (e.isFile() && /\.exe$/i.test(e.name) && !HELPER.test(e.name)) found.push({ rel: path.relative(dir, p), depth, word: sharesWord(e.name, folder) ? 0 : 1, size: (statOf(p) || {}).size || 0 });
+    if (e.isFile() && WIN_PROGRAM.test(e.name) && !HELPER.test(e.name)) found.push({ rel: path.relative(dir, p), bat: /\.bat$/i.test(e.name) ? 1 : 0, depth, word: sharesWord(e.name, folder) ? 0 : 1, size: (statOf(p) || {}).size || 0 });
     else if (e.isDirectory() && depth < 2 && !SKIP_DIR.test(e.name)) walk(p, depth + 1); } };
   walk(dir, 0);
-  return found.sort((a, b) => a.depth - b.depth || a.word - b.word || b.size - a.size).slice(0, 20).map(f => ({ rel: f.rel, native: false }));
+  return found.sort((a, b) => a.bat - b.bat || a.depth - b.depth || a.word - b.word || b.size - a.size).slice(0, 40).map(f => ({ rel: f.rel, native: false }));
 }
 // every program a game could start with, the one Boxshelf would pick first
 const programsIn = (dir, folder) => [...(isLinux ? linuxPrograms(dir, folder) : []), ...windowsPrograms(dir, folder)];

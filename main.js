@@ -1535,13 +1535,15 @@ async function launchLinuxPc(g) {
       spec = { exe: g.exe, args: g.source === 'folder' ? [] : launcher.buildArgs(g.args || '', ''), cwd: path.dirname(g.exe), env: {}, runner: g.runner };
     }
   } finally { launching = false; }
+  // the game's own way of running (pc.run, by id: its runner, prefix and variables), over what the PC games settings say
+  const own = (pc.run || {})[g.id] || {}, ownEnv = own.env || {};
   let c, runner = null, prefix = '';
-  if (!linuxpc.isWindowsProgram(spec.exe)) c = { cmd: spec.exe, args: spec.args, cwd: spec.cwd, env: linuxpc.cleanEnv({ ...linuxpc.gameHome(pc.homeDir), ...spec.env }), how: 'native' };
+  if (!linuxpc.isWindowsProgram(spec.exe)) c = { cmd: spec.exe, args: spec.args, cwd: spec.cwd, env: linuxpc.cleanEnv({ ...linuxpc.gameHome(pc.homeDir), ...ownEnv, ...spec.env }), how: 'native' };
   else {
     // (the prefix is named after the game's own title, not a name given in Details → Rename: renaming keeps its saves)
-    const name = g.fileTitle || g.title; runner = linuxpc.pickRunner(spec.runner || pc.runner); prefix = linuxpc.prefixFor(name, pc.prefixDir);
+    const name = g.fileTitle || g.title; runner = linuxpc.pickRunner(own.runner || spec.runner || pc.runner); prefix = own.prefix || linuxpc.prefixFor(name, pc.prefixDir);
     if (runner && runner.kind === 'proton' && linuxpc.umuNeedsRuntime()) notice = "First start with Proton: its runtime is downloading (about 700 MB), so the game takes a minute or two to appear.";
-    c = linuxpc.windowsCommand({ ...spec, runner, prefix, env: { ...linuxpc.protonEnv(name), ...spec.env }, store: spec.store || 'none' });
+    c = linuxpc.windowsCommand({ ...spec, runner, prefix, env: { ...linuxpc.protonEnv(name), ...ownEnv, ...spec.env }, store: spec.store || 'none' });
   }
   const done = info => { if (runner) linuxpc.endPrefix(runner, prefix); onExit(info); };
   const r = launcher.launchCommand(c.cmd, c.args, done, { env: c.env, cwd: c.cwd, log: pcGameLog() });
