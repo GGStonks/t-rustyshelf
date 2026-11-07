@@ -65,6 +65,20 @@ let fails = 0; const check = (name, ok, detail) => { console.log((ok ? 'PASS  ' 
   check('launch wrapper: nothing added from the desktop; --no-sandbox when Steam starts it; X11 too in Game Mode',
     w0 === '--x' && w1 === '--no-sandbox --x' && /^--ozone-platform=x11 --no-sandbox --x$/.test(w2), JSON.stringify([w0, w1, w2]));
   fs.rmSync(wdir, { recursive: true, force: true });
+
+  // (beta.9) hold Select + Start for 1.5 s during a game: Boxshelf closes it (main/linuxpad.js, joystick events fed in)
+  const LP = require(path.join(root, 'main', 'linuxpad.js'));
+  const ev = (value, type, num) => { const b = Buffer.alloc(8); b.writeUInt32LE(1000, 0); b.writeInt16LE(value, 4); b[6] = type; b[7] = num; return b; };
+  const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'bxjs-'));
+  const padRun = async steps => { let quit = 0; LP.init({ dir: empty, sysDir: empty, force: true }); LP.begin(() => quit++);
+    for (const s of steps) { if (typeof s === 'number') await new Promise(r => setTimeout(r, s)); else LP._feed('js0', Buffer.concat(s)); } LP.end(); return quit; };
+  const held = await padRun([[ev(0, 0x81, 6), ev(0, 0x81, 7), ev(1, 1, 6), ev(1, 1, 7)], 1800]);
+  const short = await padRun([[ev(1, 1, 6), ev(1, 1, 7)], 700, [ev(0, 1, 7)], 1500]);
+  const already = await padRun([[ev(1, 0x81, 6), ev(1, 0x81, 7)], 1800]);
+  const otherBtn = await padRun([[ev(1, 1, 6), ev(1, 1, 0)], 1800]);
+  check('hold Select + Start 1.5 s closes the game (once); a short press, another button, or buttons already held at the start don\'t',
+    held === 1 && short === 0 && already === 0 && otherBtn === 0, JSON.stringify({ held, short, already, otherBtn }));
+  fs.rmSync(empty, { recursive: true, force: true });
   console.log(fails ? `${fails} failed` : 'all passed');
   fs.rmSync(HOME, { recursive: true, force: true });
   process.exit(fails ? 1 : 0);

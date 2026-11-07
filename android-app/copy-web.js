@@ -23,7 +23,9 @@ if (!html.includes(VIEWPORT)) throw new Error('index.html viewport tag changed; 
 // android-early.js (the real pixel ratio for the scaled layout) must run before anything else reads it: right after the CSP tag
 const CSP = html.match(/<meta http-equiv="Content-Security-Policy"[^>]*>/);
 if (!CSP) throw new Error('index.html has no CSP meta tag; update copy-web.js');
-fs.writeFileSync(idx, html.replace(CSP[0], CSP[0] + '\n<script src="android-early.js"></script>\n<script src="perf-meter.js"></script>').replace(VIEWPORT, '<meta name="viewport" content="width=1440,user-scalable=no">').replace('</head>', '<link rel="stylesheet" href="android.css">\n<link rel="stylesheet" href="android-studio.css">\n</head>').replace(mockTag, mockTag + '\n' + androidTags).replace(tag, tag + '\n<script src="thor-hud.js"></script>\n<script src="android-touch.js"></script>'));
+// (beta.9) the Media tab's YouTube trailers play in YouTube's own frame (android-api.js previewYt): only youtube-nocookie.com
+const CSP_A = CSP[0].replace(/(content="[^"]*)"/, "$1; frame-src 'self' https://www.youtube-nocookie.com\""); // ('self': the bottom screen's page, which the browser preview and tests show in a frame)
+fs.writeFileSync(idx, html.replace(CSP[0], CSP_A + '\n<script src="android-early.js"></script>\n<script src="perf-meter.js"></script>').replace(VIEWPORT, '<meta name="viewport" content="width=1440,user-scalable=no">').replace('</head>', '<link rel="stylesheet" href="android.css">\n<link rel="stylesheet" href="android-studio.css">\n</head>').replace(mockTag, mockTag + '\n' + androidTags).replace(tag, tag + '\n<script src="thor-hud.js"></script>\n<script src="android-touch.js"></script>'));
 // (0.3.2) magazines & guides: android-reading.js after the other Android scripts (it builds on android-api.js), its stylesheet last
 { const h = fs.readFileSync(idx, 'utf8'), after = '<script src="android-wizard.js"></script>';
   if (!h.includes(after)) throw new Error('index.html has no android-wizard.js tag; update copy-web.js');

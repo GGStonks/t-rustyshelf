@@ -38,7 +38,7 @@ const hubWizard=()=>wizard&&onAndroid();
 // GameCube startup, launch options, your own art folder) keeps its default and lives in Settings.
 const winWizard=()=>wizard&&!onAndroid();
 function sectionList(){
-  if(winWizard())return [{id:"welcome",label:"Welcome"},{id:"pick",label:"Your consoles"},{id:"fix",label:"Finish setting up"},{id:"artlook",label:"Box art"},{id:"done",label:"Done"}];
+  if(winWizard())return [{id:"welcome",label:"Welcome"},{id:"pick",label:"Your consoles"},{id:"fix",label:"Finish setting up"},{id:"artlook",label:"Box art"},{id:"accounts",label:"Accounts"},{id:"done",label:"Done"}]; // (beta.9: Accounts, optional)
   const s=[],hub=!wizard||hubWizard();
   if(wizard)s.push({id:"welcome",label:"Welcome"});
   // the Android build's own wizard questions (android-wizard.js: games folder, box art, bottom screen, Home app), one per page;
@@ -59,6 +59,7 @@ function dotFor(sec){
   if(sec.id==="pick")return pickItems().some(x=>x.on())?"ok":"";
   if(sec.id==="fix")return fixNeeds().length?"warn":"ok";
   if(sec.id==="artlook")return cfg.ui.autoCovers===true?"ok":"";
+  if(sec.id==="accounts")return acctAny()?"ok":"";
   return "";
 }
 
@@ -77,7 +78,7 @@ async function open(opts){
   wizard=!!opts.wizard||!cfg.setupDone;
   // everything but the first-run wizard opens the full-screen Settings (settings.js); it hands the classic pages back here
   if(!wizard&&window.Settings&&Settings.show){legacyBack=null;Settings.show(info,opts);return}
-  steps=sectionList();step=0;hubMain.clear();hubMore=false;pickMain=null;pickMore=false;wizLook=null;artChosen=null;searched=false;
+  steps=sectionList();step=0;acctOsk=null;acctAsked=false;acctMore=false;hubMain.clear();hubMore=false;pickMain=null;pickMore=false;wizLook=null;artChosen=null;searched=false;
   $("setup").classList.add("on");$("setup").setAttribute("aria-hidden","false");
   render();
 }
@@ -179,7 +180,8 @@ function renderFoot(){
     if(sec.id==="done")f.append(el("button",{type:"button",class:"btn primary",onclick:finish},"Open Boxshelf"));
     else if(sec.parent)f.append(el("button",{type:"button",class:"btn primary",onclick:()=>{persist();stepBy(-1)}},"Done")); // a console page from the Consoles page: back to it
     else if(sec.id!=="welcome"){if(sec.id==="consoles"||sec.id==="pick")f.append(el("button",{type:"button",class:"btn",onclick:()=>runDetect(true)},detecting?"Searching…":"Search again"));
-      f.append(el("button",{type:"button",class:"btn primary",onclick:()=>{persist();stepBy(1)}},"Next"))}
+      // (beta.9) Accounts: "Skip for now" until something is filled in
+      f.append(el("button",{type:"button",class:"btn primary","data-next":sec.id,onclick:()=>{persist();stepBy(1)}},sec.id==="accounts"&&!acctAny()?"Skip for now":"Next"))}
   }else{
     if(sec.id==="consoles"||sec.console)f.append(el("button",{type:"button",class:"btn",onclick:()=>runDetect(true)},detecting?"Searching…":"Find emulators again"));f.append(el("div",{class:"grow"}),el("button",{type:"button",class:"btn primary",onclick:close},"Done"));
   }
@@ -198,7 +200,9 @@ function renderBody(){
   if(sec.extra)return sec.extra.render(b,wizCtx());
   if(sec.id==="pick")return pickSection(b);
   if(sec.id==="fix")return fixSection(b);
+  if(sec.id!=="accounts")acctOsk=null; // (the keyboard never follows you to another page)
   if(sec.id==="artlook")return artLookSection(b);
+  if(sec.id==="accounts")return acctSection(b);
   if(sec.id==="consoles")return consolesSection(b);
   if(sec.console){if(sec.parent)b.append(el("button",{type:"button",class:"su-back",onclick:()=>wizard?toHub(sec.id):(step=steps.findIndex(x=>x.id==="consoles"),render())},"‹ All consoles"));return consoleSection(b,sec.console)}
   if(sec.id==="steam")return steamSection(b);
@@ -373,7 +377,7 @@ function artLookSection(b){
   if(artChosen===null&&!(info.config&&info.config.setupDone)&&cfg.ui.autoCovers!==true){
     head(b,"Step 3 of 3","Download box art?","Boxshelf can find the covers, backs, spines, discs and manuals for your games online. To find them it sends your game titles (and GameCube / Wii disc IDs) to LaunchBox, libretro, GameTDB and the Super Mario Wiki. Nothing else about you or your PC is sent.");
     b.append(el("div",{class:"d-actions"},
-      el("button",{type:"button",class:"btn primary","data-art":"yes",onclick:()=>{artChosen=true;cfg.ui.autoCovers=true;if(cfg.ui.autoManuals==null)cfg.ui.autoManuals=true;if(!pvTouched&&api.previewFind)cfg.ui.previews="shelf";changed();render()}},"Yes, download box art"),
+      el("button",{type:"button",class:"btn primary","data-art":"yes",onclick:()=>{artChosen=true;cfg.ui.autoCovers=true;if(cfg.ui.autoManuals==null)cfg.ui.autoManuals=true;if(!pvTouched&&api.previewFind&&!(window.bsPlatform&&bsPlatform.os==="android"))cfg.ui.previews="shelf"; /* (beta.9: Android previews stay off until chosen) */changed();render()}},"Yes, download box art"),
       el("button",{type:"button",class:"btn","data-art":"no",onclick:()=>{artChosen=false;cfg.ui.autoCovers=false;cfg.ui.autoManuals=false;changed();stepBy(1)}},"Not now")));
     b.append(el("p",{class:"wz2-foot",text:"You can change this any time in Settings → Box art & manuals."}));
     return;
@@ -393,6 +397,84 @@ function artLookSection(b){
   const more=el("details",{class:"adv"},el("summary",{},"More options"));more.append(artLibCard("Where to keep box art & manuals"));b.append(more);
   b.append(el("p",{class:"wz2-foot",text:"You can change any console, or a single game, later in the Art Studio."}));
 }
+/* ---------- (beta.9) Accounts: the Windows first run's optional sign-ins and keys ----------
+   The same ones Settings → Accounts & services keeps (ra.user / ra.key, keys.*), saved the same way (main encrypts them).
+   Each card says what it adds, links to where its free key is made, and tests it. With a controller, A on a box (or its
+   Type button) brings up an on-screen keyboard; B puts it away. Skipping the page leaves everything as it was. */
+const ACCTS=[
+  {id:"ra",name:"RetroAchievements",what:"Achievements and your progress on each game's details, and a summary after you play.",
+    fields:[["Username","ra.user",false],["Web API key","ra.key",true]],link:"https://retroachievements.org/settings",get:"Get your key",how:"Sign in, then Settings → Keys → Web API Key."},
+  {id:"steamgriddb",name:"SteamGridDB",what:"Community-made posters for your games in the Art Studio, next to the real box scans.",
+    fields:[["API key","keys.steamgriddb",true]],link:"https://www.steamgriddb.com/profile/preferences/api",get:"Get a free key",how:"Sign in with Steam (free), then Preferences → API."},
+  {id:"screenscraper",name:"ScreenScraper",what:"Box backs, spines, and disc or cartridge art by region, in the Art Studio.",
+    fields:[["Username","keys.ssUser",false],["Password","keys.ssPass",true]],link:"https://www.screenscraper.fr/membreinscription.php",get:"Make a free account",how:"A free account allows a set number of look-ups a day."},
+  {id:"fanart",name:"fanart.tv",what:"Official disc art and logos for the museum's movie shelves.",
+    fields:[["API key","keys.fanart",true]],link:"https://fanart.tv/get-an-api-key/",get:"Get a free key",how:"A free personal key.",more:true}];
+const acctSt={},acctBusy={};let acctOsk=null,acctShift=false,acctAsked=false,acctMore=false; // acctOsk: the box the on-screen keyboard types into ("ra.key"…)
+const cget=p=>{let o=cfg;for(const k of p.split(".")){if(o==null||typeof o!=="object")return "";o=o[k]}return o==null?"":String(o)};
+const cset=(p,v)=>{const ks=p.split(".");let o=cfg;for(let i=0;i<ks.length-1;i++){if(o[ks[i]]==null||typeof o[ks[i]]!=="object")o[ks[i]]={};o=o[ks[i]]}o[ks[ks.length-1]]=v};
+const acctFilled=s=>s.fields.every(([,p])=>!!cget(p).trim());
+const acctAny=()=>ACCTS.some(s=>s.fields.some(([,p])=>!!cget(p).trim()));
+const onAcct=()=>!!(steps[step]&&steps[step].id==="accounts");
+function acctOkText(s,st){if(s.id==="ra")return st.points?`Connected · ${Number(st.points).toLocaleString()} pts`:"Connected";
+  if(s.id==="screenscraper")return st.left!=null?`Working · ${st.left} look-ups left today`:"Working";return "Key works"}
+function acctSection(b){
+  head(b,"Optional","Connect your accounts","Free sign-ins that add more to Boxshelf. Fill in any you like, or skip this page: they're all in Settings → Accounts & services later.");
+  // run again from Settings: what was tested before shows on its card
+  if(!acctAsked&&api.apiStatus){acctAsked=true;Promise.resolve(api.apiStatus()).then(st=>{if(!st)return;let any=false;
+    for(const s of ACCTS){const x=st[s.id];if(x&&(x.state==="ok"||x.state==="fail")&&!acctSt[s.id]){acctSt[s.id]=x;any=true}}if(any&&onAcct())render()}).catch(()=>{})}
+  ACCTS.filter(s=>!s.more).forEach(s=>b.append(acctCard(s)));
+  const more=ACCTS.filter(s=>s.more);
+  if(more.length){const d=el("details",{class:"adv wz2-acct-more"},el("summary",{},"More services"));if(acctMore)d.open=true;d.addEventListener("toggle",()=>{acctMore=d.open});more.forEach(s=>d.append(acctCard(s)));b.append(d)}
+  b.append(el("p",{class:"wz2-foot",text:"Keys are stored encrypted on this PC and sent only to their own service."}));
+}
+function acctCard(s){
+  const st=acctSt[s.id],busy=acctBusy[s.id];
+  const badge=busy?el("span",{class:"badge",text:"Checking…"}):st&&st.state==="ok"?el("span",{class:"badge ok",text:acctOkText(s,st)}):st&&st.state==="fail"?el("span",{class:"badge bad",text:"Didn't work"}):null;
+  const sec=el("section",{class:"card grp wz2-acct","data-svc":s.id}),box=el("div",{class:"grp-box"});
+  sec.append(el("div",{class:"grp-head"},el("div",{class:"grp-title"},el("span",{text:s.name}),badge),el("div",{class:"grp-d",text:s.what})));
+  // a box changed after a test: its old answer no longer applies
+  const stale=()=>{if(!acctSt[s.id])return;delete acctSt[s.id];const x=sec.querySelector(".grp-title .badge");if(x)x.remove();const m=sec.querySelector(".miss");if(m)m.remove()};
+  s.fields.forEach(([label,p,secret])=>{const typing=acctOsk===p;
+    const inp=el("input",{class:"text",type:secret&&!typing?"password":"text",value:cget(p),spellcheck:"false",autocomplete:"off",placeholder:"Not set","aria-label":`${s.name} ${label.toLowerCase()}`,"data-osk":p});
+    inp.addEventListener("input",()=>{cset(p,inp.value);stale();changed();renderFoot()});
+    inp.addEventListener("change",()=>{const v=inp.value.trim();inp.value=v;cset(p,v);changed()}); // (a pasted key often brings a space along)
+    inp.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();inp.blur();acctTest(s)}});
+    const kb=el("button",{type:"button",class:"btn small wz2-kb","aria-label":typing?"Hide the keyboard":`Type the ${label.toLowerCase()}`,onclick:()=>typing?acctOskClose():acctOskOpen(p)},typing?"Hide keyboard":"⌨ Type");
+    // Paste: most keys are copied from the service's page in the browser (Ctrl+V and right-click → Paste work too)
+    const paste=api.clipboardText?el("button",{type:"button",class:"btn small wz2-paste","data-paste":p,"aria-label":`Paste the ${label.toLowerCase()}`,onclick:()=>acctPaste(inp,p,stale)},"Paste"):null;
+    box.append(grpRow(label,"",null,el("div",{class:"row"},inp,paste,kb)));
+    if(typing)box.append(el("div",{class:"grp-item"},acctKeys(inp,p,stale)))});
+  if(st&&st.state==="fail")box.append(el("div",{class:"miss",text:"That didn't work: "+(st.msg||"not accepted")}));
+  const get=el("button",{type:"button",class:"btn small ghost",title:s.link,onclick:()=>openLink(s.link)},s.get+" ↗");
+  const test=el("button",{type:"button",class:"btn small","data-test":s.id,disabled:!!busy,onclick:()=>acctTest(s)},busy?"Checking…":"Test");
+  box.append(grpRow("",s.how,null,el("div",{class:"row-btns"},get,test)));
+  sec.append(box);return sec}
+// the on-screen keyboard (plain buttons: the D-pad / stick and A reach every key). Shift gives capitals, and the symbols over the digits
+const ACCT_KEYS=[["1","2","3","4","5","6","7","8","9","0"],["q","w","e","r","t","y","u","i","o","p"],["a","s","d","f","g","h","j","k","l","@"],["z","x","c","v","b","n","m",".","_","-"]];
+const ACCT_SHIFT={"1":"!","2":"#","3":"$","4":"%","5":"&","6":"*","7":"+","8":"=","9":"(","0":")","@":"?",".":",","_":"~","-":"/"};
+function acctKeys(inp,p,stale){
+  const put=v=>{cset(p,v);inp.value=v;stale();changed();renderFoot()};
+  const ch=c=>acctShift?(ACCT_SHIFT[c]||c.toUpperCase()):c;
+  const k=(label,run,cls,aria)=>el("button",{type:"button",class:"ia-key"+(cls?" "+cls:""),"aria-label":aria||label,onclick:e=>{e.preventDefault();run()}},label);
+  return el("div",{class:"ia-osk wz2-osk",role:"group","aria-label":"On-screen keyboard"},
+    ...ACCT_KEYS.map(row=>el("div",{class:"ia-krow"},...row.map(c=>{const t=ch(c);return k(t,()=>put(cget(p)+t))}))),
+    el("div",{class:"ia-krow"},k(acctShift?"abc":"ABC",()=>{acctShift=!acctShift;render()},"mid",acctShift?"Small letters":"Capitals and symbols"),k("Space",()=>put(cget(p)+" "),"wide"),
+      k("⌫",()=>put(cget(p).slice(0,-1)),"mid","Delete"),k("Clear",()=>put(""),"mid"),k("Done",()=>acctOskClose(),"go","Done typing")))}
+async function acctPaste(inp,p,stale){let t="";try{t=String(await api.clipboardText()||"").trim()}catch(e){}
+  if(!t){Shelf.toast("Nothing to paste: copy the key first");return}
+  cset(p,t);inp.value=t;stale();changed();renderFoot()}
+function acctOskOpen(p){acctOsk=p;acctShift=false;render();const k=$("suBody").querySelector(".wz2-osk .ia-key");if(k)focusEl(k)}
+function acctOskClose(){const p=acctOsk;acctOsk=null;render();const i=p&&$("suBody").querySelector(`input[data-osk="${p}"]`);if(i)focusEl(i)}
+async function acctTest(s){
+  if(acctBusy[s.id])return;
+  if(!acctFilled(s)){Shelf.toast(`Fill in the ${s.fields.map(f=>f[0].toLowerCase()).join(" and ")} first`);return}
+  acctBusy[s.id]=true;if(onAcct())render();
+  try{clearTimeout(saveT);await persist();acctSt[s.id]=api.testApi?await api.testApi(s.id):{state:"fail",msg:"Testing isn't available here"}}
+  catch(e){acctSt[s.id]={state:"fail",msg:e.message||String(e)}}
+  acctBusy[s.id]=false;const st=acctSt[s.id]||{};
+  Shelf.toast(st.state==="ok"?`${s.name} connected`:"That didn't work: "+(st.msg||"not accepted"));
+  if(onAcct())render()}
 // setup finishing (first run): "Sharpest" becomes the HD style for every picked console that has no style yet
 function applyLook(){
   if(info.config&&info.config.setupDone)return;if(lookNow()!=="hd"||cfg.ui.autoCovers!==true)return;
@@ -829,7 +911,7 @@ let pvTouched=false,pvFound=null;
 function pvCard(){const on=(cfg.ui.previews||"off")!=="off";
   const found=el("div",{class:"hint-text wz2-pvfound",text:on?(pvFound==null?"Looking for videos you already have…":pvFound?`Found videos for ${pvFound} of your games. Steam games get their trailers too.`:"No video files found yet: Steam games get their trailers, and other games YouTube's."):""});
   if(on&&pvFound==null&&api.previewCount){pvFound=-1;persist().then(()=>api.previewCount()).then(c=>{pvFound=c&&c.total||0;render()}).catch(()=>{pvFound=0;render()})}
-  return card("","",toggle("Play video previews",on,v=>{pvTouched=true;cfg.ui.previews=v?"shelf":"off";changed();render()},"wz2-pv"),
+  return card("","",toggle("Play video previews",on,v=>{pvTouched=true;cfg.ui.previews=v?(window.bsPlatform&&bsPlatform.os==="android"?"details":"shelf"):"off";changed();render()},"wz2-pv"),
     el("div",{class:"hint-text",text:"Rest on a game and its preview plays, on the shelf and in Details: videos you already have (ES-DE, EmuDeck, RetroBat, LaunchBox), Steam's trailers for Steam games, and YouTube trailers for the rest."}),
     on?found:null,
     on&&pvClipOk?toggle("Console trailers too (a short clip of each game's YouTube trailer, saved so it plays on the shelf; fetches a free 25 MB helper once)",cfg.ui.previewClips!==false,v=>{pvTouched=true;cfg.ui.previewClips=!!v;changed()},"wz2-pvclip"):null,
@@ -932,6 +1014,7 @@ function paneMove(a){
 function goBack(){if(wizard){if(step>0)stepBy(-1);else if(cfg&&cfg.setupDone)close()}else close()} // B on the first step of a re-run wizard leaves (a first run can't: nothing is set up yet)
 function key(e){
   if(opening)return;
+  if(e.key==="Escape"&&acctOsk){e.preventDefault();acctOskClose();return} // (the Accounts page's on-screen keyboard first)
   if(e.key==="Escape"){if(e.target&&e.target.tagName==="INPUT"){e.target.blur();return}e.preventDefault();goBack()}
 }
 function pad(a){
@@ -941,8 +1024,10 @@ function pad(a){
   if(ae&&ae.tagName==="SELECT"&&(a==="left"||a==="right")){const n=ae.options.length;if(n){ae.selectedIndex=Math.max(0,Math.min(n-1,ae.selectedIndex+(a==="right"?1:-1)));ae.dispatchEvent(new Event("input",{bubbles:true}));ae.dispatchEvent(new Event("change",{bubbles:true}))}return}
   if(ae&&ae.type==="range"&&(a==="left"||a==="right")){a==="right"?ae.stepUp():ae.stepDown();ae.dispatchEvent(new Event("input"));ae.dispatchEvent(new Event("change"));return}
   if(a==="up"||a==="down"||a==="left"||a==="right"){paneMove(a);return}
-  else if(a==="ok"){if(ae&&ae.tagName==="SELECT"){moveFocus(1);return}if(ae&&ae!==document.body&&$("setup").contains(ae))ae.click();else moveFocus(0)}
-  else if(a==="back")goBack();
+  else if(a==="ok"){if(ae&&ae.tagName==="SELECT"){moveFocus(1);return}
+    if(ae&&ae.tagName==="INPUT"&&ae.dataset.osk&&$("setup").contains(ae)){acctOskOpen(ae.dataset.osk);return} // (beta.9) a key box: the on-screen keyboard
+    if(ae&&ae!==document.body&&$("setup").contains(ae))ae.click();else moveFocus(0)}
+  else if(a==="back"){if(acctOsk){acctOskClose();return}goBack()}
 }
 
 function scroll(dy){if(opening)return;const ae=document.activeElement;let t=ae&&ae.classList&&ae.classList.contains("su-scroller")?ae:null;

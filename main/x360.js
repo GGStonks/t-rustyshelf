@@ -119,4 +119,6 @@ function lookup(file) {
   return { titleId, title: hit ? hit.title : null, compat: hit ? hit.state : null };
 }
 
-module.exports = { init, ensureDb, lookup, titleIdOf, xexTitleId };
+// (beta.9) changes whenever the title list is (re)loaded: part of the scanner's key, so kept scans pick up the new titles
+const stamp = () => (db ? 1 : 0) + ':' + dbAt;
+module.exports = { init, ensureDb, lookup, titleIdOf, xexTitleId, stamp };

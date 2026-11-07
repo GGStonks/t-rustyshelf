@@ -1,8 +1,8 @@
 // Device test pass "previews" (beta.7), run by web-device-test.js: the demo page as Windows on a 1920x1080 TV.
 //   Node side (main/previews.js): a game's video is found in ES-DE / EmuDeck / RetroBat / LaunchBox / your own folders,
 //   by file name then title; Steam's DASH manifest becomes the first ~20 s of its 480p video; YouTube links are read.
-//   Page: previews are off until chosen; in Details a preview opens under the title only once it plays, and is gone
-//   the moment Details closes; a YouTube trailer is laid over the same box (and steps aside while the panel scrolls);
+//   Page: previews are off until chosen; in Details (beta.9, Windows) the preview plays at the top of Overview, and is
+//   gone the moment Details closes; a console trailer clip still being made gets a waiting box, never YouTube's player;
 //   nothing starts while the shelf is busy; "Details and shelf" plays softly behind the cases and stops when you move;
 //   Settings has the Video previews rows; the first run offers previews with box art. Screenshots: previews-*.png.
 'use strict';
@@ -60,8 +60,13 @@ module.exports = async function previewsPass({ browser, base, check, OUT }) {
     const st0 = Y.status(); const f1 = await Y.clip('abcdefghijk'); const n1 = reads.length; const f2 = await Y.clip('abcdefghijk'); const bad = await Y.clip('gone0000000'); const bad2 = await Y.clip('gone0000000');
     const out = f1 && fs.readFileSync(f1), st1 = Y.status();
     check('Console trailers: a clip is the header plus those fragments, made once and kept (a removed video is not asked again)',
-      st0.helper && !!f1 && f1 === f2 && reads.length === n1 && n1 === 2 && out.length === head.length + want && out.subarray(0, head.length).equals(head) && /-f 135\[protocol=https\]\/134/.test(asked[0]) && /watch\?v=abcdefghijk$/.test(asked[0]) && bad === null && bad2 === null && asked.filter(a => /gone/.test(a)).length === 1 && st1.n === 1 && Y.cached('abcdefghijk') === f1,
+      st0.helper && !!f1 && f1 === f2 && reads.length === n1 && n1 === 2 && out.length === head.length + want && out.subarray(0, head.length).equals(head) && /-f 136\[protocol=https\]\/135\[protocol=https\]\/134/.test(asked[0]) && /\.hd\.mp4$/.test(f1) && /watch\?v=abcdefghijk$/.test(asked[0]) && bad === null && bad2 === null && asked.filter(a => /gone/.test(a)).length === 1 && st1.n === 1 && Y.cached('abcdefghijk') === f1,
       JSON.stringify({ helper: st0.helper, f1: !!f1, same: f1 === f2, reads, size: out && out.length, want: head.length + want, bad, asked: asked.length, kept: st1.n }));
+    // (beta.9) a 480p clip kept from before plays at once, its 720p one is made in the background, then the old one is gone
+    const oldF = path.join(dd, 'previews', 'youtube', 'oldclip0001.mp4'); fs.writeFileSync(oldF, 'old');
+    const c0 = Y.cached('oldclip0001'), up = await Y.clip('oldclip0001'), c1 = Y.cached('oldclip0001');
+    check('Console trailers: a 480p clip from before plays at once, is remade from the 720p stream in the background, and the old one is removed',
+      c0 === oldF && !!up && /oldclip0001\.hd\.mp4$/.test(up) && c1 === up && !fs.existsSync(oldF), JSON.stringify({ c0: c0 && path.basename(c0), up: up && path.basename(up), c1: c1 && path.basename(c1), oldLeft: fs.existsSync(oldF) }));
     // offline is not "gone": nothing is marked, clips pause for a while instead of asking again on every rest
     Y._reset(); const asked2 = [];
     Y._setRun(async args => { asked2.push(args[args.length - 1].slice(-11)); throw new Error('ERROR: [youtube] off0000000a: Unable to download webpage: <urlopen error [Errno 11001] getaddrinfo failed>'); });
@@ -96,31 +101,38 @@ module.exports = async function previewsPass({ browser, base, check, OUT }) {
     const off = await media(); await page.keyboard.press('Escape'); await pause(500);
     check('Previews: off until you choose them (Details stays as it was)', !/\bon\b/.test(off.cls) && !off.src && !off.yt, JSON.stringify(off));
 
-    // Details: a file preview, then a YouTube one
+    // Details: a file preview, then a console trailer clip still being made
     await ready('?platform=windows&shelf=1&previews=details'); await toGame();
-    // (Details redone: a video file plays behind the case on Overview and moves into the Media tab's box; YouTube plays in
-    // Media only)
+    // (beta.9, Windows: the trailer sits at the top of Overview with the info under it; the Media tab is gone. A video file
+    // plays framed there and steps behind the case on Your copy; YouTube's own player is never loaded there by itself)
     let file = null, yt = null; const seen = [];
-    for (let i = 0; i < 8 && !(file && yt); i++) {
-      await page.keyboard.press('i'); await pause(1500); // (the rest delay is 1 s here)
-      for (let w = 0; w < 25; w++) { const m = await media(); if (m.bg) break; await pause(400); } // (the page records its pretend clip the first time: slow on a build machine)
-      let m = await media(); seen.push([m.tab, m.bg, m.bgSrc, m.cls, (await page.evaluate(() => { const g = Shelf._lib.cur(); return g && g.title; }))].join('/'));
-      if (!file && m.bg && m.bgSrc && m.tab === 'overview') { file = m; await page.screenshot({ path: path.join(OUT, 'previews-details.png') }); await pause(600); file.t2 = (await media()).bgT;
-        await page.keyboard.press('e'); await pause(1200); const mm = await media(); file.inBox = mm.tab === 'media' && /\bready\b/.test(mm.cls) && mm.src && !mm.bg; await page.screenshot({ path: path.join(OUT, 'previews-media-tab.png') });
-        await page.keyboard.press('q'); await pause(1200); file.backBehind = (await media()).bg; }
-      else if (!yt && !m.bg) { await page.keyboard.press('e'); await pause(1400); m = await media();
-        if (/\byt\b/.test(m.cls) && m.yt) { yt = m; const d = await page.evaluate(() => { const r = document.getElementById('details').getBoundingClientRect(); return { l: r.left, r: r.right }; }); yt.inPanel = m.rect && m.rect.x >= d.l - 1 && m.rect.x + m.rect.w <= d.r + 1 && m.rect.w > 200;
-          const canScroll = await page.evaluate(() => { const d = document.getElementById('details'); d.scrollTop = 120; return d.scrollTop > 0; }); await pause(60); yt.hidWhileScrolling = !canScroll || !(await media()).yt; /* (a short Media tab can't scroll: nothing to step aside for) */ await pause(400); yt.back = (await media()).yt;
-          await page.evaluate(() => { document.getElementById('details').scrollTop = 0; }); await pause(400);
-          await page.keyboard.press('q'); await pause(500); yt.leftWithTab = !(await media()).yt; await page.keyboard.press('e'); await pause(900); } }
+    for (let i = 0; i < 8 && !file; i++) {
+      await page.keyboard.press('i'); await pause(1500);
+      for (let w = 0; w < 25; w++) { const m = await media(); if (/\bready\b/.test(m.cls) || m.yt) break; await pause(400); } // (the page records its pretend clip the first time: slow on a build machine)
+      let m = await media(); seen.push([m.tab, m.bg, m.src, m.cls, (await page.evaluate(() => { const g = Shelf._lib.cur(); return g && g.title; }))].join('/'));
+      if (!file && m.tab === 'overview' && /\bready\b/.test(m.cls) && m.src && !m.bg && !/\byt\b/.test(m.cls)) { file = m; await page.screenshot({ path: path.join(OUT, 'previews-details.png') }); await pause(600); file.t2 = (await media()).t;
+        file.above = await page.evaluate(() => { const b = document.getElementById('dMedia'), a = ['dSecAbout', 'dSecInfo', 'dGrid'].map(id => document.getElementById(id)).find(e => e && !e.hidden && e.getBoundingClientRect().height > 0); // (the first info shown: a game without a description has no About)
+          return !!a && b.closest('[data-pane="overview"]') !== null && b.getBoundingClientRect().bottom <= a.getBoundingClientRect().top + 1; });
+        await page.keyboard.press('e'); await pause(1200); const mm = await media(); file.behind = mm.tab === 'copy' && mm.bg && !/\bon\b/.test(mm.cls);
+        await page.keyboard.press('q'); await pause(1200); const m3 = await media(); file.backInBox = m3.tab === 'overview' && /\bready\b/.test(m3.cls) && m3.src && !m3.bg; }
       await page.keyboard.press('Escape'); await pause(700);
-      const after = await media(); if (file && !file.closed) file.closed = !after.src && !after.bgSrc && !after.bg; if (yt && !yt.closed) yt.closed = !after.yt && after.stops > 0;
+      const after = await media(); if (file && !file.closed) file.closed = !after.src && !after.bgSrc && !after.bg;
       await page.keyboard.press('ArrowRight'); await pause(700);
     }
-    check('Previews in Details: a video plays behind the case once it has a picture, moves into the Media tab\'s box and back, and stops the moment Details closes',
-      !!file && file.t2 !== file.bgT && file.inBox && file.backBehind && file.closed, JSON.stringify(file ? { t: file.bgT, t2: file.t2, inBox: file.inBox, back: file.backBehind, closed: file.closed } : seen));
-    check('Previews in Details: a YouTube trailer plays in the Media tab\'s box, steps aside while the panel scrolls or the tab changes, and is gone after Details',
-      !!yt && yt.inPanel && yt.hidWhileScrolling && yt.back && yt.leftWithTab && yt.closed, JSON.stringify(yt && { inPanel: yt.inPanel, hid: yt.hidWhileScrolling, back: yt.back, tab: yt.leftWithTab, closed: yt.closed }));
+    check('Previews in Details (Windows): a video plays framed at the top of Overview above the info, steps behind the case on Your copy and back, and stops the moment Details closes',
+      !!file && file.t2 !== file.t && file.above && file.behind && file.backInBox && file.closed, JSON.stringify(file ? { t: file.t, t2: file.t2, above: file.above, behind: file.behind, back: file.backInBox, closed: file.closed } : seen));
+    // a console game whose trailer clip is still being made (main answers "youtube, pending"): Overview's box opens at once
+    // with the game's art and waits for the clip; YouTube's own player is never loaded by itself (it lagged and took the
+    // controller away), and the clip plays when it's ready
+    await ready('?platform=windows&shelf=1&previews=details&clips=1&helper=1'); await toGame();
+    await page.keyboard.press('i'); let wait0 = null; for (let w = 0; w < 20 && !wait0; w++) { await pause(100); const m0 = await media(); if (/\bon\b/.test(m0.cls)) wait0 = m0; }
+    // (Your copy and straight back while it's still being made: the waiting box is there again)
+    await page.keyboard.press('e'); await pause(250); await page.keyboard.press('q'); await pause(250); const rt = await media();
+    let ready1 = null; for (let w = 0; w < 30 && !ready1; w++) { await pause(300); const m1 = await media(); if (/\bready\b/.test(m1.cls)) ready1 = m1; }
+    yt = { waiting: wait0 && wait0.cls, ytWhileWaiting: wait0 ? wait0.yt : null, roundTrip: rt.tab === 'overview' && /\bon\b/.test(rt.cls), played: ready1 && ready1.cls, src: ready1 && ready1.src, ytAfter: (await media()).yt };
+    await page.keyboard.press('Escape'); await pause(600);
+    check('Previews in Details (Windows): while a console trailer clip is made, Overview\'s box opens at once and waits for it without loading YouTube\'s player (it lagged and took the controller), then plays the clip',
+      !!yt.waiting && !/\byt\b/.test(yt.waiting) && yt.ytWhileWaiting === false && yt.roundTrip && !!yt.played && yt.src && yt.ytAfter === false, JSON.stringify(yt));
     // Details' layout: Play and three small buttons, the rest in More (opened and closed with the keyboard and B / Esc)
     await page.keyboard.press('i'); await pause(1200);
     const lay = await page.evaluate(() => { const bar = [...document.querySelectorAll('#details .d-actions > button')].filter(b => !b.hidden).map(b => b.id), menu = [...document.querySelectorAll('#dMenu button')].filter(b => !b.hidden).map(b => b.id);
@@ -129,7 +141,72 @@ module.exports = async function previewsPass({ browser, base, check, OUT }) {
     await page.keyboard.press('Escape'); await pause(400); const shut = await page.evaluate(() => document.getElementById('dMenu').hidden && Shelf.getMode() === 'details');
     await page.keyboard.press('Escape'); await pause(500);
     check('Details: Play with Manual, Inspect and More beside it; the rest in More (Esc closes More first, then Details); tabs and a stats strip',
-      JSON.stringify(lay.bar) === JSON.stringify(['dPlay', 'dManual', 'dInspect', 'dMoreBtn']) && lay.menu.includes('dBoxArt') && lay.menu.includes('dRename') && lay.menu.includes('dCols') && lay.tabs.join() === 'overview,media,copy' && lay.stats === 3 && open && shut, JSON.stringify({ ...lay, open, shut }));
+      JSON.stringify(lay.bar) === JSON.stringify(['dPlay', 'dManual', 'dInspect', 'dMoreBtn']) && lay.menu.includes('dBoxArt') && lay.menu.includes('dRename') && lay.menu.includes('dCols') && lay.tabs.join() === 'overview,copy' && lay.stats === 3 && open && shut, JSON.stringify({ ...lay, open, shut }));
+    // (beta.9) Details buttons in Settings' style (Windows): Play lit, the small buttons slim icons that show their name on the
+    // controller, Settings' highlight gliding under the one you're on, and the row never wider than the panel
+    await page.mouse.move(5, 5); // (the More click above left the pointer on More: hovering it rightly opens its name)
+    await page.keyboard.press('i'); await pause(1200);
+    const sl = await page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), out = {};
+      const pad = { id: 'Test pad', index: 0, connected: true, mapping: 'standard', timestamp: 0, axes: [0, 0, 0, 0], buttons: Array.from({ length: 17 }, () => ({ pressed: false, touched: false, value: 0 })) };
+      Object.defineProperty(navigator, 'getGamepads', { configurable: true, value: () => [pad, null, null, null] }); window.dispatchEvent(Object.assign(new Event('gamepadconnected'), { gamepad: pad }));
+      const press = async b => { pad.buttons[b] = { pressed: true, touched: true, value: 1 }; pad.timestamp++; await w(150); pad.buttons[b] = { pressed: false, touched: false, value: 0 }; pad.timestamp++; await w(450); };
+      const bar = document.querySelector('#details .d-actions'), $ = id => document.getElementById(id);
+      out.fits = bar.scrollWidth <= bar.clientWidth + 1; out.slim = ['dManual', 'dInspect', 'dMoreBtn'].every(id => $(id).offsetWidth < 64);
+      out.lit = getComputedStyle($('dPlay')).backgroundImage.includes('gradient');
+      // (where things end up is what's judged, not the animation: a software-drawn runner was still mid-glide after 3 s)
+      const still = document.createElement('style'); still.textContent = '#details .d-actions, #details .d-actions *, #details .d-actions::before { transition: none !important; animation: none !important }'; document.head.appendChild(still);
+      // Play → Manual → Inspect: right until Inspect has the focus (a slow runner can miss a press: at most six, then judged)
+      const onId = () => (document.querySelector('#details .pad-focus') || {}).id;
+      for (let i = 0; i < 6 && onId() !== 'dInspect'; i++) await press(15);
+      // (the highlight's glide and the name opening are transitions: a software-drawn runner finishes them late, so they are
+      // judged once settled, up to 3 s)
+      const f = document.querySelector('#details .pad-focus'), hl = bar.querySelector('.d-hl'), sp = f && f.querySelector('span'); out.on = f && f.id;
+      const judge = () => { if (!f || !hl) return; const a = f.getBoundingClientRect(), b = hl.getBoundingClientRect(); out.glide = hl.classList.contains('on') && Math.abs(a.left - b.left) < 2 && Math.abs(a.width - b.width) < 2;
+        out.named = !!sp && getComputedStyle(sp).opacity === '1' && f.offsetWidth > 64; };
+      for (let i = 0; i < 15; i++) { await w(200); judge(); if (out.glide && out.named) break; }
+      if (!(out.glide && out.named) && f && hl) { const a = f.getBoundingClientRect(), b = hl.getBoundingClientRect(); out.dbg = { f: [Math.round(a.left), Math.round(a.width)], hl: [Math.round(b.left), Math.round(b.width)], hlOn: hl.classList.contains('on'), op: sp && getComputedStyle(sp).opacity, iw: innerWidth, pad: document.body.classList.contains('pad-input') }; }
+      out.fits2 = bar.scrollWidth <= bar.clientWidth + 1; still.remove();
+      try { delete navigator.getGamepads; } catch (e) {} // (the test's own "no controllers" on the prototype comes back)
+      return out; });
+    await page.keyboard.press('Escape'); await pause(500);
+    check('Details (Windows): Play lit, Manual / Inspect / More slim icons; on the controller the one you\'re on shows its name with Settings\' highlight under it, and the row fits the panel',
+      sl.fits && sl.slim && sl.lit && sl.on === 'dInspect' && sl.glide && sl.named && sl.fits2, JSON.stringify(sl));
+    // a narrow window (under 761 px: Details is the phone-style sheet): moving along the buttons with the controller never
+    // shifts them (the highlight layer is never a flex item of the row)
+    await page.setViewportSize({ width: 700, height: 900 }); await pause(700); await page.keyboard.press('i'); await pause(1200);
+    const nw = await page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), out = {};
+      const pad = { id: 'Test pad', index: 0, connected: true, mapping: 'standard', timestamp: 0, axes: [0, 0, 0, 0], buttons: Array.from({ length: 17 }, () => ({ pressed: false, touched: false, value: 0 })) };
+      Object.defineProperty(navigator, 'getGamepads', { configurable: true, value: () => [pad, null, null, null] }); window.dispatchEvent(Object.assign(new Event('gamepadconnected'), { gamepad: pad }));
+      const press = async b => { pad.buttons[b] = { pressed: true, touched: true, value: 1 }; pad.timestamp++; await w(150); pad.buttons[b] = { pressed: false, touched: false, value: 0 }; pad.timestamp++; await w(450); };
+      const bar = document.querySelector('#details .d-actions'), xs = () => [...bar.querySelectorAll(':scope>button')].filter(b => !b.hidden).map(b => b.offsetLeft + ',' + b.offsetTop).join(' ');
+      const onId = () => (document.querySelector('#details .pad-focus') || {}).id; // (a slow runner can miss a press: right until the controller is off Play, at most six)
+      out.x0 = xs(); await press(15); for (let i = 0; i < 6 && (!onId() || onId() === 'dPlay'); i++) await press(15); await press(15); await w(300); out.x1 = xs(); out.on = onId();
+      const hl = bar.querySelector(':scope>.d-hl'); out.hlFlex = !!hl && getComputedStyle(hl).position !== 'absolute' && getComputedStyle(hl).display !== 'none';
+      try { delete navigator.getGamepads; } catch (e) {} return out; });
+    await page.keyboard.press('Escape'); await pause(500); await page.setViewportSize({ width: 1920, height: 1080 }); await pause(700);
+    check('Details (Windows, narrow window): moving along the buttons with the controller never shifts them',
+      nw.x0 === nw.x1 && !!nw.on && nw.on !== 'dPlay' && !nw.hlFlex, JSON.stringify(nw));
+    // (beta.9) the screenshot strip in Overview: with the controller the picture you're on is centred by a smooth scroll and
+    // never cut off at the strip's edge
+    await ready('?platform=windows&shelf=1&previews=details&shots=1'); await toGame(); // (the demo games with eight screenshots each; previews on, as the checks after this expect)
+    const ss = await page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), out = {};
+      const key = k => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true })); key('i'); await w(1500);
+      const pad = { id: 'Test pad', index: 0, connected: true, mapping: 'standard', timestamp: 0, axes: [0, 0, 0, 0], buttons: Array.from({ length: 17 }, () => ({ pressed: false, touched: false, value: 0 })) };
+      Object.defineProperty(navigator, 'getGamepads', { configurable: true, value: () => [pad, null, null, null] }); window.dispatchEvent(Object.assign(new Event('gamepadconnected'), { gamepad: pad }));
+      const press = async b => { pad.buttons[b] = { pressed: true, touched: true, value: 1 }; pad.timestamp++; await w(150); pad.buttons[b] = { pressed: false, touched: false, value: 0 }; pad.timestamp++; await w(500); };
+      const foc = () => document.querySelector('#details .pad-focus');
+      out.path = []; out.shots = document.querySelectorAll('#dShots .d-shot').length; out.shotsHidden = document.getElementById('dShots').hidden;
+      for (let i = 0; i < 10 && !(foc() && foc().classList.contains('d-shot')); i++) { await press(13); const f = foc(); out.path.push(f ? (f.id || f.className || f.tagName) : '-'); }
+      out.inStrip = !!(foc() && foc().classList.contains('d-shot'));
+      const strip = document.getElementById('dShots'), lefts = [];
+      for (let i = 0; i < 4; i++) { pad.buttons[15] = { pressed: true, touched: true, value: 1 }; pad.timestamp++; await w(150); pad.buttons[15] = { pressed: false, touched: false, value: 0 }; pad.timestamp++;
+        for (let t = 0; t < 6; t++) { await w(40); lefts.push(Math.round(strip.scrollLeft)); } await w(500); }
+      const f = foc(), r = f.getBoundingClientRect(), q = strip.getBoundingClientRect();
+      out.steps = new Set(lefts).size; out.scrolled = strip.scrollLeft > 0; out.centre = Math.round(Math.abs((r.left + r.right) / 2 - (q.left + q.right) / 2));
+      out.inside = r.left >= q.left - 1 && r.right <= q.right + 1; out.index = [...strip.children].indexOf(f);
+      try { delete navigator.getGamepads; } catch (e) {} key('Escape'); await w(600); return out; });
+    check('Details (Windows): with the controller the screenshot strip glides to centre the picture you\'re on, which is never cut off',
+      ss.inStrip && ss.scrolled && ss.steps >= 4 && ss.centre <= 40 && ss.inside, JSON.stringify(ss));
 
     // nothing starts while the shelf is busy
     await page.evaluate(() => { window.__busy = window.BS_BUSY; window.BS_BUSY = () => true; });
@@ -155,9 +232,10 @@ module.exports = async function previewsPass({ browser, base, check, OUT }) {
     await page.keyboard.press('ArrowRight'); await pause(900); await page.keyboard.press('ArrowLeft'); await pause(900);
     let again = false, t0 = Date.now(); for (let w = 0; w < 20 && !again; w++) { await pause(300); again = await page.evaluate(() => document.getElementById('app').classList.contains('pv-on')); }
     const againMs = Date.now() - t0, made2 = await page.evaluate(() => window.__clipsMade || 0);
-    await page.keyboard.press('i'); let dc = false; for (let w = 0; w < 25 && !dc; w++) { await pause(400); dc = await page.evaluate(() => document.getElementById('app').classList.contains('pv-det')); }
+    // (beta.9, Windows: in Details the clip plays in Overview's box, not behind the case)
+    await page.keyboard.press('i'); let dc = false; for (let w = 0; w < 25 && !dc; w++) { await pause(400); dc = await page.evaluate(() => { const b = document.getElementById('dMedia'); return b.classList.contains('ready') && !!document.getElementById('dVideo').getAttribute('src') && !window.__ytOn; }); }
     await page.screenshot({ path: path.join(OUT, 'previews-console-clip.png') }); await page.keyboard.press('Escape'); await pause(600);
-    check('Console trailers: a console game\'s clip plays behind the shelf once it\'s made, is reused the next time (not made again), and plays behind the case in Details',
+    check('Console trailers: a console game\'s clip plays behind the shelf once it\'s made, is reused the next time (not made again), and plays in Overview\'s box in Details',
       cb && made === 1 && again && made2 === 1 && dc, JSON.stringify({ game: cg, shelf: cb, made, again, againMs, made2, details: dc }));
 
     // (beta.8) no helper yet: a card on the shelf says so once, and its button gets it
@@ -175,12 +253,12 @@ module.exports = async function previewsPass({ browser, base, check, OUT }) {
     const side = await page.evaluate(() => [...document.querySelectorAll('.bss-side .bss-nav')].map(e => e.textContent.trim()));
     await page.locator('.bss-side .bss-nav', { hasText: 'Video previews' }).first().click(); // (as a person would: the side list)
     const list =() => page.evaluate(() => ((document.querySelector('.bss-scroll') || {}).innerText || ''));
-    let st = ''; for (let w = 0; w < 20 && !/Console trailers/.test(st); w++) { await pause(300); st = await list(); }
+    let st = ''; for (let w = 0; w < 60 && !(/Console trailers/.test(st) && /Found|23 games/.test(st)); w++) { await pause(300); st = await list(); } // (slow build machines)
     const getBtn = page.getByText(/^Get the trailer helper/).first(); let got = '';
-    if (await getBtn.count()) { await getBtn.click(); for (let w = 0; w < 20 && !/Console trailer clips/.test(got); w++) { await pause(300); got = await list(); } }
+    if (await getBtn.count()) { await getBtn.click(); for (let w = 0; w < 60 && !/Console trailer clips/.test(got); w++) { await pause(300); got = await list(); } }
     check('Settings: Video previews is its own section under Library (after Box art & manuals): where they play, Console trailers with its helper, sound, start after, YouTube, the videos found',
       artRows === 0 && side.includes('Video previews') && side.indexOf('Video previews') > side.indexOf('Box art & manuals') && side.indexOf('Video previews') < side.indexOf('Magazines & guides') &&
-      /Play previews/.test(st) && /Console trailers/.test(st) && /Get the trailer helper/.test(st) && /Play previews with sound/.test(st) && /Start a preview after/.test(st) && /YouTube.s player in the Media tab/.test(st) && /23 games|Found/i.test(st) && /Console trailer clips/.test(got),
+      /Play previews/.test(st) && /Console trailers/.test(st) && /Get the trailer helper/.test(st) && /Play previews with sound/.test(st) && /Start a preview after/.test(st) && !/YouTube.s player/.test(st) /* (beta.9: the Thor only) */ && /23 games|Found/i.test(st) && /Console trailer clips/.test(got),
       JSON.stringify({ artRows, side: side.filter(s => /Box art|Video|Magazines/.test(s)), rows: st.split('\n').filter(l => /video|preview|trailer|helper/i.test(l)).slice(0, 9), helperAfter: /Console trailer clips/.test(got) }));
 
     // first run: box art yes → previews offered, on, with what was found
@@ -195,4 +273,40 @@ module.exports = async function previewsPass({ browser, base, check, OUT }) {
     check('Previews pass: no page errors', !errors.length, errors.slice(0, 3).join(' | '));
   } catch (e) { check('Previews pass ran to the end', false, e.message.split('\n')[0]); try { await page.screenshot({ path: path.join(OUT, 'previews-fail.png') }); } catch {} }
   await ctx.close();
+
+  // ---------- (beta.9) the Thor (pretend device): off until chosen; then a video beside the game plays in Details ----------
+  { const tctx = await browser.newContext({ viewport: { width: 853, height: 480 }, deviceScaleFactor: 2.25, hasTouch: true, isMobile: true });
+    tctx.setDefaultTimeout(90000);
+    await tctx.addInitScript({ content: 'window.__previewUrl = "/__test/preview.webm";' });
+    await tctx.route('**/__test/preview.webm', r => r.fulfill({ path: path.join(__dirname, 'fixtures', 'preview.webm'), contentType: 'video/webm' }));
+    const tp = await tctx.newPage(), terr = []; tp.on('pageerror', e => terr.push(e.message));
+    try {
+      await tp.goto(base + '?fakeNative=1'); await tp.waitForTimeout(4000);
+      const first = await tp.evaluate(async () => { const api = window.boxshelf, info = await api.getConfig(), det = await api.detect(), c = info.config, was = (c.ui || {}).previews || 'off';
+        c.systems.gc.romDirs = [await api.pick({ kind: 'folder' })]; c.systems.gc.emulator = det.systems.gc.emulator; c.setupDone = true; c.ui.previews = 'details'; c.ui.previewDelay = 1; await api.saveConfig(c); await api.scan(); return was; });
+      await tp.goto(base + '?fakeNative=1'); await tp.waitForFunction(() => window.Shelf && Shelf._lib && Shelf._lib.cur(), null, { timeout: 90000, polling: 250 }); await tp.waitForTimeout(3000);
+      for (let i = 0; i < 6 && !/Pikmin/.test(await tp.evaluate(() => (Shelf._lib.cur() || {}).title || '')); i++) { await tp.keyboard.press('ArrowRight'); await tp.waitForTimeout(900); }
+      const onShelf = await tp.evaluate(() => document.getElementById('app').classList.contains('pv-on'));
+      await tp.keyboard.press('i'); let det = false; for (let w = 0; w < 30 && !det; w++) { await tp.waitForTimeout(400); det = await tp.evaluate(() => document.getElementById('app').classList.contains('pv-det')); }
+      const copied = await tp.evaluate(() => (window.__copied || []).join(' ')); await tp.screenshot({ path: path.join(OUT, 'previews-thor-details.png') });
+      await tp.keyboard.press('Escape'); await tp.waitForTimeout(800); const after = await tp.evaluate(() => !document.getElementById('pvBack').getAttribute('src') || !document.getElementById('app').classList.contains('pv-det'));
+      await tp.evaluate(() => Setup.open({ page: 'shelf' })); await tp.waitForTimeout(1800);
+      const row = await tp.evaluate(() => ((document.querySelector('.bss-scroll') || {}).innerText || '').includes('Video previews'));
+      check('Thor: previews start off; switched on, a video beside the game plays behind the case in Details (copied into the app once), never behind the moving shelf; Settings → Shelf & museum has them',
+        first === 'off' && !onShelf && det && /Pikmin%20\(USA\)\.mp4|Pikmin \(USA\)\.mp4/.test(decodeURIComponent(copied)) && after && row, JSON.stringify({ first, onShelf, det, copied: copied.slice(-60), after, row }));
+      // (beta.9) Ports & custom APKs: an app switched on in Settings moves to a Custom shelf of its own, off the Apps shelf
+      await tp.evaluate(() => window.Settings && Settings.close && Settings.close()); await tp.waitForTimeout(1200);
+      await tp.evaluate(() => Setup.open({ page: 'android-ports' })); let prow = null;
+      for (let w = 0; w < 25 && !prow; w++) { await tp.waitForTimeout(300); prow = await tp.evaluate(() => { const n = [...document.querySelectorAll('.bss-scroll .bss-row .nm')].map(e => e.textContent).find(x => x && !/Looking for your apps|No apps found/.test(x)); return n || null; }); }
+      if (prow) await tp.evaluate(name => { const r = [...document.querySelectorAll('.bss-scroll .bss-row')].find(e => (e.querySelector('.nm') ? e.querySelector('.nm').textContent : e.textContent.trim().split('\n')[0]) === name); r && r.click(); }, prow);
+      await tp.waitForTimeout(1500); await tp.evaluate(() => window.Settings && Settings.close && Settings.close());
+      let sh = null; for (let w = 0; w < 30; w++) { await tp.waitForTimeout(500); sh = await tp.evaluate(() => Shelf._lib.shelves().map(s => ({ id: s.id, ids: s.ids }))); if (sh.some(s => s.id === 'custom')) break; }
+      const cust = (sh || []).find(s => s.id === 'custom'), appsSh = (sh || []).find(s => s.id === 'media');
+      const lib = await tp.evaluate(async () => (await window.boxshelf.cachedLibrary()).filter(s => s.id === 'custom' || s.id === 'media').map(s => ({ id: s.id, titles: s.games.map(g => g.title) })));
+      const portTitles = ((lib.find(s => s.id === 'custom') || {}).titles) || [], appTitles = ((lib.find(s => s.id === 'media') || {}).titles) || [];
+      check('Thor: Ports & custom APKs: an app switched on gets a Custom shelf of its own and leaves the Apps shelf',
+        !!prow && portTitles.includes(prow) && !appTitles.includes(prow) && !!cust, JSON.stringify({ prow, portTitles, appTitles: appTitles.slice(0, 5), shelves: (sh || []).map(s => s.id) }));
+      check('Thor previews: no page errors', !terr.length, terr.slice(0, 3).join(' | '));
+    } catch (e) { check('Thor previews ran to the end', false, e.message.split('\n')[0]); }
+    await tctx.close(); }
 };

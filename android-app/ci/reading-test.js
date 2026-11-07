@@ -36,7 +36,8 @@ module.exports = async function readingPass({ browser, base, check, newPage, OUT
 
     // ---- Settings → Magazines & guides ----
     await page.evaluate(() => Setup.open({ page: 'reading' }));
-    await until(() => /Your magazines & guides[\s\S]*1 magazine · 1 guide/.test((document.querySelector('#bss') || {}).innerText || ''), null, 30000);
+    // (beta.9: waits for the whole line it checks, the folder included: it can come a moment after the counts on a slow machine)
+    await until(() => /Your magazines & guides[\s\S]*1 magazine · 1 guide · ROMs\/Boxshelf Reading/.test((document.querySelector('#bss') || {}).innerText || ''), null, 30000);
     const set = await page.evaluate(() => (document.querySelector('#bss') || {}).innerText || '');
     await page.screenshot({ path: path.join(OUT, 'R0-settings-reading.png') });
     check('Store: Settings → Magazines & guides has the store and "Your magazines & guides" (no PC folder rows)', /Magazines & guides store/.test(set) && /Your magazines & guides/.test(set) && !/Magazines & guides folder|Guides folder|Bring them over/.test(set),

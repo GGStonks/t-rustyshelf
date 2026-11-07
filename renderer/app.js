@@ -452,8 +452,23 @@ function ensureBack(onlyReal){
   // on settle only real back art is attached; a generated back (10–90 ms of drawing) waits until you actually flip
   if(onlyReal){const g0=curGame();if(!g0||!(g0.art&&g0.art.back))return}
   s.backDrawn=true;
-  const g=curGame(),img=new Image();img.alt="";img.draggable=false;img.decoding="async";img.onerror=()=>{img.onerror=null;img.src=Covers.back(stOf(g),g,infoRows(g).slice(0,5),g.info&&g.info.overview)};img.src=backUrl(g);s.back.appendChild(img);
+  const g=curGame(),img=new Image();img.alt="";img.draggable=false;img.decoding="async";img.onerror=()=>{img.onerror=null;img.src=Covers.back(stOf(g),g,infoRows(g).slice(0,5),g.info&&g.info.overview)};
+  // (beta.9) a made-up back not ready yet: its JPEG is encoded in the worker and the picture goes in a moment later
+  // (the flip never waits for it; prepBack usually made it while you were resting on the game)
+  if((g.art&&g.art.back)||!Covers.backAsync||Covers.hasBack(stOf(g),g))img.src=backUrl(g);
+  else Covers.backAsync(stOf(g),g,infoRows(g).slice(0,5),g.info&&g.info.overview).then(u=>{if(u&&!img.src)img.src=u}).catch(()=>{img.src=backUrl(g)});
+  s.back.appendChild(img);
 }
+// (beta.9) Details' backdrop: a screenshot is decoded off the main thread first, then put in (if that game is still open)
+let heroBgWant="";
+function heroBgSoon(u,g){heroBgWant=u;const im=new Image();im.decoding="async";im.src=u;
+  const put=()=>{if(heroBgWant===u&&mode==="details"&&curGame()===g)$("dHeroBg").style.backgroundImage=`url("${String(u).replace(/"/g,"%22")}")`};
+  (im.decode?im.decode():Promise.resolve()).then(put,put)}
+// (beta.9) rest on a game with no back art of its own and its made-up back is made in idle time (requestIdleCallback
+// waits for a still shelf, perf.js), so the first flip shows it at once instead of drawing it then
+function prepBack(s,g){if(!g||(g.art&&g.art.back)||!Covers.backAsync||Covers.hasBack(stOf(g),g))return;
+  const run=()=>{if(slots[sel]!==s||curGame()!==g||s.backDrawn)return;Covers.backAsync(stOf(g),g,infoRows(g).slice(0,5),g.info&&g.info.overview).catch(()=>{})};
+  if(window.requestIdleCallback)requestIdleCallback(run,{timeout:3000});else setTimeout(run,250)}
 // A tiny copy of the cover, scaled up, makes a smooth blurred background without an expensive blur filter.
 const tinyCache=new Map();
 function tinyBlur(url,cb){
@@ -489,7 +504,7 @@ function applyRotation(){const s=slots[sel];if(s){s.box.style.transform=`rotateY
 let landT;
 function landSel(){
   clearTimeout(landT);if(landSel.prev&&landSel.prev.el)landSel.prev.el.classList.remove("landed");landSel.prev=slots[sel];const s=slots[sel];if(!s)return;
-  landT=setTimeout(()=>{if(s.el){s.el.classList.add("landed");ensureBack(true)}},380);qsFreshSoon();
+  landT=setTimeout(()=>{if(s.el){s.el.classList.add("landed");ensureBack(true);if(!ANDROID)prepBack(s,curGame())}},380);qsFreshSoon(); // (Android: its handheld budget keeps backs to the flip)
   const g=curGame(),gh0=themeOf().halo(shelfHue(g),shelfPos()),gh=window.bsPlatform&&bsPlatform.os==="android"?Math.round(gh0/3)*3:gh0,glow=hsl(gh,95,62,.62); /* Android: the hue in 3° steps (invisible), so most shelf steps don't repaint the halo, floor and tab bar */glowEls=glowEls||[...document.querySelectorAll(".floor,.sel-halo,#tabs")];if(glow!==lastGlow){lastGlow=glow;
     // a step along the shelf only walks the hue by a degree or so: the tab bar takes that at once instead of fading it in
     // over .6 s (a colour fade the compositor can't do, so it was a repaint every frame for as long as you kept moving);
@@ -888,8 +903,8 @@ function fillDetails(){
       tiles.forEach(([k,v])=>{const d=document.createElement("div");d.className="d-stat";const a=document.createElement("span");a.textContent=k;const b=document.createElement("b");b.textContent=v;d.append(a,b);st.append(d)})}}
   // screenshots strip (LaunchBox); the chosen one fills the hero
   const shots=(g.kind==="rom"&&i.shots)||[];shotSel=0;const ds=$("dShots");ds.innerHTML="";ds.hidden=!shots.length;$("dCover").closest(".d-hero").classList.toggle("shot",!!shots.length);
-  shots.forEach((u,k)=>{const d=document.createElement("button");d.type="button";d.className="d-shot"+(k===0?" on":""); /* (a button: the controller can land on it in Media) */const im=document.createElement("img");im.loading="lazy";im.alt="";im.src=u;d.append(im);d.addEventListener("click",()=>showShot(k));ds.append(d)});
-  if(shots.length)$("dHeroBg").style.backgroundImage=`url("${shots[0]}")`;
+  shots.forEach((u,k)=>{const d=document.createElement("button");d.type="button";d.className="d-shot"+(k===0?" on":""); /* (a button: the controller can land on it in Media) */const im=document.createElement("img");im.loading="lazy";im.decoding="async";im.alt="";im.src=u;d.append(im);d.addEventListener("click",()=>showShot(k));ds.append(d)}); /* (beta.9: decoded off the main thread) */
+  if(shots.length)heroBgSoon(shots[0],g); // (beta.9: decoded first, then swapped in: never a half-drawn or hitching backdrop)
   $("dTrailer").hidden=!(g.kind==="rom"&&i.video);
   // (beta.7) Media: says when there's nothing there yet (a preview found later fills it); the tab is marked when there's something
   {const has=!!shots.length||!$("dTrailer").hidden;$("dNoMedia").hidden=has;$("dTabMedia").classList.toggle("has",has)}
@@ -899,10 +914,10 @@ function fillDetails(){
   // what's on file for this game: the box (front, back, spine), the disc / cartridge label, the manual
   {const box=$("dArt"),row=$("dArtRow");row.innerHTML="";const a=g.art||{},show=g.kind==="rom";box.hidden=!show;$("dTabCopy").hidden=!show;
     if(show){const media=s&&(MEDIA[s.id]||{}).kind==="cart"?"Cartridge":s&&s.id==="psp"?"UMD":"Disc",man=Array.isArray(a.manual)?a.manual.length:0;
-      const items=[["Front cover",!!a.front],["Back cover",!!a.back],["Spine",!!a.spine],[media+" art",!!a.disc],["Manual",man>0,man?`${man} pages`:""]];
+      const items=[["Front cover",!!a.front],["Back cover",!!a.back],["Spine",!!a.spine],[media+" art",!!a.disc],["Manual",man>0,man?`${man} pages`:g.manualMiss?"none found online":""]]; /* (beta.9: manualMiss, the search looked and found none) */
       const full=a.front&&a.back&&a.spine;
       items.forEach(([l,ok,extra])=>{const c=document.createElement("span");c.className="d-art-chip"+(ok?" ok":"");c.textContent=(ok?"✓ ":"")+l+(extra?` · ${extra}`:"");row.appendChild(c)});
-      const sum=document.createElement("div");sum.className="d-art-sum";sum.textContent=full&&a.disc&&man?"Complete: full box, disc and manual":full?"Full box art"+(a.disc?"":" · no disc art")+(man?"":" · no manual"):"Missing pictures can be fetched in Settings → Box art & manuals → Download missing art now";row.appendChild(sum)}}
+      const sum=document.createElement("div");sum.className="d-art-sum";sum.textContent=full&&a.disc&&man?"Complete: full box, disc and manual":full?"Full box art"+(a.disc?"":" · no disc art")+(man?"":g.manualMiss?" · no manual found online":" · no manual"):"Missing pictures can be fetched in Settings → Box art & manuals → Download missing art now";row.appendChild(sum)}}
   if(g.kind==="rom"&&i.genres&&i.genres.includes(";")){const box=document.createElement("div");box.className="wide";const dt=document.createElement("dt"),dd=document.createElement("dd");dt.textContent="Genres";dd.textContent=i.genres.replace(/;/g,", ");box.append(dt,dd);grid.append(box)}
   {const si=$("dSecInfo");if(si)si.hidden=!grid.childElementCount}
   let cmd="";
@@ -916,17 +931,21 @@ function fillDetails(){
   $("dPlay").textContent=g.kind==="rom"||g.kind==="steam"?"Play":"Open";
   $("dInspect").hidden=g.kind!=="rom";$("dManual").hidden=g.kind!=="rom";$("dManual").querySelector("span").textContent=hasManual(g)?"Read manual":"Read booklet"; /* (beta.7: an icon button: only its label changes) */
   $("dEmu").hidden=!(g.kind==="rom"&&s.hasEmulator);$("dEmu").textContent=`Open ${s.emulatorName||"emulator"}`;
-  {const b=$("dBoxArt");if(b)b.hidden=!((g.kind==="rom"&&api.artStudio&&g.file)||(g.kind==="steam"&&api.pcCoverOptions));}{const b=$("dRename");if(b)b.hidden=!(api.renameGame&&((g.kind==="rom"&&g.file)||g.kind==="steam"));} /* (beta.5: PC games too, through the cover picker) */
+  {const pc=g.kind==="steam"&&!!api.pcCoverOptions,b=$("dBoxArt"),p=$("dBoxArtPc");if(b)b.hidden=!(g.kind==="rom"&&api.artStudio&&g.file);if(p)p.hidden=!pc;} /* (beta.9) a PC game's Box art sits beside Play (it has no manual or Inspect), not in More */{const b=$("dRename");if(b)b.hidden=!(api.renameGame&&((g.kind==="rom"&&g.file)||g.kind==="steam"));} /* (beta.5: PC games too, through the cover picker) */
   {const b=$("dCols");if(b)b.hidden=!isGame(g)||g.kind==="app";}
-  {const b=$("dChooseManual");if(b){b.hidden=!(g.kind==="rom"&&api.manualStudio&&g.file);b.textContent=hasManual(g)?"Choose manual…":"Find a manual…"}}
+  {const b=$("dChooseManual");if(b){b.hidden=!(g.kind==="rom"&&api.manualStudio&&g.file);b.textContent=hasManual(g)?"Choose manual…":"Find a manual…";b.title=!hasManual(g)&&g.manualMiss?`Boxshelf looked online on ${new Date(g.manualMiss).toLocaleDateString()} and found no manual for this game. Search or add one here.`:""}}
   {const b=$("dGameEmu");if(b){const own=g.kind==="rom"?gameEmu(g):"";b.hidden=!(g.kind==="rom"&&api.gameEmulator);b.textContent=own?(emuLabel(own).length>16?emuLabel(own).slice(0,15)+"…":emuLabel(own)):"Emulator";b.title=own?`Runs in ${own} (just this game). Press to change.`:`Runs in the shelf's ${s.emulatorName||"emulator"}. Press to pick a different build for just this game.`;b.classList.toggle("own",!!own)}}
   renderHints(); // Y's prompt follows this game's trailer / achievements row (updateInfo drew the bar before this fill)
   pvSchedule(); // (beta.7) its video preview, after a rest
 }
-function openDetails(){if(mode!=="browse"||!curGame()||emptyShelf())return;
+function openDetails(){if(mode!=="browse"||!curGame()||emptyShelf())return;uiCrumb("Details: "+curGame().title);
   // (beta.7) the shelf's own preview already playing for this game carries straight on behind Details (no restart)
   {const g=curGame(),k=String(g.id!=null?g.id:g.title);if(PV&&PV.bkey===k&&app.classList.contains("pv-on")){const v=$("pvBack");clearTimeout(PV.bt);PV.bkey="";PV.key=k;PV.r={type:"file",url:v.currentSrc||v.src};app.classList.add("pv-det")}}
-  mode="details";fillDetails();$("details").scrollTop=0;app.classList.add("details-open");$("details").setAttribute("aria-hidden","false");play_("panel");padSet($("details"),$("dPlay"));renderHints()}
+  PV.openAt=performance.now(); // (beta.9: opening Details looks for the trailer at once; the rest delay is for moving between games in it)
+  mode="details";fillDetails();
+  // (the shelf's own preview carries on in Overview's box, from where it was, with this game's fan art behind the case)
+  if(!ANDROID&&PV.key&&PV.r&&dTabNow()===MEDIA_TAB){const t0=$("pvBack").currentTime||0,dv=$("dVideo"),k0=PV.key;pvBoxStart(k0);dArtOn(curGame(),k0);const u0=dv.getAttribute("src");
+    if(t0>0&&u0)dv.addEventListener("loadedmetadata",()=>{try{if(PV.key===k0&&dv.getAttribute("src")===u0&&t0<dv.duration-.5)dv.currentTime=t0}catch{}},{once:true})} /* (only for that same video: not a later game's) */$("details").scrollTop=0;app.classList.add("details-open");$("details").setAttribute("aria-hidden","false");play_("panel");padSet($("details"),$("dPlay"));renderHints()}
 // ---------- (beta.7) video previews (main/previews.js) ----------
 // Details: rest on a game (Settings → Video previews → Start after) and its preview fades into a 16:9 box under the
 // title: a video file you have or Steam's trailer clip plays right here; a YouTube trailer plays in YouTube's own player,
@@ -945,34 +964,48 @@ function pvRect(){const b=$("dMediaIn"),d=$("details");if(!b||!d)return null;con
 // panel); the Media tab plays it in its framed box instead (the background steps back while it does). YouTube can't sit
 // behind the app (its player is a view on top), so a YouTube trailer plays in the Media tab's box only.
 // Before any video, the game's fan art (LaunchBox) is the backdrop (the video's poster); not on the Thor.
-function pvVid(v,url,k,onPlay){v.muted=!pvUi("previewSound");v.volume=v.muted?0:Math.min(1,+(pvUi("volume")??.7));v.onplaying=()=>{if(PV.key===k)onPlay()};v.onerror=()=>{if(PV.key===k){v.onerror=null;pvBoxStop();pvBgStop()}};v.src=url;v.play().catch(()=>{})}
+function pvVid(v,url,k,onPlay){uiCrumb("Video: "+String(url).split(/[\\/]/).pop().slice(0,60));v.muted=!pvUi("previewSound");v.volume=v.muted?0:Math.min(1,+(pvUi("volume")??.7));v.onplaying=()=>{if(PV.key===k)onPlay()};v.onerror=()=>{if(PV.key===k){v.onerror=null;pvBoxStop();pvBgStop()}};v.src=url;v.play().catch(()=>{})}
 function pvBgStop(){app.classList.remove("pv-det");const v=$("pvBack");if(v&&v.getAttribute("src")&&!PV.bkey){v.onplaying=v.onerror=null;v.pause();v.removeAttribute("src");try{v.load()}catch{}}}
-function pvBoxStop(){const box=$("dMedia"),v=$("dVideo");if(box)box.classList.remove("on","yt","ready");if(PV.yt){PV.yt="";if(api.previewYtStop)api.previewYtStop()}
+function pvBoxStop(){clearTimeout(PV.lt);const box=$("dMedia"),v=$("dVideo");if(box)box.classList.remove("on","yt","ready");if(PV.yt){PV.yt="";if(api.previewYtStop)api.previewYtStop()}
   if(v&&v.getAttribute("src")){v.onplaying=v.onerror=null;v.pause();v.removeAttribute("src");try{v.load()}catch{}}}
 function pvStop(){clearTimeout(PV.t);clearTimeout(PV.st);PV.key="";PV.r=null;pvBoxStop();pvBgStop();dArtOff()}
 function pvSchedule(){const g=curGame(),k=g?String(g.id!=null?g.id:g.title):"";if(k&&k===PV.key)return;pvStop();
-  if(mode!=="details"||!g)return;dArtOn(g,k);if(pvMode()==="off"||!pvCan(g))return;PV.key=k;PV.t=setTimeout(()=>pvStart(g,k),pvDelay())}
+  if(mode!=="details"||!g)return;dArtOn(g,k);if(pvMode()==="off"||!pvCan(g))return;PV.key=k;PV.t=setTimeout(()=>pvStart(g,k),!ANDROID&&performance.now()-(PV.openAt||0)<900?300:pvDelay())} // (300 ms: after the panel has slid in)
 async function pvStart(g,k){
   if(PV.key!==k||mode!=="details")return;
   if(window.BS_BUSY&&BS_BUSY()){PV.t=setTimeout(()=>pvStart(g,k),300);return}
   const r=await pvAsk(g);if(PV.key!==k||mode!=="details"||!r)return;PV.r=r;
-  if(r.type==="pending")return; // (beta.8) a console trailer clip is being made: api.onPreviewClip plays it when it's ready
-  if(r.type==="youtube"&&(ANDROID||!api.previewYt))return;
+  if(r.type==="pending"){pvBoxWait(k);return} // (beta.8) a console trailer clip is being made: api.onPreviewClip plays it when it's ready
+  if(r.type==="youtube"&&!api.previewYt)return; // (beta.9: Android has its own YouTube player too, android-api.js)
   $("dTabMedia").classList.add("has");$("dNoMedia").hidden=true;
-  if(dTabNow()==="media")pvBoxStart(k);else if(r.type==="file")pvVid($("pvBack"),r.url,k,()=>app.classList.add("pv-det"))}
+  if(dTabNow()===MEDIA_TAB)pvBoxStart(k);else if(r.type==="file")pvVid($("pvBack"),r.url,k,()=>app.classList.add("pv-det"))}
 // the Media tab's box: the same video framed, or YouTube's player laid over it
+// (beta.9, Windows) the box opens at once with this game's art and a soft shimmer, so you see the trailer is coming (and
+// nothing below jumps when it starts); the Thor's opens once the picture is there, as before
+function pvBoxWait(k){clearTimeout(PV.lt);if(ANDROID||PV.key!==k||dTabNow()!==MEDIA_TAB)return;$("dMediaIn").style.backgroundImage=$("dHeroBg").style.backgroundImage;$("dMedia").classList.add("on");
+  PV.lt=setTimeout(()=>{if(PV.key===k&&!$("dMedia").classList.contains("ready"))pvBoxStop()},45000)} // (a clip that never comes: the box closes again)
 function pvBoxStart(k){const r=PV.r;if(!r||PV.key!==k)return;const box=$("dMedia"),tag=$("dMediaTag");$("dMediaIn").style.backgroundImage=$("dHeroBg").style.backgroundImage; // (this game's art under the picture as it fades in)
-  if(r.type==="file"){pvBgStop();tag.textContent=r.steam?"Steam trailer":r.yt?"Trailer":"Preview";pvVid($("dVideo"),r.url,k,()=>box.classList.add("on","ready"))}
+  if(r.type==="file"){pvBgStop();pvBoxWait(k);tag.textContent=r.steam?"Steam trailer":r.yt?"Trailer":"Preview";pvVid($("dVideo"),r.url,k,()=>box.classList.add("on","ready"))}
+  // (beta.9, Windows) Overview never loads YouTube's own player by itself: it's a heavy web page laid over the app, and with the
+  // trailer at the top of Overview it loaded on every Details open, lagged and took the controller away while it did. The
+  // box waits for the console trailer clip instead (made in the background, a plain video); full screen still opens YouTube
+  else if(r.type==="youtube"&&!ANDROID){if(r.pending)pvBoxWait(k)}
+  else if(r.type==="pending")pvBoxWait(k); // (back on Overview while the clip is still being made: the waiting box again)
   else if(r.type==="youtube"){PV.yt=r.id;tag.textContent="Trailer";box.classList.add("on","yt");
     // the box opens first (its poster is this game's art); YouTube's player is laid over it once the box has its size
     PV.st=setTimeout(()=>{if(PV.key!==k||PV.yt!==r.id)return;const rc=pvRect();if(rc)api.previewYt(r.id,rc,!pvUi("previewSound"))},380)}}
 // switching tabs: into Media the preview moves into the box; out of it, back behind the case
-function pvTab(from,to){if(!PV.key||!PV.r)return;if(to==="media")pvBoxStart(PV.key);else if(from==="media"){pvBoxStop();if(PV.r.type==="file"){const k=PV.key;pvVid($("pvBack"),PV.r.url,k,()=>app.classList.add("pv-det"))}}}
+function pvTab(from,to){if(!PV.key||!PV.r)return;if(to===MEDIA_TAB)pvBoxStart(PV.key);else if(from===MEDIA_TAB){pvBoxStop();if(PV.r.type==="file"){const k=PV.key;pvVid($("pvBack"),PV.r.url,k,()=>app.classList.add("pv-det"))}}}
 // the fan-art backdrop: decoded first, then faded in as the video's poster (no flash, no half-drawn picture)
 function dArtOn(g,k){if(ANDROID||g.kind!=="rom")return;const u=g.info&&g.info.bg;if(!u)return;const im=new Image();im.src=u;im.decode().then(()=>{if(mode!=="details"||curGame()!==g)return;const v=$("pvBack");if(!v.getAttribute("src"))v.poster=u;app.classList.add("d-art-on")}).catch(()=>{})}
 function dArtOff(){if(!app.classList.contains("d-art-on"))return;app.classList.remove("d-art-on");const v=$("pvBack");setTimeout(()=>{if(!app.classList.contains("d-art-on")&&!app.classList.contains("pv-on"))v.removeAttribute("poster")},700)}
 // ---------- (beta.7) Details' tabs (Overview, Media, Your copy, Info) and its More menu ----------
 const dTabNow=()=>{const b=document.querySelector("#details .d-body");return b?b.dataset.show:"overview"};
+// (beta.9, Windows) the trailer sits at the top of Overview with the info under it (it had a Media tab of its own): the
+// box, the full-screen button and the screenshots move into Overview, and the preview plays framed there. The Thor keeps
+// its Media tab (MEDIA_TAB "media")
+const MEDIA_TAB=ANDROID?"media":"overview";
+if(!ANDROID){const ov=document.querySelector('#details .d-pane[data-pane="overview"]');if(ov){ov.prepend($("dMedia"),$("dTrailer"),$("dShots"))}$("dTabMedia").hidden=true;$("details").classList.add("d-one")}
 function dTab(t,quiet){const body=document.querySelector("#details .d-body");if(!body)return;
   if(typeof t==="number"){const L=[...$("dTabs").querySelectorAll("button")].filter(b=>!b.hidden),i=L.findIndex(b=>b.dataset.tab===body.dataset.show);t=L[((i<0?0:i)+t+L.length)%L.length].dataset.tab}
   const was=body.dataset.show;if(was===t&&!quiet)return;body.dataset.show=t;
@@ -993,14 +1026,19 @@ if(api.onPreviewYt)api.onPreviewYt(d=>{if(!d||d.id!==PV.yt)return;if(d.state==="
 if(api.onPreviewClip)api.onPreviewClip(d=>{if(!d||!d.id||!d.url)return;
   if(mode==="details"&&PV.key&&PV.r&&PV.r.id===d.id&&(PV.r.type==="youtube"||PV.r.type==="pending")){const k=PV.key,ytOn=!!PV.yt;PV.r={type:"file",url:d.url,yt:d.id};
     $("dTabMedia").classList.add("has");$("dNoMedia").hidden=true;
-    if(dTabNow()==="media"){if(!ytOn)pvBoxStart(k)}else pvVid($("pvBack"),d.url,k,()=>app.classList.add("pv-det"))}
+    if(dTabNow()===MEDIA_TAB){if(!ytOn)pvBoxStart(k)}else pvVid($("pvBack"),d.url,k,()=>app.classList.add("pv-det"))}
   if(PV.bwait&&PV.bwait.id===d.id&&PV.bkey===PV.bwait.k&&mode==="browse"){const k=PV.bkey;PV.bwait=null;pvBackPlay(k,d.url)}});
 // the panel scrolls: YouTube's player steps aside and comes back where the box now is
 $("details").addEventListener("scroll",()=>{if(!PV.yt||!api.previewYtMove)return;api.previewYtMove(null,false);clearTimeout(PV.st);PV.st=setTimeout(()=>{if(!PV.yt)return;const rc=pvRect();api.previewYtMove(rc,!!rc)},180)},{passive:true});
 addEventListener("resize",()=>{if(PV.yt&&api.previewYtMove){const rc=pvRect();api.previewYtMove(rc,!!rc)}});
 // the shelf's own preview, behind the cases
 function pvBackStop(){clearTimeout(PV.bt);PV.bkey="";PV.bwait=null;app.classList.remove("pv-on");const v=$("pvBack");if(v&&v.getAttribute("src")){const was=v.src;setTimeout(()=>{if(v.src===was&&!PV.bkey){v.pause();v.removeAttribute("src");try{v.load()}catch{}}},650)}}
-function pvBackSchedule(){if(!PV)return;if(pvMode()!=="shelf"||ANDROID){if(PV.bkey)pvBackStop();return}
+// (beta.9, Windows, previews in Details only) resting 2 s on a game on the shelf quietly asks for its preview: a console
+// trailer clip or Steam's is then made in the background (main), so it's often ready by the time Details opens. Nothing
+// plays; never while the shelf moves
+function pvWarm(){clearTimeout(PV.wt);if(ANDROID||pvMode()!=="details"||mode!=="browse")return;const g=curGame();if(!pvCan(g)||!(g.kind==="steam"||(g.info&&g.info.video)))return;
+  PV.wt=setTimeout(()=>{if(mode!=="browse"||curGame()!==g)return;if(window.BS_BUSY&&BS_BUSY()){pvWarm();return}pvAsk(g)},2000)}
+function pvBackSchedule(){if(!PV)return;if(pvMode()!=="shelf"||ANDROID){if(PV.bkey)pvBackStop();pvWarm();return}
   const g=curGame(),k=g?String(g.id!=null?g.id:g.title):"";if(k&&k===PV.bkey&&mode==="browse")return;pvBackStop();
   if(mode!=="browse"||!pvCan(g))return;PV.bkey=k;PV.bt=setTimeout(()=>pvBackStart(g,k),pvDelay()+500)}
 async function pvBackStart(g,k){
@@ -1009,7 +1047,7 @@ async function pvBackStart(g,k){
   if(r.type!=="file"){if(r.pending||r.type==="pending")PV.bwait={k,id:r.id};return} // (beta.8) its console trailer clip plays when ready
   pvBackPlay(k,r.url)}
 function pvBackPlay(k,url){if(PV.bkey!==k||mode!=="browse")return;if(window.BS_BUSY&&BS_BUSY()){PV.bt=setTimeout(()=>pvBackPlay(k,url),300);return}
-  const v=$("pvBack");v.muted=true;v.onplaying=()=>{if(PV.bkey===k)app.classList.add("pv-on")};v.src=url;v.play().catch(()=>{})}
+  uiCrumb("Shelf video: "+String(url).split(/[\\/]/).pop().slice(0,60));const v=$("pvBack");v.muted=true;v.onplaying=()=>{if(PV.bkey===k)app.classList.add("pv-on")};v.src=url;v.play().catch(()=>{})}
 // people who set Boxshelf up before previews existed: told once, on the shelf, where to turn them on
 // one UI setting saved on top of the settings as they are now (the shelf's own copy may be older than what Settings or a
 // test saved since: saving that whole copy would undo them)
@@ -1037,8 +1075,8 @@ async function deckAdd(){toast("Adding Boxshelf to Steam (Steam closes and opens
 async function deckHint(){const ui=cfgInfo&&cfgInfo.config&&cfgInfo.config.ui;if(!ui||ANDROID||!api.deckInfo||!cfgInfo.config.setupDone||ui.deckHint)return;
   let d=null;try{d=await api.deckInfo()}catch{}if(!d||!d.deck||d.steam||d.gameMode)return;
   uiSet("deckHint",true);
-  const steps=d.inSteam?["Switch to Game Mode and start Boxshelf from your Library (Non-Steam)","To leave a game, use your emulator's quit hotkey (EmuDeck: Select + Start)"]
-    :["Add Boxshelf to Steam (the button below does it for you)","Switch to Game Mode and start it from your Library (Non-Steam)","To leave a game, use your emulator's quit hotkey (EmuDeck: Select + Start)"];
+  const steps=d.inSteam?["Switch to Game Mode and start Boxshelf from your Library (Non-Steam)","To leave a game, hold Select + Start for a moment"]
+    :["Add Boxshelf to Steam (the button below does it for you)","Switch to Game Mode and start it from your Library (Non-Steam)","To leave a game, hold Select + Start for a moment"];
   noteShow({wide:true,kick:"Steam Deck",title:"Start Boxshelf from Steam for your games' controls",
     sub:"Started outside Steam, the Deck's controller works as a keyboard and mouse here, so B is the Esc key and most emulators quit their game on it. Started from Steam, B is just B.",items:steps,
     primary:d.inSteam||!d.canAdd?["Got it",null]:["Add Boxshelf to Steam",()=>deckAdd()],secondary:d.inSteam||!d.canAdd?null:["Not now",()=>toast("You can add it any time in Settings → System.")]})}
@@ -1122,27 +1160,35 @@ function bpDone(exe){if(!bp)return;const b=bp;bp=null;mode=b.prev;b.el.classList
    posters (with the player's key), Steam's own cover, a picture of your own, or back to the automatic one. The arrows /
    D-pad move through the grid, A uses, B (Esc) closes; a click or tap uses a tile. The main side keeps the addresses:
    the page sends a game id and an option's key only */
-let cp=null;
-async function pcCoverOpen(g,term){
+let cp=null,cpReturn=null;
+async function pcCoverOpen(g,term,batch){
   if(!api.pcCoverOptions||cp||bp||(mode!=="browse"&&mode!=="details"))return;
   const el=document.createElement("div");el.className="buildpick coverpick";
   const card=document.createElement("div");card.className="bp-card";card.setAttribute("role","dialog");card.setAttribute("aria-label","Choose a cover");
-  const t=document.createElement("div");t.className="bp-title";t.textContent="Choose a cover";
+  const t=document.createElement("div");t.className="bp-title";t.textContent=batch?`Choose a cover · ${batch.i+1} of ${batch.list.length}`:"Choose a cover";
   const sub=document.createElement("div");sub.className="bp-game";sub.textContent=g.title;
   const note=document.createElement("div");note.className="cp-note";note.textContent="Looking for covers…";
   const grid=document.createElement("div");grid.className="cp-grid";
   const f=document.createElement("div");f.className="bp-foot";f.textContent=`${btnWord("a")} use · ${btnWord("back")} back`;
   card.append(t,sub,note,grid,f);el.append(card);el.addEventListener("click",e=>{if(e.target===el){cpDone();sfx.back()}});document.body.append(el);
-  cp={el,grid,note,g,term:term||"",items:[],tiles:[],i:0,prev:mode==="details"?"browse":mode,busy:false};if(mode==="details")closeDetails(true);mode="cover";
+  if(batch)f.textContent=`${btnWord("a")} use · ${btnWord("back")} stop`; // (beta.9: going through every custom game's cover)
+  cp={el,grid,note,g,term:term||"",items:[],tiles:[],i:0,prev:mode==="details"?"browse":mode,busy:false,batch:batch||null,advance:false};if(mode==="details")closeDetails(true);mode="cover";
   requestAnimationFrame(()=>el.classList.add("on"));sfx.flip();
   let r=null;try{r=await api.pcCoverOptions(g.id,term||"")}catch(e){if(cp&&cp.g===g)cp.note.textContent=String(e&&e.message||e);r={list:[],sgdb:true,current:false}}
   if(!cp||cp.g!==g)return;
-  const items=[...(r.sgdb?[{act:"search",icon:"⌕",label:"Search by name…",sub:term?`Now: ${term}`:"Another name to look up"}]:[]),{act:"own",icon:"+",label:"A picture of yours",sub:"JPG, PNG or WebP"},...(r.current?[{act:"reset",icon:"↺",label:"Automatic cover",sub:"Go back to it"}]:[]),
-    ...(r.list||[]).map(x=>({key:x.key,thumb:x.thumb,label:x.label,sub:x.sub||""}))];
-  const n=(r.list||[]).filter(x=>x.source==="steamgriddb").length;
-  cp.note.textContent=n?`${n} cover${n===1?"":"s"} from SteamGridDB${term?` for "${term}"`:""}.`:term?`SteamGridDB has nothing for "${term}". Try another name.`:r.sgdb?"SteamGridDB has no covers for this game. Use a picture of yours.":"For dozens of covers to choose from, add a free SteamGridDB key in Settings → Accounts & services.";
+  // (beta.9) Search by name works without a key too (Steam's store answers it); with no SteamGridDB key, a highlighted slot
+  // after the covers says what one adds and opens its page (the picker comes back when Settings closes)
+  const items=[...(batch?[{act:"skip",icon:"→",label:"Skip this game",sub:batch.i+1<batch.list.length?"On to the next":"The last one"}]:[]),...(!batch?[{act:"search",icon:"⌕",label:"Search by name…",sub:term?`Now: ${term}`:"Another name to look up"}]:[]),{act:"own",icon:"+",label:"A picture of yours",sub:"JPG, PNG or WebP"},...(r.current?[{act:"reset",icon:"↺",label:"Automatic cover",sub:"Go back to it"}]:[]),
+    ...(r.list||[]).map(x=>({key:x.key,thumb:x.thumb,label:x.label,sub:x.sub||""})),
+    ...(!r.sgdb&&!batch&&window.Setup&&Setup.open?[{act:"sgdb",icon:"",acct:true,label:"Add SteamGridDB",sub:"Dozens more covers · free key"}]:[])];
+  const L=r.list||[],n=L.filter(x=>x.source==="steamgriddb").length,ns=L.filter(x=>x.source==="steamstore"||x.source==="steam").length;
+  cp.note.textContent=n?`${n} cover${n===1?"":"s"} from SteamGridDB${term?` for "${term}"`:""}${ns?", and Steam's own":""}.`
+    :term?(ns?`Steam's cover${ns===1?"":"s"} for "${term}".${r.sgdb?" SteamGridDB has none.":""}`:`Nothing found for "${term}". Try another name.`)
+    :r.sgdb?(ns?"Steam's own cover. SteamGridDB has none for this game.":"SteamGridDB has no covers for this game. Search by name, or use a picture of yours.")
+    :ns?"Steam's own cover. For dozens more, add a free SteamGridDB key.":"No cover under this name on Steam. Search by name, use a picture of yours, or add a free SteamGridDB key for dozens more.";
   cp.items=items;cp.tiles=items.map((it,j)=>{const b=document.createElement("button");b.type="button";b.className="cp-tile";
-    const im=document.createElement("div");im.className="im";if(it.thumb)im.style.backgroundImage=`url("${String(it.thumb).replace(/"/g,"%22")}")`;else im.textContent=it.icon||"";
+    if(it.acct)b.classList.add("acct");
+    const im=document.createElement("div");im.className="im";if(it.thumb)im.style.backgroundImage=`url("${String(it.thumb).replace(/"/g,"%22")}")`;else if(it.acct)im.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M15 8l2 2"/></svg>';else im.textContent=it.icon||"";
     const l=document.createElement("b");l.textContent=it.label;const s=document.createElement("span");s.textContent=it.sub;b.append(im,l,s);
     b.addEventListener("click",()=>{if(cp){cp.i=j;cpRender();cpChoose()}});b.addEventListener("pointerenter",()=>{if(cp&&inputMode==="pointer"){cp.i=j;cpRender()}});grid.append(b);return b});
   const first=items.findIndex(x=>x.key&&x.key!=="current");cp.i=first>=0?first:0;cpRender();
@@ -1150,23 +1196,50 @@ async function pcCoverOpen(g,term){
 function cpRender(){if(!cp)return;cp.tiles.forEach((b,j)=>b.classList.toggle("on",j===cp.i));const b=cp.tiles[cp.i];if(b)b.scrollIntoView({block:"nearest"})}
 function cpCols(){const T=cp.tiles;if(T.length<2)return 1;const y=T[0].offsetTop;let n=1;while(n<T.length&&T[n].offsetTop===y)n++;return n}
 function cpMove(dx,dy){if(!cp||!cp.tiles.length)return;const n=cp.tiles.length,j=Math.max(0,Math.min(n-1,cp.i+dx+dy*cpCols()));if(j!==cp.i){cp.i=j;play_("tick",{dir:dx||dy});cpRender()}}
-async function cpChoose(){if(!cp||cp.busy)return;const it=cp.items[cp.i],g=cp.g,term=cp.term;if(!it)return;cp.busy=true;
+async function cpChoose(){if(!cp||cp.busy)return;const it=cp.items[cp.i],g=cp.g,term=cp.term,B=cp.batch;if(!it)return;cp.busy=true;
+  const next=()=>{if(cp)cp.advance=true}; // (in a batch: this game is settled, on to the next one)
   try{
-    if(it.act==="own"){const r=await api.pcCoverOwn(g.id);if(r&&r.ok){cpDone();play_("toast");toast(`New cover for ${g.title}`)}else if(cp)cp.busy=false;return}
+    if(it.act==="skip"){next();cpDone();play_("tick",{dir:1});return}
+    if(it.act==="own"){const r=await api.pcCoverOwn(g.id);if(r&&r.ok){if(B)B.done++;next();cpDone();play_("toast");if(!B)toast(`New cover for ${g.title}`)}else if(cp)cp.busy=false;return}
     if(it.act==="search"){cpDone();play_("panel");Setup.open({page:"coversearch",id:g.id,title:g.title,term:term||""});return}
-    if(it.act==="reset"){await api.pcCoverReset(g.id);cpDone();play_("toast");toast(`${g.title} is back on its automatic cover`);return}
-    if(it.key==="current"){cpDone();return}
-    cp.note.textContent="Downloading the cover…";await api.pcCoverUse(g.id,it.key);cpDone();play_("toast");toast(`New cover for ${g.title}`);
+    if(it.act==="sgdb"){cpDone();play_("panel");cpReturn={id:g.id,term:term||""};Setup.open({page:"steamgriddb"});return} // (beta.9) the key's page; the picker again when Settings closes
+    if(it.act==="reset"){await api.pcCoverReset(g.id);next();cpDone();play_("toast");if(!B)toast(`${g.title} is back on its automatic cover`);return}
+    if(it.key==="current"){next();cpDone();return}
+    cp.note.textContent="Downloading the cover…";await api.pcCoverUse(g.id,it.key);if(B)B.done++;next();cpDone();play_("toast");if(!B)toast(`New cover for ${g.title}`);
   }catch(e){if(cp){cp.busy=false;cp.note.textContent=String(e&&e.message||e)}play_("error")}
 }
-function cpDone(){if(!cp)return;const c=cp;cp=null;mode=c.prev;c.el.classList.remove("on");setTimeout(()=>c.el.remove(),260)}
+/* (beta.9) covers for every custom game at once (Recomps, ports, Quiver's games, programs added by hand or from Playnite:
+   they never get an automatic cover, since their names often match an unrelated game). One by one in the picker (A uses,
+   Skip moves on, B stops), or the best SteamGridDB match for each in one go, with Undo for that run */
+let coverUndo=[];
+async function pcCoverMissing(){let L=[];try{L=await api.pcCoverMissing()}catch{}return Array.isArray(L)?L:[]}
+async function pcCoverBatch(){if(!api.pcCoverMissing||cp||bp)return;const L=await pcCoverMissing();
+  if(!L.length){toast("Every custom game has a cover already");return}
+  const b={list:L,i:0,done:0};cpBatchOpen(b)}
+function cpBatchOpen(b){const x=b.list[b.i];if(!x){toast(b.done?`New covers for ${b.done} game${b.done===1?"":"s"}`:"No covers changed");return}
+  const g=allShelves.flatMap(s=>s.items||[]).find(y=>y&&y.id===x.id)||{id:x.id,title:x.title,kind:"steam"};pcCoverOpen(g,"",b)}
+async function pcCoverAuto(){if(!api.pcCoverMissing||cp||bp)return {n:0};const L=await pcCoverMissing();
+  if(!L.length){toast("Every custom game has a cover already");return {n:0}}
+  toast(`Finding covers for ${L.length} game${L.length===1?"":"s"}…`);const done=[];
+  for(const x of L){let r=null;try{r=await api.pcCoverOptions(x.id,"")}catch{continue}
+    if(r&&r.sgdb===false){toast("Add a free SteamGridDB key first: Settings → Accounts & services");return {n:0,nokey:true}}
+    const best=((r&&r.list)||[]).find(o=>o.source==="steamgriddb");if(!best)continue;
+    try{await api.pcCoverUse(x.id,best.key);done.push(x.id)}catch{}}
+  coverUndo=done;play_("toast");toast(done.length?`New covers for ${done.length} of ${L.length} game${L.length===1?"":"s"}. Don't like them? Settings → Custom games → Undo`:"SteamGridDB had no covers for these games");return {n:done.length,of:L.length}}
+async function pcCoverUndo(){const L=coverUndo;coverUndo=[];for(const id of L){try{await api.pcCoverReset(id)}catch{}}if(L.length){play_("toast");toast(`${L.length} cover${L.length===1?"":"s"} put back`)}return L.length}
+function cpDone(){if(!cp)return;const c=cp;cp=null;mode=c.prev;c.el.classList.remove("on");setTimeout(()=>c.el.remove(),260)
+  if(c.batch){const b=c.batch;if(c.advance){b.i++;setTimeout(()=>cpBatchOpen(b),320)}else if(b.done)toast(`New covers for ${b.done} game${b.done===1?"":"s"}`)}} // (beta.9: B stops a batch)
 function cpKey(k){if(k==="ArrowLeft")cpMove(-1,0);else if(k==="ArrowRight")cpMove(1,0);else if(k==="ArrowUp")cpMove(0,-1);else if(k==="ArrowDown")cpMove(0,1);
   else if(k==="Enter"||k===" ")cpChoose();else if(k==="Escape"||k==="Backspace"){cpDone();sfx.back()}else return false;return true}
 function bpKey(k){if(k==="ArrowUp")bpMove(-1);else if(k==="ArrowDown")bpMove(1);else if(k==="Enter"||k===" ")bpChoose();else if(k==="Escape"||k==="Backspace")bpDone(null);else return false;return true}
 /* ---------- launching ---------- */
 let launchTimer,runningKind=null;
 const wait=ms=>new Promise(r=>setTimeout(r,ms)); // let the screen fade to black before the emulator window appears
+// (beta.9) a short note of what the screen is doing, with its memory use: main keeps the last ten and writes them to the
+// log only if the screen crashes (no log noise otherwise). The Thor / the demo page have no api.crumb: nothing is sent
+function uiCrumb(t){try{if(!api.crumb)return;const m=performance.memory;api.crumb(String(t).slice(0,120)+(m?` · js ${Math.round(m.usedJSHeapSize/1048576)}/${Math.round(m.jsHeapSizeLimit/1048576)} MB`:"")+` · ${document.querySelectorAll("img").length} img`)}catch{}}
 function play(){
+  {const g=curGame();uiCrumb("Play: "+(g?g.title:"?"))}
   const es=!rawItem()&&(mode==="browse"||mode==="details")&&!sysBusy()?emptyShelf():null;if(es){play_("panel");Setup.open({page:es.kind==="steam"?"steam":es.id});return}
   const raw=rawItem();if(!raw||sysBusy()||(mode!=="browse"&&mode!=="details"))return;closeDetails(true);
   if(raw.kind==="setup"){const s=shelfFor(raw)||cur();play_("panel");Setup.open({page:raw.addGames?"addgames":s?s.id:"consoles"});return}
@@ -1197,7 +1270,7 @@ function slotPose(s){if(!s||!s.el||!s.el.isConnected||!s.img)return null;const f
 // show a box the 3D case had stood in for: at once when the case has landed exactly on it, or fading in (cross-fade)
 function relight(e){if(!e||!e.classList.contains("lift"))return;e.classList.add("glowfade");e.classList.remove("lift");clearTimeout(e._gl);e._gl=setTimeout(()=>e.classList.remove("glowfade"),450)}
 function unhold(e,fade){if(!e)return;if(!e.classList.contains("held")){relight(e);return}if(fade){e.classList.add("unhold");clearTimeout(e._uh);e._uh=setTimeout(()=>e.classList.remove("unhold"),260)}e.classList.remove("held");relight(e)}
-function openInspect(){
+function openInspect(){uiCrumb("Inspect");
   const g=curGame(),s=pickShelf();if(!g||g.kind!=="rom"||sysBusy()||(mode!=="browse"&&mode!=="details"))return;
   closeDetails(true);mode="inspect";clearTimeout(isp.wd);const tok=++isp.tok;
   const el=$("inspect"),style=STYLE[s.id]||STYLE.media,m=MEDIA[s.id]||MEDIA.wii;
@@ -1360,6 +1433,8 @@ const fitImg=(x,im,X,Y,W,H,cover)=>{const k=cover?Math.max(W/im.width,H/im.heigh
 const movieLine=m=>[m.year,m.runtime,(m.genres||[]).slice(0,3).join(" · ")].filter(Boolean).join("   ·   ");
 const seasonsOf=m=>Object.keys((m&&m.seasons)||{}).map(Number).filter(n=>n>0).sort((a,b)=>a-b);
 const movieBackCache=new Map();
+// (beta.9) the museum's made movie backs and discs: the 60 used last are kept (a big film collection used to keep every one)
+const capMovie=m=>{while(m.size>60)m.delete(m.keys().next().value)};
 function movieBack(d){if(movieBackCache.has(d.id))return movieBackCache.get(d.id);const p=(async()=>{
   const m=await movieDetails(d)||{},W=788,H=1000,c=document.createElement("canvas");c.width=W;c.height=H;const x=c.getContext("2d");
   const g0=x.createLinearGradient(0,0,0,H);g0.addColorStop(0,"#0d1b36");g0.addColorStop(1,"#050913");x.fillStyle=g0;x.fillRect(0,0,W,H);
@@ -1375,7 +1450,7 @@ function movieBack(d){if(movieBackCache.has(d.id))return movieBackCache.get(d.id
   const ss=seasonsOf(m);if(ss.length){x.font="600 18px Lexend, sans-serif";x.fillStyle="#7fb2ff";x.fillText(`${ss.length} SEASON${ss.length===1?"":"S"} · ${ss.reduce((a,n)=>a+m.seasons[n].length,0)} EPISODES`,40,y)}
   const bandG=x.createLinearGradient(0,H-74,0,H);bandG.addColorStop(0,"#2f7fe0");bandG.addColorStop(1,"#1a4fa8");x.fillStyle=bandG;x.fillRect(0,H-74,W,74);
   x.fillStyle="#fff";x.font="800 34px Lexend, sans-serif";x.fillText("BLU-RAY",40,H-26);x.font="600 17px Lexend, sans-serif";x.textAlign="right";x.globalAlpha=.85;x.fillText("FROM YOUR STREMIO LIBRARY",W-40,H-30);x.globalAlpha=1;x.textAlign="left";
-  const u=c.toDataURL("image/jpeg",.88);c.width=c.height=0;return u})();movieBackCache.set(d.id,p);p.catch(()=>movieBackCache.delete(d.id));return p}
+  const u=c.toDataURL("image/jpeg",.88);c.width=c.height=0;return u})();movieBackCache.set(d.id,p);capMovie(movieBackCache);p.catch(()=>movieBackCache.delete(d.id));return p}
 // the disc: fanart.tv's official print when there's a key and a match (Settings → Connections), else one printed here from
 // the title's own background and logo, the way real discs usually look
 const movieDiscCache=new Map();
@@ -1393,7 +1468,7 @@ function movieDisc(d){if(movieDiscCache.has(d.id))return movieDiscCache.get(d.id
   x.fillStyle="rgba(255,255,255,.9)";x.font="800 40px Lexend, sans-serif";x.textAlign="center";x.fillText("BLU-RAY DISC",r,r+300);x.font="600 22px Lexend, sans-serif";x.globalAlpha=.8;x.fillText((m.year?m.year+" · ":"")+(d.type==="series"?"SERIES":"FEATURE"),r,r+340);x.globalAlpha=1;x.textAlign="left";
   x.restore();x.globalCompositeOperation="destination-out";x.beginPath();x.arc(r,r,r*.11,0,Math.PI*2);x.fill();x.globalCompositeOperation="source-over"; // the centre hole
   x.strokeStyle="rgba(200,210,225,.9)";x.lineWidth=18;x.beginPath();x.arc(r,r,r*.2,0,Math.PI*2);x.stroke();
-  const u=c.toDataURL("image/png");c.width=c.height=0;return u})();movieDiscCache.set(d.id,p);p.catch(()=>movieDiscCache.delete(d.id));return p}
+  const u=c.toDataURL("image/png");c.width=c.height=0;return u})();movieDiscCache.set(d.id,p);capMovie(movieDiscCache);p.catch(()=>movieDiscCache.delete(d.id));return p}
 // the insert: a small folded card inside the case, read like the games' manuals
 const insertCache=new Map();
 function movieInsert(d){if(insertCache.has(d.id))return pagesTouch(insertCache,d.id);const p=(async()=>{
@@ -1438,13 +1513,37 @@ function openReader(){
 }
 // "this is the wrong game's manual": set it aside (kept in .manual-originals), never pick that copy again, fetch the next
 // best match. Two presses, so a stray button doesn't throw a good manual away.
+// (beta.9) The first press opens a small fix menu for 8 s: Wrong game (the same button again) or Repair (the right game's
+// manual that looks wrong: no cover, thumbnails, two pages side by side), B / Esc to leave it
 let wrongAsk=0,wrongAskId=null,wrongBusy=false;
+const fixOn=()=>!!(wrongAsk&&Date.now()-wrongAsk<8000&&curGame()&&wrongAskId===curGame().id);
+function fixCancel(){wrongAsk=0;wrongAskId=null;renderIspHints()}
+// (beta.9) while a fix runs, the message stays up and says what it's doing (waiting for the background pass to stop, looking,
+// the pages coming down); then a tick, and the reader opens again with the new pages if you're still at this game's case
+let fixRun=null;
+const fixSay=t=>{if(fixRun)toastWork(t)};
+if(api.onManualTurn)api.onManualTurn(d=>{if(!fixRun||!d)return;if(d.wait)fixSay("Waiting for the background manual download to pause…");else if(d.go)fixSay(fixRun.kind==="repair"?"Repairing the manual…":`Looking for the right manual for ${fixRun.g.title}…`)});
+if(api.onCoversProgress)api.onCoversProgress(i=>{if(!fixRun||fixRun.kind!=="wrong"||!i)return;const m=/page (\d+) of (\d+)/.exec(String(i.stage||""));if(m)fixSay(`Downloading the new manual · page ${m[1]} of ${m[2]}`)});
+// this game's pages as they are now, with a version on each address (a page repaired in place isn't the cached old one).
+// Main hands them back with the fix (r.pages: no whole-library scan, which set every background pass off again while you
+// read); the shelf refreshes on its own once you're back on it. Only an older main without r.pages makes the scan
+async function fixPages(g,r){const v="v="+Date.now().toString(36),put=L=>{g.art=g.art||{};g.art.manual=(L||[]).map(u=>typeof u==="string"&&/^bsfile:/.test(u)?u+(u.includes("?")?"&":"?")+v:u)};
+  if(r&&Array.isArray(r.pages)){put(r.pages);pendingRefresh=true;return}
+  try{const lib=await api.scan();if(!Array.isArray(lib))return;pendingLib=lib;for(const s of lib)for(const x of s.games||[])if(x.id===g.id){put(x.art&&x.art.manual);return}}catch{}}
+function fixReopen(g){if(mode==="inspect"&&curGame()===g&&!rd.open&&hasManual(g)){rdCache.clear();openReader();return true}return false}
+async function repairManual(){const g=curGame();if(!g||!hasManual(g)||wrongBusy||!api.repairManual)return;
+  wrongAsk=0;wrongAskId=null;wrongBusy=true;fixRun={g,kind:"repair"};closeReader();toastWork("Repairing the manual…");
+  try{const r=await api.repairManual(shelfFor(g).id,g.file);fixRun=null;
+    if(r&&r.changed){toastWork("Repaired. Getting the pages…");await fixPages(g,r);const m=`✓ Manual repaired: ${r.what}`;toastDone(fixReopen(g)?m:m+". Open its case to read it")}
+    else toastDone("Nothing to repair in this manual. If it's another game's, use Wrong game")}
+  catch(e){fixRun=null;toast("Couldn't repair the manual: "+((e&&e.message)||e))}finally{fixRun=null;wrongBusy=false}}
 async function wrongManual(){const g=curGame();if(!g||!hasManual(g)||wrongBusy)return;
-  if(!wrongAsk||Date.now()-wrongAsk>4000||wrongAskId!==g.id){wrongAsk=Date.now();wrongAskId=g.id;toast("Wrong game's manual? Press again to set it aside and find the right one");play_("tick",{dir:1});renderIspHints();setTimeout(()=>{if(wrongAsk&&Date.now()-wrongAsk>=4000){wrongAsk=0;if(rd.open)renderIspHints()}},4100);return}
-  wrongAsk=0;wrongAskId=null;wrongBusy=true;closeReader();toast("Setting that manual aside and looking for the right one…");
-  try{const r=await api.rejectManual(shelfFor(g).id,g.file);if(g.art)g.art.manual=[];
-    toast(r.got?`Found another manual for ${g.title}. Reopen the case to see it`:r.offline?`Set aside. Couldn't search right now (offline?); Settings → Manuals can search later`:`Set aside. No other match for ${g.title} yet; Settings → Manuals can search by hand`)}
-  catch(e){toast("Couldn't replace the manual: "+((e&&e.message)||e))}finally{wrongBusy=false}}
+  if(!fixOn()){wrongAsk=Date.now();wrongAskId=g.id;play_("tick",{dir:1});renderIspHints();setTimeout(()=>{if(wrongAsk&&Date.now()-wrongAsk>=8000){wrongAsk=0;if(rd.open)renderIspHints()}},8100);return}
+  wrongAsk=0;wrongAskId=null;wrongBusy=true;fixRun={g,kind:"wrong"};closeReader();toastWork("Setting that manual aside…");
+  try{const r=await api.rejectManual(shelfFor(g).id,g.file);fixRun=null;if(g.art)g.art.manual=[];
+    if(r.got){toastWork("Found it. Getting the pages…");await fixPages(g,r);const m=`✓ New manual for ${g.title}`;toastDone(fixReopen(g)?m:m+". Open its case to read it")}
+    else toastDone(r.offline?`Set aside. Couldn't search right now (offline?); Settings → Manuals can search later`:`Set aside. No other match for ${g.title} yet; Settings → Manuals can search by hand`)}
+  catch(e){fixRun=null;toast("Couldn't replace the manual: "+((e&&e.message)||e))}finally{fixRun=null;wrongBusy=false}}
 function closeReader(){if(!rd.open)return;rd.open=false;if(window.Inspect3D)Inspect3D.setPaused(false);$("inspect").classList.remove("reading");$("reader").classList.remove("on");$("reader").setAttribute("aria-hidden","true");renderIspHints();sfx.back()}
 // Page 1 is the cover on its own; after that pages come in pairs like an open booklet.
 // Pages are decoded off the main thread before they're shown, and the next few are warmed up in the background, so turning stays smooth.
@@ -1493,7 +1592,8 @@ function renderIspHints(){
   const next=isp.state===0?"Open case":isp.state===1?(cart?"Take out cartridge":"Take out disc"):"Hold to play";
   let items,acts;
   if(rd.open){$("ispStep").textContent=$("rdCount").textContent||"Manual";items=[[pad?["L","R"]:["←","→"],"Turn page"],[pad?["x"]:["Space"],"Next page"],[pad?["o"]:["Esc"],"Put manual back"]];acts=[()=>rdTurn(1),()=>rdTurn(1),closeReader];
-    if(hasManual(curGame())){items.push([pad?["tri"]:["W"],wrongAsk&&Date.now()-wrongAsk<4000?"Press again: wrong manual":"Wrong manual?"]);acts.push(wrongManual)}}
+    if(hasManual(curGame())){if(fixOn()){items=[[pad?["tri"]:["W"],"Wrong game: find the right one"],[pad?["sq"]:["R"],"Repair it (cover, pages)"],[pad?["o"]:["Esc"],"Cancel"]];acts=[wrongManual,repairManual,fixCancel]}
+      else{items.push([pad?["tri"]:["W"],"Fix manual…"]);acts.push(wrongManual)}}}
   else{items=[[pad?["L","R"]:["←","→"],ispSpins()?"Spin":"Next side"],[pad?["L2","R2"]:["+","−"],"Zoom"],[pad?["tri"]:["F"],"Turn over"],[pad?["x"]:["Enter"],next],[pad?["o"]:["Esc"],isp.state?"Put back":"Close"]];acts=[()=>{ispTurn(90,0,true);ispSnap()},()=>ispZoom(1),()=>ispFlip(),ispAdvance,ispBack];
     if(isp.state>=1&&curGame()&&curGame().kind==="rom"){items.splice(4,0,[pad?["sq"]:["M"],hasManual(curGame())?"Read manual":"Read booklet"]);acts.splice(4,0,openReader)}}
   const h=$("ispHints");h.innerHTML="";
@@ -1507,6 +1607,8 @@ function inspectKey(e){
   const k=e.key;setInput("kbd");let handled=true;
   if(rd.open){
     if(k==="ArrowRight"||k==="PageDown"||k===" ")rdTurn(1);else if(k==="ArrowLeft"||k==="PageUp")rdTurn(-1);
+    else if((k==="Escape"||k==="Backspace")&&fixOn()){if(!e.repeat)fixCancel()} // (beta.9: the fix menu first)
+    else if((k==="r"||k==="R")&&fixOn()){if(!e.repeat)repairManual()}
     else if(k==="Escape"||k==="Backspace"||k==="Enter"||k==="m"||k==="M"){if(!e.repeat)closeReader()}
     else if(k==="Home"){rd.i=0;showSpread(true)}else if(k==="w"||k==="W"){if(!e.repeat)wrongManual()}else handled=false;
     if(handled)e.preventDefault();return;
@@ -1735,7 +1837,7 @@ api.onRunAside&&api.onRunAside(on=>{document.body.classList.toggle("aside",on);i
 // cover still up 3 s after the game ended, and an exit outside "launch" mode still takes the black layers away
 let returnWatch=0;
 function clearReturnCover(why){const was=["launching","returning"].filter(c=>app.classList.contains(c));document.body.classList.remove("aside");app.classList.remove("returning","launching");returnPrep=false;$("launch").style.background="";if(was.length&&api.log)api.log(`return: cleared the black cover (${why}; was ${was.join("+")}, mode ${mode}, page ${document.visibilityState})`)}
-api.onExited(async info=>{if(window.Sound&&Sound.nextSong)Sound.nextSong("game");
+api.onExited(async info=>{uiCrumb("Back from the game");if(window.Sound&&Sound.nextSong)Sound.nextSong("game");
   clearTimeout(returnWatch);returnWatch=setTimeout(()=>{if(mode!=="launch"&&(app.classList.contains("returning")||app.classList.contains("launching")||document.body.classList.contains("aside")))clearReturnCover("watchdog, 3 s after the game ended")},3000);
   if(mode!=="launch"){if(!(info&&info.code===-1))clearReturnCover("game ended outside launch mode");return}
   if(info&&info.code===-1){clearTimeout(insertT);clearTimeout(launchTimer);hideInsert();note([`Couldn't start: ${info.error||"unknown error"}. `,{br:1},"Press ",{b:btnWord("back")}," or ",{b:"Esc"}," to go back."],true);runningKind="error";return}
@@ -1886,7 +1988,10 @@ function manualNote(list){if(!list||!list.length)return"";const up=list.filter(x
 setInterval(()=>{if(pendingNote&&mode==="browse"&&!sysBusy()){toast(pendingNote);pendingNote=""}},1500);
 // (1.82) a newer beta on the public page (main asks once per start): said once per version, when the shelf is idle
 api.onUpdate&&api.onUpdate(r=>noteUpdate(r)); // (beta.7: a card with the release's highlights, not a one-line note)
-api.onLibraryChanged&&api.onLibraryChanged(info=>{const note=info&&manualNote(info.manualUpdates);if((mode!=="browse"&&mode!=="details")||sysBusy()){pendingRefresh=true;if(note)pendingNote=note;return}if(note)toast(note);if(info&&info.covers)toast(`Added covers for ${info.covers} new game${info.covers===1?"":"s"}`);if(info&&info.manuals)toast(`Added the built-in manual for ${info.manuals} Wii U game${info.manuals===1?"":"s"}`);if(info&&info.onlineManuals)toast(`Added manuals for ${info.onlineManuals} game${info.onlineManuals===1?"":"s"}`);
+api.onLibraryChanged&&api.onLibraryChanged(info=>{const note=info&&manualNote(info.manualUpdates);
+  // (beta.9) the background manual re-check set some aside and looked them up again: said plainly, once it's all done
+  const rk=info&&info.rechecked&&info.rechecked.moved?`✓ Manuals checked: ${info.rechecked.moved} set aside and looked up again`:"";
+  if((mode!=="browse"&&mode!=="details")||sysBusy()){pendingRefresh=true;if(rk||note)pendingNote=rk||note;return}if(note)toast(note);if(info&&info.covers)toast(`Added covers for ${info.covers} new game${info.covers===1?"":"s"}`);if(info&&info.manuals)toast(`Added the built-in manual for ${info.manuals} Wii U game${info.manuals===1?"":"s"}`);if(info&&info.onlineManuals)toast(`Added manuals for ${info.onlineManuals} game${info.onlineManuals===1?"":"s"}`);if(rk)toastDone(rk);
   const nGames=()=>allShelves.reduce((a,sh)=>a+((sh.games||[]).filter(g=>g.kind==="rom").length),0),n0=nGames();
   Promise.resolve(refresh(true)).then(()=>{if(qm.open)qsSoft();const n=nGames()-n0;if(info&&info.watch&&n>0)toast(`${n} new game${n===1?"":"s"} found`+(musStyle().mail!==false?(n===1?" · it's":" · they're")+" waiting for you in the museum mail":""))})});
 // console.json options with per-system defaults: front-slot consoles load the disc upright through the front; GameCube is top-loading
@@ -2121,7 +2226,7 @@ function qsHints(){if(!qsEl)return;const pad=showPad(),G=(p,k)=>pad?glyph(p):`<s
   else{const x=qm.rows[qm.r],id=x&&x.r.id;out.push([pad?glyph("↕"):`<span class="g">↑↓</span>`,"Move"]);if(id==="vol")out.push([pad?glyph("↔"):`<span class="g">←→</span>`,"Volume"]);
     out.push([G("x","Enter"),x&&x.r.lines?"Open":"Select"],[G("o","Esc"),"Close"])}
   qsEl.querySelector(".qm-hints").innerHTML=out.map(([k,l])=>`<span class="hint">${k}<span>${qsEsc(l)}</span></span>`).join("")}
-function qmOpen(){if(qm.open||(mode!=="browse"&&mode!=="details")||sysBusy())return;qsBuild();if(mode==="details")closeDetails(true);
+function qmOpen(){if(qm.open||(mode!=="browse"&&mode!=="details")||sysBusy())return;uiCrumb("Quick menu");qsBuild();if(mode==="details")closeDetails(true);
   qm.open=true;qm.sub=null;qm.pv=null;qm.ac=0;qsEl.querySelector(".qm-scroll").scrollTop=0;if(!ANDROID||qm.sig!==qsSig())qsRender(); /* Android: rows already built for this game and these settings (qsFreshSoon) are kept: the press only moves the highlight and slides the panel in */qm.r=qm.rows.findIndex(x=>x.r.id===(ANDROID?"mus":"vol"));if(qm.r<0)qm.r=0; /* (Android 0.3.2: the highlight starts on the top three) */
   // Android: the menu's own rows are measured (qsPaint reads their offsetTop) before the page-wide qm-open class goes on.
   // The other way round, that read made the phone restyle and lay out the whole shelf, every case face included, right
@@ -2639,7 +2744,7 @@ function museumData(){
 // a game's pictures for the museum's wall, as museumData gives them (Museum.refreshArt: new art while it's open)
 function musArtOf(g){const a=g&&g.art||{};return {spine:a.spine||null,back:a.back?(/^bsfile:/.test(a.back)?a.back+(a.back.includes("?")?"&":"?")+"t=1024":a.back):null,disc:a.disc||null,boxFull:!!(a.front&&a.back&&a.spine)}}
 let musOpenTok=0;
-function openMuseum(at){
+function openMuseum(at){uiCrumb("Museum");
   if(sysBusy()||(mode!=="browse"&&mode!=="details"))return;if(!window.Museum||!Museum.available()){toast("The museum needs WebGL, which isn't available here");return}
   if(!allShelves.some(sh=>(sh.kind==="console"||sh.kind==="steam")&&sh.items.some(isGame))){toast("Nothing on the shelves yet");return}
   closeDetails(true);musLaunch=null;
@@ -3091,7 +3196,7 @@ let lastInputAt=0,yAt=0;
 addEventListener("pointerdown",()=>{wake()},true);addEventListener("wheel",()=>{lastInputAt=performance.now()},{capture:true,passive:true});
 let uiBusySent=0;
 function setInput(m){if(m==="kbd"&&touchBack)m=inputMode; /* a touch Back (sent as Esc) keeps the controller / touch prompts */const was=showPad();{const t=performance.now();if(t-uiBusySent>500&&api.uiBusy){uiBusySent=t;try{api.uiBusy()}catch{}}} // background downloads hold off while you're pressing buttons
-  if(m==="kbd")kbdEver=true;if(attract)wake();lastInputAt=performance.now();if(m!==inputMode){inputMode=m;renderHints();document.body.classList.toggle("pad-input",m==="pad")}else if(showPad()!==was)renderHints()
+  if(m==="kbd")kbdEver=true;if(attract)wake();lastInputAt=performance.now();if(m!==inputMode){inputMode=m;renderHints();document.body.classList.toggle("pad-input",m==="pad");if(m==="pad"&&mode==="details")dGlide($("details").querySelector(".pad-focus"))}else if(showPad()!==was)renderHints()
   if(showPad()!==was&&(mode==="browse"||mode==="details")){const g=rawItem();if(!g||g.kind==="random")updateInfo()}} // the Shuffle tile's "R / LS rolls again" and the empty-filter note name a key: follow the switch
 // the pointer comes back the moment the mouse moves
 addEventListener("mousemove",e=>{if((Math.abs(e.movementX)+Math.abs(e.movementY))>2&&inputMode==="pad")setInput("pointer")},{passive:true});
@@ -3138,7 +3243,7 @@ let preMenuMode="browse";
 // Settings, Sort or while a game is starting)
 api.onShelfMenuRequest&&api.onShelfMenuRequest(()=>{if(mode==="browse"||mode==="details"){qmClose(true);api.openShelfMenu()}});
 api.onShelfMenu&&api.onShelfMenu(d=>{
-  if(d&&d.open){if(mode==="homemenu")return;qmClose(true);closeDetails(true);preMenuMode=mode;mode="homemenu";play_("open");return}
+  if(d&&d.open){if(mode==="homemenu")return;uiCrumb("Home menu opened (from "+mode+")");qmClose(true);closeDetails(true);preMenuMode=mode;mode="homemenu";play_("open");return}
   if(mode==="homemenu")mode=preMenuMode==="details"?"browse":preMenuMode;
   const a=d&&d.action;
   if(a==="shelfhome"){const i=shelves.indexOf(HOME);if(i>=0&&i!==sysIdx)setSystem(i);else if(i<0)toast("Play something or ♥ a game to fill your Home shelf")}
@@ -3338,6 +3443,9 @@ async function smoothTest(){
   }finally{smoothTest.on=false;css.remove();ban.remove();unnear();if(api.winMode)api.winMode(wasFull?"full":"max").catch(()=>{})}
   toast(smoothTest.stop?"Smoothness test stopped":"Smoothness test done: the results are in the log");return res}
 let pollLast=-1e9,padF=1;
+let slowPoll=false;
+function anyPad(){let L=null;try{L=navigator.getGamepads?navigator.getGamepads():null}catch{}if(!L)return false;for(let i=0;i<L.length;i++)if(L[i])return true;return false}
+addEventListener("gamepadconnected",()=>{if(slowPoll){clearTimeout(bgPoll);slowPoll=false;requestAnimationFrame(poll)}}); // (back to every frame at once)
 function poll(t){
   if(mode==="launch"&&(!document.hasFocus()||document.body.classList.contains("aside"))){clearTimeout(bgPoll);pollOff=true;return}
   // (Android: with nothing touched for a few seconds and the shelf still, the pad is read on a 30 Hz timer instead of every
@@ -3347,6 +3455,10 @@ function poll(t){
   // compositor runs on its own; a frame callback every vsync made the page restyle every moving case, re-layerize and
   // commit 60 times a second for the whole slide. Now the page only makes a frame when a step actually changes something)
   else if(ANDROID&&mode==="browse"&&!qm.open){clearTimeout(bgPoll);bgPoll=setTimeout(()=>poll(performance.now()),16)}
+  // (beta.9, PC) no controller connected and the shelf still: looked for ten times a second instead of every frame (a
+  // 144 / 240 Hz screen woke the page that often for nothing); every frame again while the shelf moves (the smoothness
+  // log) and the moment a controller connects
+  else if(!ANDROID&&!anyPad()&&!(window.BS_BUSY&&BS_BUSY())){clearTimeout(bgPoll);slowPoll=true;bgPoll=setTimeout(()=>{slowPoll=false;poll(performance.now())},100)}
   else{requestAnimationFrame(poll);frameWatch(t)}
   // on a 240 Hz screen the pad is read every other frame (~120 times a second): the same feel, half the work
   if(t-pollLast<6.5)return;padF=Math.min(3,Math.max(.25,(t-pollLast)/16.667));pollLast=t;
@@ -3445,7 +3557,7 @@ function pollBody(t){
       if(padActive)setInput("pad");
       const lx=ax[0]||0,ly=ax[1]||0,rx2=ax[2]||0,ry2=ax[3]||0;
       const sx=Math.abs(rx2)>.15?rx2:Math.abs(lx)>.15?lx:0, sy=Math.abs(ry2)>.15?ry2:Math.abs(ly)>.15?ly:0;
-      if(rd.open){edge(gp,3,()=>wrongManual());edge(gp,4,()=>rdTurn(-1));edge(gp,5,()=>rdTurn(1));edge(gp,14,()=>rdTurn(-1));edge(gp,15,()=>rdTurn(1));const hs=ax[0]>.55?1:ax[0]<-.55?-1:0;if(hs&&!prevBtn.hs)rdTurn(hs);prevBtn.hs=!!hs;/* D-pad via the edges above, stick separately: both fired for one D-pad press and skipped a spread */edge(gp,0,()=>rdTurn(1));edge(gp,1,()=>closeReader());edge(gp,2,()=>closeReader());prevBtn.v=!!v;prevBtn.h=!!h;return}
+      if(rd.open){edge(gp,3,()=>wrongManual());edge(gp,4,()=>rdTurn(-1));edge(gp,5,()=>rdTurn(1));edge(gp,14,()=>rdTurn(-1));edge(gp,15,()=>rdTurn(1));const hs=ax[0]>.55?1:ax[0]<-.55?-1:0;if(hs&&!prevBtn.hs)rdTurn(hs);prevBtn.hs=!!hs;/* D-pad via the edges above, stick separately: both fired for one D-pad press and skipped a spread */edge(gp,0,()=>rdTurn(1));edge(gp,1,()=>fixOn()?fixCancel():closeReader());edge(gp,2,()=>fixOn()?repairManual():closeReader()); /* (beta.9: in the fix menu, B leaves it and X repairs) */prevBtn.v=!!v;prevBtn.h=!!h;return}
       const {lt,rt}=trig(gp);if(rt>.08)ispZoom(rt,padF);if(lt>.08)ispZoom(-lt,padF);
       // zoomed in: the left stick pans the view gently, the right stick turns the case; not zoomed: either stick turns it
       if(isp.tz>1){
@@ -3508,9 +3620,22 @@ function padItems(root){return [...root.querySelectorAll("button,input[type=chec
 // sideways while a panel was still sliding in, which knocked the Details panel half off its place)
 // safety net: if anything still scrolls the app, put it straight back
 [document.documentElement,document.body,document.getElementById("app")].forEach(n=>n&&n.addEventListener("scroll",()=>{if(n.scrollLeft||n.scrollTop){n.scrollLeft=0;n.scrollTop=0}},{passive:true}));
-function revealIn(el){for(let p=el.parentElement;p&&p!==document.body;p=p.parentElement){const cs=getComputedStyle(p),sy=/(auto|scroll)/.test(cs.overflowY)&&p.scrollHeight>p.clientHeight,sx=/(auto|scroll)/.test(cs.overflowX)&&p.scrollWidth>p.clientWidth;if(!sy&&!sx)continue;
+// (beta.9, Windows) a Details screenshot: the strip glides to centre it (a smooth scroll, the way a click already does) instead
+// of jumping just far enough to show it
+function shotCentre(el){const s=el.parentElement;if(!s)return;const to=Math.max(0,Math.min(s.scrollWidth-s.clientWidth,el.offsetLeft-(s.clientWidth-el.offsetWidth)/2));
+  if(Math.abs(to-s.scrollLeft)>1)s.scrollTo({left:to,behavior:document.body.classList.contains("reduce-motion")?"auto":"smooth"})}
+function revealIn(el){const shot=!ANDROID&&el.classList&&el.classList.contains("d-shot")&&el.closest(".details.d-one");if(shot)shotCentre(el);
+  for(let p=el.parentElement;p&&p!==document.body;p=p.parentElement){const cs=getComputedStyle(p),sy=/(auto|scroll)/.test(cs.overflowY)&&p.scrollHeight>p.clientHeight,sx=!(shot&&p===el.parentElement)&&/(auto|scroll)/.test(cs.overflowX)&&p.scrollWidth>p.clientWidth;if(!sy&&!sx)continue;
   const r=el.getBoundingClientRect(),q=p.getBoundingClientRect();if(sy){if(r.top<q.top+8)p.scrollTop-=q.top+8-r.top;else if(r.bottom>q.bottom-8)p.scrollTop+=r.bottom-q.bottom+8}if(sx){if(r.left<q.left+8)p.scrollLeft-=q.left+8-r.left;else if(r.right>q.right-8)p.scrollLeft+=r.right-q.right+8}}}
-function padSet(root,el){root.querySelectorAll(".pad-focus").forEach(e=>e.classList.remove("pad-focus"));if(!el)return;el.classList.add("pad-focus");try{el.focus({preventScroll:true})}catch{}
+// (beta.9) Details buttons (Windows): Settings' highlight glides to the button you're on: one layer behind the row, moved with a
+// transform (setup.css .d-hl). Measured once per move, after the label opens; never on the Thor, which keeps its own look
+function dGlide(el){if(ANDROID)return;const bar=$("details").querySelector(".d-actions");if(!bar)return;let hl=bar.querySelector(":scope>.d-hl");
+  if(!el||el.id==="dPlay"||el.parentNode!==bar||innerWidth<761){ /* (under 761 px Details is the phone-style sheet: no glide) */if(hl)hl.classList.remove("on");return}
+  if(!hl){hl=document.createElement("i");hl.className="d-hl";hl.setAttribute("aria-hidden","true");bar.prepend(hl)}
+  const first=!hl.classList.contains("on");if(first)hl.style.transition="opacity .16s";
+  hl.style.width=el.offsetWidth+"px";hl.style.height=el.offsetHeight+"px";hl.style.transform=`translate(${el.offsetLeft}px,${el.offsetTop}px)`;hl.classList.add("on");
+  if(first)requestAnimationFrame(()=>{hl.style.transition=""})}
+function padSet(root,el){root.querySelectorAll(".pad-focus").forEach(e=>e.classList.remove("pad-focus"));if(!el){if(root.id==="details")dGlide(null);return}el.classList.add("pad-focus");try{el.focus({preventScroll:true})}catch{}if(root.id==="details")dGlide(el); // (after the focus moves: the button left behind closes first)
   // the Details buttons sit in a bar pinned to the bottom: always in view, so moving onto them never scrolls the text
   if(el.closest(".d-actions"))return;revealIn(el);
   // scroll only the panel itself (scrollIntoView also scrolled the whole app sideways and dragged a hidden panel into view);
@@ -3533,7 +3658,11 @@ function padNav(root,dir){
 function panelScroll(el,d){const max=el.scrollHeight-el.clientHeight;if(max<=0)return;const to=Math.max(0,Math.min(max,el.scrollTop+d*el.clientHeight*.45));if(to===el.scrollTop)return;el.scrollTo({top:to,behavior:document.body.classList.contains("reduce-motion")?"auto":"smooth"});play_("tick",{dir:d})}
 function padActivate(root){const e=root.querySelector(".pad-focus");if(!e||!padItems(root).includes(e))return false;e.click();return true}
 /* ---------- misc ---------- */
-let toastT,undoHide=null;function toast(msg){undoHide=null;const el=$("toast");el.textContent=msg;el.classList.add("on");clearTimeout(toastT);toastT=setTimeout(()=>el.classList.remove("on"),2600)}
+let toastT,undoHide=null;function toast(msg){undoHide=null;const el=$("toast");el.textContent=msg;el.classList.remove("work","done");el.classList.add("on");clearTimeout(toastT);toastT=setTimeout(()=>el.classList.remove("on"),2600)}
+// (beta.9) a message that stays up while something works (a turning ring), changing as it goes, then a plain "done" with a
+// tick (the manual fixes showed "Repairing…" for 2.6 s and then nothing until the result popped up)
+function toastWork(msg){undoHide=null;const el=$("toast");clearTimeout(toastT);if(el.textContent!==msg)el.textContent=msg;el.classList.remove("done");el.classList.add("on","work")}
+function toastDone(msg){undoHide=null;const el=$("toast");el.textContent=msg;el.classList.remove("work");el.classList.add("on","done");clearTimeout(toastT);toastT=setTimeout(()=>el.classList.remove("on","done"),6000)}
 $("dAchBtn").addEventListener("click",()=>achAct());
 let HIST={},shotSel=0;
 function fmtPlay(ms){const m=Math.round((ms||0)/60000);if(m<1)return "under a minute";if(m<60)return m+" min";const h=Math.floor(m/60);return h+" h"+(m%60?" "+(m%60)+" min":"")} // no trailing space on whole hours ("2 h played")
@@ -3546,7 +3675,7 @@ function loadHistory(){if(api.history)api.history().then(h=>{HIST=h||{};bootMark
 // Open into → Home: at start-up the Home shelf may only appear once the play history is in (it lists recent games)
 function homeStartCheck(){if(openInto!=="home-wait")return;openInto="done";const i=shelves.indexOf(HOME);if(i<0||i===sysIdx||mode!=="browse"||sysBusy()||lastInputAt>0)return;
   if(!revealedAt){sysIdx=i;sel=0;flipped=false;spin=0;spinT=0;build();tuneTo(cur())}else setSystem(i)}
-function showShot(k){const g=curGame(),shots=(g&&g.info&&g.info.shots)||[];if(!shots.length)return;shotSel=((k%shots.length)+shots.length)%shots.length;$("dHeroBg").style.backgroundImage=`url("${shots[shotSel]}")`;[...$("dShots").children].forEach((d,j)=>d.classList.toggle("on",j===shotSel));const el=$("dShots").children[shotSel];if(el)el.scrollIntoView({inline:"center",block:"nearest",behavior:"smooth"});play_("tick",{dir:1})}
+function showShot(k){const g=curGame(),shots=(g&&g.info&&g.info.shots)||[];if(!shots.length)return;shotSel=((k%shots.length)+shots.length)%shots.length;heroBgSoon(shots[shotSel],g);[...$("dShots").children].forEach((d,j)=>d.classList.toggle("on",j===shotSel));const el=$("dShots").children[shotSel];if(el)el.scrollIntoView({inline:"center",block:"nearest",behavior:"smooth"});play_("tick",{dir:1})}
 function openTrailer(){const g=curGame();if(!g||!g.info||!g.info.video)return;play_("open");api.openTrailer(g.info.video).then(r=>{if(r&&r.external)toast("Trailer opened in your browser")}).catch(e=>toast(e.message))}
 $("dTrailer").addEventListener("click",openTrailer);
 $("dMore").addEventListener("click",()=>{const d=$("dDesc"),m=$("dMore");const c=d.classList.toggle("clamp");m.textContent=c?"Read more":"Show less"});
@@ -3757,7 +3886,11 @@ async function chooseGameEmu(g){if(!g||g.kind!=="rom"||!api.gameEmulator)return;
 // the Details panel's "Box art" button (1.67): opens Settings → Art & manuals straight at this game's mix (front, back,
 // spine and disc looks, Pick exact for any part); B there goes up to the console's games, then the Art page
 (function(){const c=$("dActEnd");if(!c||$("dBoxArt"))return;const b=document.createElement("button");b.className="btn";b.type="button";b.id="dBoxArt";b.textContent="Box art";b.title="Choose this game's box art: front, back, spine and disc";
-  b.addEventListener("click",()=>{const g=curGame();if(g&&g.kind==="steam"&&api.pcCoverOptions){closeDetails(true);pcCoverOpen(g);return}if(!g||g.kind!=="rom"||!api.artStudio)return;artStudioFor(g)});c.before(b)})();
+  b.addEventListener("click",()=>{const g=curGame();if(g&&g.kind==="steam"&&api.pcCoverOptions){closeDetails(true);pcCoverOpen(g);return}if(!g||g.kind!=="rom"||!api.artStudio)return;artStudioFor(g)});c.before(b);
+  // (beta.9) PC games: the same picker from a button in the main row, beside Play (consoles keep theirs in More)
+  const m=$("dMoreBtn");if(m&&!$("dBoxArtPc")){const p=document.createElement("button");p.className="btn d-ico";p.type="button";p.id="dBoxArtPc";p.hidden=true;p.title="Choose this game's cover";
+    p.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4zM4 16l5-5 4 4 3-3 4 4"/><path d="M14.5 8.5h.01"/></svg><span>Box art</span>';
+    p.addEventListener("click",()=>{const g=curGame();if(g&&g.kind==="steam"&&api.pcCoverOptions){closeDetails(true);pcCoverOpen(g)}});m.before(p)}})();
 // (beta.5) Details → Rename: a console or PC game's own name (Settings' Rename page, so a controller gets the on-screen
 // keyboard); main applies it everywhere it reads games, so box art and manuals are looked up by it too
 (function(){const c=$("dActEnd");if(!c||$("dRename"))return;const b=document.createElement("button");b.className="btn";b.type="button";b.id="dRename";b.textContent="Rename";b.title="Give this game the name you want on your shelf";
@@ -3778,6 +3911,8 @@ window.Shelf={
   companionPlay,smoothTest,holdInput,
   // (beta.5) Settings → Search for a cover: the picker again for that game, with SteamGridDB's covers for the typed name
   pcCoverSearch:(id,term)=>{const g=allShelves.flatMap(s=>s.items||[]).find(x=>x&&x.id===id);if(g)setTimeout(()=>pcCoverOpen(g,term),350)},
+  // (beta.9) Settings → Custom games: covers for every custom game (one by one in the picker, or the best match for each)
+  pcCoverBatch:()=>setTimeout(()=>pcCoverBatch(),350),pcCoverAuto:()=>pcCoverAuto(),pcCoverUndo:()=>pcCoverUndo(),coverUndoCount:()=>coverUndo.length,
   // (beta.7) test hooks for the library pass: the filters on offer, picking one, the shelf's games and the one in view
   _lib:{filters:()=>filterList(),filter:v=>pickSort(1,v),cur:()=>{const g=curGame();return g?{id:g.id,title:g.title,kind:g.kind}:null},
     games:()=>(cur()?cur().items.filter(isGame):[]).map(g=>({id:g.id,year:yearOf(g),genres:genresOf(g)})),shelves:()=>shelves.map(s=>({id:s.id,name:s.name,col:!!s.col,ids:(s.items||[]).filter(isGame).map(g=>g.id),last:((s.items||[])[(s.items||[]).length-1]||{}).id||null}))},
@@ -3787,7 +3922,8 @@ window.Shelf={
   _mus:{set:(k,v)=>musSetOpt(k,v),style:()=>musStyle(),hist:h=>{HIST=Object.assign({},HIST,h||{})},tv:()=>({ch:tvS.ch,n:tvS.list.length,list:tvS.list.slice(0,4).map(e=>String(e.key).slice(0,12)),i:tvS.i,ads:tvS.ads.length,bad:[...tvS.bad],guide:!!tvS.guide}),games:()=>allShelves.filter(sh=>sh.kind==="console").flatMap(sh=>sh.items.filter(isGame).map(g=>({id:g.id,title:g.title,sys:sh.id})))}, // museum test hooks (the harness can't see these names)
   refresh,flushSaves,toast,shuffle,cleanLogo,attractNow:()=>{lastInputAt=-1e9;attractCheck()},sound:(o)=>{if(o&&o.enabled!=null){soundOn=!!o.enabled;musTvVol()}if(o&&o.volume!=null&&cfgInfo){cfgInfo.config.ui.volume=+o.volume;paintVol()}if(window.Sound){Sound.set(o);if(o.preview)Sound.play(o.preview);if(o.music!=null||o.musicLevel!=null){if(o.music!=null)mmTrack=String(o.music);if(o.musicLevel!=null)mmLevel=+o.musicLevel;ambient(mmWant)}else if(o.enabled===true)ambient(mmWant)}},raReload:()=>{RA.shelf={};RA.game.clear();raInit()},
   // Settings closed without a rescan: pick up what refresh() used to re-read (sound on/off, the volume icon, prompts)
-  settingsClosed:()=>{if(!cfgInfo)return;const u=cfgInfo.config.ui;soundOn=u.sound!==false;paintVol();buttonsPref=u.buttons||"auto";applyUiAll();renderHints.sig="";renderHints();updateSkipText();lastInputAt=performance.now()},
+  settingsClosed:()=>{if(cpReturn){const x=cpReturn;cpReturn=null;const g=allShelves.flatMap(s=>s.items||[]).find(y=>y&&y.id===x.id);if(g)setTimeout(()=>pcCoverOpen(g,x.term),350)} /* (beta.9) back from the SteamGridDB key's page: the cover picker again */
+    if(!cfgInfo)return;const u=cfgInfo.config.ui;soundOn=u.sound!==false;paintVol();buttonsPref=u.buttons||"auto";applyUiAll();renderHints.sig="";renderHints();updateSkipText();lastInputAt=performance.now()},
   // Settings reads the controller itself: its presses count as activity (attract, dimming), and none of them act while
   // the dimmed screen is up or the press that woke it is still held
   _wake:()=>{lastInputAt=dimAt=performance.now()},padBlocked:()=>dimOn||dimSwallowPad,

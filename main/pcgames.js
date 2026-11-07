@@ -263,6 +263,7 @@ const titleFromExe = exe => path.basename(String(exe || ''), path.extname(String
 let last = new Map();
 function remember(games) { last = new Map(games.map(g => [g.id, g])); }
 const byId = id => last.get(String(id || ''));
+const all = () => [...last.values()]; // (beta.9: the batch cover finder)
 
 // ---------- covers: a title → its Steam app, once ----------
 // data\pc-steam.json: { "<lower title>": { id: 1234 | 0, at } }; a miss is tried again after a week
@@ -294,5 +295,24 @@ async function matchSteam(titles) {
   return n;
 }
 
-module.exports = { init, epicGames, quiverGames, quiverFind, quiverRoots, customGames, titleFromExe, mainExe, remember, byId, steamIdOf, matchSteam, EPIC_DIR,
+// (beta.9) the cover picker, without any key: Steam games with this name, for their official covers. exact: only the very
+// same name, the game's own title ("Quarantine" never offers "Quarantine Zone: The Last Check"); otherwise (a name typed in
+// Search by name) Steam's first few answers. Never a soundtrack, artbook, demo, pack or DLC. [{ id, name }] (at most 3); []
+// offline. Answers kept for 10 minutes.
+const searchMemo = new Map(), NOT_GAME = /\b(soundtrack|ost|artbook|art book|demo|dlc|season pass|expansion pass|wallpapers?|supporter pack|bundle)\b/i; // (not "pack" alone: The Jackbox Party Pack is a game)
+async function steamSearch(term, exact) {
+  const t = String(term || '').replace(/\s+/g, ' ').trim().slice(0, 120); if (!t) return [];
+  const k = t.toLowerCase(), m = searchMemo.get(k);
+  let items = m && Date.now() - m.at < 600000 ? m.items : null;
+  if (!items) {
+    const r = await getJson('https://store.steampowered.com/api/storesearch/?term=' + encodeURIComponent(t) + '&l=english&cc=US', 8000);
+    if (r.err) { log('PC cover: Steam search', r.err); return []; }
+    items = (r.data && Array.isArray(r.data.items) ? r.data.items : []).filter(x => x && /^\d{1,10}$/.test(String(x.id)) && x.name && x.type !== 'sub' && !NOT_GAME.test(x.name)).map(x => ({ id: String(x.id), name: String(x.name).slice(0, 120) }));
+    searchMemo.set(k, { at: Date.now(), items }); while (searchMemo.size > 200) searchMemo.delete(searchMemo.keys().next().value);
+  }
+  if (!exact) return items.slice(0, 3);
+  const want = norm(t); return items.filter(x => norm(x.name) === want).slice(0, 3);
+}
+
+module.exports = { init, epicGames, quiverGames, quiverFind, quiverRoots, customGames, titleFromExe, mainExe, remember, byId, all, steamIdOf, matchSteam, steamSearch, EPIC_DIR,
   storeGames, gogGames, ubisoftGames, eaGames, xboxGames, parseReg, xboxRoots, eaFromDirs, xboxScan };

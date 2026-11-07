@@ -69,6 +69,17 @@ function ensureWindow() {
   win.setIgnoreMouseEvents(true);
   win.loadFile(path.join(__dirname, '..', 'renderer', 'home.html'));
   win.on('closed', () => { win = null; });
+  // (beta.9) the overlay's own page crashed (it did once, the moment the menu opened on the shelf): the controller then went
+  // to a dead window, the shelf waited for a menu that never closed, and the Home button found it "already open". Now the
+  // dead window goes, the menu closes the normal way (Resume: the controller back to the shelf or the game, a paused game
+  // unpaused), and the next Home press makes a fresh overlay
+  win.webContents.on('render-process-gone', (e, d) => {
+    if (d && d.reason === 'clean-exit') return;
+    log('home menu: its page crashed (' + (d && d.reason) + ' ' + (d && d.exitCode) + '): closing the menu so the controller works again');
+    const w = win; win = null; clearTimeout(hideT);
+    try { if (w && !w.isDestroyed()) w.destroy(); } catch {}
+    if ((session && session.open) || shelf) { try { act('resume'); } catch (err) { log('home menu: resume after the crash failed', err.message); shelf = null; if (session) session.open = false; try { padwatch.setMenu(false); } catch {} } }
+  });
   return win;
 }
 // Over an app (Stremio, Nuvio), the menu takes the focus while it's open: the app stays in front behind it otherwise and

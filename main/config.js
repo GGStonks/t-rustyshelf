@@ -140,18 +140,45 @@ function load() {
 }
 
 // temp + fsync + rename: a crash or power cut leaves the old file or the new one, never a truncated config
-function save(cfg) {
-  if (!isObj(cfg)) throw new Error('Not a settings object.');
-  if (readBlocked) throw new Error('Your settings file couldn\'t be read when Boxshelf started (another program had it locked), so it won\'t be overwritten. Restart Boxshelf to load it.');
-  const json = JSON.stringify(cfg, null, 2);
+function writeNow(json, tmpName) {
   fs.mkdirSync(path.dirname(FILE), { recursive: true });
-  const tmp = FILE + '.tmp'; let fd = null;
+  const tmp = FILE + (tmpName || '.tmp'); let fd = null;
   try {
     fd = fs.openSync(tmp, 'w'); fs.writeSync(fd, json); fs.fsyncSync(fd); fs.closeSync(fd); fd = null;
     // Windows: antivirus / indexing can hold the file for a moment; retry for up to about a second
     for (let i = 0; ; i++) { try { fs.renameSync(tmp, FILE); break; } catch (e) { if (i >= 20 || !['EPERM', 'EACCES', 'EBUSY'].includes(e.code)) throw e; sleepSync(50); } }
   } catch (e) { if (fd != null) { try { fs.closeSync(fd); } catch {} } try { fs.unlinkSync(tmp); } catch {} throw e; }
+}
+// the same, without holding up the main process (a slow disk, antivirus scanning the file): the write, its fsync and the
+// rename retries all wait in the background
+async function writeLater(json) {
+  await fs.promises.mkdir(path.dirname(FILE), { recursive: true });
+  const tmp = FILE + '.tmp'; let fh = null;
+  try {
+    fh = await fs.promises.open(tmp, 'w'); await fh.writeFile(json); await fh.sync(); await fh.close(); fh = null;
+    for (let i = 0; ; i++) { try { await fs.promises.rename(tmp, FILE); break; } catch (e) { if (i >= 20 || !['EPERM', 'EACCES', 'EBUSY'].includes(e.code)) throw e; await new Promise(r => setTimeout(r, 50)); } }
+  } catch (e) { if (fh) { try { await fh.close(); } catch {} } try { await fs.promises.unlink(tmp); } catch {} throw e; }
+}
+// (beta.9) save(): checked and turned into text at once (so a bad object or a blocked file is said straight away, as
+// before), then written in the background: one write at a time, the newest settings always the ones written. flush()
+// (Boxshelf quitting) writes anything still waiting, the old way, so nothing is lost.
+let waiting = null, writing = false, lastJson = null;
+async function pump() {
+  if (writing) return; writing = true;
+  try { while (waiting != null) { const json = waiting; waiting = null; try { await writeLater(json); } catch (e) { log('Settings: saving failed (' + (e.code || e.message) + '), trying again with the next change'); if (waiting == null) waiting = json; break; } } }
+  finally { writing = false; }
+}
+function save(cfg) {
+  if (!isObj(cfg)) throw new Error('Not a settings object.');
+  if (readBlocked) throw new Error('Your settings file couldn\'t be read when Boxshelf started (another program had it locked), so it won\'t be overwritten. Restart Boxshelf to load it.');
+  lastJson = waiting = JSON.stringify(cfg, null, 2);
+  pump();
   return cfg;
+}
+function flush() {
+  if (waiting == null && !writing) return;
+  const json = lastJson; waiting = null;
+  try { writeNow(json, '.tmp-quit'); } catch (e) { log('Settings: last save at quit failed:', e.message); }
 }
 
 // Values the settings screen chooses from: anything else (a hand-edited file, an older or newer version) falls back to
@@ -255,4 +282,4 @@ function sanitizeArt(a, ui) {
 // settings coming back from the screen: same shape rules as a loaded file (a missing or broken section gets its defaults)
 function normalize(c) { if (!isObj(c)) throw new Error('Not a settings object.'); return sanitize(merge(defaults(), c)); }
 
-module.exports = { init, load, save, defaults, normalize, sanitize, file: () => FILE, blocked: () => readBlocked, ART, defaultArtStyle, cleanArtStyle, sanitizeArt };
+module.exports = { init, load, save, flush, defaults, normalize, sanitize, file: () => FILE, blocked: () => readBlocked, ART, defaultArtStyle, cleanArtStyle, sanitizeArt };

@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('boxshelf', {
   getCore: (systemId) => call('racore:get', { systemId }), openBiosFolder: (systemId) => call('bios:open', { systemId }),
   onCoreProgress: (fn) => { const h = (_e, d) => fn(d); ipcRenderer.on('racore:progress', h); return () => ipcRenderer.removeListener('racore:progress', h); },
   log: msg => ipcRenderer.send('renderer:log', String(msg).slice(0, 2000)),
+  crumb: t => ipcRenderer.send('ui:crumb', String(t).slice(0, 200)), // (beta.9) the screen's last steps, logged only if it crashes
   uiBusy: () => ipcRenderer.send('ui:busy'),
   saveConfig: cfg => call('config:save', cfg),
   detect: () => call('detect'),
@@ -51,6 +52,7 @@ contextBridge.exposeInMainWorld('boxshelf', {
   pcCoverUse: (id, key) => call('pccover:use', { id, key }),
   pcCoverOwn: id => call('pccover:own', { id }),
   pcCoverReset: id => call('pccover:reset', { id }),
+  pcCoverMissing: () => call('pccover:missing'), // (beta.9) custom games with no cover chosen yet
   renameGame: o => call('game:rename', o), // (beta.5) { systemId, file } or { id }, and title ('' = back to the file's name)
   themes: () => call('themes:list'),
   setTheme: (systemId, kind, file) => call('themes:set', { systemId, kind, file }),
@@ -131,6 +133,10 @@ contextBridge.exposeInMainWorld('boxshelf', {
   downloadManuals: choices => call('manuals:download', { choices }),
   saveOptimizedModel: (systemId, kind, bytes) => call('models:saveOptimized', { systemId, kind, bytes }),
   rejectManual: (systemId, file) => call('manuals:reject', { systemId, file }),
+  onManualTurn: fn => ipcRenderer.on('manuals:turn', (e, d) => fn(d)), // (beta.9) Wrong game / Repair: { wait } then { go }
+  checkManuals: () => call('manuals:check'), // (beta.9) Settings → Get manuals → Check my manuals
+  cancelCheckManuals: () => call('manuals:checkCancel'),
+  onManualCheck: fn => ipcRenderer.on('manuals:check', (e, d) => fn(d)), // { stage, done, total, checked, moved }
   findIpl: systemId => call('dolphin:ipl', { systemId }),
   openIplFolder: (systemId, region) => call('dolphin:iplFolder', { systemId, region }),
   toggleFullscreen: () => call('app:fullscreen'),
@@ -157,6 +163,8 @@ contextBridge.exposeInMainWorld('boxshelf', {
   onHistoryChanged: fn => ipcRenderer.on('history:changed', (e, info) => fn(info)),
   apiStatus: () => call('api:status'),
   testApi: service => call('api:test', { service: String(service || '') }),
+  clipboardText: () => call('clipboard:text'), // (beta.9) setup's Paste buttons
+  repairManual: (systemId, file) => call('manuals:repair', { systemId: String(systemId || ''), file: String(file || '') }), // (beta.9) the reader's Repair
   raEmulators: () => call('ra:emulators'),
   onApiStatus: fn => ipcRenderer.on('api:status', (e, st) => fn(st)),
   // Art Studio (1.67): every call takes one object; a game is { systemId, file }. The on… ones return an unsubscribe.

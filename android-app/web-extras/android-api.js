@@ -78,14 +78,26 @@
 
   // ---------- scanning ----------
   const COMP = A.COMPANION;
+  // (beta.9) video previews on Android: the videos beside the games ("videos", "media/videos", "snap" folders under a
+  // console's games folder, the way RetroBat / Batocera / ES-DE scrapers leave them) come with the scan itself (the same
+  // listing, three more file types); by system id: Map(key -> { uri, name, size })
+  const portKey = p => String(p || '').replace(/[^\w]/g, '_'); // (beta.9: a package name as a settings key, dots and all)
+  const VID_EXTS = ['mp4', 'webm', 'm4v'], vids = new Map(), ytFns = [];
+  const ytOff = () => { const f = document.getElementById('bsYt'); if (f) { f.src = 'about:blank'; f.remove(); } };
+  const ytPlace = (f, r, show) => { f.style.left = r.x + 'px'; f.style.top = r.y + 'px'; f.style.width = r.w + 'px'; f.style.height = r.h + 'px'; f.style.visibility = show ? 'visible' : 'hidden'; };
+  const vkey = n => String(n || '').toLowerCase().replace(/\.[a-z0-9]{2,4}$/, '').replace(/\s*[([][^)\]]*[)\]]/g, '').replace(/-(video|01|02|trailer)$/i, '').replace(/[^a-z0-9]+/g, '');
   async function scanSystem(s, c) {
-    const files = [];
+    const files = [], vmap = new Map();
     for (const dir of c.romDirs || []) {
       const uri = st.folders[dir]; if (!uri) { log('no access to', dir); continue; }
-      const exts = [...new Set([...s.extensions, ...Object.keys(COMP)])];
-      try { const r = await N.listFiles({ uri, exts, depth: 4 }); for (const f of r.files || []) files.push({ ...f, path: idToPath(f.docId), tree: uri }); }
+      const exts = [...new Set([...s.extensions, ...Object.keys(COMP), ...VID_EXTS])];
+      try { const r = await N.listFiles({ uri, exts, depth: 4 }); for (const f of r.files || []) {
+        if (VID_EXTS.includes(String(f.ext || '').toLowerCase()) && !s.extensions.includes(f.ext)) { const base = String(f.name).replace(/\.[^.]+$/, '').toLowerCase(), v = { uri: f.uri, name: f.name, size: f.size || 0 };
+          if (!vmap.has('=' + base)) vmap.set('=' + base, v); const k = vkey(f.name); if (k && !vmap.has(k)) vmap.set(k, v); continue; }
+        files.push({ ...f, path: idToPath(f.docId), tree: uri }); } }
       catch (e) { log('scan failed', dir, e && e.message); }
     }
+    vids.set(s.id, vmap);
     // a .cue / .gdi / .m3u owns the track and disc files beside it; those never get boxes of their own
     const byDir = new Map(); for (const f of files) { const k = f.path.slice(0, f.path.lastIndexOf('/')); (byDir.get(k) || byDir.set(k, []).get(k)).push(f); }
     const hidden = new Set();
@@ -109,8 +121,15 @@
       const e = emuFor(pkgOf(c.emulator)) || E[s.emus[0]];
       out.push({ id: s.id, kind: 'console', name: s.name, emulatorName: e ? e.name : '', hasEmulator: !!c.emulator, emulator: c.emulator, gameArgs: '', bootOnLaunch: c.bootOnLaunch !== false, games: await scanSystem(s, c) }); }
     // Apps shelf: every app on the device with a launcher icon (Thor tools, store, media apps…), Boxshelf itself left out
+    // (beta.9) ports, recomps and custom APKs picked in Settings → Games → Ports & custom APKs: a Custom shelf of their own
+    // (and off the Apps shelf, so nothing shows twice). Stored per app as config.portsOn["com_example_game"] = true
+    const portOn = p => !!(st.config.portsOn && st.config.portsOn[portKey(p)]);
+    try { const inst = await apps(true);
+      const ports = [...inst].filter(([p]) => p !== 'io.github.boxshelf' && portOn(p)).sort((x, y) => String(x[1]).localeCompare(String(y[1]), undefined, { sensitivity: 'base' }))
+        .map(([p, label]) => ({ kind: 'app', id: 'port-' + p, appId: p, title: String(label), path: p, art: {} }));
+      if (ports.length) out.push({ id: 'custom', kind: 'apps', name: 'Custom', games: ports }); } catch (e) { log('ports shelf', e && e.message); }
     if (st.config.apps.android === undefined || st.config.apps.android.enabled !== false) { try { const inst = await apps(true);
-      const list = [...inst].filter(([p]) => p !== 'io.github.boxshelf').sort((x, y) => String(x[1]).localeCompare(String(y[1]), undefined, { sensitivity: 'base' }))
+      const list = [...inst].filter(([p]) => p !== 'io.github.boxshelf' && !portOn(p)).sort((x, y) => String(x[1]).localeCompare(String(y[1]), undefined, { sensitivity: 'base' }))
         .map(([p, label]) => ({ kind: 'app', id: 'app-' + p, appId: p, title: String(label), path: p, art: {} }));
       if (list.length) out.push({ id: 'media', kind: 'apps', name: 'Apps', games: list }); } catch (e) { log('apps shelf', e && e.message); } }
     applyArt(out); applyManuals(out); st.library = out; store('library.json', out); // (saved at once: a delayed save was lost if the app closed or reloaded right after a scan; tested in beta.8)
@@ -209,7 +228,8 @@
     ps2: 'Sony - PlayStation 2', psp: 'Sony - PlayStation Portable', psx: 'Sony - PlayStation', n64: 'Nintendo - Nintendo 64', dreamcast: 'Sega - Dreamcast', saturn: 'Sega - Saturn',
     megadrive: 'Sega - Mega Drive - Genesis', mastersystem: 'Sega - Master System - Mark III', gamegear: 'Sega - Game Gear', snes: 'Nintendo - Super Nintendo Entertainment System',
     nes: 'Nintendo - Nintendo Entertainment System', gba: 'Nintendo - Game Boy Advance', gbc: 'Nintendo - Game Boy Color', gb: 'Nintendo - Game Boy',
-    pcengine: 'NEC - PC Engine - TurboGrafx 16', neogeo: 'SNK - Neo Geo' }; // arcade: MAME sets are named by short zip names, which libretro's titles never match
+    pcengine: 'NEC - PC Engine - TurboGrafx 16', neogeo: 'SNK - Neo Geo',
+    segacd: 'Sega - Mega-CD - Sega CD', sega32x: 'Sega - 32X', atari2600: 'Atari - 2600', atarilynx: 'Atari - Lynx', wonderswan: 'Bandai - WonderSwan', dos: 'DOS' }; // (beta.9: the rest of wave 2) // arcade: MAME sets are named by short zip names, which libretro's titles never match
   const TDB_SYS = { gc: 'wii', wii: 'wii' }; // GameTDB keeps GameCube under its Wii art. (3DS / Switch / Wii U are named by title ids that
   // need decrypting or unpacking the game to read: not done here, ScreenScraper covers those consoles by file name instead)
   const TDB_REGIONS = { E: ['US'], N: ['US'], J: ['JA'], K: ['KO'], P: ['EN', 'FR', 'DE', 'ES', 'IT', 'NL'], D: ['DE', 'EN'], F: ['FR', 'EN'], S: ['ES', 'EN'], I: ['IT', 'EN'], H: ['NL', 'EN'], U: ['EN', 'AU'], X: ['EN', 'US'], Y: ['EN', 'US'], Z: ['EN', 'US'] };
@@ -732,7 +752,8 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
     ps2: ['ps2', 'playstation 2'], psx: ['playstation', 'psx', 'ps1', 'psone'], n3ds: ['3ds', 'nintendo 3ds'], nds: ['nintendo ds', 'nds'], n64: ['nintendo 64', 'n64'],
     snes: ['super nintendo', 'snes', 'super famicom'], nes: ['nintendo entertainment system', 'nes', 'famicom'], gba: ['game boy advance', 'gba'], gbc: ['game boy color', 'gbc'],
     gb: ['game boy', 'gameboy'], megadrive: ['genesis', 'mega drive', 'megadrive'], saturn: ['saturn'], dreamcast: ['dreamcast'], mastersystem: ['master system'],
-    gamegear: ['game gear'], pcengine: ['turbografx', 'pc engine'], neogeo: ['neo geo'] };
+    gamegear: ['game gear'], pcengine: ['turbografx', 'pc engine'], neogeo: ['neo geo'],
+    segacd: ['sega cd', 'mega cd', 'mega-cd'], sega32x: ['32x', 'sega 32x'], atari2600: ['atari 2600', '2600'], atarilynx: ['lynx', 'atari lynx'], wonderswan: ['wonderswan', 'wonderswan color'], dos: ['ms-dos', 'msdos', 'dos'] };
   const NOISE_W = /^(manual|instruction|instructions|booklet|nintendo|sony|sega|eng|english|usa|us|eu|pal|ntsc|scan|scans|game|games)$/;
   const manWords = s => new Set(norm(s).split(' ').filter(w => w.length > 1 || /\d/.test(w)));
   function manScore(title, t) { // how much of the game's title the item covers; much else in it, or another sequel number, counts against
@@ -900,7 +921,8 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
     psx: 'Sony Playstation', ps2: 'Sony Playstation 2', ps3: 'Sony Playstation 3', ps4: 'Sony Playstation 4', psp: 'Sony PSP', x360: 'Microsoft Xbox 360',
     n64: 'Nintendo 64', snes: 'Super Nintendo Entertainment System', nes: 'Nintendo Entertainment System', gba: 'Nintendo Game Boy Advance',
     gbc: 'Nintendo Game Boy Color', gb: 'Nintendo Game Boy', megadrive: 'Sega Genesis', saturn: 'Sega Saturn', dreamcast: 'Sega Dreamcast',
-    mastersystem: 'Sega Master System', gamegear: 'Sega Game Gear', pcengine: 'NEC TurboGrafx-16', neogeo: 'SNK Neo Geo AES' };
+    mastersystem: 'Sega Master System', gamegear: 'Sega Game Gear', pcengine: 'NEC TurboGrafx-16', neogeo: 'SNK Neo Geo AES',
+    segacd: 'Sega CD', sega32x: 'Sega 32X', atari2600: 'Atari 2600', atarilynx: 'Atari Lynx', wonderswan: 'WonderSwan', dos: 'MS-DOS' };
   const LB_IMG = 'https://images.launchbox-app.com/', LB_MB = 110, LB_DAYS = 90;
   const lb = { meta: undefined, shards: {}, dropT: 0, job: null, prog: null, L: [] };
   const lbSafe = p => String(p).replace(/[^A-Za-z0-9]+/g, '_');
@@ -1078,7 +1100,7 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
   // moment of the request (from the saved settings). Media addresses in the answers carry it in their query: they're kept
   // without it (ssClean). Nothing here logs an address or a body.
   const SS_SYS = { gc: 13, wii: 16, wiiu: 18, sw: 225, n3ds: 17, nds: 15, ps2: 58, psp: 61, psx: 57, n64: 14, dreamcast: 23, saturn: 22, megadrive: 1, mastersystem: 2,
-    gamegear: 21, snes: 4, nes: 3, gba: 12, gbc: 10, gb: 9, pcengine: 31, neogeo: 142 };
+    gamegear: 21, snes: 4, nes: 3, gba: 12, gbc: 10, gb: 9, pcengine: 31, neogeo: 142, segacd: 20, sega32x: 19, atari2600: 26, atarilynx: 28, wonderswan: 45, dos: 135 };
   const JEWEL = new Set(['psx', 'saturn', 'dreamcast', 'pcengine']); // CD cases: back insert with the spines on it
   const SS_MEDIA = { front: ['box-2D'], back: ['box-2D-back'], spine: ['box-2D-side'], wrap: ['box-texture'], disc: ['support-2D'] };
   const SS_REGION = r => { r = String(r || '').toLowerCase(); return r === 'us' || r === 'cus' ? 'usa' : r === 'jp' ? 'jpn' : r === 'wor' ? 'world' : /^(eu|fr|de|es|it|uk|nl|pt|se|dk|fi|no|pl|gr|ru|au|nz)$/.test(r) ? 'eur' : ''; };
@@ -1540,6 +1562,22 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
           info: 'Looks again for every missing picture (covers, discs, backs and spines), including ones nothing was found for last time.', run: () => api.artFetchNow(), sub: artSub, keys: 'covers box art download missing back spine' }); continue; }
       rows.push(r); }
     sec.rows = rows;
+    // (beta.9) Games → Ports & custom APKs: switch on the installed apps that are games (ports, recomps, a custom APK) and
+    // they get a Custom shelf of their own, off the Apps shelf. One switch per app, saved with the rest of Settings
+    const con = sections.find(s => s && s.id === 'consoles');
+    if (con && h && h.M && bind) {
+      const P = { list: null, loading: false };
+      const load = () => { if (P.list || P.loading) return; P.loading = true;
+        api.androidApps().then(L => { P.list = L || []; }).catch(() => { P.list = []; }).finally(() => { P.loading = false; if (window.Settings && Settings.repaint) Settings.repaint(); }); };
+      const appRows = () => { load(); if (!P.list) return [{ t: 'action', label: 'Looking for your apps…', btn: '', ns: true, run: () => {} }];
+        if (!P.list.length) return [{ t: 'action', label: 'No apps found', btn: '', ns: true, run: () => {} }];
+        return P.list.map(a => Object.assign({ t: 'toggle', label: a.label, keys: 'port ports apk recomp custom app ' + a.label, rescan: true, ns: true,
+          info: `Puts ${a.label} on the Custom shelf (and off the Apps shelf). It starts like any app; nothing on the device is changed.` }, bind('portsOn.' + portKey(a.pkg), false))); };
+      const page = h.M('Ports & custom APKs', 'android-ports', 'Ports, recomps and games you installed as an APK, on a Custom shelf of their own.',
+        'Switch on the apps that are games. They get a case on the Custom shelf, like your consoles\' games, and leave the Apps shelf.', [{ t: 'dyn', fn: appRows }],
+        { keys: 'port ports apk apks recomp recomps custom shelf android games add', sub: () => { const n = Object.values(st.config.portsOn || {}).filter(Boolean).length; return { text: n ? `${n} on the Custom shelf` : 'None yet' }; } });
+      con.rows = [...con.rows, { t: 'head', text: 'Ports & custom APKs' }, page];
+    }
     const acct = sections.find(s => s && s.id === 'acct'); // (keys live in Boxshelf's private storage here, not Windows' encrypted store)
     if (acct) acct.lead = 'Sign-ins and keys that add extra art and features. Kept in Boxshelf\'s private storage on this device. ' + ART_HELP;
     // IGDB (0.3.1, Android): official HD covers in Art Studio, with a free Twitch developer app's Client ID + Secret
@@ -1578,6 +1616,8 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
     add('saturn', 'saturn', 'sega saturn'); add('dreamcast', 'dreamcast', 'dc', 'sega dreamcast'); add('mastersystem', 'mastersystem', 'master system', 'sms', 'sega master system');
     add('gamegear', 'gamegear', 'game gear', 'gg', 'sega game gear'); add('pcengine', 'pcengine', 'pc engine', 'tg16', 'turbografx', 'turbografx 16', 'pce');
     add('neogeo', 'neogeo', 'neo geo'); add('arcade', 'arcade', 'mame', 'fbneo', 'fba', 'finalburn neo');
+    add('segacd', 'segacd', 'sega cd', 'megacd', 'mega cd'); add('sega32x', 'sega32x', '32x', 'sega 32x'); add('atari2600', 'atari2600', 'atari 2600', '2600', 'a2600');
+    add('atarilynx', 'atarilynx', 'lynx', 'atari lynx'); add('wonderswan', 'wonderswan', 'wonderswancolor', 'wonderswan color', 'wsc', 'ws'); add('dos', 'dos', 'msdos', 'ms-dos', 'pc dos'); // (beta.9)
     for (const s of SYS) add(s.id, s.id, s.name, ...(ALIASES[s.id] || []));
     return m; })());
   // "Nintendo GameCube ROMs" → gc; null when the name says nothing Boxshelf knows
@@ -1657,6 +1697,32 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
       return (list || []).map(p => { const pkg = pkgOf(p); return { path: p, file: !!(pkg && inst.has(pkg)), dir: !!st.folders[p] }; }); },
     scan: () => scanAll().then(handOut),
     scanIfChanged: () => scanAll().then(handOut),
+    // (beta.9) video previews (app.js PV): a video beside the game (copied once into the app's cache: the page can't open
+    // the games folder's documents), else its YouTube trailer (LaunchBox's link) in the Media tab. Details only on Android
+    // (no video behind the moving shelf: 60 fps first)
+    previewFind: async ({ systemId, file, title, youtube } = {}) => { await ready; const ui = st.config.ui || {}; if ((ui.previews || 'off') === 'off') return null;
+      const m = vids.get(systemId); let v = null;
+      if (m && file) { const base = String(file).split('/').pop().replace(/\.[^.]+$/, '').toLowerCase(); v = m.get('=' + base) || m.get('=' + base + '-video') || m.get(vkey(base)) || (title ? m.get(vkey(title)) : null); }
+      if (v) { const r = await N.copyPreview({ uri: v.uri, name: (systemId + '-' + v.name).replace(/[^\w.-]+/g, '_').slice(0, 120), size: v.size }).catch(() => null);
+        if (r && r.ok && r.path) return { type: 'file', url: fileUrl(r.path) }; }
+      const y = /^https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{6,20})/.exec(String(youtube || ''));
+      if (y && ui.previewYoutube !== false) return { type: 'youtube', id: y[1] };
+      return null; },
+    previewCount: async () => { await ready; const out = []; let total = 0;
+      for (const s of SYS) { const m = vids.get(s.id); if (!m || !m.size) continue; const lib = (st.library || []).find(x => x.id === s.id), games = (lib && lib.games) || [];
+        const n = games.filter(g => { const base = String(g.file || '').split('/').pop().replace(/\.[^.]+$/, '').toLowerCase(); return m.has('=' + base) || m.has(vkey(base)) || m.has(vkey(g.title)); }).length;
+        if (n) { out.push({ id: s.id, name: s.name, n, of: games.length }); total += n; } }
+      return { total, systems: out, steamBytes: 0 }; },
+    // YouTube in the Media tab: YouTube's own player in a frame laid over the box (the page moves it with the panel)
+    previewYt: async (id, rect, muted) => { if (!/^[\w-]{6,20}$/.test(String(id || '')) || !rect) return false; ytOff();
+      const f = document.createElement('iframe'); f.id = 'bsYt'; f.setAttribute('allow', 'autoplay; encrypted-media'); f.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+      f.src = `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&mute=${muted === false ? 0 : 1}&controls=0&playsinline=1&loop=1&playlist=${id}&rel=0&iv_load_policy=3&disablekb=1&fs=0`;
+      f.style.cssText = 'position:fixed;border:0;z-index:350;pointer-events:none;background:#000;opacity:0;transition:opacity .45s ease'; ytPlace(f, rect, true); document.body.appendChild(f);
+      f.addEventListener('load', () => setTimeout(() => { if (document.getElementById('bsYt') !== f) return; f.style.opacity = '1'; ytFns.forEach(fn => { try { fn({ id, state: 'playing' }); } catch {} }); }, 900), { once: true });
+      return true; },
+    previewYtMove: async (rect, show) => { const f = document.getElementById('bsYt'); if (!f) return; if (rect) ytPlace(f, rect, show !== false); else f.style.visibility = show === false ? 'hidden' : 'visible'; },
+    previewYtStop: async () => ytOff(),
+    onPreviewYt: fn => { ytFns.push(fn); },
     cachedLibrary: async () => { await ready; return handOut(st.library); },
     launchGame: async (systemId, file) => { await ready; const g = gameByFile(file); if (!g) throw new Error('That game is no longer in its folder. Rescan to update the shelf.'); return start(systemId, g); },
     launchEmulator: systemId => start(systemId, null),
@@ -1717,7 +1783,8 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
   Object.assign(api, over, studioApi, { thumbFor }); // (thumbFor: the shelf's smaller copies, 0.3.3)
   const ALIASES = { gc: ['gamecube', 'ngc'], wii: [], wiiu: ['wii u'], sw: ['switch', 'nsw'], n3ds: ['3ds'], nds: ['ds'], ps2: ['playstation 2'], psp: [], psx: ['ps1', 'psx', 'playstation'],
     n64: ['nintendo 64'], dreamcast: ['dc'], saturn: [], megadrive: ['genesis', 'md'], mastersystem: ['sms', 'master system'], gamegear: ['gg', 'game gear'], snes: ['super nintendo', 'sfc'],
-    nes: ['famicom', 'fc'], gba: ['game boy advance'], gbc: ['game boy color'], gb: ['game boy'], pcengine: ['tg16', 'turbografx', 'pce'], neogeo: ['neo geo'], arcade: ['mame', 'fbneo'] };
+    nes: ['famicom', 'fc'], gba: ['game boy advance'], gbc: ['game boy color'], gb: ['game boy'], pcengine: ['tg16', 'turbografx', 'pce'], neogeo: ['neo geo'], arcade: ['mame', 'fbneo'],
+    segacd: ['megacd', 'sega cd'], sega32x: ['32x'], atari2600: ['2600', 'a2600'], atarilynx: ['lynx'], wonderswan: ['wsc', 'ws', 'wonderswancolor'], dos: ['msdos'] };
   // Keyboards: Boxshelf has its own on-screen keyboard for the controller, and Android's popping up on top of it fought
   // over the buttons (reading room search on the Thor). A text field focused by the controller keeps Android's keyboard
   // away (inputmode=none); a field you tap with a finger gets it, as you'd expect on a touchscreen.
@@ -1738,7 +1805,7 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
   // ---------- a pretend device for browser testing (?fakeNative=1) ----------
   function fakeNative() {
     const files = {}, listeners = {};
-    const lib = { 'primary:ROMs/gc': ['Pikmin (USA).rvz', 'Legend of Zelda, The - The Wind Waker (USA).rvz', 'Metroid Prime (USA) (Disc 1).iso'],
+    const lib = { 'primary:ROMs/gc': ['Pikmin (USA).rvz', 'Legend of Zelda, The - The Wind Waker (USA).rvz', 'Metroid Prime (USA) (Disc 1).iso', 'Pikmin (USA).mp4' /* (beta.9: a video beside a game, the way a videos folder is listed) */],
       'primary:ROMs/psx': ['Crash Bandicoot (USA).cue', 'Crash Bandicoot (USA).bin', 'Final Fantasy VII (USA) (Disc 1).chd', 'Final Fantasy VII (USA) (Disc 2).chd'],
       'primary:ROMs/snes': ['Super Metroid (Japan, USA).sfc', 'Chrono Trigger (USA).sfc'],
       // more of the main ROMs folder (only seen when it is picked as a whole): one folder known by name, one by its games,
@@ -1795,7 +1862,8 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
       activities: async ({ pkg }) => ({ activities: pkg.includes('azahar') ? ['org.citra.citra_emu.activities.EmulationActivity', 'org.citra.citra_emu.ui.main.MainActivity'] : [] }),
       folderAccess: async () => ({ uris: [] }),
       pickFolder: async () => { const id = window.__fakePickNext || order[pickN++ % order.length]; window.__fakePickNext = null; return { uri: 'content://com.android.externalstorage.documents/tree/' + encodeURIComponent(id), docId: id }; },
-      listFiles: async ({ uri }) => { const id = idOfTree(uri); return { files: (lib[id] || []).map(n => ({ name: n, docId: id + '/' + n, dir: '', ext: n.split('.').pop().toLowerCase(), uri: treeOnly(uri) + '/document/' + encodeURIComponent(id + '/' + n), size: 1e8, mtime: 1.7e12 })) }; },
+      copyPreview: async ({ uri }) => { window.__copied = (window.__copied || []).concat(String(uri)); return { ok: true, path: window.__previewUrl || '/__test/preview.webm' }; }, // (beta.9: the video played from the app's cache)
+    listFiles: async ({ uri }) => { const id = idOfTree(uri); return { files: (lib[id] || []).map(n => ({ name: n, docId: id + '/' + n, dir: '', ext: n.split('.').pop().toLowerCase(), uri: treeOnly(uri) + '/document/' + encodeURIComponent(id + '/' + n), size: 1e8, mtime: 1.7e12 })) }; },
       listDirs: async ({ uri }) => { const id = idOfTree(uri), kids = new Set();
         for (const k of [...Object.keys(lib), ...Object.keys(dirs)]) if (k.startsWith(id + '/')) kids.add(k.slice(id.length + 1).split('/')[0]);
         return { dirs: [...kids].map(n => ({ name: n, docId: id + '/' + n, uri: treeOnly(uri) + '/document/' + encodeURIComponent(id + '/' + n) })) }; },

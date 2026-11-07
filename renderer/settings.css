@@ -387,7 +387,9 @@ body.safe-area #app>#bss{scale:var(--safe-inv,1)}
 .bsa-scene{position:relative;perspective:1400px;width:100%;height:430px;display:grid;place-items:center;flex:none}
 .bsa-turn{transform-style:preserve-3d;transition:transform .8s cubic-bezier(.3,.7,.2,1);cursor:pointer}
 .bsa-turn.turned{transform:rotateY(180deg)}
-.bsa-case{position:relative;width:250px;height:350px;transform-style:preserve-3d;animation:bsaturn 9s ease-in-out infinite}
+/* (beta.9) the case takes the shape of the game's front art (--ar, its width : height, set by casePaint), at the same
+   height, never wider than --mw: a 3DS, PSP, Switch, Blu-ray or cartridge box shows whole instead of cropped to a DVD case */
+.bsa-case{--h:350px;--ar:.714;--mw:340px;position:relative;width:min(calc(var(--h) * var(--ar)),var(--mw));height:calc(min(calc(var(--h) * var(--ar)),var(--mw)) / var(--ar));transform-style:preserve-3d;animation:bsaturn 9s ease-in-out infinite;transition:width .25s,height .25s}
 @keyframes bsaturn{0%,100%{transform:rotateY(-24deg) rotateX(6deg)}50%{transform:rotateY(18deg) rotateX(4deg)}}
 .bsa-case>div{position:absolute;overflow:hidden;background:#15161c}
 .bsa-case .f{inset:0;border-radius:6px;transform:translateZ(14px);box-shadow:0 0 0 3px #1b1b1f}
@@ -464,7 +466,7 @@ body.safe-area #app>#bss{scale:var(--safe-inv,1)}
 .bss-root.narrow .bsa-pre .bsa-fc{font-size:10px}
 .bss-root.narrow .bsa-presets{gap:12px}.bss-root.narrow .bsa-pre .im{height:190px}.bss-root.narrow .bsa-pre b{font-size:19px}.bss-root.narrow .bsa-pre>span{font-size:13.5px}
 .bss-root.narrow .bsa-pre .opt i{padding:6px 8px;font-size:12.5px}
-.bss-root.narrow .bsa-scene{height:380px}.bss-root.narrow .bsa-case{width:220px;height:308px}
+.bss-root.narrow .bsa-scene{height:380px}.bss-root.narrow .bsa-case{--h:308px;--mw:300px}
 .bss-root.narrow .bsa-pill{padding:0 14px;font-size:15.5px}
 .bss-root.narrow .bsa-part{padding:0 12px;gap:10px}.bss-root.narrow .bsa-part .nm{font-size:17px}
 @media (prefers-reduced-motion:reduce){.bsa-case,.bsa-disc,.bsa-ph.wait::after{animation:none}.bsa-grid,.bsa-cgrid,.bsa-turn{transition:none}}
@@ -498,6 +500,11 @@ body.bss-reduce .bsa-card.dk.sel .im.disc img{animation:none}
 .bsa-card .in.act .im{display:grid;place-items:center;border-radius:10px;background:rgba(255,255,255,.04);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.14);border:0}
 .bsa-card .in.act .im span{font-size:54px;font-weight:300;color:var(--dim)}.bsa-card.sel .in.act .im span{color:#fff}
 .bsa-card .in.act .im.disc{border-radius:50%}
+/* (beta.9) the "add an account" slot: an empty, dashed blue slot that stands out from My picture / Undo (static: no animation) */
+.bsa-card .in.act.acct .im{background:linear-gradient(165deg,rgba(107,140,255,.16),rgba(107,140,255,.03) 70%);box-shadow:inset 0 0 0 1.5px rgba(107,140,255,.22);border:1.5px dashed rgba(107,140,255,.75)}
+.bsa-card .in.act.acct .im span{display:grid;place-items:center;width:84px;height:84px;border-radius:50%;background:rgba(107,140,255,.14);color:#9fb3ff}
+.bsa-card.sel .in.act.acct .im{border-color:#6b8cff;background:linear-gradient(165deg,rgba(107,140,255,.28),rgba(107,140,255,.06) 70%)}.bsa-card.sel .in.act.acct .im span{color:#fff;background:rgba(107,140,255,.3)}
+.bsa-card .in.act.acct .ed{color:#b9c7ff}.bsa-card.sel .in.act.acct .ed{color:#fff}
 /* Settings → Museum: the preview's Retro TV (stand, size, place) and the scene's own light, so every change shows at once */
 .bss-mtv{position:absolute;left:var(--x,70%);bottom:14%;width:calc(8.5vw * var(--s,1));aspect-ratio:1.28;transform:translateX(-50%);display:none;transition:left .45s,width .45s,bottom .45s}
 .bss-mus.tv .bss-mtv{display:block}

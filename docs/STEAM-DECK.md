@@ -13,7 +13,7 @@ Boxshelf's Linux build runs on the Steam Deck. It's experimental: tell us how it
 
 Start Boxshelf from your Library, under **Non-Steam**. Started from Steam, your controller works as a gamepad in every game Boxshelf starts.
 
-- **Leaving a game:** use your emulator's quit hotkey. EmuDeck sets Select + Start for most emulators. (Boxshelf's own Home menu on the Guide button is Windows-only for now.)
+- **Leaving a game:** hold **Select + Start** for a moment. Boxshelf closes the game, whatever the emulator, and you're back on the shelf. (Your emulator's own quit hotkey works too. Boxshelf's Home menu on the Guide button is Windows-only for now.)
 - **Why not Desktop Mode?** There, programs not started by Steam get the Deck's keyboard-and-mouse layout: **B is the Esc key**, and most emulators quit their game on Esc.
 
 ## If Boxshelf doesn't start in Game Mode

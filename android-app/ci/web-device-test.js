@@ -78,6 +78,12 @@ async function newPage(browser, init) {
 server.listen(0, async () => {
   const base = `http://localhost:${server.address().port}/index.html`;
   const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+  // Real controllers plugged into the PC running the test are hidden from every page: a pad's button or stick moved them
+  // (a game launched by itself mid-check). The GitHub machines have none, so this only makes local runs match them.
+  { const noPads = () => { try { Object.defineProperty(Navigator.prototype, 'getGamepads', { configurable: true, value: () => [null, null, null, null] }); } catch (e) {} };
+    const nc = browser.newContext.bind(browser);
+    browser.newContext = async o => { const c = await nc(o); await c.addInitScript(noPads); return c; };
+    browser.newPage = async o => { const c = await browser.newContext(o), p = await c.newPage(); const close = p.close.bind(p); p.close = async a => { await close(a); await c.close().catch(() => {}); }; return p; }; }
   try {
     { const p = await browser.newPage({ viewport: { width: 360, height: 512 } }); // four plain test covers (no network in the test)
       for (let i = 0; i < 4; i++) { await p.setContent(`<body style="margin:0;background:hsl(${i * 90 + 20},60%,38%);font:bold 54px sans-serif;color:#fff;display:grid;place-items:center;height:512px">TEST ART ${i}</body>`);
@@ -116,7 +122,7 @@ server.listen(0, async () => {
           shelves: lib.map(s => ({ id: s.id, titles: s.games.map(g => g.title + ((g.discs || []).length > 1 ? ` [${g.discs.length} discs]` : '')) })) };
       });
       const shelf = id => (setup.shelves.find(s => s.id === id) || { titles: [] }).titles;
-      check('23 systems offered on Android', setup.consoles === 23, setup.consoles);
+      check('29 systems offered on Android', setup.consoles === 29, setup.consoles); // (beta.9: + Sega CD, 32X, Atari 2600, Lynx, WonderSwan, DOS)
       check('Emulators detected (Dolphin, DuckStation, RetroArch)', /dolphin/i.test(setup.emus[0]) && /duckstation/i.test(setup.emus[1]) && /retroarch/i.test(setup.emus[2]), setup.emus.join(', '));
       check('GameCube scan: clean titles', shelf('gc').includes('The Legend of Zelda - The Wind Waker') && shelf('gc').length === 3, shelf('gc').join(' | '));
       check('PlayStation scan: .bin hidden behind .cue, 2-disc game is one box', shelf('psx').length === 2 && shelf('psx').some(t => /\[2 discs\]/.test(t)), shelf('psx').join(' | '));
@@ -1156,7 +1162,7 @@ server.listen(0, async () => {
       const h0 = await hub();
       await page.screenshot({ path: path.join(OUT, '6-wizard-consoles.png') });
       check('Wizard: consoles found on the device first, the rest under More',
-        h0.title === 'Your consoles' && h0.big.join() === 'gc,wii,n3ds,psx' && /More consoles \(19\)/.test(h0.more) && h0.small === 0 && h0.fits && h0.nav >= 3, // (Android: the feature questions are steps of their own before Consoles)
+        h0.title === 'Your consoles' && h0.big.join() === 'gc,wii,n3ds,psx' && /More consoles \(25\)/.test(h0.more) && h0.small === 0 && h0.fits && h0.nav >= 3, // (Android: the feature questions are steps of their own before Consoles)
         `${h0.title}: ${h0.big.join(', ')} · "${h0.more}" · ${h0.small} folded · fits ${h0.fits} · ${h0.nav} steps`);
       // controller: down onto the first card, A opens its page, B comes back; A on More shows every other console
       const pad = a => page.evaluate(a => window.Setup.pad(a), a);
@@ -1166,14 +1172,14 @@ server.listen(0, async () => {
       await pad('back'); await page.waitForTimeout(500); const h1 = await hub();
       await page.click('.con-more'); await page.waitForTimeout(600); const h2 = await hub();
       check('Wizard: controller opens a console and comes back; More shows the rest (every console reachable)',
-        f1 === 'gc' && pg === 'GameCube' && h1.title === 'Your consoles' && h2.small === 19 && h2.big.length + h2.small === 23,
+        f1 === 'gc' && pg === 'GameCube' && h1.title === 'Your consoles' && h2.small === 25 && h2.big.length + h2.small === 29,
         `focus ${f1} → ${pg} → ${h1.title}; More: ${h2.small} + ${h2.big.length} = ${h2.small + h2.big.length}`);
       // a console deep in More: B comes back to its card (focused, on screen), not to the top of the list
       const last = await page.evaluate(() => { const c = [...document.querySelectorAll('.con-grid.small .con-card')].pop(); c.scrollIntoView(); c.click(); return c.dataset.con; });
       await page.waitForTimeout(400); await pad('back'); await page.waitForTimeout(500);
       const back = await page.evaluate(() => { const a = document.activeElement, r = a.getBoundingClientRect(), b = document.getElementById('suBody').getBoundingClientRect();
         return { id: a.dataset.con, seen: r.top >= b.top - 1 && r.bottom <= b.bottom + 1, more: document.querySelectorAll('.con-grid.small .con-card').length }; });
-      check('Wizard: back from a console in More lands on its card, still in view', back.id === last && back.seen && back.more === 19, `${last} → focus ${back.id}, in view ${back.seen}, ${back.more} folded open`);
+      check('Wizard: back from a console in More lands on its card, still in view', back.id === last && back.seen && back.more === 25, `${last} → focus ${back.id}, in view ${back.seen}, ${back.more} folded open`);
       // set three consoles up (gc, psx, snes) and go to the shelf: RetroArch also gave a dozen consoles an emulator, but
       // only shelves with games get a tab
       await page.evaluate(async () => { const api = window.boxshelf, info = await api.getConfig(), det = await api.detect(), c = info.config;
@@ -1197,8 +1203,8 @@ server.listen(0, async () => {
           clear: r1.right <= hud.left, edges: t.className, reads, strip: t.querySelector('.tab-strip').style.transform };
       });
       await page.screenshot({ path: path.join(OUT, '6-console-bar-23.png'), clip: { x: 0, y: 0, width: 853, height: 80 } });
-      check('Console bar with 23 consoles: current one centred, edges fade, bar never moves or re-measures',
-        big.n === 24 && Math.abs(big.off) <= 3 && big.same && big.clear && /more-l/.test(big.edges) && /more-r/.test(big.edges) && big.reads === 0,
+      check('Console bar with 29 consoles: current one centred, edges fade, bar never moves or re-measures',
+        big.n === 30 && Math.abs(big.off) <= 3 && big.same && big.clear && /more-l/.test(big.edges) && /more-r/.test(big.edges) && big.reads === 0,
         `${big.n} tabs, ${big.off}px off centre, bar still ${big.same}, clear of the clock ${big.clear}, ${big.edges}, ${big.reads} layout reads`);
       // touch: drag the strip sideways, then a tap on a tab picks that shelf
       const cdp = await ctx.newCDPSession(page);

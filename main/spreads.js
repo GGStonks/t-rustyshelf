@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 const SPREAD = 1.25, SPREAD_MAX = 1.62; /* a booklet page is ~0.7 wide:tall, a spread ~1.4; 16:9 screens-as-pages (1.78) are left alone */
+const SPREAD_MIN_W = 1100; /* (beta.9) narrower than this, a wide page is a screen capture, not a booklet scanned open */
 
 // [width, height] from the header, or null. A small read first (4 KB, one buffer reused); only a JPEG whose frame
 // header sits further in (big EXIF / ICC blocks before it) gets a second, 64 KB look
@@ -39,6 +40,15 @@ async function splitManual(dir, base, crop, opts = {}) {
   if (!sizes.some(spread)) return 0;
   // a booklet that is landscape on every page (a digital manual laid out sideways) is left as it is
   if (!opts.scan && !sizes.some(z => z && z[1] >= z[0]) && sizes.every(z => z && Math.abs(z[0] / z[1] - sizes[0][0] / sizes[0][1]) < .02) && files.length > 2) return 0;
+  // (beta.9) a manual from anywhere but a scan collection is cut only when it really is a booklet scanned open: wide pages
+  // big enough to be a scan (a 320x240 or 640x480 screen from a digital manual isn't), and most of its pages that way. A
+  // single wide page among upright ones (a box wrap or a poster in a "cover and manual" upload) stays whole.
+  if (opts.minW && sizes.filter(spread).some(z => z[0] < opts.minW)) return 0; // (beta.9: Repair: never screens of a digital manual)
+  if (!opts.scan) {
+    const wide = sizes.filter(spread);
+    if (wide.some(z => z[0] < SPREAD_MIN_W)) return 0;
+    if (wide.length * 2 < sizes.filter(Boolean).length) return 0;
+  }
   const front = [], back = []; let cut = 0;
   for (let i = 0; i < files.length; i++) {
     const f = files[i], full = path.join(dir, f), ext = path.extname(f).toLowerCase() === '.png' ? '.png' : '.jpg';

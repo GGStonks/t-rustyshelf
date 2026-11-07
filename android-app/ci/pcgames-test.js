@@ -11,6 +11,22 @@ const path = require('path'), fs = require('fs'), os = require('os');
 
 module.exports = async function pcGamesPass({ browser, base, check, newPage }) {
   const root = path.resolve(__dirname, '..', '..');
+  // (beta.9) main/pccovers.js with no SteamGridDB key: a Steam game Steam kept no cover for gets Steam's store cover (2x
+  // first, 1x if that fails); a custom game gets the Steam games of its exact name (asked exactly), a typed name loosely
+  try {
+    const pcc = require(path.join(root, 'main', 'pccovers.js')), d = fs.mkdtempSync(path.join(os.tmpdir(), 'bs-pcc-')), asked = [], got = [];
+    const img = Buffer.alloc(3000, 7);
+    pcc.init({ dataDir: d, log: () => {}, fileUrl: f => 'bsfile:///' + f, steamCover: () => null, steamgrid: { enabled: () => false },
+      fetchImage: async u => { got.push(u); return /_2x/.test(u) ? null : img; }, steamSearch: async (t, exact) => { asked.push([t, exact]); return /hollow/i.test(t) ? [{ id: '367520', name: 'Hollow Knight' }] : []; } });
+    const st = await pcc.options({ id: 'steam-1145360', appid: '1145360', title: '' });
+    const cu = await pcc.options({ id: 'custom-hollow', title: 'Hollow Knight' }), none = await pcc.options({ id: 'custom-x', title: 'Zzq' }), typed = await pcc.options({ id: 'custom-x', title: 'hollow', term: true });
+    got.length = 0; const used = await pcc.use('custom-hollow', 'st0');
+    check('PC covers (node): with no SteamGridDB key a Steam game gets Steam\'s store cover, a custom game the Steam game of its name (asked exactly, a typed name loosely), none when Steam has none; Use takes the sharpest that downloads',
+      !st.sgdb && st.list.length === 1 && st.list[0].source === 'steamstore' && cu.list.length === 1 && /Hollow Knight on Steam/.test(cu.list[0].sub) && none.list.length === 0
+        && typed.list.length === 1 && asked.some(a => a[0] === 'Hollow Knight' && a[1] === true) && asked.some(a => a[0] === 'hollow' && a[1] === false)
+        && /367520\/library_600x900_2x/.test(got[0]) && fs.existsSync(used) && pcc.cover('custom-hollow') === used, JSON.stringify({ st: st.list, cu: cu.list.map(x => x.sub), none: none.list.length, typed: typed.list.length, asked, got }).slice(0, 600));
+    fs.rmSync(d, { recursive: true, force: true });
+  } catch (e) { check('PC covers (node) ran to the end', false, e && e.stack ? e.stack.split('\n').slice(0, 2).join(' ') : e); }
   try {
     const pcg = require(path.join(root, 'main', 'pcgames.js'));
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bs-pc-'));
@@ -146,16 +162,18 @@ module.exports = async function pcGamesPass({ browser, base, check, newPage }) {
       const word = () => (document.getElementById('sysWord') || {}).textContent || '';
       for (let i = 0; i < 20 && !/^Custom/.test(word().trim()); i++) { key('ArrowDown'); await w(500); }
       const out = { game: Shelf._qs().g };
-      key('i'); await w(900); const btn = document.getElementById('dBoxArt'); out.button = !!btn && !btn.hidden; if (btn) btn.click(); await w(900);
+      // (beta.9) a PC game's Box art is in the main row beside Play (consoles keep theirs in More): the More one stays hidden
+      key('i'); await w(900); const btn = document.getElementById('dBoxArtPc'), inMore = document.getElementById('dBoxArt');
+      out.button = !!btn && !btn.hidden && !btn.closest('#dMenu') && btn.getBoundingClientRect().width > 0 && !!inMore && inMore.hidden; if (btn) btn.click(); await w(900);
       const tiles = () => [...document.querySelectorAll('.coverpick .cp-tile')].map(t => t.textContent.trim());
       out.mode = Shelf.getMode(); out.tiles = tiles(); out.note = ((document.querySelector('.coverpick .cp-note') || {}).textContent || '');
       out.at = ((document.querySelector('.coverpick .cp-tile.on') || {}).textContent || '').trim();
       key('ArrowRight'); await w(200); out.moved = ((document.querySelector('.coverpick .cp-tile.on') || {}).textContent || '').trim();
       key('Enter'); await w(900); out.used = Object.assign({}, window.__pcCovers || {}); out.after = Shelf.getMode(); out.toast = ((document.getElementById('toast') || {}).textContent || '');
-      key('i'); await w(900); const b2 = document.getElementById('dBoxArt'); if (b2) b2.click(); await w(900); out.again = tiles();
+      key('i'); await w(900); const b2 = document.getElementById('dBoxArtPc'); if (b2) b2.click(); await w(900); out.again = tiles();
       key('Escape'); await w(500); out.closed = Shelf.getMode();
       // Search by name: the picker's first tile → Settings' Search for page → Enter → the picker again, for that name
-      key('i'); await w(900); const b3 = document.getElementById('dBoxArt'); if (b3) b3.click(); await w(900);
+      key('i'); await w(900); const b3 = document.getElementById('dBoxArtPc'); if (b3) b3.click(); await w(900);
       const first = document.querySelector('.coverpick .cp-tile'); out.searchTile = first ? first.textContent.trim() : ''; if (first) first.click();
       for (let i = 0; i < 40 && !document.querySelector('#bss.on .bss-row'); i++) await w(150); await w(600);
       out.searchPage = (document.querySelector('#bss .bss-title') || {}).textContent || '';
@@ -169,6 +187,25 @@ module.exports = async function pcGamesPass({ browser, base, check, newPage }) {
         && cv.used['quiver-quarantine'] === 'sg1' && cv.after === 'browse' && /New cover for Quarantine/.test(cv.toast) && cv.again.some(t => /Automatic cover/.test(t)) && cv.closed === 'browse', JSON.stringify(cv).slice(0, 600));
     check('PC games (Windows): the cover picker\'s Search by name opens a Search for page; Enter brings the picker back with covers for the typed name',
       /Search by name/.test(cv.searchTile) && /Search for a cover/.test(cv.searchPage) && cv.searchMode === 'cover' && cv.term === 'Quarantine 1994' && /for "Quarantine 1994"/.test(cv.searchNote), JSON.stringify({ t: cv.searchTile, p: cv.searchPage, rows: cv.searchRows, m: cv.searchMode, term: cv.term, n: cv.searchNote }));
+    // (beta.9) no SteamGridDB key: the picker still has Steam's store cover and Search by name, plus a lit "Add SteamGridDB"
+    // slot after the covers; it opens that key's page in Settings, and closing Settings brings the picker back for the game
+    const nk = await page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), out = {};
+      const key = k => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+      for (let i = 0; i < 40 && Shelf.getMode() !== 'browse'; i++) await w(250);
+      window.__noSgdb = true; out.game = Shelf._qs().g;
+      key('i'); await w(900); const b = document.getElementById('dBoxArtPc'); if (b) b.click(); for (let i = 0; i < 20 && !document.querySelector('.coverpick .cp-tile'); i++) await w(150); await w(300);
+      const tiles = [...document.querySelectorAll('.coverpick .cp-tile')]; out.tiles = tiles.map(t => t.textContent.trim());
+      out.note = ((document.querySelector('.coverpick .cp-note') || {}).textContent || ''); const last = tiles[tiles.length - 1];
+      out.slotLast = !!last && last.classList.contains('acct') && /Add SteamGridDB/.test(last.textContent);
+      out.at = ((document.querySelector('.coverpick .cp-tile.on') || {}).textContent || '').trim();
+      if (last) last.click(); for (let i = 0; i < 30 && !(window.Settings && Settings.isOpen && Settings.isOpen()); i++) await w(150); await w(900);
+      out.settings = !!(window.Settings && Settings.isOpen && Settings.isOpen()); out.page = ((document.getElementById('bss') || {}).textContent || '').includes('SteamGridDB');
+      if (out.settings) { await Settings.close(); } for (let i = 0; i < 30 && Shelf.getMode() !== 'cover'; i++) await w(150); await w(400);
+      out.back = Shelf.getMode(); out.backGame = ((document.querySelector('.coverpick .bp-game') || {}).textContent || '');
+      key('Escape'); await w(500); out.closed = Shelf.getMode(); window.__noSgdb = false; return out; });
+    check('PC games (Windows): with no SteamGridDB key the cover picker offers Steam\'s cover and Search by name, and a lit Add SteamGridDB slot that opens its page; closing Settings brings the picker back',
+      nk.tiles.some(t => /Steam's cover/.test(t)) && nk.tiles.some(t => /Search by name/.test(t)) && /Steam's cover/.test(nk.at) && nk.slotLast && /free SteamGridDB key/.test(nk.note)
+        && nk.settings && nk.page && nk.back === 'cover' && nk.backGame === nk.game && nk.closed === 'browse', JSON.stringify(nk).slice(0, 700));
     // (beta.5) Details → Rename: Settings' Rename page; Enter saves the name, the shelf shows it; Use the file's name puts it back
     const rn = await page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), out = {};
       const key = k => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
@@ -193,6 +230,21 @@ module.exports = async function pcGamesPass({ browser, base, check, newPage }) {
       for (let i = 0; i < 20 && Shelf._qs().g !== 'Quarantine'; i++) await w(250); out.back = Shelf._qs().g; return out; });
     check('PC games (Windows): Details → Rename saves a game\'s own name (the shelf shows it), and Use the file\'s name puts it back',
       rn.button && /Rename/.test(rn.page) && rn.saved && rn.saved.title === 'Quarantine DOS' && rn.resetRow && rn.after === 'Quarantine DOS' && rn.back === 'Quarantine', JSON.stringify(rn).slice(0, 500));
+    // (beta.9) covers for every custom game: one by one in the picker ("1 of N", A uses SteamGridDB's best), then the best
+    // match for each in one go, and Undo
+    const bt = await page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), out = {};
+      const key = k => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+      for (let i = 0; i < 40 && Shelf.getMode() !== 'browse'; i++) await w(250);
+      window.__pcCovers = {}; const missing = await window.boxshelf.pcCoverMissing(); out.n = missing.length; out.titles = [];
+      Shelf.pcCoverBatch();
+      for (let k = 0; k < out.n; k++) { let t = ''; for (let i = 0; i < 80; i++) { await w(250); const el = document.querySelector('.coverpick.on .bp-title'); if (el && /of \d/.test(el.textContent) && !out.titles.includes(el.textContent) && document.querySelector('.coverpick.on .cp-tile.on')) { t = el.textContent; break; } } // (slow build machines: up to 20 s)
+        out.titles.push(t); key('Enter'); await w(700); }
+      for (let i = 0; i < 20 && Shelf.getMode() !== 'browse'; i++) await w(200);
+      out.chosen = Object.keys(window.__pcCovers || {}).length; out.modeAfter = Shelf.getMode();
+      window.__pcCovers = {}; const a = await Shelf.pcCoverAuto(); out.auto = a && a.n; out.undoN = Shelf.coverUndoCount(); out.afterAuto = Object.keys(window.__pcCovers).length;
+      out.undone = await Shelf.pcCoverUndo(); out.afterUndo = Object.keys(window.__pcCovers).length; return out; });
+    check('PC games (Windows): covers for every custom game: one by one ("1 of N", A uses the best match), or the best for each at once, with Undo',
+      bt.n >= 1 && bt.titles.length === bt.n && /1 of \d/.test(bt.titles[0]) && bt.chosen === bt.n && bt.modeAfter === 'browse' && bt.auto === bt.n && bt.undoN === bt.n && bt.afterAuto === bt.n && bt.undone === bt.n && bt.afterUndo === 0, JSON.stringify(bt));
     check('PC games pass (Windows page): no script errors', !errors.length, errors.slice(0, 3).join(' | '));
   } catch (e) { check('PC games pass (Windows page) ran to the end', false, e && e.stack ? e.stack.split('\n').slice(0, 2).join(' ') : e); }
   await ctx.close();

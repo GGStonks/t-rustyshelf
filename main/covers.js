@@ -614,6 +614,7 @@ async function coversRun(systems, progress, plan, opts, tok) {
   const active = systems.filter(({ def }) => kindsFor(def.id).length);
   for (const { def, cfg } of active) {
     if (tok.c) break;
+    await new Promise(r => setImmediate(r)); // (beta.9: a breath between consoles)
     const kinds = kindsFor(def.id), want = k => kinds.includes(k) || kinds.includes('redo-' + k), redo = k => kinds.includes('redo-' + k);
     const games = opts.only ? scanSystem(def, cfg).filter(g => opts.only.has(g.id)) : scanSystem(def, cfg); // opts.only: just these game ids
     const rep = { id: def.id, name: def.name, total: games.length, front: 0, back: 0, spine: 0, disc: 0, upgraded: 0, had: 0, missed: [], missedKinds: {}, got: [], up: [] };

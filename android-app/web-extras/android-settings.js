@@ -32,9 +32,12 @@
     const con = take('consoles'), apps = take('apps'), pc = take('pc'), reading = take('reading');
     // the store row answers to the PC's old name, so links into the reading corner (Setup.open({ page: 'reading' })) land on it
     for (const r of rowsOf(reading)) if (r && r.t !== 'head' && /store/i.test(String(r.label || ''))) { r.was = 'Find on the Internet Archive'; break; }
+    // (beta.9) Ports & custom APKs (android-api.js) go last, after the reading corner: the consoles' and magazines' rows keep their places
+    const isPorts = r => r && (r.pg === 'android-ports' || (r.t === 'head' && r.text === 'Ports & custom APKs'));
+    const ports = rowsOf(con).filter(isPorts);
     if (con) sec(con, { name: 'Games', ic: 'games', lead: 'Your consoles, their emulators and games folders, and the reading corner.',
       alias: ['consoles', 'apps', 'pc', 'reading', 'magazines', 'guides'],
-      rows: [...rowsOf(con), ...(pc ? [head(pc.name), ...rowsOf(pc)] : []), ...(apps ? [head(apps.name), ...rowsOf(apps)] : []), ...(reading ? [head('Magazines & guides'), ...rowsOf(reading).filter((r, i) => !(r && r.t === 'head' && i === 0))] : [])] }); // (its own first heading would sit right under this one)
+      rows: [...rowsOf(con).filter(r => !isPorts(r)), ...(pc ? [head(pc.name), ...rowsOf(pc)] : []), ...(apps ? [head(apps.name), ...rowsOf(apps)] : []), ...(reading ? [head('Magazines & guides'), ...rowsOf(reading).filter((r, i) => !(r && r.t === 'head' && i === 0))] : []), ...ports] }); // (its own first heading would sit right under this one)
 
     // ----- Art Studio: the studio first, then what every console gets, the sources, the manuals -----
     const art = take('art');
@@ -55,11 +58,14 @@
     }
 
     // ----- Shelf & museum (the museum's rows marked: Settings shows the room behind them) -----
-    const shelf = take('shelf'), museum = take('museum');
+    const shelf = take('shelf'), museum = take('museum'), pv = take('previews');
+    // (beta.9) video previews: one row here opening their own page (Windows gives them a section of their own)
+    const pvRow = pv && h.M ? [head('Video previews'), h.M('Video previews', 'pv-android', 'Previews in Details: videos beside your games, or YouTube trailers in the Media tab.', pv.lead || '', rowsOf(pv),
+      { keys: 'video preview previews trailer youtube videos' })] : [];
     if (shelf || museum) {
       const mus = rowsOf(museum).map(r => { if (r && typeof r === 'object') r._mus = true; return r; });
-      sec(shelf || museum, { id: shelf ? 'shelf' : 'museum', name: 'Shelf & museum', ic: shelf ? shelf.ic : 'museum', lead: 'How the shelf behaves, and your collection\'s room.', alias: ['shelf', 'museum'],
-        rows: [...rowsOf(shelf), ...(museum ? [Object.assign(head('Museum'), { _mus: true }), ...mus] : [])] });
+      sec(shelf || museum, { id: shelf ? 'shelf' : 'museum', name: 'Shelf & museum', ic: shelf ? shelf.ic : 'museum', lead: 'How the shelf behaves, and your collection\'s room.', alias: ['shelf', 'museum', 'previews', 'videos', 'trailers'],
+        rows: [...rowsOf(shelf), ...pvRow, ...(museum ? [Object.assign(head('Museum'), { _mus: true }), ...mus] : [])] });
     }
 
     // ----- Display & sound (the bottom screen's switch moves to Controls & screens) -----

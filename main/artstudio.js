@@ -208,7 +208,7 @@ async function gameArg(a) {
 async function gamesFor(sysId, fresh) {
   const m = gamesMemo.get(sysId); if (m && !fresh && Date.now() - m.at < 60000) return m;
   const item = env.consoles().find(x => x.def.id === sysId); if (!item) throw new Error('Unknown system.');
-  await yieldNow(); const list = env.scan(item.def, item.sc).filter(g => g.kind !== 'app');
+  await yieldNow(); const list = env.scan(item.def, item.sc, !!fresh).filter(g => g.kind !== 'app'); // (beta.9: fresh reads the folders again, past the scanner's kept scan)
   const byFile = new Map(list.map(g => [path.resolve(g.file).toLowerCase(), g]));
   const r = { at: Date.now(), list, byFile }; gamesMemo.set(sysId, r); return r;
 }
@@ -647,7 +647,7 @@ async function studio() {
 async function games(a) {
   const { def } = sysArg(a), { list } = await gamesFor(def.id), out = []; // the 60 s memo (cleared by every library scan, kept current by every change made here)
   for (let i = 0; i < list.length; i++) {
-    if (i && i % 40 === 0) await yieldNow(); // header reads only, but a big shelf shouldn't hold everything up in one go
+    if (i && i % 8 === 0) await yieldNow(); // header reads only (one file each), but a big shelf shouldn't hold everything up in one go (beta.9: every 8 games, was 40: up to 200 picture reads at a time held up the Studio's opening)
     const g = list[i], locks = locksOf(def.id, g.file), art = {}, low = {}, lock = {};
     for (const p of PARTS) { const f = g.art && g.art[p]; art[p] = f ? env.fileUrl(f) : null; low[p] = !!f && covers.isLow(f, p); lock[p] = locks[p] ? { look: locks[p].look, ...(locks[p].key ? { key: locks[p].key } : {}) } : null; }
     out.push({ file: g.file, title: g.title, region: g.region || '', art, low, lock, frozen: !!locks.all }); // frozen: the whole game locked as it is

@@ -4,6 +4,10 @@
 /* global wum */
 wum.onModel(async job => {
   try {
+    // (beta.9) a manual page too big to show: made `w` pixels wide (decoded at that size, never in full on a canvas)
+    if (job.mode === 'shrink') { const b = await createImageBitmap(new Blob([job.data]), { resizeWidth: Math.max(64, job.w | 0), resizeQuality: 'high' });
+      const c = document.createElement('canvas'); c.width = b.width; c.height = b.height; c.getContext('2d').drawImage(b, 0, 0); b.close();
+      const u = c.toDataURL('image/jpeg', 0.9); c.width = c.height = 0; wum.done(null, [u]); return; }
     const bmp = await createImageBitmap(new Blob([job.data]));
     if (job.mode === 'cart') { const r = cart(bmp, job); bmp.close(); wum.done(r ? null : 'no cartridge made', r ? [r] : []); return; }
     if (job.mode === 'back') { const r = await back(bmp, job); bmp.close(); wum.done(r ? null : 'no back made', r ? [r] : []); return; }

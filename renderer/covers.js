@@ -135,8 +135,20 @@ function drawFront(style,game){
   return c;
 }
 // lines: array of [label, value] shown on the back
+const bkey=(style,game)=>style.id+"|b|"+game.title;
 function back(style,game,lines,blurb){
-  const key=style.id+"|b|"+game.title;if(cache.has(key))return cache.get(key);
+  const key=bkey(style,game);if(cache.has(key))return cache.get(key);
+  const url=pending(key)||c2url(drawBack(style,game,lines,blurb));capCache(key,url);return url;
+}
+// (beta.9) the same back as a Promise of its URL: drawn here, the JPEG encode (most of the 10–90 ms) in the worker, so a
+// back made ahead of a flip (or during one) never holds up the shelf
+function backAsync(style,game,lines,blurb){
+  const key=bkey(style,game);if(cache.has(key))return Promise.resolve(cache.get(key));
+  if(pend.has(key))return pend.get(key).p.then(u=>u||back(style,game,lines,blurb));
+  return encodeAsync(key,drawBack(style,game,lines,blurb)).then(u=>u||back(style,game,lines,blurb));
+}
+const hasBack=(style,game)=>cache.has(bkey(style,game));
+function drawBack(style,game,lines,blurb){
   const W=420,Hh=Math.round(W/style.ratio),c=document.createElement("canvas");c.width=W;c.height=Hh;const ctx=c.getContext("2d",{willReadFrequently:true});const r=rng(game.seed^0x9e3779b9);
   const g=ctx.createLinearGradient(0,0,0,Hh);g.addColorStop(0,hsl(game.hue+200,40,16));g.addColorStop(1,hsl(game.hue+230,45,7));ctx.fillStyle=g;ctx.fillRect(0,0,W,Hh);
   const bandH=band(ctx,W,Hh,style,"");
@@ -147,7 +159,7 @@ function back(style,game,lines,blurb){
   let y=top+shotH*2+44;ctx.font="13px Lexend, sans-serif";
   if(blurb){ctx.fillStyle="rgba(255,255,255,.9)";const bl=wrapLines(ctx,blurb,W*.88).slice(0,6);bl.forEach(l=>{ctx.fillText(l,W*.06,y);y+=17});y+=10}
   (lines||[]).forEach(([k,v])=>{if(y>Hh-40)return;ctx.fillStyle="rgba(255,255,255,.55)";ctx.fillText(k,W*.06,y);ctx.fillStyle="#fff";const vv=wrapLines(ctx,String(v),W*.6)[0]||"";ctx.fillText(vv,W*.34,y);y+=22});
-  const url=c.toDataURL("image/jpeg",.86);capCache(key,url);return url;
+  return c;
 }
 // A cover built around a program's own icon (Stremio, Dolphin…): dark tinted sleeve, the icon large, the name below.
 const iconCache=new Map();
@@ -211,5 +223,5 @@ function setupFront(style){
   ctx.fillStyle="rgba(255,255,255,.45)";ctx.font=`500 ${W*.04}px Lexend, sans-serif`;ctx.fillText("OPEN SETTINGS",W/2,Hh*.84+W*.07);
   const url=c.toDataURL("image/jpeg",.92);c.width=c.height=0;if(!document.fonts||document.fonts.check(`700 ${W*.1}px Lexend`))setupCache.set(style.id,url);return url;
 }
-window.Covers={front,frontAsync,back,hash,hsl,iconFront,randomFront,setupFront};
+window.Covers={front,frontAsync,back,backAsync,hasBack,hash,hsl,iconFront,randomFront,setupFront};
 })();

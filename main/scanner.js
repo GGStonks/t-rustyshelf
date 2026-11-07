@@ -162,8 +162,34 @@ function findArt(file, title, artDirs) {
   return { front: look(''), back: back || made, madeBack: !!made, spine: spine || madeSp, madeSpine: !!madeSp, disc: look('-disc'), manual, manualPdf };
 }
 
-function scanSystem(sysDef, sysCfg) {
+// (beta.9) The slow part of a scan (walking the games folders, each game's file details, disc headers, param files, a
+// Wii U game's NUS files) is kept for a short while. One background pass (manual collections, the manual search, PDF
+// pages, spreads, made backs and spines) used to scan every console again and again within the same minute, and each
+// scan held up the main process (and with it the shelf's input). The art is still looked up fresh on every call: those
+// passes add pictures and manual pages between scans. A change in a games folder (main.js watchRoms) or a settings save
+// clears it (forget), and the key holds everything the slow part reads.
+const SCAN_TTL = 90 * 1000, scanMemo = new Map();
+function fileKey(sysDef, sysCfg) {
+  return sysDef.id + '|' + JSON.stringify((sysCfg && sysCfg.romDirs) || []) + '|' + (sysDef.gameFile || '') + (sysDef.deep ? '|d' : '') +
+    (Arcade.SYSTEMS.has(sysDef.id) ? '|a' + (Arcade.ready() ? 1 : 0) : '') + (sysDef.id === 'x360' && x360.stamp ? '|x' + x360.stamp() : ''); // (names that arrive later change the titles)
+}
+function scanSystem(sysDef, sysCfg, fresh) { // fresh: read the folders again now (the Studios' "look again", a game not found)
+  const k = fileKey(sysDef, sysCfg), now = Date.now();
+  for (const [mk, mv] of scanMemo) if (now - mv.at > SCAN_TTL) scanMemo.delete(mk); // (old entries never pile up)
+  let m = fresh ? null : scanMemo.get(k);
+  if (!m) { m = { at: now, list: scanFiles(sysDef, sysCfg) }; scanMemo.set(k, m); }
+  return withArt(m.list, sysCfg);
+}
+function forget() { scanMemo.clear(); }
+// the art for each game, fresh: new objects every time, so a caller changing a game never changes the kept list
+function withArt(list, sysCfg) {
   dirCache.clear(); manualCache.clear();
+  const artDirs = artDirsFor(sysCfg);
+  return list.map(g => { const { _art, ...o } = g, a = findArt(g.file, _art.title, artDirs), fg = _art.fg;
+    if (fg) { if (!a.front && fg.icon) a.front = fg.icon; if (fg.hero) a.hero = fg.hero; if (!a.disc && fg.icon) a.disc = fg.icon; }
+    o.art = a; if (Array.isArray(o.discs)) o.discs = o.discs.slice(); return o; }); // (art keeps its place among the keys)
+}
+function scanFiles(sysDef, sysCfg) {
   const files = [];
   for (const dir of sysCfg.romDirs || []) walk(dir, sysDef.extensions, sysDef.gameFile || sysDef.deep ? 4 : 3, files, sysDef.gameFile);
   const byTitle = new Map(), byName = new Map(), discOf = new Map(); // discOf: file → { n: disc number, size }
@@ -233,7 +259,6 @@ function scanSystem(sysDef, sysCfg) {
       if (prev.discs && info.disc) { const i = prev.discs.findIndex(d => (discOf.get(d) || { n: 1 }).n === info.disc); if (i < 0) prev.discs.push(f); else if (size > ((discOf.get(prev.discs[i]) || {}).size || 0)) prev.discs[i] = f; }
       if (!better) continue;
     }
-    const artDirs = artDirsFor(sysCfg);
     byTitle.set(key, {
       kind: 'rom',
       id: sysDef.id + ':' + f,
@@ -243,14 +268,13 @@ function scanSystem(sysDef, sysCfg) {
       file: f,
       ext: path.extname(f).slice(1).toLowerCase(),
       sizeBytes: size, added,
-      art: (() => { const a = findArt(f, info.title, artDirs); if (fg) { if (!a.front && fg.icon) a.front = fg.icon; if (fg.hero) a.hero = fg.hero; if (!a.disc && fg.icon) a.disc = fg.icon; } return a; })(),
+      art: null, _art: { title: info.title, fg: fg ? { icon: fg.icon, hero: fg.hero } : null }, // (looked up in withArt; the title before any "(Disc 2)" is added below)
       discs: prev ? prev.discs : [f],
       titleId: x ? x.titleId : fg && fg.titleId ? fg.titleId : undefined, compat: x ? x.compat : undefined
     });
   }
   if (pkgs.length) {
     const installed = new Set([...byTitle.values()].map(g => g.titleId).filter(Boolean));
-    const artDirs = artDirsFor(sysCfg);
     for (const f of pkgs) {
       const sfo = pkgInfo(f) || {}, cat = String(sfo.CATEGORY || 'gd').toLowerCase();
       if (cat && cat !== 'gd') continue; // patches and add-ons aren't games
@@ -259,7 +283,7 @@ function scanSystem(sysDef, sysCfg) {
       const title = (sfo.TITLE ? String(sfo.TITLE).replace(/\s+/g, ' ').replace(/[™®]/g, '').trim() : '') || pkgTitleFromName(f) || path.basename(f);
       const key = title.toLowerCase() + '|pkg'; if (byTitle.has(key)) continue;
       let size = 0; try { size = fs.statSync(f).size; } catch {}
-      byTitle.set(key, { kind: 'rom', id: sysDef.id + ':' + f, title, region: 'Not installed', disc: 0, file: f, ext: 'pkg', sizeBytes: size, notInstalled: true, titleId: id || undefined, art: findArt(f, title, artDirs), discs: [f] });
+      byTitle.set(key, { kind: 'rom', id: sysDef.id + ':' + f, title, region: 'Not installed', disc: 0, file: f, ext: 'pkg', sizeBytes: size, notInstalled: true, titleId: id || undefined, art: null, _art: { title, fg: null }, discs: [f] });
     }
   }
   // Xbox 360: a disc 2+ (bonus / content disc, its own title id) joins its disc 1 by file-name title; on its own it says
@@ -276,4 +300,4 @@ function scanSystem(sysDef, sysCfg) {
   return [...byTitle.values()].sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true }));
 }
 
-module.exports = { scanSystem, cleanTitle, SKIP_NAME }; // (SKIP_NAME for the device test)
+module.exports = { scanSystem, forget, cleanTitle, SKIP_NAME }; // (SKIP_NAME for the device test; forget: main.js clears the kept scans)

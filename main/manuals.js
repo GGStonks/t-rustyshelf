@@ -88,9 +88,17 @@ const ROMAN_RE = new RegExp('\\b(' + Object.keys(ROMAN).sort((a, b) => b.length 
 const norm = s => String(s || '').toLowerCase().replace(/&/g, ' and ').replace(/['’]/g, '').replace(/[^a-z0-9]+/g, ' ').replace(/\b(the|a|an|of)\b/g, ' ').replace(ROMAN_RE, r => ROMAN[r]).replace(/\s+/g, ' ').trim();
 const words = s => new Set(norm(s).split(' ').filter(w => w.length > 1 || /\d/.test(w))); /* keep sequel numbers: Black Ops 3 is not Black Ops II */
 // How much of the game's title the archive item covers, penalised when the item is about something much broader or different
-function similarity(a, b) { const A = words(a), B = words(b); if (!A.size) return 0; let hit = 0; for (const w of A) if (B.has(w)) hit++; const recall = hit / A.size; const noise = [...B].filter(w => !A.has(w) && !/^(manual|instruction|instructions|booklet|nintendo|sony|wii|gamecube|psp|switch|ps2|ps3|ps4|playstation|xbox|360|x360|microsoft|eng|english|usa|us|eu|pal|ntsc|scan|scans|game|games)$/.test(w)).length; const nums = S => [...S].filter(w => /^\d{1,2}$/.test(w)), want = nums(A), got = nums(B);
-  const wrongSequel = got.some(n => !A.has(n)) || (want.length && !want.every(n => B.has(n)) && got.length); /* a different number in the title = a different game */
-  return recall * (noise >= 3 ? .6 : noise === 2 ? .8 : 1) * (wrongSequel ? .4 : 1); }
+// (beta.9) words a manual's title may carry besides the game's name without counting as "something else"
+const GENERIC = /^(manual|manuals|instruction|instructions|booklet|user|users|owner|owners|nintendo|sony|sega|wii|gamecube|psp|switch|ps1|ps2|ps3|ps4|ps5|psx|playstation|xbox|360|x360|microsoft|eng|english|usa|us|eu|europe|pal|ntsc|scan|scans|game|games|ds|nds|3ds|gba|snes|nes|n64|genesis|dreamcast|saturn|en)$/;
+// (beta.9) a sequel number ends the name, or a part of it ("Black Ops 3", "Galaxy 2: …", "Mario Party 9 (USA)"): the manual
+// must have it too. A number inside a name ("Call of Duty 7 Black Ops") isn't one, so its manual still matches without it.
+function seqNums(t) { const out = new Set(); for (const part of String(t || '').split(/\s+[-–:]\s*|:\s*|\(/)) { const w = norm(part).split(' '), last = w[w.length - 1]; if (/^\d{1,2}$/.test(last)) out.add(last); } return out; }
+function simParts(a, b) { const A = words(a), B = words(b); if (!A.size) return { recall: 0, noise: 0, wrongSequel: false };
+  let hit = 0; for (const w of A) if (B.has(w)) hit++;
+  const noise = [...B].filter(w => !A.has(w) && !GENERIC.test(w) && !/^\d{3,}$/.test(w)).length, /* (a year or a catalogue number isn't another game) */ got = [...B].filter(w => /^\d{1,2}$/.test(w)), want = [...A].filter(w => /^\d{1,2}$/.test(w));
+  const wrongSequel = got.some(n => !A.has(n)) || (want.length && !want.every(n => B.has(n)) && got.length) || [...seqNums(a)].some(n => !B.has(n)); /* a different (or a missing) number = a different game */
+  return { recall: hit / A.size, noise, wrongSequel }; }
+function similarity(a, b) { const p = simParts(a, b); return p.recall * (p.noise >= 4 ? .45 : p.noise === 3 ? .6 : p.noise === 2 ? .8 : 1) * (p.wrongSequel ? .4 : 1); }
 
 const PLATFORM_RE = { gc: /\b(game ?cube|gcn|ngc)\b/i, wii: /\bwii\b(?! ?u)/i, wiiu: /\bwii ?u\b/i, sw: /\bswitch\b/i, sw2: /\bswitch ?2\b/i, psp: /\b(psp|playstation portable)\b/i, ps2: /\b(ps2|playstation 2)\b/i, ps3: /\b(ps3|playstation 3)\b/i, ps4: /\b(ps4|playstation 4)\b/i, ps5: /\b(ps5|playstation 5)\b/i, x360: /\b(xbox ?360|x360)\b/i, pc: /\b(pc|windows|dos|mac)\b/i, xone: /\bxbox one\b/i, xbox: /\bxbox\b(?! ?(360|one))/i, ds: /\b(nds|nintendo ds)\b/i, n3ds: /\b(3ds|nintendo 3ds)\b/i,
   // (beta.6) the retro shelves (nds is the DS shelf's id; ds stays for uploads that name it)
@@ -99,6 +107,29 @@ const PLATFORM_RE = { gc: /\b(game ?cube|gcn|ngc)\b/i, wii: /\bwii\b(?! ?u)/i, w
   megadrive: /\b(genesis|mega ?drive)\b/i, mastersystem: /\bmaster system\b/i, gamegear: /\bgame gear\b/i, dreamcast: /\bdreamcast\b/i, saturn: /\b(sega )?saturn\b/i, pcengine: /\b(turbografx(-16)?|pc[ -]?engine|tg-?16)\b/i, neogeo: /\bneo[ -]?geo\b/i, arcade: /\barcade\b/i, segacd: /\b(sega|mega)[ -]?cd\b/i, sega32x: /\b(sega )?32x\b/i, atari2600: /\batari 2600\b|\b2600\b/i, atarilynx: /\b(atari )?lynx\b/i, wonderswan: /\bwonderswan\b/i, dos: /\b(ms-?dos|dos)\b/i };
 /* the title names a console and it isn't ours (Xbox 360's sibling "Xbox One" counts as other) */
 function otherPlatform(sysId, t) { const own = PLATFORM_RE[sysId]; if (own && own.test(t)) return false; return Object.entries(PLATFORM_RE).some(([k, re]) => k !== sysId && re.test(t)); }
+// (beta.9) the last resort's "same game on a sibling console": consoles of the same generation that shared releases. A
+// manual naming any other console (the SNES All-Stars for the Wii one, a PC or handheld edition) isn't the same game's.
+const SIBLINGS = { gc: ['ps2', 'xbox', 'wii'], wii: ['ps3', 'x360', 'ps2', 'gc'], ps2: ['gc', 'xbox'], ps3: ['x360', 'wii', 'ps4'], x360: ['ps3', 'wii', 'xone'], ps4: ['xone', 'ps5', 'ps3'] };
+const ownName = (sysId, k) => k === sysId || (sysId === 'nds' && k === 'ds') || (sysId === 'ds' && k === 'nds');
+function foreignPlatform(sysId, t, anyPlatform) { const own = PLATFORM_RE[sysId]; if (own && own.test(t)) return false; const ok = anyPlatform ? (SIBLINGS[sysId] || []) : [];
+  return Object.entries(PLATFORM_RE).some(([k, re]) => !ownName(sysId, k) && !ok.includes(k) && re.test(t)); }
+// (beta.9) uploads that aren't a game's manual at all: promotional booklets, posters, catalogues, a declassified report
+const NOT_MANUAL = /promotional|\bpromo\b|poster|flyer|leaflet|catalog(ue)?|brochure|advert|press kit|newsletter|price ?list|reading room|cia-rdp|declassified|compliance|policy|for site|service manual|repair|schematic|walkthrough|cheat/i;
+// One candidate's score for a game (searchArchive, and the re-check of manuals picked before): title match, language,
+// console, what kind of upload it is
+function scoreHit(sysId, title, t, o = {}) {
+  const p = simParts(title, t), english = !o.lang || /^(eng|en|english)/.test(o.lang);
+  let score = similarity(title, t) * 10;
+  if (/mode d.emploi|spielanleitung|manuale|manual de|bedienungsanleitung/i.test(t)) score -= 3;
+  if (!english) score -= 4;
+  if (/manual|instruction|booklet/i.test(t)) score += 1;
+  if (/guide|strategy|magazine|catalog|price/i.test(t)) score -= 3;
+  if (NOT_MANUAL.test(t)) score -= 5;
+  if (foreignPlatform(sysId, t, o.anyPlatform)) score -= 6; /* the PS3 or PC booklet is not this game's manual (a sibling console only as the last resort) */
+  if (words(title).size <= 1 && p.noise >= 2) score -= 4; /* a one-word name ("Bloodborne") inside a longer, different title */
+  score += Math.min(1, (+o.downloads || 0) / 500);
+  return score;
+}
 const GDB_SYSTEM = { gc: 'nintendo-gamecube', wii: 'nintendo-wii', wiiu: 'nintendo-wii-u', psp: 'sony-psp', sw: 'nintendo-switch', ps3: 'sony-playstation-3', ps4: 'sony-playstation-4', ps2: 'sony-playstation-2', x360: 'microsoft-xbox-360', n3ds: 'nintendo-3ds', psx: 'sony-playstation', nes: 'nintendo-nes', snes: 'nintendo-snes', n64: 'nintendo-n64', gb: 'nintendo-game-boy', gbc: 'nintendo-game-boy-color', gba: 'nintendo-game-boy-advance', nds: 'nintendo-ds', megadrive: 'sega-genesis', mastersystem: 'sega-master-system', gamegear: 'sega-game-gear', dreamcast: 'sega-dreamcast', saturn: 'sega-saturn', pcengine: 'nec-turbografx-16', neogeo: 'snk-neo-geo-cd', arcade: 'arcade', segacd: 'sega-cd', sega32x: 'sega-32x', atari2600: 'atari-2600', atarilynx: 'atari-lynx', wonderswan: 'bandai-wonderswan', dos: 'microsoft-dos' }; // (beta.6: the retro shelves, each checked on gamesdatabase.org)
 const LANG_NAMES = { eng: 'English', en: 'English', fre: 'French', fra: 'French', fr: 'French', ger: 'German', deu: 'German', de: 'German', spa: 'Spanish', es: 'Spanish', ita: 'Italian', it: 'Italian', jpn: 'Japanese', ja: 'Japanese', por: 'Portuguese', dut: 'Dutch', nld: 'Dutch' };
 function getText(url, hops = 0) {
@@ -133,7 +164,10 @@ async function searchGamesDatabase(sysId, title) {
     if (!m) return null;
     const url = m[1].startsWith('http') ? m[1] : 'https://www.gamesdatabase.org' + m[1];
     const name = decodeURIComponent(path.basename(url)).replace(/\.pdf$/i, '').replace(/_/g, ' ');
-    return { id: 'gdb:' + url, title: name, language: 'eng', pages: 0, score: 9.5, source: 'GamesDatabase (PDF)', thumb: '', url: `https://www.gamesdatabase.org/game/${sys}/${p.slug}` };
+    // (beta.9) the page is this console's, but the PDF on it can be another edition's ("…GOTY PC Game Manual" on an Xbox 360
+    // page): still offered to pick by hand, never taken automatically
+    const foreign = foreignPlatform(sysId, name, false) || NOT_MANUAL.test(name);
+    return { id: 'gdb:' + url, title: name, language: 'eng', pages: 0, score: foreign ? 5 : 9.5, source: 'GamesDatabase (PDF)', thumb: '', url: `https://www.gamesdatabase.org/game/${sys}/${p.slug}` };
   }
   return null;
 }
@@ -153,8 +187,9 @@ async function search(sysId, title, opts = {}) {
   let all = gdb ? [gdb, ...ia] : ia;
   // nothing: try the number the other way round once ("Black Ops III" <-> "Black Ops 3")
   if (!all.length && !opts.alt) { const alt = altNumbers(title); if (alt && alt !== title) { log('Manual: trying', alt); return search(sysId, alt, { alt: true }); } }
-  // bundles ("Wii Sports + Wii Sports Resort"): fall back to the first game's manual
-  if (!all.length && /\s(\+|&)\s/.test(title)) { const first = title.split(/\s(?:\+|&)\s/)[0]; log('Manual: trying bundle part', first); return search(sysId, first, opts); }
+  // bundles ("Wii Sports + Wii Sports Resort"): fall back to the first game's manual. (beta.9) Only "+": "&" is part of
+  // most names ("Gallop & Ride!" was looked up as "Gallop" and got Gallop Racer's manual)
+  if (!all.length && /\s\+\s/.test(title)) { const first = title.split(/\s\+\s/)[0]; if (words(first).size >= 2) { log('Manual: trying bundle part', first); return search(sysId, first, opts); } }
   return all.map(c => ({ ...c, languageName: LANG_NAMES[c.language] || (c.language ? c.language : (c.source ? 'English' : 'unknown')), english: !c.language || /^(eng|en)/.test(c.language) })).slice(0, 6);
 }
 async function searchArchive(sysId, title, opts = {}) {
@@ -164,7 +199,7 @@ async function searchArchive(sysId, title, opts = {}) {
   const q = `(${JSON.stringify(title.replace(/"/g, ''))}) AND mediatype:texts AND (manual OR instruction OR booklet)` + (opts.anyPlatform || !sysWords.length ? '' : ` AND (${sysWords.map(w => JSON.stringify(w)).join(' OR ')})`);
   const url = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(q)}&fl[]=identifier&fl[]=title&fl[]=language&fl[]=imagecount&fl[]=downloads&rows=12&output=json`;
   let docs = [];
-  try { const j = await getJson(url); docs = (j && j.response && j.response.docs) || []; } catch (e) { log('Manual search failed', title, e.message); if (!/^HTTP 4\d\d$/.test(e.message) || /429/.test(e.message)) throw e; return []; } /* offline / busy: a retry tomorrow, not 'no manual' for a month */
+  try { const j = await getJson(url); docs = (j && j.response && j.response.docs) || []; } catch (e) { log('Manual search failed', title, e.message); if (e instanceof TypeError || e instanceof SyntaxError) return []; /* (beta.9) an answer that wasn't a results list: nothing found, not "offline" (it was retried every day for ever) */ if (!/^HTTP 4\d\d$/.test(e.message) || /429/.test(e.message)) throw e; return []; } /* offline / busy: a retry tomorrow, not 'no manual' for a month */
   if (!docs.length) {
     // Second try: uploads that don't mention the console, matched on the title alone.
     const q2 = `title:(${JSON.stringify(title.replace(/"/g, ''))}) AND mediatype:texts AND (manual OR instruction OR booklet)`;
@@ -179,15 +214,7 @@ async function searchArchive(sysId, title, opts = {}) {
   if (docs.length) log('Archive raw hits', title, docs.length, docs.slice(0, 3).map(d => d.title).join(' | '));
   return docs.map(d => {
     const t = String(d.title || ''), lg = lang(d.language);
-    const english = !lg || /^(eng|en|english)/.test(lg);
-    let score = similarity(title, t) * 10;
-    if (/mode d.emploi|spielanleitung|manuale|manual de|bedienungsanleitung/i.test(t)) score -= 3;
-    if (!english) score -= 4;
-    if (/manual|instruction|booklet/i.test(t)) score += 1;
-    if (/guide|strategy|magazine|catalog|price/i.test(t)) score -= 3;
-    if (otherPlatform(sysId, t) && !opts.anyPlatform) score -= 6; /* the PS3 or PC booklet is not this game's manual (unless it's the last resort) */
-    if (opts.anyPlatform && /\b(pc|windows|dos|mac|gba|game ?boy|nds|ds)\b/i.test(t)) score -= 6; /* a different game under the same name on handhelds / PC */
-    score += Math.min(1, (+d.downloads || 0) / 500);
+    const score = scoreHit(sysId, title, t, { lang: lg, anyPlatform: !!opts.anyPlatform, downloads: d.downloads });
     return { id: d.identifier, title: t, language: lg || '', pages: +d.imagecount || 0, score, source: 'Internet Archive', thumb: `https://archive.org/services/img/${encodeURIComponent(d.identifier)}`, url: `https://archive.org/details/${encodeURIComponent(d.identifier)}` };
   }).filter(c => c.score >= 4).sort((a, b) => b.score - a.score).slice(0, 5);
 }
@@ -195,7 +222,7 @@ async function searchArchive(sysId, title, opts = {}) {
 // Find candidates for every game on the shelves given. progress({done,total,stage}).
 async function findAll(systems, progress, token) {
   let done = 0; const all = [];
-  for (const { def, cfg } of systems) for (const g of scanSystem(def, cfg)) all.push({ def, cfg, g });
+  for (const { def, cfg } of systems) { await new Promise(r => setImmediate(r)); for (const g of scanSystem(def, cfg)) all.push({ def, cfg, g }); } // (beta.9: a breath between consoles)
   const out = new Array(all.length), per = {}, perDone = {}; all.forEach(x => { per[x.def.id] = (per[x.def.id] || 0) + 1; perDone[x.def.id] = 0; });
   const ls = require('./dircache').lister(); // each folder listed once for the whole search, not once per game
   await pool(all, 3, async ({ def, cfg, g }, k) => {
@@ -213,6 +240,36 @@ async function findAll(systems, progress, token) {
 
 const artDir = manualDirFor; // manuals: Art\<console>\manuals with an art library, else beside the box art
 
+// (beta.9) a loose image in an upload that is one of its pages: an original file (not archive.org's own derivative), not a
+// thumbnail or tile, more than a thumbnail's few KB, and small enough to show
+const PAGE_MAX_BYTES = 80 * 1048576;
+function isPageImage(f) {
+  if (!f || !/\.(jpe?g|png)$/i.test(f.name)) return false;
+  if (/__ia_thumb|_thumb\.|\.thumbs\/|_itemimage|(^|\/)thumb/i.test(f.name)) return false;
+  if (f.source && f.source !== 'original') return false;
+  if (/thumbnail|item tile|spectrogram/i.test(String(f.format || ''))) return false;
+  const size = +f.size || 0; if (size && (size < 15000 || size > PAGE_MAX_BYTES)) return false;
+  return true;
+}
+// (beta.9) pages wider than this are made smaller after downloading (in the background image window: decoding a huge scan
+// on the main process froze the app), so the reader never holds a 500 MB picture
+const PAGE_MAX_W = 3000;
+let shrinker = null; // (file, width) -> JPEG Buffer, set by main.js
+function setShrink(fn) { shrinker = typeof fn === 'function' ? fn : null; }
+async function shrinkPages(dir, base) {
+  if (!shrinker) return 0; const pre = (base + '-manual-').toLowerCase(); let n = 0, names = [];
+  try { names = (await fs.promises.readdir(dir)).filter(f => f.toLowerCase().startsWith(pre) && /-manual-\d+\.(jpe?g|png)$/i.test(f)); } catch { return 0; }
+  for (const f of names) {
+    const full = path.join(dir, f), z = require('./spreads').sizeOf(full); if (!z || z[0] <= PAGE_MAX_W) continue;
+    let buf = null; try { buf = await shrinker(full, PAGE_MAX_W); } catch {} if (!buf || buf.length < 1000) continue;
+    const out = full.replace(/\.(jpe?g|png)$/i, '.jpg'), tmp = out + '.tmp';
+    try { await fs.promises.writeFile(tmp, buf); await fs.promises.rename(tmp, out); if (out !== full) await fs.promises.unlink(full).catch(() => {}); n++; }
+    catch { fs.promises.unlink(tmp).catch(() => {}); }
+    await breath();
+  }
+  if (n) log('Manual', base, 'made', n, 'oversized pages smaller');
+  return n;
+}
 // Download one chosen manual as page images.
 async function fetchManual(id, dir, base, progress) {
   const meta = await getJson(`https://archive.org/metadata/${encodeURIComponent(id)}`);
@@ -266,8 +323,10 @@ async function fetchManual(id, dir, base, progress) {
     saved = results.filter(Boolean).length;
     if (pages && saved < total) gaps(saved, total);
   } else {
-    // Some uploads are loose images.
-    const imgs = files.filter(f => /\.(jpe?g|png)$/i.test(f.name) && !/__ia_thumb/.test(f.name)).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })).slice(0, MAX_PAGES);
+    // Some uploads are loose images. (beta.9) Only the uploader's own scans: archive.org adds thumbnails and tiles of its
+    // own (a 96 px "page" opened a manual), and a scan too big to show (a 186 MB, 13000 px board) is left out
+    const imgs = files.filter(isPageImage).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })).slice(0, MAX_PAGES);
+    const skipped = files.filter(f => /\.(jpe?g|png)$/i.test(f.name) && !isPageImage(f)).length; if (skipped) log('Manual', base, id, 'left out', skipped, 'thumbnails or oversized images');
     for (let i = 0; i < imgs.length; i++) {
       const dest = path.join(dir, `${base}-manual-${String(i + 1).padStart(2, '0')}${path.extname(imgs[i].name).toLowerCase()}`);
       if (isFile(dest)) { saved++; continue; } made.push(dest);
@@ -302,7 +361,7 @@ async function downloadChosen(systems, choices, progress) {
         report.push({ file: c.file, pages: ok ? -1 : 0, pdf: ok ? pdf : null, error: ok ? undefined : 'download failed' });
         log('Manual PDF', base, c.id.slice(4), ok ? 'saved' : 'failed');
       } else {
-        const n = await fetchManual(c.id, dir, base, sub); report.push({ file: c.file, pages: n }); log('Manual', base, c.id, n, 'pages');
+        const n = await fetchManual(c.id, dir, base, sub); if (n) await shrinkPages(dir, base); report.push({ file: c.file, pages: n }); log('Manual', base, c.id, n, 'pages');
       }
     }
     catch (e) { report.push({ file: c.file, pages: 0, error: e.message }); log('Manual ERROR', base, c.id, e.message); }
@@ -334,7 +393,7 @@ async function savePages(cfg, file, pages, done, complete) {
 }
 
 // ---------- automatic: confident English matches only, misses remembered for a month ----------
-const AUTO_MIN = 7, AUTO_RETRY = 30 * 864e5, AUTO_MAX = 40, AUTO_V = 3;
+const AUTO_MIN = 7, AUTO_RETRY = 30 * 864e5, AUTO_MAX = 40, AUTO_V = 4; /* (beta.9: 4, the stricter matching) */
 const LAST_RESORT = new Set(['gc', 'wii', 'ps2', 'ps3', 'x360', 'ps4']); /* home consoles share multi-platform releases (AUTO_V: bump when matching improves, so earlier misses get another look) */
 let autoFile = null, autoMemo = null;
 function setStore(file) { autoFile = file; autoMemo = null; }
@@ -367,6 +426,7 @@ async function autoFetch(systems, opts = {}) {
   const m = memo(), now = Date.now(), todo = [], ls = require('./dircache').lister(); let nG = 0;
   for (const { def, cfg } of systems) {
     if (opts.skip && opts.skip(def)) continue;
+    await new Promise(r => setImmediate(r)); // (beta.9) a breath between consoles: every console's scan in one go held up the main process
     for (const g of scanSystem(def, cfg)) {
       if (g.extra) continue;
       if (++nG % 25 === 0) await new Promise(r => setImmediate(r));
@@ -408,6 +468,63 @@ async function autoFetch(systems, opts = {}) {
   }
   log('Auto manuals done: searched', batch.length, 'downloaded', got);
   return { searched: batch.length, got };
+}
+
+// ---------- (beta.9) one look over the manuals already on the shelves, with the stricter rules ----------
+// A manual the automatic search picked that the new rules wouldn't (another game, another console, not a manual), or one
+// with thumbnail "pages" in it, is moved aside into .manual-originals (never deleted), and the game is looked up again. A
+// wrong match is remembered so it's never picked again. Left alone: manuals chosen by hand (Manual Studio, or picked
+// from the search), from a scan collection (opts.collInfo), and Wii U's own e-manuals. Runs once per RECHECK_V.
+const RECHECK_V = 1;
+async function recheck(systems, opts = {}) {
+  // (beta.9) opts.force: again on demand (Settings → Get manuals → Check my manuals); opts.progress({ system, sysDone,
+  // sysTotal, checked, moved, shrunk }) once per console
+  const m = memo(); if (m.__recheck === RECHECK_V && !opts.force) return { checked: 0, moved: 0, shrunk: 0 };
+  const ls = require('./dircache').lister(), { backupDir, sizeOf } = require('./spreads'); let checked = 0, moved = 0, shrunk = 0, sysDone = 0; const list = []; // (list: the games set aside, { sysId, file })
+  for (const { def, cfg } of systems) {
+    sysDone++; if (def.id === 'wiiu') continue;
+    await breath(); if (opts.idle) await opts.idle(); if (opts.cancelled && opts.cancelled()) return { checked, moved, shrunk, list, cancelled: true };
+    if (opts.progress) { try { opts.progress({ system: def.name || def.id, sysDone, sysTotal: systems.length, checked, moved, shrunk }); } catch {} }
+    let games = []; try { games = scanSystem(def, cfg); } catch { continue; }
+    for (const g of games) {
+      const key = def.id + '|' + g.file.toLowerCase(), seen = m[key], dir = artDir(cfg, g.file), base = artBase(g.file);
+      if (!hasManual(dir, base, ls)) continue;
+      if (opts.locked && opts.locked(def.id, g.file)) continue;
+      // pages too big to show (a 13000 px scan) are made smaller, whatever the manual's source (two pages tell)
+      if (shrinker) { const pre0 = (base + '-manual-').toLowerCase(), first = ls.names(dir).filter(f => f.toLowerCase().startsWith(pre0) && /\.(jpe?g|png)$/i.test(f)).slice(0, 2);
+        if (first.some(f => { const z = sizeOf(path.join(dir, f)); return z && z[0] > PAGE_MAX_W; })) { await shrinkPages(dir, base); ls.forget(dir); shrunk++; } }
+      const coll = opts.collInfo ? opts.collInfo(key) : null; if (coll && coll.src) continue;
+      if (seen && seen.hand) continue;
+      checked++; let why = '', wrong = false;
+      if (seen && seen.got && seen.title) {
+        const gdb = String(seen.got).startsWith('gdb:');
+        if (gdb) { if (foreignPlatform(def.id, seen.title, false) || NOT_MANUAL.test(seen.title)) { why = `"${seen.title}" is another edition's`; wrong = true; } }
+        else {
+          // the score the search would give it now; a last-resort pick (the same game on a sibling console) as the last resort scores it
+          let s = scoreHit(def.id, g.title, seen.title, {});
+          if (LAST_RESORT.has(def.id)) { const t2 = g.title.replace(/^(nickelodeon|disney[- ]pixar|disney's|disney|pixar|dreamworks|cartoon network|mtv)\s+/i, ''); if (similarity(t2, seen.title) >= .95) s = Math.max(s, scoreHit(def.id, t2, seen.title, { anyPlatform: true })); }
+          if (s < AUTO_MIN - 1) { why = `"${seen.title}" doesn't match (${s.toFixed(1)})`; wrong = true; } // (a point of leeway: a borderline match that was fine stays)
+        }
+      }
+      if (!why) { const pre = (base + '-manual-').toLowerCase(), pages = ls.names(dir).filter(f => f.toLowerCase().startsWith(pre) && /\.(jpe?g|png|webp)$/i.test(f));
+        const tiny = pages.filter(f => { const z = sizeOf(path.join(dir, f)); return z && z[0] < 300; }).length;
+        if (tiny) why = `${tiny} thumbnail page${tiny === 1 ? '' : 's'}`; }
+      if (!why) continue;
+      const pre = base.toLowerCase() + '-manual', files = ls.names(dir).filter(f => { const l = f.toLowerCase(); return l.startsWith(pre + '-') || l === pre + '.pdf'; });
+      if (!files.length) continue;
+      let keep = null; const done = [];
+      try { keep = backupDir(dir, base); for (const f of files) { fs.renameSync(path.join(dir, f), path.join(keep, f)); done.push(f); } }
+      catch (e) { for (const d of done) { try { fs.renameSync(path.join(keep, d), path.join(dir, d)); } catch {} } log('Manual re-check:', g.title, '- could not move it aside:', e.code || e.message); continue; }
+      ls.forget(dir);
+      if (wrong && seen && seen.got && rejFile) { const rj = rejects(); rj[key] = [...new Set([...(rj[key] || []), String(seen.got)])]; try { fs.writeFileSync(rejFile + '.tmp', JSON.stringify(rj)); fs.renameSync(rejFile + '.tmp', rejFile); } catch {} }
+      delete m[key]; moved++; list.push({ sysId: def.id, file: g.file });
+      log('Manual re-check:', g.title, '-', why, '- set aside in .manual-originals, looking again');
+      await breath();
+    }
+  }
+  m.__recheck = RECHECK_V; saveMemo();
+  if (checked) log('Manual re-check: looked at', checked, 'manuals, set aside', moved, shrunk ? `, made ${shrunk} smaller` : '');
+  return { checked, moved, shrunk, list };
 }
 
 // ---------- language and region (Manual Studio): what a candidate is, and what a console asked for ----------
@@ -477,6 +594,9 @@ async function rejectManual(systems, systemId, file, opts = {}) {
         throw new Error('Couldn\'t move the manual aside (' + (e.code || e.message) + '). Is a page open in another program?'); } }
       moved = done.length; } } catch (e) { if (/move the manual/.test(e.message)) throw e; }
   log('Wrong manual:', g.title, '- set aside', moved, 'files; never again from', bad.join(', ') || '(unknown source)');
+  // (beta.9) a scan collection's copy first (the cleanest, with its cover), then the search's next best
+  if (opts.tryFirst) { let c = null; try { c = await opts.tryFirst(sys.def, sys.cfg, g); } catch (e) { log('Wrong manual:', g.title, '- collections:', e.message); }
+    if (c && c.got) { delete m[key]; saveMemo(); log('Wrong manual:', g.title, '- got the scan from', c.from); return { moved, title: g.title, got: c.got, from: c.from }; } }
   const next = cands.find(x => x.english !== false && x.score >= AUTO_MIN && !isRejected(key, x.id));
   if (!next) { m[key] = searchErr ? { v: AUTO_V, at: Date.now(), err: searchErr.message, rejected: true } : { v: AUTO_V, at: Date.now(), none: true, rejected: true }; saveMemo(); return { moved, title: g.title, got: 0, offline: !!searchErr }; }
   log('Wrong manual:', g.title, '- trying', next.title);
@@ -485,8 +605,50 @@ async function rejectManual(systems, systemId, file, opts = {}) {
   return { moved, title: g.title, got: r.pages || 0, from: next.title, pdf: r.pages === -1 };
 }
 
+// ---------- (beta.9) "Repair": the right game's manual, put right where it is ----------
+// The pages as they are go to .manual-originals first (undo = put them back). Then: thumbnail "pages" out, oversized
+// pages made smaller, gaps in the numbering closed, booklet pages scanned open cut in two (never a digital manual's
+// screens), and when the manual doesn't open on a cover, the game's box front goes in as its first page.
+// opts: { crop(file, side), front: the box front's file, sysId }. Returns { changed, what }.
+const pageSort = (a, b) => a.localeCompare(b, undefined, { numeric: true });
+function manualPages(dir, base) { const pre = (base + '-manual-').toLowerCase(); try { return fs.readdirSync(dir).filter(f => f.toLowerCase().startsWith(pre) && /-manual-\d+\.(jpe?g|png|webp)$/i.test(f)).sort(pageSort); } catch { return []; } }
+// pages renamed 01, 02, 03… in order, with `first` (a file to copy in) as page 01 when given; through temporary names, so
+// nothing is ever overwritten half-way
+function renumber(dir, base, first) {
+  const files = manualPages(dir, base), tmp = [];
+  files.forEach((f, i) => { const t = path.join(dir, `.${base}-renum-${i}${path.extname(f).toLowerCase()}`); fs.renameSync(path.join(dir, f), t); tmp.push(t); });
+  let n = 0; const name = ext => path.join(dir, `${base}-manual-${String(++n).padStart(2, '0')}${ext}`);
+  if (first) fs.copyFileSync(first, name(path.extname(first).toLowerCase() === '.jpeg' ? '.jpg' : path.extname(first).toLowerCase()));
+  for (const t of tmp) fs.renameSync(t, name(path.extname(t)));
+  return n;
+}
+async function repairInPlace(cfg, g, opts = {}) {
+  const dir = artDir(cfg, g.file), base = artBase(g.file), sp = require('./spreads'), what = [];
+  let files = manualPages(dir, base); if (!files.length) return { changed: false, what: 'no pages to repair' };
+  const keep = sp.backupDir(dir, base); for (const f of files) fs.copyFileSync(path.join(dir, f), path.join(keep, f));
+  const size = f => sp.sizeOf(path.join(dir, f));
+  // thumbnails out
+  const tiny = files.filter(f => { const z = size(f); return z && z[0] < 300; });
+  if (tiny.length < files.length) { for (const f of tiny) fs.unlinkSync(path.join(dir, f)); if (tiny.length) what.push(`${tiny.length} thumbnail page${tiny.length === 1 ? '' : 's'} taken out`); }
+  const shrunk = await shrinkPages(dir, base); if (shrunk) what.push(`${shrunk} oversized page${shrunk === 1 ? '' : 's'} made smaller`);
+  renumber(dir, base);
+  // booklet pages scanned open: cut, the outside's front cover first (pages narrower than a scan are screens: left whole)
+  if (opts.crop && opts.sysId !== 'wiiu') { let n = 0; try { n = await sp.splitManual(dir, base, opts.crop, { scan: true, minW: 1100 }); } catch (e) { log('Repair', base, 'spreads:', e.message); } if (n) what.push('two-page scans cut into single pages'); }
+  // the cover: a Wii U e-manual opens on the box front by itself; anything else gets the box front as page 1, unless page 1
+  // already is it (a second Repair never adds a second one). (beta.9: it used to be added only when nothing else needed
+  // fixing or page 1 wasn't cover-shaped, and any upright page counts as that: so a manual with thumbnails or huge pages
+  // needed Repair twice before its cover showed)
+  files = manualPages(dir, base);
+  if (opts.sysId !== 'wiiu' && opts.front && isFile(opts.front) && files.length) {
+    let same = false; try { same = fs.statSync(opts.front).size === fs.statSync(path.join(dir, files[0])).size; } catch {}
+    if (!same) { renumber(dir, base, opts.front); what.push('the box front added as its cover'); }
+  }
+  if (!what.length) { try { fs.rmSync(keep, { recursive: true, force: true }); fs.rmdirSync(path.dirname(keep)); } catch {} } // (nothing changed: no backup needed)
+  log('Repair manual:', g.title, '-', what.length ? what.join(', ') : 'nothing to change');
+  return { changed: what.length > 0, what: what.join(', ') };
+}
 // a manual picked by hand from the search: remember which copy it was, so "wrong manual" can block exactly that one
 function noteChosen(choices, rep) { if (!autoFile) return; const m = memo(); let n = 0;
-  for (const r of rep || []) { const c = choices.find(x => x.file === r.file); if (c && r.pages) { m[c.systemId + '|' + String(c.file).toLowerCase()] = { v: AUTO_V, at: Date.now(), got: c.id, title: c.title || '' }; n++; } }
+  for (const r of rep || []) { const c = choices.find(x => x.file === r.file); if (c && r.pages) { m[c.systemId + '|' + String(c.file).toLowerCase()] = { v: AUTO_V, at: Date.now(), got: c.id, title: c.title || '', hand: true /* (beta.9) picked by hand: the re-check leaves it */ }; n++; } }
   if (n) saveMemo(); }
-module.exports = { langCode, regionOf, prefMatch, prefPick, forgetMisses, autoInfo, searchArchive, fetchManual, LANG_NAMES, isManualFile, noteChosen, words, setRejectStore, isRejected, rejectManual, AUTO_MIN, coverage, init, searchGamesDatabase, search, findAll, downloadChosen, savePages, writePages, autoFetch, setStore, altNumbers, gdbSlugs, getJson, getText, getFile, similarity, norm, pool, hasManual };
+module.exports = { repairInPlace, renumber, manualPages, recheck, setShrink, shrinkPages, isPageImage, scoreHit, simParts, seqNums, foreignPlatform, langCode, regionOf, prefMatch, prefPick, forgetMisses, autoInfo, searchArchive, fetchManual, LANG_NAMES, isManualFile, noteChosen, words, setRejectStore, isRejected, rejectManual, AUTO_MIN, coverage, init, searchGamesDatabase, search, findAll, downloadChosen, savePages, writePages, autoFetch, setStore, altNumbers, gdbSlugs, getJson, getText, getFile, similarity, norm, pool, hasManual };

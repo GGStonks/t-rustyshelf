@@ -15,6 +15,7 @@ const safeId = id => String(id || '').toLowerCase().replace(/[^a-z0-9._-]+/g, '-
 const dir = () => path.join(o.dataDir, 'pc-covers'), cacheDir = () => path.join(o.dataDir, 'pc-cover-cache');
 const isFile = p => { try { return fs.statSync(p).isFile(); } catch { return false; } };
 const sha = s => crypto.createHash('sha1').update(String(s)).digest('hex').slice(0, 24);
+const steamArt = (appid, name) => [`https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${appid}/${name}`, `https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/${name}`]; // (Steam's public store CDN, as steamart.js)
 const extOf = (u, buf) => { if (buf && buf[0] === 0x89 && buf[1] === 0x50) return 'png'; if (buf && buf.slice(8, 12).toString() === 'WEBP') return 'webp'; const m = /\.(png|webp|jpe?g)(?:$|\?)/i.exec(String(u || '')); return m ? m[1].toLowerCase().replace('jpeg', 'jpg') : 'jpg'; };
 
 function init(opts) { o = Object.assign(o, opts || {}); }
@@ -44,6 +45,14 @@ async function options(game) {
   const id = String(game.id), keys = {}, list = [];
   const mine = cover(id); if (mine) list.push({ key: 'current', thumb: o.fileUrl(mine), source: 'yours', label: 'Your choice now', sub: 'Chosen before' });
   if (game.appid) { const s = o.steamCover(game.appid); if (s) { keys.steam = { file: s }; list.push({ key: 'steam', thumb: o.fileUrl(s), source: 'steam', label: "Steam's cover", sub: 'From your Steam library' }); } }
+  // (beta.9) with no key at all: Steam's official cover from its public store (no account): a Steam game's own when Steam
+  // hasn't kept it on this PC, and for any other game the Steam games of that name (the player picks: a name can be shared)
+  try {
+    const apps = game.appid ? (keys.steam ? [] : [{ id: String(game.appid), name: '' }]) : (o.steamSearch ? await o.steamSearch(game.title, !game.term) : []);
+    const got = await Promise.all(apps.map(async (a, i) => ({ a, i, t: await thumb(steamArt(a.id, 'library_600x900.jpg')[0]) || await thumb(steamArt(a.id, 'library_600x900.jpg')[1]) })));
+    for (const { a, i, t } of got) { if (!t) continue; const k = 'st' + i; keys[k] = { urls: [...steamArt(a.id, 'library_600x900_2x.jpg'), ...steamArt(a.id, 'library_600x900.jpg')] };
+      list.push({ key: k, thumb: o.fileUrl(t), source: 'steamstore', label: "Steam's cover", sub: a.name ? `${a.name} on Steam` : "From Steam's store" }); }
+  } catch (e) { o.log('PC cover: Steam store', e.message); }
   const sgdb = !!(o.steamgrid && o.steamgrid.enabled && o.steamgrid.enabled());
   if (sgdb) {
     let posters = [];
@@ -59,8 +68,9 @@ async function use(id, key) {
   id = String(id); const k = (last.get(id) || {})[String(key || '')]; if (!k) throw new Error('That cover isn\'t in the list any more. Open the picker again.');
   let buf = null, ext = 'jpg';
   if (k.file) { buf = await fs.promises.readFile(k.file); ext = extOf(k.file, buf); }
-  else if (k.url) { buf = await o.fetchImage(k.url); if (!buf) throw new Error("Couldn't download that cover. Check the connection and try again."); ext = extOf(k.url, buf); }
-  const dest = await save(id, buf, ext); o.log('PC cover chosen:', id, key.startsWith('sg') ? 'SteamGridDB' : key); return dest;
+  else if (k.url || k.urls) { const us = k.urls || [k.url]; let u = null; for (const x of us) { buf = await o.fetchImage(x); if (buf) { u = x; break; } } // (the sharpest first: Steam's 2x cover, then its 1x)
+    if (!buf) throw new Error("Couldn't download that cover. Check the connection and try again."); ext = extOf(u, buf); }
+  const dest = await save(id, buf, ext); o.log('PC cover chosen:', id, key.startsWith('sg') ? 'SteamGridDB' : key.startsWith('st') ? "Steam's store" : key); return dest;
 }
 // a picture of your own (a file the player picked in the dialog)
 async function own(id, file) {

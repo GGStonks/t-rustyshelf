@@ -73,7 +73,7 @@ let askT={},toastT=0,peekT=0,themeT=0,rafId=0,primed=false,openId=0;const held={
 
 /* ---------- config access ---------- */
 function gp(path){let o=cfg;for(const k of path.split(".")){if(o==null||typeof o!=="object")return undefined;o=o[k]}return o}
-function sp(path,v){const ks=path.split(".");let o=cfg;for(let i=0;i<ks.length-1;i++){if(o[ks[i]]==null||typeof o[ks[i]]!=="object")o[ks[i]]={};o=o[ks[i]]}o[ks[ks.length-1]]=v}
+function sp(path,v){secDrop();const ks=path.split(".");let o=cfg;for(let i=0;i<ks.length-1;i++){if(o[ks[i]]==null||typeof o[ks[i]]!=="object")o[ks[i]]={};o=o[ks[i]]}o[ks[ks.length-1]]=v}
 const bindv=(path,def)=>({path,d:def,get:()=>{const v=gp(path);return v===undefined||v===null?def:v},set:v=>sp(path,v)});
 const bindb=(path,def)=>({path,d:def,get:()=>{const v=gp(path);return v===undefined||v===null?def:!!v},set:v=>sp(path,!!v)});
 // row makers: choice, toggle, slider, action, path (file / folder picker), text (typed), heading
@@ -327,7 +327,9 @@ function build(){
     {t:"dyn",fn:clipRows},
     T("Play previews with sound","ui.previewSound",false,"Off: previews play silently (Steam's trailer clips are always silent).",{when:()=>gp("ui.previews")!=="off",keys:"video preview sound audio mute"}),
     C("Start a preview after","ui.previewDelay",[[0.5,"Half a second"],[1,"1 second"],[1.5,"1.5 seconds"],[2,"2 seconds"],[3,"3 seconds"],[5,"5 seconds"],[8,"8 seconds"],[10,"10 seconds"],[15,"15 seconds"]],1.5,"How long you rest on a game before its preview starts (on the shelf, half a second more, so browsing quickly stays calm).",{when:()=>gp("ui.previews")!=="off",keys:"video preview delay wait"}),
-    T("YouTube's player in the Media tab","ui.previewYoutube",true,"A game's YouTube trailer plays in YouTube's own player in Details → Media (streamed: it needs the internet, and YouTube can now and then show an ad). Also covers the wait while a console trailer clip is made.",{when:()=>!!api.previewYt&&gp("ui.previews")!=="off",keys:"video preview youtube trailer online"}),
+    // (beta.9: the Thor only. On Windows, Overview's box never loads YouTube's player by itself, it lagged and took the
+    // controller away; full screen opens the trailer either way)
+    T("YouTube's player in Details","ui.previewYoutube",true,"A game's YouTube trailer plays in YouTube's own player in Details → Media (streamed: it needs the internet, and YouTube can now and then show an ad). Also covers the wait while a console trailer clip is made.",{when:()=>!!api.previewYt&&gp("ui.previews")!=="off"&&!!(window.bsPlatform&&bsPlatform.os==="android"),keys:"video preview youtube trailer online"}),
     {t:"dyn",fn:()=>gp("ui.previews")!=="off"&&api.previewCount?pvRows():[]}
   ]},
   // the museum's reading corner (1.68): its own page, so a deep link lands on its rows instead of below Art Studio's list
@@ -383,7 +385,7 @@ function build(){
     A("Quit Boxshelf","Quit","Closes Boxshelf completely. Sleep, Restart and Shut down are in the Home menu.",async()=>{await save();api.quit&&api.quit()},{keys:"exit close"}),
   ]},
   ];
-  if(!api.previewFind||(window.bsPlatform&&bsPlatform.os==="android"))SECTIONS=SECTIONS.filter(s=>s.id!=="previews"); // (beta.8) no video previews on Android yet (its demo api has previewFind)
+  if(!api.previewFind)SECTIONS=SECTIONS.filter(s=>s.id!=="previews"); // (beta.9: on Android too; its Settings puts them under Shelf & museum, android-settings.js)
 if(window.bsPlatform&&bsPlatform.filterSections)SECTIONS=bsPlatform.filterSections(SECTIONS,{bind:bindb,M,H,T,A}); // Android: drop what this platform can't do (renderer/platform.js); M…A: the row makers, for a platform's own rows and sub-pages
 }
 /* Accounts & services: each service's own page (sub {kind:"svc",id}) */
@@ -549,6 +551,8 @@ function moveOrder(d){const {order}=orderList(),i=rowI,j=i+d;if(!grab||j<0||j>=o
    ticked console; Start shows each console's progress as rows, then what was found. The plan is ui.artPlan, as before. */
 const AG={cov:null,loading:false,busy:false,prog:{},stage:"",rep:null,err:null,started:0,ids:[],parts:null};
 const MG={cov:null,loading:false,busy:false,prog:{},stage:"",phase:"",rep:null,err:null,started:0,ids:[],pick:null};
+// (beta.9) Get manuals → Check my manuals: every manual you have looked at again (main manuals:check), progress and a result
+const MC={busy:false,stage:"",done:0,total:0,checked:0,moved:0,started:0,rep:null,err:null,stopping:false};let mcTick=0,mcHooked=false;
 const PARTS4=[["front","Covers"],["back","Backs"],["spine","Spines"],["disc","Discs & carts"]];
 const took=t=>{const s=Math.max(0,Math.round((Date.now()-t)/1000));return s<60?s+"s":Math.floor(s/60)+"m "+String(s%60).padStart(2,"0")+"s"};
 const infoRow=(label,btn,sub,x={})=>({t:"action",label,btn:btn||"",ns:true,keepInfo:true,run:()=>{},sub:()=>sub,...x}); // a line of information (selectable, so a controller can scroll through)
@@ -609,6 +613,16 @@ async function agStart(){
 // Get manuals: the same, one switch per console
 function mgLoad(){if(MG.loading||!api.manualCoverage)return;MG.loading=true;api.manualCoverage().then(c=>{MG.cov=Array.isArray(c)?c:[]}).catch(()=>{MG.cov=[]}).finally(()=>{MG.loading=false;if(isOpen)bump()})}
 function manGetRows(){dlHook();
+  if(MC.busy)return [H("Checking your manuals",{em:()=>took(MC.started)}),infoRow(MC.stage||"Starting…",MC.total?`${MC.done} of ${MC.total} consoles`:""),
+    infoRow("So far","",{text:`${MC.checked} looked at · ${MC.moved} set aside`,cls:MC.moved?"warn":""}),
+    A("Cancel",()=>MC.stopping?"Stopping…":"Cancel","Stops at the next step. What's been set aside so far is looked up the next time the background pass runs.",()=>{if(MC.stopping)return;MC.stopping=true;if(api.cancelCheckManuals)api.cancelCheckManuals();toast("Stopping")},{ns:true})];
+  if(MC.rep||MC.err){const r=MC.rep||{},L=[];
+    if(MC.err)L.push(H("The check didn't finish"),infoRow(MC.err,""));
+    else{const bits=[`${r.checked||0} looked at`];if(r.moved)bits.push(`${r.got||0} replaced`);if(r.moved&&r.moved>(r.got||0))bits.push(`${r.moved-(r.got||0)} set aside without a match yet`);if(r.shrunk)bits.push(`${r.shrunk} made smaller`);
+      L.push(H(r.cancelled?"Check stopped":"Manuals checked",{em:()=>"took "+took(MC.started)}),
+        infoRow(r.cancelled?"Stopped · "+bits.join(" · "):r.moved||r.shrunk?"✓ "+bits.join(" · "):`✓ All ${r.checked||0} manuals look right`,"",{text:r.cancelled?"Stopped part way":r.moved||r.shrunk?"Changes show when you close Settings":"Nothing needed fixing",cls:r.cancelled?"warn":"ok"},
+          {info:"Manuals set aside are kept in the game's .manual-originals folder, never deleted."}))}
+    L.push(H(""),A("Back to the list","Back","Your consoles and what they still need.",()=>{MC.rep=null;MC.err=null;MG.cov=null;mgLoad()},{ns:true}));return L}
   if(MG.busy){const L=[H(MG.phase==="download"?"Downloading manuals":"Looking for manuals",{em:()=>took(MG.started)})];
     if(MG.phase==="download")L.push(infoRow(MG.stage||"",""));
     else MG.ids.forEach(id=>{const c=consoleList().find(x=>x.id===id)||{name:id},p=MG.prog[id],tot=p&&p.sysTotal||0,dn=p&&p.sysDone||0,fin=!!tot&&dn>=tot;
@@ -635,9 +649,25 @@ function manGetRows(){dlHook();
   L.push(A("Select all","All","Every console.",()=>{MG.pick=new Set(sys.map(c=>c.id))},{ns:true}),A("Select none","None","No console.",()=>{MG.pick=new Set()},{ns:true}),
     H("Options"),T("Only sure English manuals","ui.manualSure",true,"Off takes the best match for every game, even unsure ones.",{keys:"language unsure"}),
     H(""),startRow);
+  if(api.checkManuals)L.push(H("Your manuals"),A("Check my manuals",()=>MC.busy?"Running…":"Check","Looks again at every manual you have: another game's, or one with thumbnail pages, is set aside (kept in .manual-originals) and looked up again; huge pages are made smaller. Manuals you picked yourself are left alone.",mcStart,
+    {ns:true,keys:"check recheck wrong manuals fix",when:()=>!!api.checkManuals,sub:()=>({text:"Every console · the manuals already on your shelves",cls:""})}));
   return L}
+// Check my manuals: one at a time with the other downloads here; the elapsed time ticks each second while it runs
+function mcClock(){clearTimeout(mcTick);if(!MC.busy)return;mcTick=setTimeout(()=>{if(isOpen)bump();mcClock()},1000)}
+async function mcStart(){
+  if(AG.busy||MG.busy||MC.busy){toast("A download is already running");return}if(!api.checkManuals)return;
+  // (at once: a second quick press must not start a second check while the settings save, and the page shows this run)
+  Object.assign(MC,{busy:true,stage:"Starting…",done:0,total:0,checked:0,moved:0,rep:null,err:null,stopping:false,started:Date.now()});
+  if(!mcHooked&&api.onManualCheck){mcHooked=true;api.onManualCheck(d=>{if(!MC.busy||!d)return;if(d.stage)MC.stage=d.stage;if(d.total)MC.total=d.total;if(d.done!=null)MC.done=d.done;if(d.checked!=null)MC.checked=d.checked;if(d.moved!=null)MC.moved=d.moved;if(isOpen)bump()});
+    // (it first waits for the background manual pass to pause at its next step: say so instead of "Starting…")
+    if(api.onManualTurn)api.onManualTurn(d=>{if(MC.busy&&d&&d.wait&&MC.stage==="Starting…"){MC.stage="Waiting for the background manual download to pause…";if(isOpen)bump()}})}
+  rowI=0;play("open");bump();mcClock();try{await save()}catch{}
+  if(MC.stopping)MC.rep={checked:0,moved:0,shrunk:0,got:0,cancelled:true}; // (Cancel while the settings saved: it never starts)
+  else{try{MC.rep=await api.checkManuals()||{}}catch(e){MC.err=errMsg(e)}}
+  MC.busy=false;MC.stopping=false;clearTimeout(mcTick);rowI=0;MG.cov=null;const r=MC.rep||{};if(r.moved||r.shrunk)needRescan=true;
+  toast(MC.err?"Manuals: "+MC.err:r.cancelled?"Manual check stopped":"Manual check finished");if(isOpen)bump()}
 async function mgStart(){
-  if(AG.busy||MG.busy){toast("A download is already running");return}const ids=[...(MG.pick||[])];if(!ids.length||!api.findManuals)return;
+  if(AG.busy||MG.busy||MC.busy){toast("A download is already running");return}const ids=[...(MG.pick||[])];if(!ids.length||!api.findManuals)return;
   await save();Object.assign(MG,{busy:true,prog:{},stage:"Starting…",phase:"search",rep:null,err:null,started:Date.now(),ids});rowI=0;play("open");bump();dlClock();
   try{const found=await api.findManuals(ids)||[];
     const min=window.BoxshelfManMin||7,pick=[],unsure=[],none=[];
@@ -651,7 +681,12 @@ async function mgStart(){
   MG.busy=false;MG.cov=null;needRescan=true;rowI=0;toast(MG.err?"Manuals: "+MG.err:"Manual download finished");if(isOpen)bump()}
 
 /* ---------- pages & navigation ---------- */
-function sec(){
+// (beta.9) one build of the page's rows per moment: the input, the info card, the hints and the page itself all asked for
+// it (4-5 full builds, every dyn row run each time, per press). Dropped at the next microtask, at every redraw and on
+// every change or move (sp, changed, goSec, openSub, leaveSub, search), so it's never stale
+let secMemo=null;const secDrop=()=>{secMemo=null};
+function sec(){if(secMemo)return secMemo;secMemo=secBuild();Promise.resolve().then(secDrop);return secMemo}
+function secBuild(){
   if(results)return {g:"Search",id:"search",name:query?`Results for “${query}”`:"Search",lead:query?`${resultTotal>results.length?`Showing ${results.length} of ${resultTotal}`:`${results.length} setting${results.length===1?"":"s"} found`}. ${word("A","Enter","Click")} opens one on its own page.`:"Type a word, like “shadows”, “volume” or “overscan”.",rows:results};
   if(sub)return subPage(sub);
   return expand(SECTIONS[secI])}
@@ -659,17 +694,17 @@ function subPage(s){if(s.kind==="console")return consolePage(s.id);if(s.kind==="
   if(s.kind==="more"){const m=MORE[s.id],o=SECTIONS[secI]||{};return expand({g:o.g,id:o.id,ic:o.ic,name:m?m.name:"",lead:m?m.lead:"",rows:m?m.rows:[],extra:m&&m.extra})}return orderPage()}
 // a sub-page's own name, and where B goes from it (the hint and the crumb name it): the page it was opened from
 function subName(s){const c=()=>(consoleList().find(x=>x.id===s.id)||{name:s.id}).name;return s.kind==="console"?c():s.kind==="conadv"?"Emulator & advanced":s.kind==="svc"?SVC_N[s.id]||s.id:s.kind==="more"?(MORE[s.id]||{}).name||"":"Console order"}
-function subUpName(s){if(!s)return "";if(s.up)return subName(s.up);if(s.kind==="console"||s.kind==="conadv")return "Consoles";if(s.kind==="svc")return "Accounts";if(s.kind==="order")return "Shelf";return (SECTIONS[secI]||{}).name||""}
+function subUpName(s){if(!s)return "";if(artAcct&&s===artAcct.page)return "Art Studio";if(s.up)return subName(s.up);if(s.kind==="console"||s.kind==="conadv")return "Consoles";if(s.kind==="svc")return "Accounts";if(s.kind==="order")return "Shelf";return (SECTIONS[secI]||{}).name||""}
 function crumbOf(s){const L=[];let x=s;for(;x.up;x=x.up)L.unshift(subName(x.up));L.unshift(x.kind==="svc"?"Accounts & services":subUpName(x));L.push(subName(s));return L.join("  ›  ")}
 function expand(s){const rows=[];s.rows.forEach(r=>{if(r.t==="dyn")rows.push(...r.fn());else rows.push(r)});if(s.extra)rows.push(...s.extra());return {...s,rows}}
 const rowsOf=s=>s.rows.filter(r=>r.t!=="head"&&shown(r));
 const curRow=()=>focus==="page"||focus==="edit"||(focus==="osk"&&edit)?rowsOf(sec())[rowI]:null;
 const word=(pad,key,mouse)=>device==="pad"?pad:device==="mouse"?mouse:key;
-function goSec(i){secI=(i+SECTIONS.length)%SECTIONS.length;sub=null;rowI=0;grab=null;studioClear()}
+function goSec(i){secDrop();secI=(i+SECTIONS.length)%SECTIONS.length;sub=null;rowI=0;grab=null;studioClear()}
 function goSecId(id){let i=SECTIONS.findIndex(s=>s.id===id);if(i<0)i=SECTIONS.findIndex(s=>s.alias&&s.alias.includes(id));if(i>=0)goSec(i)} // (alias: a platform that merges sections keeps the old names working)
 // sub-pages nest (a console → its Emulator & advanced): each one keeps the page under it (up) and that page's own return row
-function openSub(s){s.up=sub;s.upRet=subRet;subRet=rowI;sub=s;rowI=0;focus="page";grab=null;play("open");render()}
-function leaveSub(){const was=sub;sub=was&&was.up||null;grab=null;rowI=subRet||0;subRet=was&&was.upRet||0;if(was&&was.kind==="console"){const k=tileList().findIndex(c=>c.id===was.id);if(k>=0)ci=k}}
+function openSub(s){secDrop();s.up=sub;s.upRet=subRet;subRet=rowI;sub=s;rowI=0;focus="page";grab=null;play("open");render()}
+function leaveSub(){if(artAcct&&sub&&sub===artAcct.page){artBackTo();return}secDrop();const was=sub;sub=was&&was.up||null;grab=null;rowI=subRet||0;subRet=was&&was.upRet||0;if(was&&was.kind==="console"){const k=tileList().findIndex(c=>c.id===was.id);if(k>=0)ci=k}}
 function openConsole(id){if(sub){openSub({kind:"console",id})}else{subRet=rowI;sub={kind:"console",id};rowI=0;focus="page";play("open");render()} /* from inside a sub-page (RetroAchievements' emulator rows): nested, so B comes back to it */if(id==="gc"&&!ipl&&api.findIpl)Promise.resolve(save()).then(()=>api.findIpl("gc")).then(r=>{ipl=r;bump()}).catch(()=>{});if(id==="sw2"&&sw2Row())Promise.resolve(save()).then(()=>api.sw2Builds("")).then(r=>{sw2b=r&&r.builds||[];bump()}).catch(()=>{sw2b=[];bump()})} /* Switch 2: the Eglantine builds for its Build row, looked for again each time the page opens */
 const sw2Row=()=>!!api.sw2Builds&&!(window.bsPlatform&&bsPlatform.os==="android");
 // (beta.3) Settings → Switch 2 → Builds. One choice among "Ask each time" and every build (the shelf's emulator is the
@@ -681,6 +716,10 @@ let pcSt=null,pcAsking=false;const customNameRows=new WeakMap();
 // (beta.7) a store row's line: "3 installed" / "None installed" once main has counted (null while asking)
 function pcCount(k){if(!pcSt)setTimeout(pcStatus,0);return pcSt&&pcSt[k]!=null?{text:pcSt[k]?`${pcSt[k]} installed`:"None installed"}:null}
 function pcStatus(){if(pcAsking||!api.pcStatus)return;pcAsking=true;Promise.resolve(api.pcStatus()).then(r=>{pcSt=r||{};pcAsking=false;bump()}).catch(()=>{pcSt={};pcAsking=false;bump()})}
+// (beta.9) how many custom games have no cover yet (the Covers rows)
+const COV={n:null,loading:false,busy:false};
+function covLoad(force){if(!api.pcCoverMissing||COV.loading||(COV.n!=null&&!force))return;COV.loading=true;
+  Promise.resolve(api.pcCoverMissing()).then(L=>{COV.n=Array.isArray(L)?L.length:0}).catch(()=>{COV.n=0}).finally(()=>{COV.loading=false;bump()})}
 function customRows(){if(!pcSt)setTimeout(pcStatus,0);cfg.pc=cfg.pc||{epic:true,quiver:true,quiverPath:"",custom:[]};const pc=cfg.pc;if(!Array.isArray(pc.custom))pc.custom=[];const rows=[];
   const again=()=>{pcSt=null;changed({rescan:true})};
   rows.push({t:"head",text:"Quiver Launcher"});
@@ -694,6 +733,14 @@ function customRows(){if(!pcSt)setTimeout(pcStatus,0);cfg.pc=cfg.pc||{epic:true,
   // (beta.7) every way of adding games on one page: several programs, a folder of games, Playnite, one program
   rows.push(M("Add games","addgames","Several programs at once, a whole folder of games, your Playnite library, or one program.","Every way to put games on the Custom shelf. You see what was found before anything is added.",[{t:"dyn",fn:addRows}],
     {keys:"add game games custom several many folder scan playnite import program exe recomp port",sub:()=>({text:"Several at once, a folder, Playnite or one program"})}));
+  // (beta.9) covers for every custom game at once (app.js pcCoverBatch / pcCoverAuto): they never get one automatically
+  if(api.pcCoverMissing&&window.Shelf&&Shelf.pcCoverBatch){covLoad();const n=COV.n,S=window.Shelf;
+    rows.push({t:"head",text:"Covers"});
+    rows.push(A("Choose covers one by one","Start","Goes through every custom game without a cover of its own: SteamGridDB's covers for each (with a free SteamGridDB key, Settings → Accounts & services) or a picture of yours. A uses one, Skip moves on, B stops.",
+      ()=>{if(!n){toast("Every custom game has a cover already");return}close();S.pcCoverBatch()},{ns:true,keys:"covers cover art all custom games batch steamgriddb recomp port decomp",sub:()=>({text:n==null?"Looking…":n?`${n} game${n===1?"":"s"} without a cover`:"Every game has one"})}));
+    rows.push(A("Use the best cover for each","Find","Picks SteamGridDB's top cover for every custom game without one, in one go. A recomp can share its name with another game: look them over, and Undo puts them all back.",
+      async()=>{if(!n){toast("Every custom game has a cover already");return}if(COV.busy)return;COV.busy=true;bump();try{await S.pcCoverAuto()}finally{COV.busy=false;covLoad(true)}},{ns:true,keys:"covers best match all automatic steamgriddb",sub:()=>({text:COV.busy?"Finding covers…":"Needs a SteamGridDB key"})}));
+    if(S.coverUndoCount&&S.coverUndoCount())rows.push(A(`Undo the ${S.coverUndoCount()} covers just found`,"Undo","Puts back the made-up cases those games had before.",async()=>{await S.pcCoverUndo();covLoad(true)},{ns:true,keys:"undo covers"}));}
   pc.custom.forEach((c,i)=>{
     // (beta.5) the name row is kept per game (the text editor finds its row by identity: a new object each draw never edited)
     let nr=customNameRows.get(c);if(!nr){nr=X(c.title||"Game","",`Its name on the shelf. Program: ${c.exe}`,{get:()=>c.title||"",set:v=>{c.title=String(v||"").slice(0,120);nr.label=c.title||"Game"},rescan:true,ns:true,keys:"rename custom game",sub:()=>({text:folderName(c.exe)})});customNameRows.set(c,nr)}
@@ -738,15 +785,17 @@ function allSettings(){const out=[];
   consoleList().forEach(c=>{const P=conPages(c.id);[P.main,P.adv].forEach(p=>{const adv=p===P.adv;let k=0,grp="";p.rows.forEach(r=>{if(r.t==="head"){grp=r.text;return}if(!shown(r))return;const i=k++;if(r.ns)return;
     out.push({sec:ci0,console:c.id,adv,i,row:r,label:r.label,where:`Consoles › ${c.name}${adv?" › "+p.name:""}${grp&&grp!==c.emulatorName?" › "+grp:""}`,text:[r.label,r.info,r.keys,c.name,c.emulatorName,adv?"advanced":""].join(" ")})})})});
   return out}
-function runSearch(){const q=query.trim().toLowerCase();if(!q){results=[];resultTotal=0;rowI=0;return}
+// (beta.9) the search index is built once per search (every section, sub-page and console page), not on every key
+let searchIdx=null;
+function runSearch(){secDrop();const q=query.trim().toLowerCase();if(!q){results=[];resultTotal=0;rowI=0;return}
   const words=q.split(/\s+/);
-  const scored=allSettings().map(e=>{const t=e.text.toLowerCase(),l=e.label.toLowerCase();if(!words.every(w=>t.includes(w)))return null;
+  const scored=(searchIdx||(searchIdx=allSettings())).map(e=>{const t=e.text.toLowerCase(),l=e.label.toLowerCase();if(!words.every(w=>t.includes(w)))return null;
     return {...e,score:(l.startsWith(q)?3:0)+(l.includes(q)?2:0)+(words.every(w=>l.includes(w))?1:0)}}).filter(Boolean).sort((a,b)=>b.score-a.score);
   resultTotal=scored.length;results=scored.slice(0,40).map(e=>({t:"result",label:e.label,where:e.where,go:e,info:e.row?e.row.info:"Opens this console's page.",row:e.row}));rowI=0}
 function hi(label){const ws=query.trim().split(/\s+/).filter(Boolean).map(w=>w.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"));if(!ws.length)return esc(label);
   const re=new RegExp("("+ws.sort((a,b)=>b.length-a.length).join("|")+")","ig");return String(label).split(re).map((p,j)=>j%2?`<mark>${esc(p)}</mark>`:esc(p)).join("")}
-function openSearch(viaPad){if(edit)cancelEdit();grab=null;if(!results)preSearch={secI,rowI,sub,subRet,focus,studio,stack,sRet};studio=null;stack=[];sSig="";runSearch();focus="search";if(viaPad)openOsk("search");render()}
-function closeSearch(){results=null;query="";closeOsk();if(preSearch){({secI,rowI,sub,subRet}=preSearch);if(preSearch.studio){studio=preSearch.studio;stack=preSearch.stack||[];sRet=preSearch.sRet||0;sSig=""}focus=preSearch.focus==="search"||preSearch.focus==="osk"?"side":preSearch.focus}else focus="side";preSearch=null;render()}
+function openSearch(viaPad){searchIdx=null;if(edit)cancelEdit();grab=null;if(!results)preSearch={secI,rowI,sub,subRet,focus,studio,stack,sRet};studio=null;stack=[];sSig="";runSearch();focus="search";if(viaPad)openOsk("search");render()}
+function closeSearch(){searchIdx=null;secDrop();results=null;query="";closeOsk();if(preSearch){({secI,rowI,sub,subRet}=preSearch);if(preSearch.studio){studio=preSearch.studio;stack=preSearch.stack||[];sRet=preSearch.sRet||0;sSig=""}focus=preSearch.focus==="search"||preSearch.focus==="osk"?"side":preSearch.focus}else focus="side";preSearch=null;render()}
 function typeChar(c){if(edit){edit.value+=c;paintEdit();return}query+=c;runSearch();if(focus!=="osk")focus="search";render()}
 function backspace(){if(edit){edit.value=edit.value.slice(0,-1);paintEdit();return}query=query.slice(0,-1);runSearch();render()}
 function goResult(r){const e=r.go;results=null;closeOsk();preSearch=null;query="";focus="page";
@@ -790,8 +839,10 @@ function commitEdit(){if(!edit)return;const r=edit.row,v=edit.value.trim().repla
 function cancelEdit(){if(!edit)return;edit=null;closeOsk();focus="page";render()}
 
 /* ---------- changing things ---------- */
-function bump(){render()}
-function changed(r){
+// (beta.9) a burst of answers (the ~10 that come back as Settings opens, a download's progress) is drawn once, next frame
+// (the next frame or 50 ms, whichever comes first: a page drawn slowly, or in software, never waits a whole frame for it)
+let bumpT=0,bumpT2=0;function bump(){if(bumpT||!isOpen)return;const go=()=>{if(!bumpT)return;cancelAnimationFrame(bumpT);clearTimeout(bumpT2);bumpT=0;bumpT2=0;render()};bumpT=requestAnimationFrame(go);bumpT2=setTimeout(go,50)}
+function changed(r){secDrop();
   if(r&&r.rescan)needRescan=true;if(r&&r.ra)raChanged=true;
   if(!(r&&r.nosave))scheduleSave();
   if(r&&r.live)try{r.live(r.get())}catch(e){console.warn("settings live",e)}
@@ -887,7 +938,7 @@ function checkPathsSoon(){if(!pathAsk.size||!api.checkPaths)return;const L=[...p
 
 /* ---------- open / close / the classic pages ---------- */
 function ensureCfg(){cfg.ui=cfg.ui||{};cfg.steam=cfg.steam||{enabled:true,path:""};cfg.apps=cfg.apps||{};cfg.ra=cfg.ra||{user:"",key:"",enabled:true};cfg.keys=cfg.keys||{};cfg.systems=cfg.systems||{};(info.apps||[]).forEach(a=>{cfg.apps[a.id]=cfg.apps[a.id]||{enabled:true,path:""}})}
-const PAGE_MAP={bottom:["display","Bottom screen"],phone:"phone",consoles:"consoles",steam:"pc",pc:"pc",epic:"pc",custom:"custom",quiver:"custom",media:"apps",apps:"apps",ra:{svc:"ra"},connections:["acct","fanart.tv"],screenscraper:{svc:"screenscraper"},acct:"acct",accounts:"acct",display:"display",perf:"perf",performance:"perf",sound:"sound",controller:"pad",pad:"pad",museum:"museum",shelf:"shelf",library:["art","Fetch manuals for new games"],art:"art",previews:"previews",videos:"previews",trailers:"previews",reading:["reading","Find on the Internet Archive"],magazines:"reading",guides:"reading",manuals:"art",startup:"sys",system:"sys",sys:"sys"};
+const PAGE_MAP={bottom:["display","Bottom screen"],phone:"phone",consoles:"consoles",steam:"pc",pc:"pc",epic:"pc",custom:"custom",quiver:"custom",media:"apps",apps:"apps",ra:{svc:"ra"},connections:["acct","fanart.tv"],screenscraper:{svc:"screenscraper"},steamgriddb:{svc:"steamgriddb"},acct:"acct",accounts:"acct",display:"display",perf:"perf",performance:"perf",sound:"sound",controller:"pad",pad:"pad",museum:"museum",shelf:"shelf",library:["art","Fetch manuals for new games"],art:"art",previews:"previews",videos:"previews",trailers:"previews",reading:["reading","Find on the Internet Archive"],magazines:"reading",guides:"reading",manuals:"art",startup:"sys",system:"sys",sys:"sys"};
 // (beta.5) Details → Rename: one game's name, on a page of its own (typed, or with the on-screen keyboard on a controller).
 // Saved by main (cfg.games[key].title) the moment Enter is pressed; "Use the file's name" puts the scanned one back
 let renameState=null;
@@ -1019,12 +1070,14 @@ function pvRows(){pvLoad();if(PVS.rows)return PVS.rows;const c=PVS.c,R=[];if(!c)
   R.push(H("Found",{em:()=>c.total?`${c.total} game${c.total===1?"":"s"}`:""}));
   if(!c.systems.length)R.push(infoRow("No video files yet","",{text:"Steam games still get their trailers, and YouTube's if it's on."}));
   c.systems.forEach(s=>R.push(infoRow(s.name,`${s.n} of ${s.of}`,{text:"games with a video"})));
+  if(!(window.bsPlatform&&bsPlatform.os==="android")){ // (Android: the videos beside the games only)
   R.push(H("Your videos folders"));
   (gp("ui.previewDirs")||[]).forEach((d,i)=>R.push({t:"folder",label:"Videos folder",info:"Videos in here (or in a subfolder named after the console) are matched to your games. Select it twice to stop using it (nothing is deleted).",more:d,short:folderName,get:()=>d,ns:true,
     run:()=>twice("pvd:"+i,()=>{const L=(gp("ui.previewDirs")||[]).slice();L.splice(i,1);sp("ui.previewDirs",L);changed(null);pvLoad(true);bump()},"Press again to stop using this folder"),ask:"pvd:"+i,sub:()=>pathSub(d,"dir")}));
   R.push(A("Add a videos folder","Add","A folder with game videos (named like the games, e.g. Super Mario 64 (USA).mp4), or with a folder per console.",async()=>{const p=await pick({kind:"folder",title:"Choose a folder with game videos"});
       if(p){const L=(gp("ui.previewDirs")||[]).slice();if(!L.includes(p))L.push(p);sp("ui.previewDirs",L);changed(null);await save();pvLoad(true);bump()}},{ns:true}),
     A("Find videos again","Find","Looks through every videos folder again (after you've added videos).",async()=>{await save();pvLoad(true);bump()},{ns:true}));
+  } // (end of the Windows / Linux videos folders)
   if(api.previewClearSteam)R.push(H("Steam trailers"),A("Clear Steam trailer clips","Clear",`The short clips kept from Steam's trailers (${mb(c.steamBytes||0)} MB). They're fetched again the next time you rest on a game.`,async()=>{await api.previewClearSteam();pvLoad(true);toast("Steam trailer clips cleared");bump()},{ns:true,when:()=>(c.steamBytes||0)>0}));
   return PVS.rows=R}
 // (beta.7) Set up for me (main/emusetup.js), one page per console: a switch per kind of change, the graphics preset, Set
@@ -1115,6 +1168,8 @@ function route(page,o){if(!page)return;o=o||{};
   if(page==="coversearch"&&o.id){coverSearch={id:String(o.id),title:String(o.title||""),term:String(o.term||o.title||"")};
     MORE.coversearch={id:"coversearch",name:"Search for a cover",lead:`Covers for ${coverSearch.title} under another name.`,rows:[{t:"dyn",fn:coverSearchRows}]};
     goSecId(/^(steam|epic)-/.test(coverSearch.id)?"pc":"custom");focus="page";rowI=0;openSub({kind:"more",id:"coversearch"});return}
+  // (beta.9) any page of its own by its id (Android's Ports & custom APKs, Video previews…): opened in the section that holds it
+  if(MORE[page]&&!PAGE_MAP[page]){const s=SECTIONS.find(x=>x&&Array.isArray(x.rows)&&x.rows.some(r=>r&&r.pg===page));if(s){goSecId(s.id);focus="page";rowI=0;openSub({kind:"more",id:page});return}}
   if(page==="rename"&&o.ref){const file=String(o.fileTitle||o.title||""),cur=String(o.title||"");renameState={ref:o.ref,name:cur,file,renamed:!!o.fileTitle&&o.fileTitle!==cur};
     MORE.rename={id:"rename",name:`Rename ${cur}`.slice(0,60),lead:o.fileTitle&&o.fileTitle!==cur?`Its file's name: ${o.fileTitle}`:"Give this game the name you want on your shelf.",rows:[{t:"dyn",fn:renameRows}]};
     goSecId(o.ref.systemId?"consoles":(/^(steam|epic)-/.test(String(o.ref.id||""))?"pc":"custom"));focus="page";rowI=0;openSub({kind:"more",id:"rename"});return}
@@ -1132,7 +1187,7 @@ function route(page,o){if(!page)return;o=o||{};
     if(k>=0)rowI=k}}
 // a deep link into one of the current section's sub-pages: B comes back to the row that opens it
 function inMore(id){const at=rowsOf(sec()).findIndex(r=>r.pg===id);if(at<0)return;subRet=at;sub={kind:"more",id};rowI=0}
-function prep(inf,opts){opts=opts||{};ensureDom();openId++;info=inf;cfg=clone(inf.config);ensureCfg();colRowsBy.clear();ADD.rows=null; /* (beta.8) rows built for the last visit held that visit's copy of the settings */
+function prep(inf,opts){opts=opts||{};ensureDom();openId++;info=inf;cfg=clone(inf.config);ensureCfg();colRowsBy.clear();ADD.rows=null;COV.n=null; /* (beta.8) rows built for the last visit held that visit's copy of the settings */
   studioClear();sRet=0;sInfo=null;sInfoBusy=false;sGames={};sCands={};sSets={};sBusy={};needRescan=false;raChanged=false;pending=false;raEmu=null;emuAsk=null;listSig="";edit=null;grab=null;results=null;query="";preSearch=null;sub=null;secI=0;rowI=0;ci=0;focus="side";infoOpen=false;det=null;ipl=null;pathOk={};status={};askT={};displays=null;outputs=null;hidden=null;readWhere=null;readOld=null;mInfo=null;mInfoBusy=false;mGames={};mCands={};mBusy={};mMsg={};
   device=document.body.classList.contains("pad-input")?"pad":"key";
   try{const g=window.BS_activePad?window.BS_activePad():[...(navigator.getGamepads?navigator.getGamepads():[])].find(x=>x&&x.connected);if(g)padId=g.id}catch{}
@@ -1320,7 +1375,7 @@ function studioRows(){if(!api.artStudio)return [];
     sys:c.id,sub:()=>({text:conJobText(c.id)||(styleName(c.style)+(c.locked?` · ${c.locked} with picks or locked`:"")),cls:conJob(c.id)?"warn":""}),run:()=>studioOpen({v:"games",sys:c.id})}))}
 
 /* opening, going back */
-function studioOpen(v,reset){if(edit)cancelEdit();grab=null;if(!studio||reset){if(!studio)sRet=rowI;stack=[]}else stack.push(studio);
+function studioOpen(v,reset){if(edit)cancelEdit();grab=null;artAcct=null;if(!studio||reset){if(!studio)sRet=rowI;stack=[]}else stack.push(studio);
   studio=Object.assign({i:0,y:0},v);focus="page";infoOpen=false;sSig="";play("open");studioLoad();render()}
 function studioBack(){play("back");const was=studio;if(stack.length){studio=stack.pop();
     if(studio.v==="mgames"&&was.file){const k=mgList(studio).findIndex(g=>String(g.file).toLowerCase()===String(was.file).toLowerCase());if(k>=0){studio.i=k;studio.zone="grid";studio.reveal=true}}
@@ -1328,6 +1383,18 @@ function studioBack(){play("back");const was=studio;if(stack.length){studio=stac
     sSig="";studioLoad();render();return}
   studio=null;sSig="";rowI=sRet;if(sRet<0){rowI=Math.max(0,rowsOf(sec()).findIndex(r=>r.sys===was.sys))}render()}
 function studioClear(){studio=null;stack=[];sSig="";sViewK=""}
+// (beta.9) an "add an account" card: that service's page in Accounts & services; leaving it (B / Left) comes back to the same
+// game and part, which looks for versions again (after the key is saved, so main sees it)
+let artAcct=null;
+function acctFromArt(st,svc){const keep={studio:st,stack:stack.slice(),sRet,secI,rowI,sub,subRet,sg:sgAsk(),key:gp("keys.steamgriddb")};route(svc);
+  if(!sub||sub.kind!=="svc"){({secI,rowI,sub,subRet}=keep);studio=keep.studio;stack=keep.stack;sRet=keep.sRet;sSig="";return}
+  artAcct=Object.assign(keep,{page:sub});play("open");render()}
+function artBackTo(){const a=artAcct;artAcct=null;secDrop();({secI,rowI,sub,subRet}=a);grab=null;focus="page";
+  studio=a.studio;stack=a.stack;sRet=a.sRet;sSig="";sViewK="";const st=studio,c=sCands[ck(st.sys,st.file,"front")];
+  // (only when the key changed: no point asking for the same versions again; a list still on its way is asked again after)
+  if(st.part!=="front"||!c||(a.sg===sgAsk()&&a.key===gp("keys.steamgriddb")))return;
+  if(c.busy){c.dirty=true;return}
+  c.list=null;Promise.resolve(save()).catch(()=>{}).then(()=>{loadCands(st.sys,st.file,"front",true);if(isOpen)bump()})}
 // the grids' edge fades are drawn with the page background (settings.css .bsa-vp::before/::after): line that background
 // up with the stage. Two rect reads, once per build
 function fadeFix(el){if(!el||!E.stage)return;const r=el.getBoundingClientRect(),s=E.stage.getBoundingClientRect(),k=el.offsetWidth?r.width/el.offsetWidth:1,sc=s.width/(parseFloat(E.stage.style.width)||s.width);if(!k||!sc)return;
@@ -1479,12 +1546,29 @@ async function saveStyle(sys,style,quiet){clearTimeout(styleT);styleT=0;if(style
 /* the 3D case on the right: front, spine, back (and the disc) from the art that's in use, X turns it around */
 function caseBuild(el,title){el.innerHTML=`<div class="k"></div><div class="bsa-scene"><div class="bsa-turn"><div class="bsa-case"><div class="f"></div><div class="s"></div><div class="bk"></div></div></div><div class="bsa-disc"></div><div class="bsa-spinebig"></div></div><div class="bsa-shadow"></div><div class="what"></div><div class="why"></div>`;
   return {k:el.querySelector(".k"),turn:el.querySelector(".bsa-turn"),f:el.querySelector(".f"),s:el.querySelector(".s"),bk:el.querySelector(".bk"),disc:el.querySelector(".bsa-disc"),sb:el.querySelector(".bsa-spinebig"),what:el.querySelector(".what"),why:el.querySelector(".why"),title}}
+// (beta.9) the preview case takes the front art's shape (kept between .45 and 1.6 wide : tall), so no box is cropped;
+// no front yet: the console's usual case shape
+const CASE_AR={sw:.618,sw2:.618,psp:.578,n3ds:1.127,ps3:.789,ps4:.789,ps5:.789};
+function caseShape(P,sys){const c=P.f&&P.f.parentNode;if(!c)return;const im=P.f.querySelector("img");
+  const set=ar=>{ar=Math.max(.45,Math.min(1.6,ar||.714));const v=ar.toFixed(3);if(c.style.getPropertyValue("--ar")!==v)c.style.setProperty("--ar",v)};
+  if(!im){set(CASE_AR[sys]||.714);return}
+  const fit=()=>{if(im.naturalWidth&&im.naturalHeight)set(im.naturalWidth/im.naturalHeight)};
+  if(im.complete&&im.naturalWidth)fit();else if(!im._shape){im._shape=1;set(CASE_AR[sys]||.714);im.addEventListener("load",fit,{once:true})}}
+// (beta.9) the case is far bigger than a card: it shows the card's 360 px picture at once (already decoded), then a sharper copy
+// (made by main off its thread, kept in data\thumbs) once that one has decoded: no blank, no flicker. Windows only
+const CASE_T=Math.max(900,Math.min(1600,Math.round((window.devicePixelRatio||1)*640/100)*100));
+function caseSharp(el){if(!el||(window.bsPlatform&&bsPlatform.os==="android"))return;const im=el.querySelector(":scope > img"),u=el._u;
+  if(!im||im._sh||!u||!/[?&]t=360\b/.test(u))return;im._sh=1;const big=String(u).replace(/([?&])t=360\b/,"$1t="+CASE_T),pre=new Image();pre.decoding="async";pre.src=big;
+  // (swapped only once the small one has settled: changing src while its own decode is pending would fail that decode,
+  // and imgEl would mark the picture bad and leave the placeholder showing)
+  const swap=()=>{if(el._u===u&&im.isConnected)im.src=big};
+  pre.decode().then(()=>im.classList.contains("on")?swap():(im.decode?im.decode().then(swap,()=>{}):swap())).catch(()=>{})}
 function casePaint(P,art,o){o=o||{};art=art||{};const t=P.title||"";
-  slot(P.f,art.front,phTitle(t,"front"));slot(P.s,art.spine,`<div class="bsa-ph spine"><span>${esc(t)}</span></div>`);slot(P.bk,art.back,phTitle("","back"));
+  slot(P.f,art.front,phTitle(t,"front"));caseShape(P,studio&&studio.sys);slot(P.s,art.spine,`<div class="bsa-ph spine"><span>${esc(t)}</span></div>`);slot(P.bk,art.back,phTitle("","back"));caseSharp(P.f);caseSharp(P.s);caseSharp(P.bk);
   slot(P.disc,art.disc,'<div class="bsa-ph disc"></div>');P.disc.classList.toggle("none",!art.disc&&!o.discBig);P.disc.classList.toggle("big",!!o.discBig);P.disc.classList.toggle("cart",isCartSys(studio&&studio.sys));P.turn.parentNode.classList.toggle("discmode",!!o.discBig);
   P.turn.classList.toggle("turned",!!o.turned);
   /* choosing a spine: the spine alone, standing up big, instead of a thin edge of the turning case */
-  if(P.sb){P.turn.parentNode.classList.toggle("spinemode",!!o.spineBig);if(o.spineBig)slot(P.sb,art.spine,`<div class="bsa-ph spine"><span>${esc(t)}</span></div>`)}P.disc.classList.toggle("still",!!o.still);
+  if(P.sb){P.turn.parentNode.classList.toggle("spinemode",!!o.spineBig);if(o.spineBig){slot(P.sb,art.spine,`<div class="bsa-ph spine"><span>${esc(t)}</span></div>`);caseSharp(P.sb)}}caseSharp(P.disc);P.disc.classList.toggle("still",!!o.still);
   if(o.k!=null&&P.k.textContent!==o.k)P.k.textContent=o.k;if(o.what!=null&&P.what.textContent!==o.what)P.what.textContent=o.what;if(o.why!=null&&P.why.textContent!==o.why)P.why.textContent=o.why}
 
 /* this game's mix: a row per part with its looks, the case on the right */
@@ -1563,16 +1647,21 @@ function partState(st,g,p){const l=lockOf(g,p),b=sBusy[ck(st.sys,st.file,p)],hav
 // after the candidates: what else you can do with the part (and, with nothing found, what to try)
 // the parts list's extra rows: Manual (Manual Studio) after Disc, then the lock switch
 const PK_MAN=PARTS.length,PK_LOCK=()=>PARTS.length+(api.manualStudio?1:0);
-const ACT_L={own:"My picture…",cut:"Cut from a full box…",undo:"Undo",retry:"Try again",index:"Build the LaunchBox index",clearf:"Clear filters",undoset:"Undo set"};
-const ACT_S={own:"A picture of your own · copied, never moved",cut:"The box opened flat: back, spine and front",undo:"The picture before this one",retry:"Look for versions again",index:"One-time download, about 110 MB",clearf:"Show every version again",undoset:"All four parts as they were before the set"};
+const ACT_L={own:"My picture…",cut:"Cut from a full box…",undo:"Undo",retry:"Try again",index:"Build the LaunchBox index",clearf:"Clear filters",undoset:"Undo set",sgdb:"Add SteamGridDB",sgdbfix:"Fix your SteamGridDB key"};
+const ACT_S={own:"A picture of your own · copied, never moved",cut:"The box opened flat: back, spine and front",undo:"The picture before this one",retry:"Look for versions again",index:"One-time download, about 110 MB",clearf:"Show every version again",undoset:"All four parts as they were before the set",sgdb:"More front posters, many in HD · free key",sgdbfix:"The key wasn't accepted · no posters until it's fixed"};
+// (beta.9) an empty "add an account" slot on the Front: SteamGridDB posters show only with the player's own key (Windows only;
+// Android has its own studio). "" = nothing to suggest. ScreenScraper waits for Boxshelf's developer registration
+const ACCT_KEY_SVG='<svg viewBox="0 0 24 24" width="46" height="46" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M14 9l2 2"/></svg>';
+const sgAsk=()=>window.bsPlatform&&bsPlatform.os==="android"?"":!svcSet("steamgriddb")?"sgdb":svcState("steamgriddb").state==="fail"?"sgdbfix":"";
 function pkList(st,c){
   if(st.view==="sets"){const S=sSets[ck(st.sys,st.file,"sets")];if(!S||!S.list)return [];const k=(S.gen||0)+"|"+!!S.undo;if(S._k!==k){S._k=k;S._all=S.list.concat(S.undo?[{act:"undoset",key:"act-undoset"}]:[])}return S._all}
   const L0=c&&c.list?(c.sorted||c.list):[];if(!c||!c.list)return L0;const fk=JSON.stringify(pkF);if(c._fk!==fk||c._fsrc!==L0){c._fk=fk;c._fsrc=L0;c._fl=fltOn()?L0.filter(fltPass):L0}const L=c._fl,A=[];
   if(!L.length)A.push({act:c.note==="noindex"&&api.artBuildIndex?"index":"retry",key:"act-x"});
+  const sg=st.part==="front"?sgAsk():"";if(sg)A.push({act:sg,key:"act-sgdb",acct:"steamgriddb"});
   if(api.artOwn){A.push({act:"own",key:"act-own"});if(st.part==="spine")A.push({act:"cut",key:"act-cut"})}
   if(api.artUndo)A.push({act:"undo",key:"act-undo"});
   if(!L.length&&L0.length)A.length=0,A.push({act:"clearf",key:"act-clearf"}),api.artOwn&&A.push({act:"own",key:"act-own"}); // every version filtered out: Clear filters comes first
-  const ak=st.part+"|"+L.length+"|"+(c.note||"")+"|"+(c.gen||0);if(c._actK!==ak||c._src!==L){c._actK=ak;c._src=L;c._all=L.concat(A)}return c._all}
+  const ak=st.part+"|"+L.length+"|"+(c.note||"")+"|"+(c.gen||0)+"|"+sg;if(c._actK!==ak||c._src!==L){c._actK=ak;c._src=L;c._all=L.concat(A)}return c._all}
 // the frame: parts on the left, the cards in the middle, the case (and the neighbours strip) on the right. Built once per
 // game; another part, a list arriving or a duplicate dropping out only lays the cards out again (pickCards)
 function pickBuild(st){const g=gameOf(st.sys,st.file);if(st.zone===undefined){st.zone="parts";st.pr=prOf(st)} // a game opens on its parts list
@@ -1608,7 +1697,7 @@ function cardHtml(x,pg,part,c){
   if(x.set){const SN=({launchbox:"LaunchBox",gametdb:"GameTDB",screenscraper:"ScreenScraper",mixed:"Mixed sources"})[x.source]||x.source;
     return `<div class="in set"><div class="im sx" style="height:${pg.imH}px"><i class="f"></i><i class="s"></i><i class="b"></i><i class="d"></i></div><div class="ed" title="${esc(x.label)}">${esc(x.label.replace(/ · complete$/,""))}</div><div class="src">${esc(SN)} · complete</div>
     <div class="meta">${x.region?`<span class="chip reg">${esc(REG_S[x.region]||x.region.toUpperCase())}</span>`:""}${x.hd?'<span class="chip sz hd">HD</span>':""}${x.same?'<span class="chip">One full scan</span>':""}</div></div><div class="use"></div>`}
-  if(x.act)return `<div class="in act"><div class="im${part==="disc"?" disc":""}" style="height:${pg.imH}px${part==="disc"?`;width:${pg.imH}px`:""}"><span>${x.act==="undo"?"↶":x.act==="retry"||x.act==="index"?"↻":"+"}</span></div><div class="ed">${esc(x.act==="index"&&sIndexBusy?"Building…":ACT_L[x.act])}</div><div class="src">${esc(ACT_S[x.act])}</div></div><div class="use"></div>`;
+  if(x.act)return `<div class="in act${x.acct?" acct":""}"><div class="im${part==="disc"?" disc":""}" style="height:${pg.imH}px${part==="disc"?`;width:${pg.imH}px`:""}"><span>${x.acct?ACCT_KEY_SVG:x.act==="undo"?"↶":x.act==="retry"||x.act==="index"?"↻":"+"}</span></div><div class="ed">${esc(x.act==="index"&&sIndexBusy?"Building…":ACT_L[x.act])}</div><div class="src">${esc(ACT_S[x.act])}</div></div><div class="use"></div>`;
   let disc=part==="disc",sz=x.w&&x.h?`${x.w} × ${x.h}`:"",short=Math.min(x.w||1e9,x.h||1e9),lim=part==="spine"?100:part==="disc"?500:700,low=x.w&&x.h&&short<lim,hd=x.kind==="hd"||(x.w&&x.h&&short>=(part==="spine"?160:1500));if(hd)low=false; // (a SteamGridDB 600×900 "HD" poster isn't also "Low-res")
   // (1.80) two short lines: where it's from and what it is ("Europe · scan" / "LaunchBox"), then its size and any warning
   const RG={usa:"USA",eur:"Europe",jpn:"Japan",world:"World"},where=x.source==="current"?"Your current file":x.source==="earlier"?"An earlier pick":[RG[x.region]||(x.region?x.region.toUpperCase():""),KIND_N[x.kind]||x.kind||""].filter(Boolean).join(" · ")||String(x.label||"Version");
@@ -1737,7 +1826,7 @@ function pickInput(a,rep){const st=studio,c=sCands[ck(st.sys,st.file,st.part)],L
   else if(a==="lt"||a==="rt"){st.i=Math.max(0,Math.min(L.length-1,st.i+(a==="rt"?2:-2)*pg.cols))}
   else if(a==="home"||a==="end")st.i=a==="home"?0:L.length-1; // End: the action cards (My picture…, Undo) at the end
   else if(a==="a"&&st.view==="sets"){const x=L[st.i];if(!x)return;if(x.act==="undoset")undoSetUI(st);else if(x.set)useSetUI(st,x);return}
-  else if(a==="a"){const x=L[st.i];if(x&&x.act==="clearf"){fltStep(st,"clear");return}if(x&&x.act){const p=st.part;if(x.act==="own"||x.act==="cut")ownPicture(st.sys,st.file,p,x.act==="cut");else if(x.act==="undo")undoPart(st.sys,st.file,p);else if(x.act==="index"){if(!sIndexBusy)buildIndex(st)}else{c.list=null;sSig="";loadCands(st.sys,st.file,p,true);render()}return}
+  else if(a==="a"){const x=L[st.i];if(x&&x.act==="clearf"){fltStep(st,"clear");return}if(x&&x.acct){acctFromArt(st,x.acct);return}if(x&&x.act){const p=st.part;if(x.act==="own"||x.act==="cut")ownPicture(st.sys,st.file,p,x.act==="cut");else if(x.act==="undo")undoPart(st.sys,st.file,p);else if(x.act==="index"){if(!sIndexBusy)buildIndex(st)}else{c.list=null;sSig="";loadCands(st.sys,st.file,p,true);render()}return}
     if(x&&x.failed){if(c.list.every(z=>z.failed)){c.list=null;sSig="";loadCands(st.sys,st.file,st.part,true);toast("Trying again…");render();return}toast("That one couldn't be downloaded");play("error");return}if(x)pickUse(st,x);return}
   render()}
 
@@ -1961,9 +2050,10 @@ function msHints(st){const L=[],H=(ks,label,a)=>`<div class="h"${a?` data-a="${a
     if(st.zone==="parts")L.push(H(dirs(1,0),"Move"),H(G("a","Enter"),st.pr===1?(locked?"Unlock":"Lock"):"Choose a manual","a"));
     else{const x=msList(c)[st.i];L.push(H(dirs(1,1),"Manuals"));if(x)L.push(H(G("a","Enter"),x.act?M_ACT_L[x.act]:x.inUse?"In use":"Use this","a"));L.push(H(G("y","Del"),locked?"Unlock":"Lock","y"))}
     L.push(H(G("x","F1"),"Console choice","x"))}
-  L.push(H(G("b","Esc"),st.v==="mpick"&&st.zone!=="parts"?"Manual":"Back","b"));return L.join("")}
+  L.push(H(G("b","Esc"),"Back","b"));return L.join("")}
 function msInput(a,rep){const st=studio;
-  if(a==="b"&&st.v==="mpick"&&st.zone!=="parts"){st.zone="parts";st.pr=0;play("back");render();return} // the cards → the Manual row (not out of the game)
+  // (beta.9) B from the manual cards goes straight back to where you came from (the game's art page, or the games grid):
+  // it used to stop on the Manual row first, which looked like nothing happened (the row is a Left / Up away)
   if(a==="b"){studioBack();return}if(a==="start"){close();return}
   ({mgames:mgInput,mpref:mprefInput,mpick:mpInput})[st.v](a,rep)}
 // the box art picker's "Manual" entry (after Disc): this game's manuals, B comes back to it
@@ -2229,7 +2319,7 @@ function renderHints(){const r=curRow(),L=[],R2=[];const H=(ks,label,a,cls)=>`<d
     R2.push(H(device==="pad"?G("view"):kc("Type"),"Search","search"),H(device==="pad"?G("lb")+G("rb"):kc("Tab"),"Section",null,"wide-only"))}
   const html=L.join("")+(R2.length?'<span class="sep"></span>'+R2.join(""):"");
   if(E.hints._h!==html){E.hints._h=html;E.hints.innerHTML=html;E.hints.querySelectorAll(".h[data-a]").forEach(e=>e.onclick=ev=>{ev.stopPropagation();device="mouse";input(e.dataset.a)})}}
-function render(){if(!root||!isOpen)return;E.root.classList.toggle("studio",!!studio);
+function render(){secDrop();if(!root||!isOpen)return;E.root.classList.toggle("studio",!!studio);
   if(focus==="page"&&!studio){const n=rowsOf(sec()).length;if(rowI>n-1)rowI=Math.max(0,n-1)} // (beta.8) the focused row went (the last hidden game shown again, the last collection deleted): focus the row now last, never nothing
   if(studio){renderSide();renderStudio();renderOsk();renderHints();E.mus.classList.remove("on");return}
   renderSide();renderPage();renderOsk();renderInfo();renderHints();paintJob();

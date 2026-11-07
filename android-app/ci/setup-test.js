@@ -75,9 +75,45 @@ module.exports = async function setupPass({ browser, base, check, OUT }) {
     await page.screenshot({ path: path.join(OUT, 'setup-finish.png') });
     check('First run: Finish setting up offers "Set up my emulators for me", on, naming the emulators found', fin.has && fin.on && /RetroArch/.test(fin.text) && /DuckStation/.test(fin.text), JSON.stringify({ has: fin.has, on: fin.on }));
     await page.getByRole('button', { name: 'Next' }).click(); await pause(800);
-    await page.getByRole('button', { name: 'Next' }).click(); await pause(2500);
+    await page.getByRole('button', { name: 'Next' }).click(); await pause(800);
+    // (beta.9) Accounts, optional: one card per service, and the page can be skipped without filling anything in
+    const ac = await page.evaluate(() => ({ title: (document.getElementById('suTitle') || {}).textContent || '', nav: [...document.querySelectorAll('#suNav .su-step')].map(s => s.textContent.trim()),
+      cards: [...document.querySelectorAll('.wz2-acct')].map(c => c.dataset.svc), next: (document.querySelector('#suFoot [data-next]') || {}).textContent || '' }));
+    check('First run (beta.9): an optional Accounts page between Box art and Done, a card each for RetroAchievements, SteamGridDB, ScreenScraper (and fanart.tv under More), skippable',
+      /Connect your accounts/.test(ac.title) && ac.nav.join('|') === 'Welcome|Your consoles|Finish setting up|Box art|Accounts|Done' && ac.cards.join() === 'ra,steamgriddb,screenscraper,fanart' && ac.next === 'Skip for now', JSON.stringify(ac));
+    await page.getByRole('button', { name: 'Skip for now' }).click(); await pause(2500);
+    const skipped = await page.evaluate(async () => { const c = (await window.boxshelf.getConfig()).config; return { title: (document.getElementById('suTitle') || {}).textContent || '', ra: (c.ra && c.ra.user) || '', sg: (c.keys && c.keys.steamgriddb) || '' }; });
+    check('First run (beta.9): Skip for now goes on to Done and leaves every account empty', /library/i.test(skipped.title) && !skipped.ra && !skipped.sg, JSON.stringify(skipped));
     const done = await page.evaluate(() => (document.querySelector('.wz2-emudone') || {}).textContent || '');
     check('First run: Done says what was set up and what was left as you had it', /Set up: .*RetroArch/.test(done) && /Left as you had them: Dolphin/.test(done), done.slice(0, 160));
+    // (beta.9) Accounts filled in: typed on a keyboard, and with a controller (A on a box opens the on-screen keyboard, B puts it away)
+    await page.goto(base + '?platform=windows&retro=1');
+    await page.waitForSelector('#setup.on', { timeout: 90000 }); await pause(800);
+    await page.locator('#suNav .su-step', { hasText: 'Accounts' }).click(); await pause(600);
+    await page.locator('input[data-osk="ra.user"]').fill('tester'); await pause(200);
+    const fill = await page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), o = {}, q = s => document.querySelector(s);
+      o.next = (q('#suFoot [data-next]') || {}).textContent;
+      document.body.classList.add('pad-input'); o.typeBtn = getComputedStyle(q('.wz2-kb')).display !== 'none';
+      q('input[data-osk="ra.key"]').focus(); Setup.pad('ok'); await w(300);
+      o.osk = !!q('.wz2-osk'); o.onKey = document.activeElement.classList.contains('ia-key');
+      Setup.pad('ok'); Setup.pad('right'); Setup.pad('ok'); Setup.pad('down'); Setup.pad('ok'); await w(200); // 1, 2, then w (the row below)
+      [...document.querySelectorAll('.wz2-osk .ia-key')].find(b => b.textContent === 'ABC').click(); await w(200);
+      [...document.querySelectorAll('.wz2-osk .ia-key')].find(b => b.textContent === 'Q').click(); await w(150);
+      o.typed = q('input[data-osk="ra.key"]').value;
+      Setup.key(new KeyboardEvent('keydown', { key: 'Escape', cancelable: true })); await w(300);
+      o.oskGone = !q('.wz2-osk'); o.stillHere = /Connect your accounts/.test(q('#suTitle').textContent); o.focusBack = (document.activeElement.dataset || {}).osk || '';
+      q('[data-test="ra"]').click(); for (let i = 0; i < 30 && !/Connected/.test((q('.wz2-acct[data-svc="ra"] .badge') || {}).textContent || ''); i++) await w(200);
+      o.badge = (q('.wz2-acct[data-svc="ra"] .badge') || {}).textContent || '';
+      document.body.classList.remove('pad-input'); o.typeBtnMouse = getComputedStyle(q('.wz2-kb')).display !== 'none';
+      // Paste (most keys are copied from the browser): one line, trimmed
+      window.__bsClip = '  sgkey123  \nsecond line'; q('[data-paste="keys.steamgriddb"]').click(); await w(300);
+      o.pasted = q('input[data-osk="keys.steamgriddb"]').value;
+      await w(600); const c = (await window.boxshelf.getConfig()).config; o.ra = c.ra; o.sg = c.keys && c.keys.steamgriddb; return o; });
+    await page.screenshot({ path: path.join(OUT, 'setup-accounts.png') });
+    check('First run (beta.9): Accounts typed in turns Skip into Next; a controller types the key on the on-screen keyboard (capitals too), B / Esc puts it away and stays on the page; Test says Connected; both are saved',
+      fill.next === 'Next' && fill.typeBtn && !fill.typeBtnMouse && fill.osk && fill.onKey && fill.typed === '12wQ' && fill.oskGone && fill.stillHere && fill.focusBack === 'ra.key' && /Connected/.test(fill.badge) &&
+      fill.ra && fill.ra.user === 'tester' && fill.ra.key === '12wQ', JSON.stringify(fill));
+    check('First run (beta.9): Paste beside a key box fills it from the clipboard (first line, trimmed) and saves it', fill.pasted === 'sgkey123' && fill.sg === 'sgkey123', JSON.stringify({ pasted: fill.pasted, saved: fill.sg }));
     // Settings → SNES → Set up RetroArch for me (on the demo shelf, set up already)
     await page.goto(base + '?platform=windows&shelf=1&retro=1');
     await page.waitForFunction(() => window.Shelf && Shelf._qs && Shelf._qs().g && window.Setup, null, { timeout: 90000, polling: 250 }); await pause(1500);

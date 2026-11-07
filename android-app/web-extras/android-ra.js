@@ -22,10 +22,10 @@
   const API = 'https://retroachievements.org/API/', MEDIA = 'https://media.retroachievements.org', SITE = 'https://retroachievements.org';
   // RetroAchievements' console ids for the shelves Boxshelf has on Android (Neo Geo sets are in its Arcade list)
   const CONSOLE_ID = { megadrive: 1, n64: 2, snes: 3, gb: 4, gba: 5, gbc: 6, nes: 7, pcengine: 8, mastersystem: 11, psx: 12, gamegear: 15, gc: 16, nds: 18,
-    wii: 19, ps2: 21, arcade: 27, neogeo: 27, saturn: 39, dreamcast: 40, psp: 41 };
+    wii: 19, ps2: 21, arcade: 27, neogeo: 27, saturn: 39, dreamcast: 40, psp: 41, segacd: 9, sega32x: 10, atari2600: 25, atarilynx: 13, wonderswan: 53 }; // (beta.9; DOS has no RetroAchievements)
   // how a console's games are hashed natively (RaHash.java); disc consoles are matched by title only
   const HASH = { nes: 'nes', snes: 'snes', pcengine: 'pce', n64: 'n64', nds: 'nds', gb: 'plain', gbc: 'plain', gba: 'plain', mastersystem: 'plain', gamegear: 'plain',
-    megadrive: 'plain', arcade: 'name', neogeo: 'name' };
+    megadrive: 'plain', arcade: 'name', neogeo: 'name', sega32x: 'plain', atari2600: 'plain', wonderswan: 'plain' }; // (Lynx and Sega CD: by title)
   const MIN = 60e3, HOUR = 60 * MIN, DAY = 24 * HOUR;
   const LIST_MS = 7 * DAY, DONE_MS = 6 * HOUR, PROFILE_MS = 30 * MIN, GAME_MS = DAY, FORCE_MS = 2 * MIN, RETRY_MS = MIN;
   const sleep = ms => new Promise(r => setTimeout(r, ms));

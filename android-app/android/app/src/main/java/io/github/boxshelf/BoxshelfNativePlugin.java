@@ -901,6 +901,39 @@ public class BoxshelfNativePlugin extends Plugin {
         });
     }
 
+    // (beta.9) a game's video preview, found beside the games (a "videos" folder): copied once into the app's cache so the
+    // page can play it (the page can't open the games folder's documents itself). { uri, name, size } → { ok, path }.
+    // Kept under 300 MB, the oldest dropped first; a copy that's already there (same size) is used as it is.
+    private static final long PREVIEW_CAP = 300L << 20;
+    @PluginMethod
+    public void copyPreview(PluginCall call) {
+        final String uriStr = call.getString("uri", ""), name = safeName(call.getString("name", "preview"));
+        final long size = call.getLong("size", 0L);
+        if (uriStr.isEmpty()) { call.reject("No video"); return; }
+        io.execute(() -> {
+            try {
+                File dir = new File(getContext().getCacheDir(), "previews");
+                if (!dir.isDirectory()) dir.mkdirs();
+                File f = new File(dir, name);
+                if (f.isFile() && (size <= 0 || f.length() == size)) { f.setLastModified(System.currentTimeMillis()); JSObject r = new JSObject(); r.put("ok", true); r.put("path", f.getAbsolutePath()); call.resolve(r); return; }
+                File part = new File(dir, name + ".part");
+                try (java.io.InputStream in = getContext().getContentResolver().openInputStream(Uri.parse(uriStr)); FileOutputStream out = new FileOutputStream(part)) {
+                    if (in == null) throw new java.io.IOException("can't open the video");
+                    byte[] b = new byte[256 * 1024]; int n; long total = 0;
+                    while ((n = in.read(b)) > 0) { out.write(b, 0, n); total += n; if (total > PREVIEW_CAP) throw new java.io.IOException("video too big"); }
+                }
+                if (!part.renameTo(f)) { part.delete(); throw new java.io.IOException("couldn't keep the video"); }
+                // the cache stays under its cap: the videos not shown for longest go first
+                File[] all = dir.listFiles(); long used = 0;
+                if (all != null) {
+                    java.util.Arrays.sort(all, (a, c) -> Long.compare(c.lastModified(), a.lastModified()));
+                    for (File x : all) { used += x.length(); if (used > PREVIEW_CAP && !x.equals(f)) x.delete(); }
+                }
+                JSObject r = new JSObject(); r.put("ok", true); r.put("path", f.getAbsolutePath()); call.resolve(r);
+            } catch (Throwable e) { JSObject x = new JSObject(); x.put("ok", false); x.put("error", String.valueOf(e.getMessage())); call.resolve(x); }
+        });
+    }
+
     @PluginMethod
     public void saveBytes(PluginCall call) {
         // a picture made in the page (a PDF manual's page): { tree, sub, folder: "manuals", name (no extension), ext, b64, key }

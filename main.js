@@ -13,18 +13,19 @@ const commercials = require('./main/commercials');
 // A portable exe unpacks itself into TEMP; PORTABLE_EXECUTABLE_DIR is where the real Boxshelf.exe sits
 const linux = require('./main/linux'); // (Linux / Steam Deck only)
 const steamdeck = require('./main/steamdeck'); // (beta.8) Steam Deck: where Boxshelf runs, Add Boxshelf to Steam
+const linuxpad = require('./main/linuxpad'); // (beta.9) Linux: hold Select + Start to close the game
 paths.setAppRoot(linux.isLinux ? linux.appRoot(app.isPackaged, __dirname) : app.isPackaged ? (process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(process.execPath)) : __dirname);
 
 const config = require('./main/config');
 const { CONSOLES, APPS } = require('./main/systems');
 const { detectAll, detectSystem } = require('./main/detect');
-const { scanSystem: scanFolders } = require('./main/scanner');
+const { scanSystem: scanFolders, forget: scanForget } = require('./main/scanner'); // (beta.9: scanForget clears the scanner's kept scans)
 const arcadenames = require('./main/arcadenames');
 // (beta.5) a game's own name (Details → Rename: cfg.games["<console>:<file>"].title) replaces the scanned one wherever main
 // reads games: the shelf, box art and manual lookups, matching. fileTitle keeps the scanned one. Copies, never the
 // scanner's own objects (a reset must bring the file's name back)
-function scanSystem(def, sc) {
-  const gs = scanFolders(def, sc), G = cfg && cfg.games; if (!G) return gs;
+function scanSystem(def, sc, fresh) { // fresh (beta.9): past the scanner's kept scan (main/scanner.js)
+  const gs = scanFolders(def, sc, fresh), G = cfg && cfg.games; if (!G) return gs;
   return gs.map(g => { const o = G[def.id + ':' + g.file]; return o && o.title && o.title !== g.title ? { ...g, fileTitle: g.title, title: o.title } : g; });
 }
 const ownTitle = id => { const o = cfg && cfg.games && cfg.games[String(id)]; return o && o.title ? o.title : ''; }; // (PC games, by id)
@@ -143,6 +144,9 @@ let cfg = null;
 
 // Keep settings next to the app so the whole folder can move between PCs.
 app.setPath('userData', path.join(paths.appRoot(), 'data'));
+// (beta.9) crash details, kept on this PC only (never uploaded): a crash of the screen or a helper leaves a small dump in
+// data\Crashpad (the newest 10 are kept), so a crash can be looked into afterwards
+try { app.setPath('crashDumps', path.join(paths.appRoot(), 'data', 'Crashpad')); require('electron').crashReporter.start({ uploadToServer: false, compress: true }); } catch {}
 
 // Write problems to data\\boxshelf.log so they can be looked at later.
 const LOG = path.join(paths.appRoot(), 'data', 'boxshelf.log');
@@ -160,12 +164,26 @@ function log(...a) {
 process.on('uncaughtException', e => log('ERROR', e && e.stack || e));
 process.on('unhandledRejection', e => log('ERROR', e && e.stack || e));
 log('Starting Boxshelf', app.getVersion());
-if (linux.isLinux) { steamdeck.init({ log }); const d = steamdeck.info(); log('Linux start:', d.deck ? 'Steam Deck' : 'PC', '| started by Steam:', d.steam, '| Game Mode:', d.gameMode, '| options:', d.flags.join(' ') || 'none'); }
+if (linux.isLinux) { steamdeck.init({ log }); linuxpad.init({ log }); const d = steamdeck.info(); log('Linux start:', d.deck ? 'Steam Deck' : 'PC', '| started by Steam:', d.steam, '| Game Mode:', d.gameMode, '| options:', d.flags.join(' ') || 'none'); }
 
 // Only one Boxshelf at a time: a second launch brings the first one forward.
 const firstInstance = app.requestSingleInstanceLock();
 if (!firstInstance) { log('Already running, focusing the open window'); app.quit(); }
-app.on('render-process-gone', (e, wc, d) => log('Screen process stopped:', d.reason, d.exitCode));
+// (beta.9) which page crashed (the shelf, the Home menu overlay, a helper page), the shelf's last steps (app.js uiCrumb: what
+// it was doing, with its memory use) and the PC's free memory: written to the log only when one crashes. The shelf reloads
+// itself (createWindow), the Home menu closes itself (homemenu.js); each says so in the log
+const crumbs = [];
+ipcMain.on('ui:crumb', (e, t) => { crumbs.push(new Date().toISOString().slice(11, 19) + ' ' + String(t).slice(0, 160)); if (crumbs.length > 10) crumbs.shift(); });
+app.on('render-process-gone', (e, wc, d) => {
+  let what = ''; try { what = alive() && wc === win.webContents ? 'the shelf' : (path.basename(String(wc.getURL() || '').split(/[?#]/)[0]) || wc.getTitle() || 'a helper page'); } catch {}
+  log('Screen process stopped:', d.reason, d.exitCode, '(' + (what || 'unknown page') + ')');
+  if (d.reason === 'clean-exit') return;
+  if (crumbs.length) log("Shelf's last steps:", crumbs.join(' | '));
+  try { const m = process.getSystemMemoryInfo(); log('Memory then: free', Math.round(m.free / 1024), 'MB of', Math.round(m.total / 1024), 'MB'); } catch {}
+});
+// (the dumps: the newest 10 kept, a while after start)
+setTimeout(() => { try { const root = app.getPath('crashDumps'), all = []; const walk = d => { for (const n of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, n.name); if (n.isDirectory()) walk(f); else if (/\.dmp$/i.test(n.name)) all.push({ f, t: fs.statSync(f).mtimeMs }); } };
+  walk(root); all.sort((a, b) => b.t - a.t).slice(10).forEach(x => { try { fs.unlinkSync(x.f); } catch {} }); } catch {} }, 60000).unref();
 app.on('child-process-gone', (e, d) => log('Helper process stopped:', d.type, d.reason, d.exitCode));
 process.on('exit', code => log('Exiting with code', code));
 app.on('second-instance', () => { if (alive() && launcher.isRunning()) { padwatch.front(runKind === 'app'); return; } /* (a media app: leave the pad-driven pointer where it is) */ /* a game is on: keep it in front, don't half-show the shelf */ if (alive()) { if (win.isMinimized()) win.restore(); stepIn(); try { win.setOpacity(1); } catch {} win.show(); win.focus(); } });
@@ -278,7 +296,14 @@ function createWindow() {
   setTimeout(() => { if (alive() && !win.isVisible()) win.show(); }, 4000); // never left hidden
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  // (beta.9) the screen busy for several seconds without answering (Windows' "not responding"), and when it's back
+  try { let hungAt = 0; win.on('unresponsive', () => { hungAt = Date.now(); log('The screen stopped answering (last:', lastEvent + ')'); }); win.on('responsive', () => { if (hungAt) log('The screen answers again after', Date.now() - hungAt, 'ms'); hungAt = 0; }); } catch {}
   win.webContents.on('did-finish-load', () => { scaleSent = ''; applyScale(); });
+  // (beta.9) right-click in a text box: Cut / Copy / Paste / Select all, as anywhere else on the PC (an Electron app has no
+  // menu of its own, so pasting a key with the mouse did nothing). Only on boxes you can type in; the rest of the screen is unchanged.
+  win.webContents.on('context-menu', (e, p) => { if (!p || !p.isEditable) return;
+    try { const { Menu } = require('electron'), f = p.editFlags || {};
+      Menu.buildFromTemplate([{ role: 'cut', enabled: !!f.canCut }, { role: 'copy', enabled: !!f.canCopy }, { role: 'paste', enabled: !!f.canPaste }, { type: 'separator' }, { role: 'selectAll', enabled: !!f.canSelectAll }]).popup({ window: win }); } catch {} });
   try { win.on('resize', applyScaleSoon); win.on('moved', applyScaleSoon); } catch {} // another screen, fullscreen on/off, a resized window
   try { screen.on('display-metrics-changed', applyScaleSoon); } catch {}
   win.webContents.on('will-navigate', e => e.preventDefault());
@@ -286,7 +311,7 @@ function createWindow() {
   // TV. Not while a game runs (it comes back once the game ends), and at most 3 times in 2 minutes (a page that crashes
   // straight away again shouldn't loop)
   const crashes = []; win.webContents.on('render-process-gone', (e, d) => {
-    if (!d || d.reason === 'clean-exit') return; const now = Date.now(); while (crashes.length && now - crashes[0] > 120000) crashes.shift(); crashes.push(now);
+    if (!d || d.reason === 'clean-exit') return; log('Screen process gone:', d.reason, 'code', d.exitCode); /* (beta.9: why, not only that it reloaded) */ const now = Date.now(); while (crashes.length && now - crashes[0] > 120000) crashes.shift(); crashes.push(now);
     if (crashes.length > 3) { log('Screen crashed again: not reloading'); return; }
     const w0 = win, again = () => { if (win !== w0 || !alive()) return; if (launcher.isRunning()) { setTimeout(again, 2000); return; } log('Reloading the screen after a crash'); win.reload(); };
     setTimeout(again, 600);
@@ -502,6 +527,7 @@ function watchPad(opts) {
     { ...opts, home, nin: true, taskbarHidden: tbHidden, onWindow: opts.appPid ? onGameWindow : undefined, cmdFile: path.join(app.getPath('temp'), `boxshelf-pad-${process.pid}.txt`), onHome: kind => { homemenu.setMeta({ glyphs: kind || shelfGlyphs }); /* the menu shows the buttons of the pad that opened it (an XInput pad: the shelf's last prompts) */ Promise.resolve(homemenu.open()).catch(e => log('home menu', e && e.message)); }, onButton: (b, d) => homemenu.button(b, d), isMenuOpen: () => homemenu.isOpen(), onFullscreen: opts.appPid ? liftCover : undefined });
 }
 function onExit(info) {
+  linuxpad.end(); // (beta.9: the Linux pad watcher only runs during a game)
   markEvent('game exited'); clearQuitCover(); wiimote.resume(); // (the Wii remote back to the shelf, after Dolphin had it)
   // (1.82) a game's emulator that closed by itself within 5 s (a missing BIOS, keys or firmware, bad launch options) wasn't a
   // play: the shelf says which emulator closed instead of quietly coming back, and the history isn't touched
@@ -531,6 +557,11 @@ function onExit(info) {
 let lagAt = Date.now(), lastEvent = 'start';
 const markEvent = e => { lastEvent = e + ' @' + new Date().toISOString().slice(11, 19); };
 setInterval(() => { const now = Date.now(), lag = now - lagAt - 100; lagAt = now; if (lag > 250) log('freeze watch: main process blocked', lag, 'ms (last:', lastEvent + ')'); }, 100).unref();
+// (beta.9) what the freeze watch can't see: a helper process of the screen that died (the graphics process above all: a
+// black flash or a stall on screen), and memory use every 15 minutes (a slow leak shows long before it ends in a crash)
+app.on('child-process-gone', (e, d) => { if (!d || d.reason === 'clean-exit') return; log('Helper process gone:', d.type, d.reason, 'code', d.exitCode, d.serviceName || d.name || ''); });
+setInterval(() => { try { let all = 0, gpu = 0, screen = 0; for (const p of app.getAppMetrics()) { const k = ((p.memory && p.memory.workingSetSize) || 0) / 1024; all += k; if (p.type === 'GPU') gpu += k; else if (p.type === 'Tab') screen += k; }
+  log('Memory:', Math.round(all), 'MB in all (screens', Math.round(screen), 'MB, graphics', Math.round(gpu), 'MB, main', Math.round(process.memoryUsage().rss / 1048576), 'MB)'); } catch {} }, 15 * 60e3).unref();
 // ---------- library ----------
 // An icon not extracted yet holds the scan up for at most 2.5 s; when it arrives later, the shelf rescans (cached then)
 let iconLateT = null;
@@ -549,8 +580,9 @@ async function buildLibrary() {
     if (!sc || !sc.enabled) continue;
     await new Promise(r => setImmediate(r)); // let covers and IPC through between shelves: a big folder scan shouldn't freeze everything
     if (!sc.emulator && !(sc.romDirs || []).length) continue;
+    markEvent('scan ' + def.id); // (beta.9) the freeze watch names the console being scanned (these showed up as "start")
     if (def.id === 'x360') { let t; try { await Promise.race([x360.ensureDb(), new Promise(r => { t = setTimeout(r, 15000); })]); } catch {} finally { clearTimeout(t); } }
-    const games = scanSystem(def, sc).map(g => ({ ...g, info: covers.gameInfo(def.id, g.title), art: { front: fileUrl(g.art.front), hero: fileUrl(g.art.hero), back: fileUrl(g.art.back), madeBack: g.art.madeBack || undefined, spine: fileUrl(g.art.spine), madeSpine: g.art.madeSpine || undefined, disc: fileUrl(g.art.disc), manual: withCover(def.id, g, (g.art.manual || []).map(fileUrl)), manualPdf: fileUrl(g.art.manualPdf) } }));
+    const games = scanSystem(def, sc).map(g => ({ ...g, info: covers.gameInfo(def.id, g.title), manualMiss: manualMiss(def.id, g), art: { front: fileUrl(g.art.front), hero: fileUrl(g.art.hero), back: fileUrl(g.art.back), madeBack: g.art.madeBack || undefined, spine: fileUrl(g.art.spine), madeSpine: g.art.madeSpine || undefined, disc: fileUrl(g.art.disc), manual: withCover(def.id, g, (g.art.manual || []).map(fileUrl)), manualPdf: fileUrl(g.art.manualPdf) } }));
     // (beta.7) arcade zips are named from FinalBurn Neo's list: fetched once in the background, then the shelf refreshes
     if (games.length && arcadenames.SYSTEMS.has(def.id) && !arcadenames.ready()) arcadenames.fetchNames().then(ok => { if (ok && alive()) win.webContents.send('library:changed', { arcade: 1 }); });
     shelves.push({ id: def.id, kind: 'console', name: def.name, emulatorName: def.emulatorName, hasEmulator: !!sc.emulator && paths.isFile(emuPath(sc.emulator)) /* (1.82) an uninstalled one gets no Open tile */, emulator: sc.emulator, emulatorIcon: fileUrl(await iconQuick(sc.emulator)), gameArgs: sc.gameArgs, bootOnLaunch: sc.bootOnLaunch !== false, useIpl: def.id === 'gc' && !!sc.useIpl, insertAnim: sc.insertAnim !== false, games });
@@ -726,6 +758,7 @@ ipcMain.on('home:meta', (e, m) => { if (!m || typeof m !== 'object') return; con
   homemenu.setMeta({ title: str(m.title), cover: str(m.cover), accent: /^#[0-9a-f]{3,8}$/i.test(m.accent || '') ? m.accent : undefined, glyphs: glyphsOf(m.glyphs), layout: cfg.ui.homeLayout === 'center' ? 'center' : 'side' }); });
 emucfg.init(log);
 modelfind.init(log);
+app.on('will-quit', () => { try { config.flush(); } catch {} }); // (beta.9: settings still waiting to be written go to disk now)
 app.on('before-quit', () => { if (tbHidden) { tbHidden = false; padwatch.stop(); padwatch.taskbarSync(true); try { fs.unlinkSync(tbMark()); } catch {} log('Taskbar back (Boxshelf quitting)'); } /* (beta.6) */ clearTimeout(scaleT); historyEnd(); companion.stop().catch(() => {}); /* the phone companion's server and its connections */ padwatch.stop(); wiimote.stop(); homemenu.end(); modelfind.stop(); clearQuitCover(); clearTimeout(focusOnlyT); if (coverTimer) { clearInterval(coverTimer.keep); clearTimeout(coverTimer); coverTimer = null; }
   romWatchers.forEach(w => { try { w.close(); } catch {} }); romWatchers = []; clearTimeout(romWatchT); clearTimeout(iconLateT); Object.values(retestT).forEach(clearTimeout); if (moving) clearTimeout(moving.t); });
 function handle(name, fn) {
@@ -734,11 +767,14 @@ function handle(name, fn) {
     catch (err) { if ((/^(archive|library|reading):/.test(name) || name === 'art:games') && !err.cancelled) log('IPC', name, 'failed:', err.message || String(err)); return { ok: false, error: err.message || String(err) }; } // (the magazines finder used to fail without a trace)
   });
 }
+// (beta.9) the Paste buttons beside the key boxes (setup's Accounts page): the clipboard's text, one line, read only when
+// pressed (the page itself may not read the clipboard). Never logged.
+handle('clipboard:text', () => { const { clipboard } = require('electron'); return String(clipboard.readText() || '').split(/\r?\n/)[0].trim().slice(0, 512); });
 
 handle('config:get', () => ({ config: cfg, consoles: CONSOLES, apps: APPS, appRoot: paths.appRoot(), version: app.getVersion(), hasInfo: covers.hasInfo(), settingsBlocked: config.blocked() }));
 // (1.82) Settings → About: the newest beta (force: ask GitHub now, not the answer from this start) and the page's links
 handle('app:updateCheck', ({ force } = {}) => updates.check(app.getVersion(), !!force).then(r => ({ ...r, links: updates.LINKS })));
-handle('config:save', next => { if (!next || typeof next !== 'object' || !next.systems || !next.ui) throw new Error('Bad settings.'); return applyCfg({ ...next, art: cfg.art, games: cfg.games, emuSetup: { ...(next.emuSetup || {}), pending: (cfg.emuSetup || {}).pending || [] }, ui: { ...next.ui, sw2Last: cfg.ui.sw2Last } }); }); // Art Studio styles and locks change through art:* only: a Settings save with its older copy mustn't undo them. (beta.8) The same for what main itself keeps: each game's own name and emulator (Details → Rename / Emulator), Set up for me's waiting list and Switch 2's last build: a screen's older copy saved later used to undo a rename, or bring back a setup that was already done
+handle('config:save', next => { if (!next || typeof next !== 'object' || !next.systems || !next.ui) throw new Error('Bad settings.'); scanForget(); return applyCfg({ ...next, art: cfg.art, games: cfg.games, emuSetup: { ...(next.emuSetup || {}), pending: (cfg.emuSetup || {}).pending || [] }, ui: { ...next.ui, sw2Last: cfg.ui.sw2Last } }); }); // Art Studio styles and locks change through art:* only: a Settings save with its older copy mustn't undo them. (beta.8) The same for what main itself keeps: each game's own name and emulator (Details → Rename / Emulator), Set up for me's waiting list and Switch 2's last build: a screen's older copy saved later used to undo a rename, or bring back a setup that was already done
 // settings saved (or restored from a backup): store them and put every change into effect now
 function applyCfg(next) { const prev = cfg, hadMenu = cfg.ui.homeMenu !== false; next = rememberEmus(prev, next); const x = o => o && o.systems && o.systems.x360 && o.systems.x360.emulator; if (x(next) !== x(prev)) next = fixXenia(next); /* (the folder walk only when that path changed) */ cfg = persistCfg(config.normalize(next)); applyArtLibrary(); applyScale(); setTimeout(watchRoms, 0); if (cfg.ui.wiimote === false) wiimote.stop(); else if (wmReady) wmStart(); /* (Settings → Controller → Wii remote, at once) */
   // Home menu switched on/off: start or stop the shelf's Guide watcher now (not after the next game)
@@ -750,7 +786,18 @@ handle('detect', () => detectAll());
 // The last scan is kept on disk so the next launch can show the shelves immediately (as console UIs do) while a fresh
 // scan runs behind them; the renderer only rebuilds if something actually changed.
 // Wii U e-manuals start on their contents page: the box front goes first, so the booklet opens on a cover like a printed one
-function withCover(sysId, g, pages) { return sysId === 'wiiu' && pages.length && g.art.front && wiiumanual.generated(g.title) && !manualstudio.chosen(sysId, g.file) /* a scanned manual picked in Manual Studio opens on its own cover */ ? [fileUrl(g.art.front), ...pages] : pages; }
+// (beta.9) a game with no manual that the manual search and the collections both looked up and found nothing for: when
+// (Details says "No manual found online" instead of leaving it to guess whether the search ran)
+function manualMiss(sysId, g) {
+  if ((g.art && ((g.art.manual || []).length || g.art.manualPdf)) || sysId === 'wiiu') return undefined;
+  try { const key = sysId + '|' + String(g.file).toLowerCase(), a = manuals.autoInfo(key), c = manualcoll.info(key);
+    if (!a || !a.none || (c && c.src)) return undefined; return a.at || undefined; } catch { return undefined; }
+}
+function withCover(sysId, g, pages) { return sysId === 'wiiu' && pages.length && g.art.front && (wiiumanual.generated(g.title) || emanualPages(g)) && !manualstudio.chosen(sysId, g.file) /* a scanned manual picked in Manual Studio opens on its own cover */ ? [fileUrl(g.art.front), ...pages] : pages; }
+// (beta.9) pages made from a Wii U e-manual, known by their shape: exactly 688 px wide (or twice / three times that) and
+// tall. The marker generated() looks for lives in the data folder that made them, so the same games folder used from
+// another copy of Boxshelf (the exe in another folder) opened on the e-manual's contents page instead of the box front.
+function emanualPages(g) { try { const f = (g.art.manual || [])[0]; if (!f) return false; const z = require('./main/spreads').sizeOf(f); return !!z && z[0] % 688 === 0 && z[0] <= 2064 && z[1] > z[0] * 1.2; } catch { return false; } }
 const libCacheFile = () => path.join(app.getPath('userData'), 'library-cache.json');
 // temp (own name per write: two scans can finish together) + rename: a crash mid-write never leaves a cut-off file behind
 let atomicN = 0;
@@ -839,6 +886,13 @@ async function renderPdfCover(pdf, last) {
 // scans uploaded as two-page spreads become single pages (Wii U pages are made here and are never spreads)
 const spreads = require('./main/spreads');
 // cut a scan into halves in a hidden window (decoding big scans here on the main thread froze the shelf)
+// (beta.9) a manual page too big to show, made `w` pixels wide in the same hidden image window (never decoded here)
+async function shrinkPage(file, w) {
+  const r = await helperJob('img-tools.html', async () => { const b = await fs.promises.readFile(file); return { data: new Uint8Array(b.buffer, b.byteOffset, b.length), mode: 'shrink', w }; }, 60000, true);
+  if (r.err) { log('shrink page', path.basename(file), r.err); return null; }
+  const m = /^data:image\/jpeg;base64,(.+)$/.exec(String((r.pages || [])[0] || ''));
+  return m ? Buffer.from(m[1], 'base64') : null;
+}
 async function cropBoth(file) {
   const r = await helperJob('img-tools.html', async () => { const b = await fs.promises.readFile(file); return { data: new Uint8Array(b.buffer, b.byteOffset, b.length) }; }, 60000, true);
   if (r.err) log('crop', path.basename(file), r.err);
@@ -876,9 +930,11 @@ async function fixSpreads() {
   let n = 0; const ls = require('./main/dircache').lister();
   for (const { def, cfg: sc } of sysList(CONSOLES.map(c => c.id))) {
     if (def.id === 'wiiu') continue;
+    await yieldNow(); await uiQuiet(); // (beta.9) between consoles too: consoles without manuals were scanned back to back, one long freeze
     let games = []; try { games = scanSystem(def, sc); } catch { continue; }
     for (const g of games) {
       if (!(g.art && (g.art.manual || []).length)) continue;
+      if (manualUser) return n; // (beta.9: a Wrong game / Repair press goes first)
       await yieldNow(); await gameIdle(); // one game at a time: checking hundreds of manuals in one go froze the shelf ~0.5 s
       try { const k = await spreads.splitManual(paths.manualDirFor(sc, g.file), paths.artBase(g.file), makeCropper(), { ls }); if (k) { n++; log('Manual spreads split', path.basename(g.file), '->', k, 'pages'); } }
       catch (e) { log('Manual spreads', path.basename(g.file), e.message); }
@@ -891,9 +947,11 @@ async function convertPdfManuals(done) {
   markEvent('convertPdfManuals');
   let n = 0;
   for (const { def, cfg: sc } of sysList(CONSOLES.map(c => c.id))) {
+    await yieldNow(); await uiQuiet(); // (beta.9: a breath between consoles, as in fixSpreads)
     let games = []; try { games = scanSystem(def, sc); } catch { continue; }
     for (const g of games) {
       if (!g.art || !g.art.manualPdf || (g.art.manual || []).length || !alive()) continue;
+      if (manualUser) return n; // (beta.9: a Wrong game / Repair press goes first)
       await gameIdle();
       const t0 = Date.now(), pages = await renderPdfPages(g.art.manualPdf, undefined, undefined, undefined, true);
       const saved = pages.length ? await manuals.savePages(sc, g.file, pages, true, pages.length < 80) : 0; // 80 = the page cap: a longer PDF is kept
@@ -1013,12 +1071,34 @@ async function autoManuals(lib) {
     // the manual collections first (sharpest scans / official digital manuals; they also upgrade blurry manuals),
     // then the per-game search for whatever they don't have
     let coll = 0; const changed = [];
-    if (cfg.ui.autoManuals !== false) { try { coll = await manualcoll.run(sysList(CONSOLES.map(c => c.id)), { renderPdf: (p, size) => renderPdfPages(p, size || 1600, undefined, undefined, true), crop: makeCropper(), cancelled: () => !alive(), idle: gameIdle, report: changed, skipSystem: d => manualstudio.prefFor(d.id) !== 'best', locked: (id, f) => manualstudio.isLocked(id, f) || manualstudio.picked(id, f) /* a picked manual: background passes leave it (1.73) */ }); } catch (e) { log('Manual collections failed', e.message); } }
-    const r = cfg.ui.autoManuals === false ? { got: 0 } : await manuals.autoFetch(sysList(CONSOLES.map(c => c.id)), { skip: d => d.id === 'wiiu', cancelled: () => !alive(), idle: gameIdle, prefFor: id => manualstudio.prefFor(id), locked: (id, f) => manualstudio.isLocked(id, f) || manualstudio.picked(id, f) /* a picked manual: background passes leave it (1.73) */ }); // (Manual Studio: each console's language / region; hand-picked manuals left alone)
+    // (beta.9) once: manuals picked before the stricter matching that it wouldn't pick (or with thumbnail pages) are set
+    // aside and looked up again by the passes below
+    let rechecked = null; // (its counts go to the shelf's "Manuals checked" message)
+    if (cfg.ui.autoManuals !== false) { try { rechecked = await manuals.recheck(sysList(CONSOLES.map(c => c.id)), { cancelled: bgStop, idle: gameIdle, collInfo: key => manualcoll.info(key), locked: (id, f) => manualstudio.isLocked(id, f) || manualstudio.picked(id, f) }); } catch (e) { log('Manual re-check failed', e.message); } }
+    if (cfg.ui.autoManuals !== false) { try { coll = await manualcoll.run(sysList(CONSOLES.map(c => c.id)), { renderPdf: (p, size) => renderPdfPages(p, size || 1600, undefined, undefined, true), crop: makeCropper(), cancelled: bgStop, idle: gameIdle, report: changed, skipSystem: d => manualstudio.prefFor(d.id) !== 'best', locked: (id, f) => manualstudio.isLocked(id, f) || manualstudio.picked(id, f) /* a picked manual: background passes leave it (1.73) */ }); } catch (e) { log('Manual collections failed', e.message); } }
+    const r = cfg.ui.autoManuals === false ? { got: 0 } : await manuals.autoFetch(sysList(CONSOLES.map(c => c.id)), { skip: d => d.id === 'wiiu', cancelled: bgStop, idle: gameIdle, prefFor: id => manualstudio.prefFor(id), locked: (id, f) => manualstudio.isLocked(id, f) || manualstudio.picked(id, f) /* a picked manual: background passes leave it (1.73) */ }); // (Manual Studio: each console's language / region; hand-picked manuals left alone)
     const conv = await convertPdfManuals(), split = await fixSpreads();
-    if ((coll || r.got || conv || split) && alive()) win.webContents.send('library:changed', { onlineManuals: Math.max(r.got, conv), manualUpdates: changed });
+    const rk = rechecked && rechecked.moved && !rechecked.cancelled && !bgStop() ? { checked: rechecked.checked, moved: rechecked.moved } : undefined; // (not when a Wrong game / Repair press stopped the pass part way: it says so when it's really done)
+    if ((coll || r.got || conv || split || rk) && alive()) win.webContents.send('library:changed', { onlineManuals: Math.max(r.got, conv), manualUpdates: changed, rechecked: rk });
   } catch (e) { log('Auto manuals failed', e.message); }
-  finally { manualsBusy = false; autoManualJob = null; fin(); if (manualAgain && alive()) { manualAgain = false; setTimeout(() => scanOnce().then(l => autoManuals(l)).catch(() => {}), 4000); } }
+  finally { manualsBusy = false; autoManualJob = null; if (manualUser) { autoManualsDone = false; manualResume = true; } /* stopped for a Wrong game / Repair press: it carries on after */ fin(); if (manualAgain && alive()) { manualAgain = false; setTimeout(() => scanOnce().then(l => autoManuals(l)).catch(() => {}), 4000); } }
+}
+// (beta.9) a Wrong game / Repair press stops the background manual pass at its next step (it used to wait for the whole
+// pass, minutes, so the button seemed to do nothing), then the pass starts again where it is needed
+let manualUser = 0, manualResume = false;
+const bgStop = () => !alive() || manualUser > 0;
+async function manualTurn(run) {
+  manualUser++;
+  // (beta.9) the screen says what it's waiting for: the background pass to stop at its next step, then the fix itself
+  const tell = d => { try { if (alive()) win.webContents.send('manuals:turn', d); } catch {} };
+  try { if (autoManualJob) { tell({ wait: true }); try { await autoManualJob; } catch {} } if (manualsBusy) throw new Error('Already downloading manuals.'); manualsBusy = true; tell({ go: true }); try { return await run(); } finally { manualsBusy = false; } }
+  finally { manualUser--; if (!manualUser && manualResume && alive()) { manualResume = false; setTimeout(() => scanOnce().then(l => autoManuals(l)).catch(() => {}), 4000); } }
+}
+// one game's manual PDF into pages (the whole-library pass looked at every game for this)
+async function pdfToPages(sc, g) {
+  const pdf = path.join(paths.manualDirFor(sc, g.file), paths.artBase(g.file) + '-manual.pdf'); if (!paths.isFile(pdf)) return 0;
+  const pages = await renderPdfPages(pdf, undefined, undefined, undefined, true);
+  return pages.length ? manuals.savePages(sc, g.file, pages, true, pages.length < 80) : 0;
 }
 const autoTried = new Set(); let autoRunning = false;
 let backMemo = null; const backFile = () => path.join(app.getPath('userData'), 'cover-checks.json');
@@ -1074,6 +1154,7 @@ async function makeBacks(ids) {
   try {
     for (const id of ids) {
       const def = CONSOLES.find(c => c.id === id), sc = cfg.systems[id]; if (!def || !sc || !(sc.romDirs || []).length) continue;
+      await yieldNow(); await uiQuiet(); // (beta.9: a breath between consoles)
       let games = []; try { games = scanSystem(def, sc); } catch { continue; }
       for (const g of games) {
         if (!g.art || !g.art.front || (g.art.back && !g.art.madeBack) || g.art.madeBack) continue; // a real back, or one already made
@@ -1095,6 +1176,7 @@ async function makeSpines(ids) {
   try {
     for (const id of ids) {
       const def = CONSOLES.find(c => c.id === id), sc = cfg.systems[id]; if (!def || !sc || !(sc.romDirs || []).length || !CASE[id]) continue;
+      await yieldNow(); await uiQuiet(); // (beta.9: a breath between consoles)
       let games = []; try { games = scanSystem(def, sc); } catch { continue; }
       for (const g of games) {
         if (!g.art || !g.art.front || g.art.spine) continue; // a real spine, or one already made
@@ -1319,7 +1401,7 @@ async function launchGameNow(systemId, file, sc) {
   // Dolphin: the Wii remote is let go first, so Dolphin finds it as it always does
   if (systemId === 'gc' || systemId === 'wii' || /dolphin/i.test(path.basename(sc.emulator || ''))) await wiimote.pause();
   await taskbarHide(); // (beta.6) gone before the emulator's first window can show
-  let r; try { r = launcher.launchGame(sc, rom, onExit, extra, env); } catch (e) { wiimote.resume(); taskbarShow('the game did not start'); throw e; } runKind = 'game'; pendingPower = null;
+  let r; try { r = launcher.launchGame(sc, rom, onExit, extra, env); } catch (e) { wiimote.resume(); taskbarShow('the game did not start'); throw e; } runKind = 'game'; pendingPower = null; if (linux.isLinux) linuxpad.begin(() => closeGame()); // (beta.9: hold Select + Start to close it)
   // (Dolphin: once it has the remote, Boxshelf listens alongside for a held Home; listening only, nothing is sent)
   if (systemId === 'gc' || systemId === 'wii' || /dolphin/i.test(path.basename(sc.emulator || ''))) setTimeout(() => { if (launcher.isRunning()) wiimote.watch(); }, 4000);
   lastLaunch = { systemId, at: Date.now() }; historyStart(systemId + ':' + file);
@@ -1383,9 +1465,13 @@ handle('launch:pc', async ({ id }) => {
 // (beta.5) a PC game's cover picker (main/pccovers.js): the page names the game by id and an option by key only
 const pcLookup = id => { id = String(id || ''); const m = /^steam-(\d{1,10})$/.exec(id); if (m) return { id, appid: m[1], title: '' }; const g = pcgames.byId(id); return g ? { id, title: g.title } : null; };
 const pcGameOf = id => { const g = pcLookup(id); if (!g) throw new Error("That game isn't on the shelf any more."); return g; };
-const pcCoverChanged = () => { if (alive()) win.webContents.send('library:changed', { pcCover: 1 }); };
+let pcCoverT = 0; // (beta.9: one shelf refresh for a run of covers, not one per cover)
+const pcCoverChanged = () => { clearTimeout(pcCoverT); pcCoverT = setTimeout(() => { if (alive()) win.webContents.send('library:changed', { pcCover: 1 }); }, 700); };
+// (beta.9) the games that never get an automatic cover (Quiver's, and programs added by hand or from Playnite: their
+// names often match an unrelated game) and have none chosen yet: the batch cover finder's list
+handle('pccover:missing', () => pcgames.all().filter(g => (g.source === 'custom' || g.source === 'quiver') && !pccovers.cover(g.id)).map(g => ({ id: g.id, title: g.title, source: g.source })));
 handle('pccover:options', ({ id, term }) => { const g = pcGameOf(id), t = String(term || '').replace(/\s+/g, ' ').trim().slice(0, 120);
-  return pccovers.options(t ? { id: g.id, title: t } : g); }); // (beta.5: term = Search by name, a title instead of the game's own / its Steam app)
+  return pccovers.options(t ? { id: g.id, title: t, term: true } : g); }); // (beta.5: term = Search by name, a title instead of the game's own / its Steam app)
 handle('pccover:use', async ({ id, key }) => { pcGameOf(id); await pccovers.use(id, key); pcCoverChanged(); return { ok: true }; });
 handle('pccover:own', async ({ id }) => {
   pcGameOf(id);
@@ -1558,23 +1644,27 @@ handle('covers:download', async ({ systemIds, types, hd }) => {
 });
 let coversUserCancel = false;
 handle('covers:cancel', () => { coversUserCancel = true; covers.cancel(); return true; });
-handle('covers:coverage', () => { const ids = CONSOLES.map(c => c.id); return covers.coverage(sysList(ids)); });
+handle('covers:coverage', async () => { const out = []; for (const s of sysList(CONSOLES.map(c => c.id))) { await yieldNow(); out.push(...covers.coverage([s])); } return out; }); // (beta.9: a console at a time, with a breath between: every console's pictures in one go froze Settings' Box art page)
 // New games while Boxshelf is open: watch the game folders, and once nothing has changed in them for 8 s (a big copy is
 // finished) tell the shelf to look again. A new game then shows up on the shelf, and in the museum it arrives as a parcel.
 // Never during a game (it waits), and at most one rescan per quiet spell.
-let romWatchers = [], romWatchT = 0, romWatchKey = null;
+let romWatchers = [], romWatchT = 0, romWatchKey = null, romMissing = new Set(), romRetryT = 0; // (beta.9: romMissing: games folders not there yet, a USB or network drive)
 function watchRoms() {
   const dirs = new Set(); Object.values(cfg.systems || {}).forEach(s => { if (s && s.enabled !== false) (s.romDirs || []).forEach(d => dirs.add(d)); });
   // only when the watched folders really changed (every settings save calls this); a pending rescan (romWatchT) stays due
   const key = [...dirs].sort().join('\n'); if (key === romWatchKey) return; romWatchKey = key;
   romWatchers.forEach(w => { try { w.close(); } catch {} }); romWatchers = [];
-  const poke = () => { clearTimeout(romWatchT); romWatchT = setTimeout(function fire() { if (launcher.isRunning()) { romWatchT = setTimeout(fire, 15000); return; } if (alive()) win.webContents.send('library:changed', { watch: 1 }); }, 8000); };
-  for (const d of dirs) { try { const w = fs.watch(d, { recursive: true }, (ev, name) => { if (name && /(^|[\\/])(covers|\.optimized|\.manual-originals)([\\/]|$)|-manual-|\.(png|jpe?g|json|txt|ini|tmp|part)$/i.test(name)) return; poke(); }); w.on('error', () => {}); romWatchers.push(w); } catch {} }
+  const poke = () => { scanForget(); /* (beta.9: a games folder changed, so the kept scans are out of date) */ clearTimeout(romWatchT); romWatchT = setTimeout(function fire() { if (launcher.isRunning()) { romWatchT = setTimeout(fire, 15000); return; } if (alive()) win.webContents.send('library:changed', { watch: 1 }); }, 8000); };
+  for (const d of dirs) { try { const w = fs.watch(d, { recursive: true }, (ev, name) => { if (name && /(^|[\\/])(covers|\.optimized|\.manual-originals)([\\/]|$)|-manual-|\.(png|jpe?g|json|txt|ini|tmp|part|srm|sav|sra|state(\d+|\.auto)?|st\d|ss\d|mcd|mcr|ps2|dsv|eep|fla|flash|mpk|bkr|brm|rtc|bak|log|cfg|lock|db|sqlite|db-journal|crdownload)$/i.test(name)) return; poke(); }); /* (beta.9: an emulator's saves, save states and memory cards beside the games aren't new games: they rescanned the whole library just after every game. Never .bin, .img or .zip: those are games) */ w.on('error', () => {}); romWatchers.push(w); if (romMissing.has(d)) { romMissing.delete(d); log('Games folder is back, watching it:', d); poke(); } } catch { romMissing.add(d); } }
+  // (beta.9) a folder that isn't there yet (its drive not plugged in) is tried again every minute; once it's there, it's
+  // watched and the shelf looks at it at once
+  for (const d of [...romMissing]) if (!dirs.has(d)) romMissing.delete(d);
+  clearTimeout(romRetryT); if (romMissing.size) romRetryT = setTimeout(() => { romWatchKey = null; watchRoms(); }, 60000);
 }
 const sysList = ids => CONSOLES.filter(d => ids.includes(d.id) && cfg.systems[d.id] && (cfg.systems[d.id].romDirs || []).length).map(def => ({ def, cfg: cfg.systems[def.id] }));
 let manualsBusy = false, findToken = null;
 handle('manuals:recent', () => manualcoll.recent(30));
-handle('manuals:coverage', () => manuals.coverage(sysList(CONSOLES.map(c => c.id))));
+handle('manuals:coverage', async () => { const out = []; for (const s of sysList(CONSOLES.map(c => c.id))) { await yieldNow(); out.push(...manuals.coverage([s])); } return out; }); // (beta.9: a console at a time, as covers:coverage)
 handle('manuals:find', async ({ systemIds }) => {
   systemIds = idList(systemIds);
   if (autoManualJob) { if (alive()) win.webContents.send('covers:progress', { stage: 'Finishing the background manual download first…' }); await autoManualJob; }
@@ -1771,20 +1861,70 @@ handle('manuals:download', async ({ choices }) => {
   }
   finally { manualsBusy = false; }
 });
+// (beta.9) Wrong game / Repair work on this one game only, right away
+const collOpts = () => ({ renderPdf: (p, size) => renderPdfPages(p, size || 1600, undefined, undefined, true), crop: makeCropper() });
+function oneGame(systemId, file) { const s = sysList([systemId])[0]; if (!s) throw new Error('Unknown system.'); const g = scanSystem(s.def, s.cfg).find(x => x.file.toLowerCase() === String(file).toLowerCase()); if (!g) throw new Error('Game not found.'); return { def: s.def, sc: s.cfg, g }; }
 handle('manuals:reject', async ({ systemId, file }) => {
   const gf = gameFile(systemId, file);
-  if (autoManualJob) await autoManualJob;
-  if (manualsBusy) throw new Error('Already downloading manuals.');
-  manualsBusy = true;
-  try {
+  return manualTurn(async () => {
     const key = systemId + '|' + gf.file.toLowerCase(), collSrc = manualcoll.forget(key);
-    const r = await manuals.rejectManual(sysList(CONSOLES.map(c => c.id)), systemId, gf.file, { collSrc, progress: info => { if (alive()) win.webContents.send('covers:progress', info); } });
-    if (r.pdf) { const made = new Map(); await convertPdfManuals(made); r.got = made.get(gf.file) || 0; }
-    await fixSpreads();
+    // a scan collection's copy of this game first (not the one just rejected), then the search's next best
+    const r = await manuals.rejectManual(sysList(CONSOLES.map(c => c.id)), systemId, gf.file, { collSrc, tryFirst: (def, sc, g) => manualcoll.fetchFor(def, sc, g, collOpts()),
+      progress: info => { if (alive()) win.webContents.send('covers:progress', info); } });
+    const { sc, g } = oneGame(systemId, gf.file);
+    if (r.pdf) r.got = await pdfToPages(sc, g);
+    if (r.got && !r.from) { try { await spreads.splitManual(paths.manualDirFor(sc, g.file), paths.artBase(g.file), makeCropper()); } catch (e) { log('Manual spreads', path.basename(g.file), e.message); } }
     if (alive()) win.webContents.send('library:changed', { manuals: 1 });
+    r.pages = manualPagesOf(systemId, gf.file); // (beta.9: the reader reopens with these, no whole-library scan)
     return r;
-  } finally { manualsBusy = false; }
+  });
 });
+// (beta.9) one game's manual pages as the shelf has them (addresses, the box front first where the library puts it there)
+function manualPagesOf(systemId, file) { try { const { def, g } = oneGame(systemId, file); return withCover(def.id, g, ((g.art && g.art.manual) || []).map(fileUrl)); } catch { return null; } }
+// Repair: the right game's manual that looks wrong (no cover, thumbnails, two pages side by side, huge pages). A scan
+// collection's copy replaces it when one has the game (unless that's the copy already there); otherwise it's put right
+// where it is (manuals.repairInPlace). The pages as they were are kept in .manual-originals.
+handle('manuals:repair', async ({ systemId, file }) => {
+  const gf = gameFile(systemId, file);
+  return manualTurn(async () => {
+    const { def, sc, g } = oneGame(systemId, gf.file), key = systemId + '|' + g.file.toLowerCase();
+    if (manualstudio.isLocked(systemId, g.file)) throw new Error('This manual was chosen in Manual Studio: change it there.');
+    const had = manualcoll.info(key), c = await manualcoll.fetchFor(def, sc, g, Object.assign(collOpts(), { force: true, skipSrc: had && had.src }));
+    let r = c && c.got ? { changed: true, what: 'swapped for the clean scan from ' + c.from } : null;
+    if (!r) { const fresh = oneGame(systemId, gf.file).g; r = await manuals.repairInPlace(sc, fresh, { crop: makeCropper(), front: fresh.art && fresh.art.front, sysId: systemId }); }
+    if (r.changed && alive()) win.webContents.send('library:changed', { manuals: 1 });
+    if (r.changed) r.pages = manualPagesOf(systemId, gf.file);
+    return r;
+  });
+});
+// (beta.9) Settings → Get manuals → Check my manuals: the one-time re-check again, on demand (another game's manual or
+// thumbnail pages set aside and looked up again, huge pages made smaller), then the same passes as the background job for
+// the games it set aside. Progress on 'manuals:check'; Cancel stops it at its next step
+// (Cancel works while it still waits for the background pass to pause; like that pass, it waits while a game is played;
+// "replaced" counts only the set-aside games that have a manual again, not manuals the search found for other games)
+let checkStop = false;
+handle('manuals:check', async () => { checkStop = false; return manualTurn(async () => {
+  const say = d => { try { if (alive()) win.webContents.send('manuals:check', d); } catch {} }, stop = () => !alive() || checkStop;
+  if (stop()) return { checked: 0, moved: 0, shrunk: 0, got: 0, cancelled: true };
+  const locked = (id, f) => manualstudio.isLocked(id, f) || manualstudio.picked(id, f);
+  const rc = await manuals.recheck(sysList(CONSOLES.map(c => c.id)), { force: true, cancelled: stop, idle: gameIdle, collInfo: key => manualcoll.info(key), locked,
+    progress: p => say({ stage: 'Checking manuals · ' + p.system, done: p.sysDone, total: p.sysTotal, checked: p.checked, moved: p.moved }) });
+  let got = 0, coll = 0; const changed = [];
+  if (rc.moved && !stop()) {
+    say({ stage: 'Looking up the set-aside games…', checked: rc.checked, moved: rc.moved });
+    try { coll = await manualcoll.run(sysList(CONSOLES.map(c => c.id)), { renderPdf: (p, size) => renderPdfPages(p, size || 1600, undefined, undefined, true), crop: makeCropper(), cancelled: stop, idle: gameIdle, report: changed, skipSystem: d => manualstudio.prefFor(d.id) !== 'best', locked }); } catch (e) { log('Manual collections failed', e.message); }
+    if (!stop()) { try { got = (await manuals.autoFetch(sysList(CONSOLES.map(c => c.id)), { skip: d => d.id === 'wiiu', cancelled: stop, idle: gameIdle, prefFor: id => manualstudio.prefFor(id), locked })).got || 0; } catch (e) { log('Manual search failed', e.message); } }
+    if (!stop()) { try { await convertPdfManuals(); await fixSpreads(); } catch (e) { log('Manual pages failed', e.message); } }
+  }
+  // (one scan per console for all its set-aside games, a pause between consoles: a scan per game froze main for seconds)
+  let replaced = 0; const bySys = new Map(); for (const x of rc.list || []) { if (!bySys.has(x.sysId)) bySys.set(x.sysId, new Set()); bySys.get(x.sysId).add(String(x.file).toLowerCase()); }
+  for (const [sysId, files] of bySys) { await yieldNow(); const s = sysList([sysId])[0]; if (!s) continue;
+    try { for (const g of scanSystem(s.def, s.cfg)) if (files.has(g.file.toLowerCase()) && g.art && g.art.manual && g.art.manual.length) replaced++; } catch {} }
+  if ((rc.moved || rc.shrunk || coll || got) && alive()) win.webContents.send('library:changed', { onlineManuals: got, manualUpdates: changed });
+  log('Check my manuals:', rc.checked, 'looked at,', rc.moved, 'set aside,', replaced, 'replaced,', rc.shrunk || 0, 'made smaller,', got + coll, 'found in all', stop() ? '(cancelled)' : '');
+  return { checked: rc.checked, moved: rc.moved, shrunk: rc.shrunk || 0, got: replaced, found: got + coll, cancelled: !!(rc.cancelled || checkStop) };
+}); });
+handle('manuals:checkCancel', () => { checkStop = true; return true; });
 handle('fs:check', list => (list || []).map(p => ({ path: p, file: paths.isFile(paths.expand(p)), dir: paths.isDir(paths.expand(p)) })));
 handle('app:quit', o => { log('Quit: asked by the shelf (' + String((o && o.why) || 'no reason given').slice(0, 60) + ')'); app.quit(); }); // (why: the quick menu's Exit, or the quit combo held on the shelf)
 handle('app:power', kind => { if (['sleep', 'restart', 'shutdown'].includes(kind)) powerAction(kind); return true; }); // the Quick Shelf's Power card
@@ -1827,7 +1967,7 @@ function saveArt(art) { cfg = persistCfg(config.normalize({ ...cfg, art })); }
 const artOpts = explicit => ({ styleFor: id => (cfg.art && cfg.art.styles && cfg.art.styles[id] ? artstudio.styleFor(cfg, id) : null), lockedFor: (id, file) => artstudio.lockedFor(id, file), serial: (id, file, fn) => artstudio.serial(id, file, fn), mayReplace: f => artstudio.mayReplace(f, !!explicit), isPoster: f => artstudio.isPoster(f) });
 let artChangedT = null;
 function initArtStudio() {
-  artstudio.init({ dataDir: app.getPath('userData'), log, getCfg: () => cfg, setArt: saveArt, consoles: () => sysList(CONSOLES.map(c => c.id)).map(x => ({ def: x.def, sc: x.cfg })), scan: (def, sc) => scanSystem(def, sc),
+  artstudio.init({ dataDir: app.getPath('userData'), log, getCfg: () => cfg, setArt: saveArt, consoles: () => sysList(CONSOLES.map(c => c.id)).map(x => ({ def: x.def, sc: x.cfg })), scan: (def, sc, fresh) => scanSystem(def, sc, fresh),
     count: id => { const sh = lastLib && lastLib.find(x => x.id === id && x.kind === 'console'); return sh ? sh.games.length : null; },
     gameFile, fileUrl, send: (ch, d) => { if (alive()) win.webContents.send(ch, d); },
     placed: dest => { artVer.set(path.resolve(dest).toLowerCase(), Date.now()); },
@@ -1860,7 +2000,7 @@ handle('art:refreshCancel', () => ({ cancelled: covers.cancelRefresh() }));
 handle('art:indexInfo', () => covers.indexInfo());
 // ---------- Manual Studio (Settings → Art & manuals → Manuals; Details → Choose manual…; the Art Studio's Manual part) ----------
 function initManualStudio() {
-  manualstudio.init({ dataDir: app.getPath('userData'), log, consoles: () => sysList(CONSOLES.map(c => c.id)).map(x => ({ def: x.def, sc: x.cfg })), scan: (def, sc) => scanSystem(def, sc), gameFile, fileUrl,
+  manualstudio.init({ dataDir: app.getPath('userData'), log, consoles: () => sysList(CONSOLES.map(c => c.id)).map(x => ({ def: x.def, sc: x.cfg })), scan: (def, sc, fresh) => scanSystem(def, sc, fresh), gameFile, fileUrl,
     send: (ch, d) => { if (alive()) win.webContents.send(ch, d); }, idle: gameIdle,
     changed: info => { if (alive()) win.webContents.send('library:changed', info); },
     renderPdf: p => renderPdfPages(p, 1600), renderFirst: async p => { const d = (await renderPdfCover(p))[0]; const m = /^data:image\/jpeg;base64,(.+)$/.exec(String(d || '')); return m ? Buffer.from(m[1], 'base64') : null; },
@@ -2192,10 +2332,11 @@ function startUp() {
   stremio.init({ log, fanartKey: () => (cfg && cfg.keys && cfg.keys.fanart) || '', artDir: path.join(app.getPath('userData'), 'stremio-art'), fetchBuf: async url => { const r = await net.fetch(url); if (r.status === 404) return null; if (!r.ok) throw new Error('HTTP ' + r.status); return Buffer.from(await r.arrayBuffer()); } }); // null = really not there; other failures throw, so nothing "missing" is cached for them
   icons.init(app.getPath('userData'), log);
   x360.init(app.getPath('userData'), log);
-  steamart.init(app.getPath('userData'), log); pcgames.init(app.getPath('userData'), log); pccovers.init({ dataDir: app.getPath('userData'), log, fileUrl, fetchImage, steamgrid: require('./main/steamgrid'), steamCover: id => steamart.local(id).front, match: covers.sgMatch });
+  steamart.init(app.getPath('userData'), log); pcgames.init(app.getPath('userData'), log); pccovers.init({ dataDir: app.getPath('userData'), log, fileUrl, fetchImage, steamgrid: require('./main/steamgrid'), steamCover: id => steamart.local(id).front, match: covers.sgMatch, steamSearch: (t, exact) => pcgames.steamSearch(t, exact) });
   wiiumanual.init(app.getPath('userData'), log);
   ra.init(app.getPath('userData'), log); ra.setCredentials(cfg.ra && cfg.ra.enabled !== false ? cfg.ra.user : '', cfg.ra && cfg.ra.key);
   manuals.init(log); archive.init(log); manuals.setStore(path.join(app.getPath('userData'), 'manual-auto.json')); manuals.setRejectStore(path.join(app.getPath('userData'), 'manual-rejects.json'));
+  manuals.setShrink(shrinkPage); // (beta.9) oversized manual pages made smaller in the background image window
   manualcoll.init({ cacheDir: path.join(app.getPath('userData'), 'boxart-cache'), memoFile: path.join(app.getPath('userData'), 'manual-collections.json'), log });
   protocol.handle('bsfile', serveFile);
   createWindow();

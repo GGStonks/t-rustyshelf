@@ -119,7 +119,8 @@ module.exports = async function raPass({ browser, base, check, newPage, OUT }) {
 
     // ---- Settings: the account's chip, and the Android note about the emulators' own sign-in ----
     await page.evaluate(async () => { await window.boxshelf.testApi('ra'); Setup.open({ page: 'acct' }); });
-    const set = await until(() => /RetroAchievements/.test((document.querySelector('#bss') || {}).innerText || ''), null, 30000);
+    // (waits for the account's status too: it comes from a background request a moment after the page draws)
+    const set = await until(() => { const t = ((document.querySelector('#bss') || {}).innerText || '').replace(/\s+/g, ' '); return /RetroAchievements/.test(t) && /Connected · tester/.test(t); }, null, 30000);
     const setText = await page.evaluate(() => ((document.querySelector('#bss') || {}).innerText || '').replace(/\s+/g, ' '));
     const rowInfo = await page.evaluate(() => { let info = ''; try { const S = window.BS_SETTINGS_PATCH([{ id: 'acct', name: 'Accounts', rows: [{ t: 'action', label: 'RetroAchievements', status: 'ra', info: 'x' }] }], {}); for (const s of S) for (const r of s.rows || []) if (r && r.status === 'ra') info = r.info; } catch (e) { info = 'ERR ' + e.message; } return info; });
     await page.screenshot({ path: path.join(OUT, 'ra-3-settings.png') });

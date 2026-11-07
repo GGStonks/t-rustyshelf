@@ -64,7 +64,7 @@ async function gamesFor(sysId, fresh) {
   const m = gamesMemo.get(sysId); if (m && !fresh && Date.now() - m.at < 30000) return m;
   const item = env.consoles().find(x => x.def.id === sysId); if (!item) throw new Error('Unknown system.');
   await new Promise(r => setImmediate(r));
-  const list = env.scan(item.def, item.sc).filter(g => g.kind !== 'app' && !g.extra);
+  const list = env.scan(item.def, item.sc, !!fresh).filter(g => g.kind !== 'app' && !g.extra); // (beta.9: fresh reads the folders again, past the scanner's kept scan)
   const r = { at: Date.now(), list, byFile: new Map(list.map(g => [path.resolve(g.file).toLowerCase(), g])) }; gamesMemo.set(sysId, r); return r;
 }
 async function gameArg(a) {
@@ -115,9 +115,17 @@ function earlierCands(g) {
   let ds = []; [g.dir, g.home].filter((r, i, a) => r && a.findIndex(x => x && path.resolve(x).toLowerCase() === path.resolve(r).toLowerCase()) === i).forEach((r, ri) => {
     const root = path.join(r, '.manual-originals', g.base); try { fs.readdirSync(root, { withFileTypes: true }).forEach(d => { if (d.isDirectory()) ds.push({ root, d: d.name, k: (ri ? 'h/' : '') + d.name }); }); } catch {} });
   ds = ds.sort((a, b) => a.d < b.d ? 1 : a.d > b.d ? -1 : 0);
+  // (beta.9) the same manual is listed once: Repair, Wrong game and every Use each keep a copy of what was there, so one
+  // manual could fill the list. Same pages (count, first and last page's size) = the same manual; the newest copy is shown,
+  // and none that matches the manual in use. Nothing is deleted
+  const fsz = f => { try { return fs.statSync(f).size; } catch { return 0; } };
+  const sig = (dir, pages) => pages.length + ':' + fsz(path.join(dir, pages[0])) + ':' + fsz(path.join(dir, pages[pages.length - 1]));
+  const curPages = g.dir ? pagesIn(g.dir, g.base) : [], seen = new Set(curPages.length ? [sig(g.dir, curPages)] : []);
   const out = [];
-  for (const { root, d, k } of ds.slice(0, 10)) {
+  for (const { root, d, k } of ds.slice(0, 30)) {
+    if (out.length >= 10) break;
     const full = path.join(root, d), pages = pagesIn(full, g.base); if (!pages.length) continue;
+    const s = sig(full, pages); if (seen.has(s)) continue; seen.add(s);
     const side = readSide(full) || {}, w = (spreads.sizeOf(path.join(full, pages[0])) || [0])[0];
     const when = /^(\d{4})-(\d\d)-(\d\d)/.exec(d);
     out.push({ key: 'earlier:' + k, source: 'earlier', label: (side.label ? side.label + ' · ' : '') + 'Earlier' + (when ? ` (${when[3]}/${when[2]}/${when[1]})` : ''), lang: side.lang || '', region: side.region || '', pages: pages.length, w, thumb: thumbUrl(path.join(full, pages[0])), dir: full, src: side.src || null });
@@ -300,7 +308,7 @@ function remember(g, keep, meta, lock) {
 function result(g) { gamesMemo.delete(g.sysId); lists.delete(g.key); env.changed({ manualStudio: 1, systemId: g.sysId, file: g.game.file });
   const pages = pagesIn(g.dir, g.base).map(f => env.fileUrl(path.join(g.dir, f)));
   return { manual: pages, locked: isLocked(g.sysId, g.game.file), canUndo: !!(db().hist[g.key] || []).length, cur: db().cur[g.key] || null }; }
-const metaOf = c => ({ src: c.source === 'earlier' ? (c.src || c.key) : c.key, label: c.label.replace(/ · Earlier.*$/, ''), lang: c.lang || '', region: c.region || '', expected: c.pages || null, origin: 'studio' });
+const metaOf = c => ({ src: c.source === 'earlier' ? (c.src || c.key) : c.key, label: c.source === 'earlier' ? (c.label.replace(/(^| · )Earlier.*$/, '') || 'Your manual from before') : c.label.replace(/ · Earlier.*$/, ''), lang: c.lang || '', region: c.region || '', expected: c.pages || null, origin: 'studio' });
 // one game's manual from a candidate (it never locks: only the Lock switch does, 1.73). opts.skip(): asked inside the
 // game's turn, so a re-pick queued behind a Use or a lock the user made meanwhile gives way (→ null)
 async function apply(g, c, opts = {}) {
@@ -313,6 +321,11 @@ async function apply(g, c, opts = {}) {
       const prev = curMeta(g), r = swapIn(g, stage, prev), meta = { ...metaOf(c), origin: opts.origin || 'studio' };
       if (cut) meta.expected = r.n; // cut at 80 / 60: what came out is the whole of what Boxshelf can show (not "N pages missing" for ever)
       remember(g, r.keep, meta, opts.lock === true);
+      // (beta.9) an earlier copy put back is moved, not copied: it leaves the Earlier list (it used to stay there, and the
+      // manual it replaced was kept as one more, so every press added a copy). Undo still has the one it replaced
+      if (c.source === 'earlier' && c.dir && path.resolve(c.dir).toLowerCase() !== path.resolve(r.keep || '').toLowerCase()) {
+        try { fs.rmSync(c.dir, { recursive: true, force: true }); } catch {}
+        const s = db(), h = s.hist[g.key]; if (h) { s.hist[g.key] = h.filter(e => !e || path.resolve(String(e.dir || '')).toLowerCase() !== path.resolve(c.dir).toLowerCase()); save(); } }
       log('Manual Studio:', path.basename(g.game.file), '->', c.key.slice(0, 120), '-', r.n, 'pages', cut ? '(cut at ' + cut.max + ' pages)' : '', r.keep ? '(old one kept in ' + path.basename(r.keep) + ')' : '');
       return { n: r.n, cut };
     } finally { try { fs.rmSync(stage, { recursive: true, force: true }); } catch {} }
@@ -471,4 +484,4 @@ async function repick(job, pref) {
   finally { setTimeout(() => jobs.delete(job.id), 60000).unref?.(); }
 }
 
-module.exports = { init, cacheDir, studio, games, cands, use, undo, lock, own, setPref, cancel, isLocked, picked, prefFor, chosen, PREFS, _t: { expectOf, completeness, rank, keyOf, db: () => db(), reset: () => { store = null; lists.clear(); gamesMemo.clear(); }, verify, pdfPages, collCand, iaCand } };
+module.exports = { init, cacheDir, studio, games, cands, use, undo, lock, own, setPref, cancel, isLocked, picked, prefFor, chosen, PREFS, _t: { expectOf, completeness, rank, keyOf, db: () => db(), reset: () => { store = null; lists.clear(); gamesMemo.clear(); }, verify, pdfPages, collCand, iaCand, earlierCands, apply } };

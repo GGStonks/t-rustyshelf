@@ -79,7 +79,14 @@
     sys('gb', 'Game Boy', ['retroarch', 'myoldboy', 'pizzagbc', 'gbcemu'], ['gambatte', 'sameboy', 'mgba'], ['gb', 'dmg', 'sgb', 'zip', '7z']),
     sys('pcengine', 'TurboGrafx-16', ['retroarch', 'pceemu'], ['mednafen_pce_fast', 'mednafen_pce'], ['pce', 'sgx', 'chd', 'cue', 'zip', '7z']),
     sys('neogeo', 'Neo Geo', ['retroarch', 'neoemu', 'mame4d'], ['fbneo', 'geolith'], ['zip', '7z', 'neo']),
-    sys('arcade', 'Arcade', ['retroarch', 'mame4d'], ['fbneo', 'mame2003_plus', 'mamearcade'], ['zip', '7z'])
+    sys('arcade', 'Arcade', ['retroarch', 'mame4d'], ['fbneo', 'mame2003_plus', 'mamearcade'], ['zip', '7z']),
+    // (beta.9) the rest of Windows' wave 2, through RetroArch (MD.emu plays Sega CD too)
+    sys('segacd', 'Sega CD', ['retroarch', 'mdemu'], ['genesis_plus_gx', 'picodrive'], ['cue', 'chd', 'iso', 'm3u']),
+    sys('sega32x', '32X', ['retroarch'], ['picodrive'], ['32x', 'zip', '7z']),
+    sys('atari2600', 'Atari 2600', ['retroarch'], ['stella', 'stella2014'], ['a26', 'bin', 'zip', '7z']),
+    sys('atarilynx', 'Lynx', ['retroarch'], ['handy', 'mednafen_lynx'], ['lnx', 'zip', '7z']),
+    sys('wonderswan', 'WonderSwan', ['retroarch'], ['mednafen_wswan'], ['ws', 'wsc', 'zip', '7z']),
+    sys('dos', 'DOS', ['retroarch'], ['dosbox_pure'], ['zip', 'dosz'])
   ];
   // multi-file games: the .bin/.img tracks are listed by the .cue/.gdi/.m3u that points at them, never as boxes of their own
   const COMPANION = { cue: ['bin', 'img', 'wav', 'ape'], gdi: ['bin', 'raw'], m3u: ['cue', 'chd', 'iso', 'gdi', 'cdi', 'bin', 'img', 'pbp'], ccd: ['img', 'sub'], mds: ['mdf'] };

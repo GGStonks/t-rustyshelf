@@ -1,11 +1,11 @@
 // (beta.8) Console trailers: a short clip of a game's YouTube trailer, saved as a file so it plays like a Steam clip (behind
 // the shelf and behind the case in Details), the way Playnite's trailer add-on does it.
 //   - The helper is yt-dlp (free, Unlicense), fetched once into data\tools when you switch Console trailers on, and
-//     checked against the SHA-256 list yt-dlp publishes with every release. It only finds the video's 480p stream.
+//     checked against the SHA-256 list yt-dlp publishes with every release. It only finds the video's 720p (else 480p) stream.
 //   - The clip: YouTube serves that stream as fragmented MP4 with an index (sidx) of its fragments. Boxshelf reads the
 //     index, fetches only the bytes of the first ~20 seconds, and joins the header and those fragments into one small
 //     silent MP4, exactly the shape of the Steam clips (no video converter needed).
-//   - Kept in data\previews\youtube\<video id>.mp4; the Steam and YouTube clips share one 400 MB limit (previews.trim).
+//   - Kept in data\previews\youtube\<video id>.hd.mp4 (beta.9; <id>.mp4 = an older 480p one); the Steam and YouTube clips share one 400 MB limit (previews.trim).
 //     A video with no usable stream is asked again after three days. One clip is made at a time.
 const fs = require('fs');
 const path = require('path');
@@ -72,11 +72,12 @@ let run = (args, timeout) => new Promise((resolve, reject) => {
   const p = execFile(helperPath(), ['--ignore-config', ...args], { windowsHide: true, maxBuffer: 32 << 20 }, (e, out, err) => { clearTimeout(t); e ? reject(new Error(timedOut ? 'timed out' : String(err || e.message).trim().split('\n').pop().slice(0, 200))) : resolve(String(out)); });
   let timedOut = false; const t = setTimeout(() => { timedOut = true; try { execFile('taskkill', ['/T', '/F', '/PID', String(p.pid)], { windowsHide: true }, () => {}); } catch {} try { p.kill(); } catch {} }, timeout);
 });
-// the trailer's 480p (else smaller) H.264 video stream: { url, headers }
+// the trailer's 720p (else 480p or smaller) H.264 video stream: { url, headers }. (beta.9: 720p first; YouTube's 480p is
+// so compressed that it looked soft stretched behind the shelf, about a quarter of a Steam clip's data per second)
 async function streamOf(id) {
-  const fmt = ['135', '134', '133', 'bv*[ext=mp4][vcodec^=avc1][height<=480]'].map(f => f + '[protocol=https]').join('/');
+  const fmt = ['136', '135', '134', '133', 'bv*[ext=mp4][vcodec^=avc1][height<=720]'].map(f => f + '[protocol=https]').join('/');
   const j = JSON.parse(await run(['--no-warnings', '--no-playlist', '--quiet', '-f', fmt, '-j', '--', 'https://www.youtube.com/watch?v=' + id], 45000));
-  if (!j || !j.url || !/^https:\/\/[a-z0-9.-]+\.(googlevideo|youtube)\.com\//i.test(j.url)) throw new Error('no 480p stream');
+  if (!j || !j.url || !/^https:\/\/[a-z0-9.-]+\.(googlevideo|youtube)\.com\//i.test(j.url)) throw new Error('no usable stream');
   const h = {}; for (const [k, v] of Object.entries(j.http_headers || {})) if (/^(user-agent|accept|accept-language|origin|referer)$/i.test(k)) h[k] = String(v);
   return { url: j.url, headers: h };
 }
@@ -122,17 +123,20 @@ const ranged = (url, a, b) => url + (url.includes('?') ? '&' : '?') + 'range=' +
 const QMAX = 3, FRESH = 30e3;
 const flights = new Map(), q = [], asked = new Map(), failAt = new Map();
 let busy = false, fails = 0, updated = false, wantUpdate = false, pausedTill = 0;
-const GONE = /video unavailable|this video is not available|private video|been removed|copyright|confirm your age|members[- ]only|no 480p stream|no fragment index/i;
+const GONE = /video unavailable|this video is not available|private video|been removed|copyright|confirm your age|members[- ]only|no 480p stream|no usable stream|no fragment index/i;
 const OFFLINE = /unable to download|getaddrinfo|ENOTFOUND|ENETUNREACH|ECONNRESET|ECONNREFUSED|EAI_AGAIN|timed out|socket hang up|HTTP 5\d\d/i;
 function pump() {
   if (busy) return;
   if (wantUpdate) { wantUpdate = false; busy = true; run(['-U'], 120000).then(() => log('Console trailers: helper updated')).catch(e => log('Console trailers: helper update failed:', e.message)).finally(() => { busy = false; pump(); }); return; }
   if (!q.length) return; busy = true; const job = q.pop(); job.run().finally(() => { busy = false; pump(); });
 }
+// (beta.9) clips are kept as <id>.hd.mp4 (made from the 720p stream). A 480p one kept from before (<id>.mp4) still plays
+// at once (cached) while the 720p one is made in the background, and is removed the next time after that
+const hdOf = id => path.join(clipDir(), id + '.hd.mp4'), oldOf = id => path.join(clipDir(), id + '.mp4');
 // the clip for one YouTube video: its file, or null (no helper, no usable stream, offline)
 function clip(id) {
   if (!supported() || !okId(id)) return Promise.resolve(null);
-  const out = path.join(clipDir(), id + '.mp4'), none = path.join(clipDir(), id + '.none'), now = Date.now();
+  const out = hdOf(id), none = path.join(clipDir(), id + '.none'), now = Date.now();
   if (isFile(out)) { try { const t = new Date(); fs.utimesSync(out, t, t); } catch {} return Promise.resolve(out); }
   if (isFile(none)) { try { if (now - fs.statSync(none).mtimeMs < 3 * 864e5) return Promise.resolve(null); } catch {} }
   if (!helperState().have || now < pausedTill || now - (failAt.get(id) || 0) < 10 * 60e3) return Promise.resolve(null);
@@ -166,7 +170,12 @@ async function make(id, out, none) {
   }
 }
 // a kept clip (marked as just shown, so the 400 MB limit drops the ones not seen for longest)
-function cached(id) { if (!okId(id)) return null; const f = path.join(clipDir(), id + '.mp4'); if (!isFile(f)) return null; try { const t = new Date(); fs.utimesSync(f, t, t); } catch {} return f; }
+// (a 480p one from before: shown now, its 720p one made in the background for next time. The 480p file is removed the
+// next time the clip is asked for, once the 720p one is there: never while it may still be playing)
+function cached(id) { if (!okId(id)) return null; let f = hdOf(id);
+  if (isFile(f)) { const old = oldOf(id); if (isFile(old)) { try { fs.unlinkSync(old); } catch {} } }
+  else { f = oldOf(id); if (!isFile(f)) return null; clip(id).catch(() => {}); }
+  try { const t = new Date(); fs.utimesSync(f, t, t); } catch {} return f; }
 function size() { try { return fs.readdirSync(clipDir()).filter(n => n.endsWith('.mp4')).reduce((a, n) => { try { a.n++; a.bytes += fs.statSync(path.join(clipDir(), n)).size; } catch {} return a; }, { n: 0, bytes: 0 }); } catch { return { n: 0, bytes: 0 }; } }
 function clear() { try { fs.rmSync(clipDir(), { recursive: true, force: true }); } catch {} }
 function status() { const h = helperState(); return { supported: supported(), helper: h.have, getting: !!helperFlight, ...size() }; }
