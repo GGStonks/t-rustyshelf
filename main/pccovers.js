@@ -12,7 +12,7 @@ const crypto = require('crypto');
 let o = { dataDir: '', log: () => {} };
 const EXTS = ['jpg', 'png', 'webp'];
 const safeId = id => String(id || '').toLowerCase().replace(/[^a-z0-9._-]+/g, '-').slice(0, 120);
-const dir = () => path.join(o.dataDir, 'pc-covers'), cacheDir = () => path.join(o.dataDir, 'pc-cover-cache');
+const dir = () => path.join(o.dataDir, 'pc-covers'), cacheDir = () => path.join(o.dataDir, 'pc-cover-cache'), autoDir = () => path.join(o.dataDir, 'pc-covers-auto');
 const isFile = p => { try { return fs.statSync(p).isFile(); } catch { return false; } };
 const sha = s => crypto.createHash('sha1').update(String(s)).digest('hex').slice(0, 24);
 const steamArt = (appid, name) => [`https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${appid}/${name}`, `https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/${name}`]; // (Steam's public store CDN, as steamart.js)
@@ -29,6 +29,21 @@ async function save(id, buf, ext) {
   await fs.promises.writeFile(tmp, buf); clear(id); await fs.promises.rename(tmp, dest); return dest;
 }
 
+// (Linux) the store's own cover of a game, downloaded once and used while no cover was chosen: Epic's box art (legendary's
+// store details), the cover Heroic shows for a game added there. data\pc-covers-auto\<game id>.<ext>; the address it came
+// from is kept beside it, so a cover Heroic or Epic changes is fetched again.
+function autoCover(id) { const b = path.join(autoDir(), safeId(id)); for (const e of EXTS) if (isFile(b + '.' + e)) return b + '.' + e; return null; }
+const autoFrom = id => { try { return fs.readFileSync(path.join(autoDir(), safeId(id) + '.from'), 'utf8'); } catch { return ''; } };
+async function fetchAuto(id, url) {
+  id = String(id); if (!url || !/^https:\/\//.test(url)) return null;
+  if (autoCover(id) && autoFrom(id) === url) return autoCover(id);
+  const buf = await o.fetchImage(url); if (!buf) return null;
+  fs.mkdirSync(autoDir(), { recursive: true });
+  const b = path.join(autoDir(), safeId(id)), dest = b + '.' + extOf(url, buf);
+  for (const e of EXTS) { try { fs.unlinkSync(b + '.' + e); } catch {} }
+  await fs.promises.writeFile(dest + '.tmp', buf); await fs.promises.rename(dest + '.tmp', dest); await fs.promises.writeFile(b + '.from', url);
+  return dest;
+}
 // a thumbnail, fetched once into the cache (three at a time); null when it couldn't be fetched
 let slots = 3; const waiting = [];
 async function slot(fn) { if (slots > 0) slots--; else await new Promise(r => waiting.push(r)); try { return await fn(); } finally { const n = waiting.shift(); if (n) n(); else slots++; } }
@@ -79,4 +94,4 @@ async function own(id, file) {
   return save(String(id), await fs.promises.readFile(file), ext);
 }
 
-module.exports = { init, cover, options, use, own, reset: id => clear(String(id)) };
+module.exports = { init, cover, autoCover, fetchAuto, options, use, own, reset: id => clear(String(id)) };

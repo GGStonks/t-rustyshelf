@@ -797,3 +797,19 @@ body.pad-input .d-adv summary.pad-focus{border-radius:8px;width:max-content;padd
 #app.note-open .hints{opacity:0;transition:opacity .2s}
 html.reduce-motion .note-card{transition:none}
 .note-card{z-index:400} /* (inside #app: over the shelf, its theme layers and the hint bar; Settings opens over it) */
+/* The lower bar's Exit (held 3 s): its card in the middle of the screen over a blurred shelf, a ring that fills while held */
+.holdexit{backdrop-filter:blur(14px) saturate(.8);-webkit-backdrop-filter:blur(14px) saturate(.8)}
+.holdexit .bp-card{width:min(380px,88vw);display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px;padding:26px 24px 18px;overflow:visible}
+.holdexit .bp-title{padding:0}
+.holdexit .bp-game{padding:6px 0 2px}
+.he-ring{width:132px;height:132px;margin:14px 0 6px;filter:drop-shadow(0 0 18px var(--sel-glow))}
+.he-ring circle{fill:none;stroke-width:7}
+.he-ring .bg{stroke:rgba(255,255,255,.1)}
+.he-ring .fg{stroke:var(--ink);stroke-linecap:round;stroke-dasharray:326.73;stroke-dashoffset:326.73;transform:rotate(-90deg);transform-origin:60px 60px;transition:stroke-dashoffset .2s ease-out}
+.holdexit.go .he-ring .fg{transition:stroke-dashoffset 3s linear;stroke-dashoffset:0}
+.he-pow{fill:none;stroke:var(--ink-dim);stroke-width:6;stroke-linecap:round}
+.holdexit.go .he-pow{stroke:var(--ink);transition:stroke 3s linear}
+.hint-exit{touch-action:none;user-select:none}
+.hint-exit:active{background:rgba(255,255,255,.16)}
+/* Box art → PC games: a game still on a made-up case is marked, like the Art Studio's missing covers */
+.pcgallery .cp-tile.made span{color:#ffcf6e}

@@ -600,6 +600,8 @@ async function buildLibrary() {
   const pc = cfg.pc || {}, epic = [], mine = [];
   // (Linux: the games legendary installed, Heroic's included; they play through Wine / Proton, main/linuxpc.js)
   if (pc.epic !== false) try { epic.push(...(linux.isLinux ? linuxpc.epicGames() : pcgames.epicGames())); } catch (e) { log('Epic library', e.message); }
+  // (Linux) the games added to Heroic by hand (its "Add game"), on the PC shelf like its Epic games
+  if (linux.isLinux && pc.heroic !== false) try { epic.push(...linuxpc.heroicSideload()); } catch (e) { log('Heroic library', e.message); }
   // (beta.7) GOG Galaxy, Ubisoft Connect, the EA app and Xbox / Game Pass join the PC shelf too, like Epic (store games)
   try { epic.push(...await pcgames.storeGames(pc)); } catch (e) { log('PC stores', e.message); }
   if (pc.quiver !== false) try { mine.push(...pcgames.quiverGames(pc.quiverPath)); } catch (e) { log('Quiver library', e.message); }
@@ -608,9 +610,14 @@ async function buildLibrary() {
   pcgames.remember([...epic, ...mine]);
   // (Steam art by title only for Epic's store games: a recomp or a program added by hand often shares its name with an
   // unrelated Steam game, "Quarantine" got a puzzle game's cover; they keep the made-up case)
+  // (artFrom: where the front comes from, for Settings → Box art → PC games: the player's pick, the store's own box art
+  // (Epic's, Heroic's), Steam's, or none: a made-up case)
   const pcGame = g => { const sid = STORE_SRC.has(g.source) ? pcgames.steamIdOf(g.title) : null, l = sid ? steamart.local(sid) : {};
-    return { kind: 'steam', source: g.source, id: g.id, title: g.title, ...(sid ? { info: steamart.gameInfo(sid) } : {}), art: { front: fileUrl(pccovers.cover(g.id) || l.front), hero: fileUrl(l.hero), icon: g.icon || undefined } }; };
+    const chosen = pccovers.cover(g.id), auto = !chosen && pccovers.autoCover(g.id), front = chosen || auto || l.front;
+    return { kind: 'steam', source: g.source, id: g.id, title: g.title, ...(sid ? { info: steamart.gameInfo(sid) } : {}), artFrom: chosen ? 'yours' : auto ? 'store' : l.front ? 'steam' : '', art: { front: fileUrl(front), hero: fileUrl(l.hero), icon: g.icon || undefined } }; };
+  pcAutoCovers([...epic, ...mine]);
   if (epic.length) pcShelf = pcShelf.concat(epic.map(pcGame)).sort((a, b) => String(a.title).localeCompare(String(b.title), undefined, { sensitivity: 'base' }));
+  pcShelf.forEach(g => { if (!g.source && g.artFrom == null) g.artFrom = g.art && g.art.front ? (pccovers.cover(g.id) ? 'yours' : 'steam') : ''; }); // (Steam's own games)
   if (pcShelf.length) shelves.push({ id: 'pc', kind: 'steam', name: 'PC', games: pcShelf });
   if (mine.length) shelves.push({ id: 'custom', kind: 'steam', name: 'Custom', games: mine.map(pcGame).sort((a, b) => String(a.title).localeCompare(String(b.title), undefined, { sensitivity: 'base' })) });
   const apps = [];
@@ -1458,7 +1465,7 @@ handle('launch:steam', ({ appid }) => launcher.launchSteam(appid));
 handle('launch:pc', async ({ id }) => {
   const g = pcgames.byId(id); if (!g) throw new Error("That game isn't on the shelf any more. The shelf is refreshing; try again in a moment.");
   // (Linux) Epic's games and Windows programs play through Wine / Proton, started by Boxshelf itself
-  if (linux.isLinux && (g.source === 'epic' || linuxpc.isWindowsProgram(g.exe))) return launchLinuxPc(g);
+  if (linux.isLinux && (g.source === 'epic' || g.source === 'heroic' || linuxpc.isWindowsProgram(g.exe))) return launchLinuxPc(g);
   // through its store's launcher (Epic, and from beta.7 Ubisoft Connect and the EA app: their sign-in, cloud saves, overlay)
   if (g.uri && /^(com\.epicgames\.launcher|uplay|origin2):\/\//i.test(g.uri)) { busyCheck(); log('PC launch:', g.source, g.title); return shell.openExternal(g.uri).then(() => ({ external: true })); }
   // (beta.7) an Xbox / Game Pass game is a Windows app: started as one (its package family and app id, from pcgames.xboxGames)
@@ -1472,6 +1479,19 @@ handle('launch:pc', async ({ id }) => {
   watchPad({ mouse: false, appPid: r.pid, fullscreenKey: null, home: true });
   return { ...r, cover: coverWhileStarting(10) };
 });
+// (Linux) the store covers (Epic's box art, Heroic's cover for a game added there) not downloaded yet: fetched in the
+// background, three at a time, then the shelf refreshes once
+let pcAutoBusy = false;
+async function pcAutoCovers(games) {
+  const want = games.filter(g => g.coverUrl && !pccovers.cover(g.id)); if (!want.length || pcAutoBusy) return;
+  pcAutoBusy = true; let got = 0;
+  try { let i = 0; await Promise.all([0, 1, 2].map(async () => { while (i < want.length) { const g = want[i++]; const had = pccovers.autoCover(g.id);
+      try { const f = await pccovers.fetchAuto(g.id, g.coverUrl); if (f && f !== had) got++; } catch (e) { log('PC store cover', g.title, e.message); } } }));
+  } finally { pcAutoBusy = false; if (got) { log('PC store covers:', got); pcCoverChanged(); } }
+}
+// (Linux) a game's own output (umu-run, Proton, the game) goes to data/logs/last-pc-game.log, the last one only: a game that
+// shows nothing can then be looked into
+const pcGameLog = () => { try { const d = path.join(app.getPath('userData'), 'logs'); fs.mkdirSync(d, { recursive: true }); return path.join(d, 'last-pc-game.log'); } catch { return ''; } };
 // (Linux) a Windows game (Epic's, or a program added by hand) through Wine / Proton. Epic's: legendary gives the program and
 // Epic's sign-in arguments, and the Wine settings Heroic keeps for the game (its runner, prefix, environment) are used when
 // there are any; otherwise the runner chosen in Settings → PC games and a prefix of the game's own
@@ -1491,21 +1511,30 @@ async function launchLinuxPc(g) {
       else {
         const h = linuxpc.heroicGame(g.appName) || {};
         runner = (pc.runner ? null : h.runner) || linuxpc.pickRunner(pc.runner, list); prefix = h.prefix || linuxpc.prefixFor(g.id, pc.prefixDir);
-        env = { ...(h.env || {}), ...info.env }; store = 'egs'; gameId = (await linuxpc.umuId('egs', g.appName)) || undefined;
+        env = { ...linuxpc.protonOptions(h.settings, g.title), ...(h.env || {}), ...info.env }; store = 'egs'; gameId = (await linuxpc.umuId('egs', g.appName)) || undefined;
         spec = { exe: info.exe, args: info.args, cwd: info.cwd };
       }
+    } else if (g.source === 'heroic') {
+      // a game added to Heroic: its Heroic settings (Wine / Proton, prefix, variables), from the folder Heroic starts it in
+      if (!paths.isFile(g.exe)) throw new Error(`${g.title} isn't at ${g.exe} any more. Check it in Heroic.`);
+      const h = linuxpc.heroicGame(g.appName) || {};
+      if (g.platform !== 'Windows') spec = { native: true, exe: g.exe, args: [], cwd: g.dir, env: h.env || {} };
+      else { runner = (pc.runner ? null : h.runner) || linuxpc.pickRunner(pc.runner, list); prefix = h.prefix || linuxpc.prefixFor(g.id, pc.prefixDir);
+        env = { ...linuxpc.protonOptions(h.settings, g.title), ...(h.env || {}) }; spec = { exe: g.exe, args: [], cwd: g.dir }; }
     } else {
       if (!paths.isFile(g.exe)) throw new Error(`${g.title} isn't at ${g.exe} any more. Remove it in Settings → Custom games and add it again.`);
       runner = linuxpc.pickRunner(g.runner || pc.runner, list); prefix = linuxpc.prefixFor(g.id, pc.prefixDir);
+      env = linuxpc.protonOptions(null, g.title);
       spec = { exe: g.exe, args: launcher.buildArgs(g.args || '', ''), cwd: path.dirname(g.exe) };
     }
+    if (runner && runner.kind === 'proton' && linuxpc.umuNeedsRuntime()) notice = "First start with Proton: its runtime is downloading (about 700 MB), so the game takes a minute or two to appear.";
   } finally { launching = false; }
-  const c = spec.native ? { cmd: spec.exe, args: spec.args, cwd: spec.cwd, env: { ...process.env, ...spec.env }, how: 'native' } : linuxpc.windowsCommand({ ...spec, runner, prefix, env, gameId, store });
+  const c = spec.native ? { cmd: spec.exe, args: spec.args, cwd: spec.cwd, env: linuxpc.cleanEnv(spec.env), how: 'native' } : linuxpc.windowsCommand({ ...spec, runner, prefix, env, gameId, store });
   const done = info => { if (runner) linuxpc.endPrefix(runner, prefix); onExit(info); };
-  const r = launcher.launchCommand(c.cmd, c.args, done, { env: c.env, cwd: c.cwd });
+  const r = launcher.launchCommand(c.cmd, c.args, done, { env: c.env, cwd: c.cwd, log: pcGameLog() });
   runKind = 'app'; pendingPower = null; linuxpad.begin(() => closeGame()); // (hold Select + Start to close it)
   log('PC launch:', g.source, g.title, 'with', c.how, prefix ? '| prefix ' + prefix.replace(require('os').homedir(), '~') : '');
-  if (cfg.ui.homeMenu !== false) homemenu.begin({ systemId: 'pc', exe: spec.exe, systemName: g.source === 'epic' ? 'Epic Games' : 'Custom', title: g.title, hotkeys: {} });
+  if (cfg.ui.homeMenu !== false) homemenu.begin({ systemId: 'pc', exe: spec.exe, systemName: g.source === 'epic' ? 'Epic Games' : g.source === 'heroic' ? 'Heroic' : 'Custom', title: g.title, hotkeys: {} });
   watchPad({ mouse: false, appPid: r.pid, fullscreenKey: null, home: true });
   return { ...r, cover: coverWhileStarting(20), ...(notice ? { notice } : {}) }; // (Proton's first start in a new prefix takes a while; notice: shown on the shelf)
 }
@@ -1513,7 +1542,7 @@ async function launchLinuxPc(g) {
 const legendaryOf = () => { const b = linuxpc.legendaryBin((cfg.pc || {}).legendaryPath); if (!b) throw new Error('legendary not found. Install Heroic Games Launcher, or choose legendary in Settings → PC games.'); return b; };
 handle('pc:linux', () => { if (!linux.isLinux) return null; const pc = cfg.pc || {}, list = linuxpc.runners(), pick = linuxpc.pickRunner(pc.runner, list), lc = linuxpc.legendaryConfig();
   return { runners: list.map(r => ({ id: r.id, name: r.name, kind: r.kind })), runner: pick ? pick.id : '', umu: !!linuxpc.umuRun(), prefixDir: linuxpc.prefixRoot(pc.prefixDir),
-    legendary: !!linuxpc.legendaryBin(pc.legendaryPath), epicAccount: linuxpc.epicAccount(), epicShared: lc.shared, epicDir: linuxpc.epicInstallDir(pc.epicDir), job: linuxpc.epicJob() }; });
+    legendary: !!linuxpc.legendaryBin(pc.legendaryPath), epicAccount: linuxpc.epicAccount(), heroic: (() => { try { return linuxpc.heroicSideload().length; } catch { return 0; } })(), heroicDir: linuxpc.heroicDir(), epicShared: lc.shared, epicDir: linuxpc.epicInstallDir(pc.epicDir), job: linuxpc.epicJob() }; });
 // Epic's own sign-in page in a window of its own (a session that keeps nothing); the code it ends on goes to legendary
 const EPIC_LOGIN = 'https://www.epicgames.com/id/login?redirectUrl=' + encodeURIComponent('https://www.epicgames.com/id/api/redirect?clientId=34a02cf8f4414e29b15921876da36f9a&responseType=code');
 const EPIC_HOSTS = /^https:\/\/([\w-]+\.)*(epicgames\.com|unrealengine\.com|google\.com|googleusercontent\.com|gstatic\.com|apple\.com|facebook\.com|xbox\.com|live\.com|microsoftonline\.com|playstation\.com|sony\.com|steampowered\.com|steamcommunity\.com|nintendo\.com|nintendo\.net|lego\.com|hcaptcha\.com|arkoselabs\.com|recaptcha\.net)(\/|$)/i;

@@ -15,13 +15,16 @@ function buildArgs(template, rom) {
   return out.filter(a => a !== '');
 }
 
-function start(exe, args, onExit, env, cwd) { // env: the emulator's own environment (PS5: the KytyJets preset); else Boxshelf's. cwd: else the program's folder
+function start(exe, args, onExit, env, cwd, logFile) { // env: the emulator's own environment (PS5: the KytyJets preset); else Boxshelf's. cwd: else the program's folder
   exe = exe && expand(String(exe).trim().replace(/^"(.*)"$/, '$1')); // same rules as the Settings check: %VAR%, {app}, pasted "quotes"
   if (!exe || !isFile(exe)) throw new Error(`Can't find ${exe || 'the program'}. Check its path in Settings.`);
   if (running) throw new Error('Something is already running. Close it first.');
   // detached: on Windows a normal child sits in Node's kill-on-close job object, so a Boxshelf crash or update restart
   // would take the emulator (and its unsaved game) with it. Not unref'd: the 'exit' event must still reach us.
-  const child = spawn(exe, args, Object.assign({ cwd: cwd || path.dirname(exe), windowsHide: false, stdio: 'ignore', detached: true }, env ? { env } : {}));
+  // logFile: the program's output goes there (Linux PC games), else nowhere
+  let fd = null; if (logFile) { try { fd = require('fs').openSync(logFile, 'w'); } catch { fd = null; } }
+  let child; try { child = spawn(exe, args, Object.assign({ cwd: cwd || path.dirname(exe), windowsHide: false, stdio: fd != null ? ['ignore', fd, fd] : 'ignore', detached: true }, env ? { env } : {})); }
+  finally { if (fd != null) { try { require('fs').closeSync(fd); } catch {} } }
   running = child;
   const started = Date.now(); let done = false, spawned = false;
   const finish = info => { if (done) return; done = true; running = null; onExit({ ...info, ms: Date.now() - started }); };
@@ -42,7 +45,7 @@ function launchEmulator(sysCfg, onExit) {
 
 function launchApp(exe, onExit, args) { return start(exe, Array.isArray(args) ? args : [], onExit); }
 // (Linux) a Windows game through Wine / Proton: the runner (umu-run, proton, wine) with the game's own folder and environment
-function launchCommand(cmd, args, onExit, { env, cwd } = {}) { return start(cmd, Array.isArray(args) ? args : [], onExit, env || null, cwd); }
+function launchCommand(cmd, args, onExit, { env, cwd, log } = {}) { return start(cmd, Array.isArray(args) ? args : [], onExit, env || null, cwd, log); }
 
 function launchSteam(appid) {
   if (!/^\d+$/.test(String(appid))) throw new Error('Unknown Steam game.');

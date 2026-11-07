@@ -81,9 +81,7 @@ const prefixFor = (id, custom) => path.join(prefixRoot(custom), slug(id));
 function windowsCommand({ exe, args = [], cwd, runner, prefix, env = {}, gameId, store }) {
   if (!runner) throw new Error('No Wine or Proton found. Install Wine, or a Proton build (GE-Proton) with Steam, Heroic or ProtonUp-Qt.');
   try { fs.mkdirSync(prefix, { recursive: true }); } catch (e) { throw new Error(`Can't make the Wine prefix ${prefix}: ${e.message}`); }
-  const base = { ...process.env, ...env };
-  delete base.APPDIR; delete base.APPIMAGE; delete base.ARGV0; delete base.OWD; // (an AppImage's own: not for the game)
-  if (process.env.APPDIR && base.LD_LIBRARY_PATH) base.LD_LIBRARY_PATH = base.LD_LIBRARY_PATH.split(':').filter(p => !p.startsWith(process.env.APPDIR)).join(':');
+  const base = cleanEnv(env);
   const dir = cwd || path.dirname(exe);
   if (runner.kind === 'proton') {
     const pe = { ...base, WINEPREFIX: prefix, STEAM_COMPAT_DATA_PATH: prefix, STEAM_COMPAT_CLIENT_INSTALL_PATH: steamRoot() || prefix, STEAM_COMPAT_INSTALL_PATH: dir, PROTONPATH: runner.path };
@@ -93,6 +91,35 @@ function windowsCommand({ exe, args = [], cwd, runner, prefix, env = {}, gameId,
   }
   return { cmd: runner.path, args: [exe, ...args], cwd: dir, env: { ...base, WINEPREFIX: prefix }, how: runner.name };
 }
+// Boxshelf's environment for a game, without what belongs to Boxshelf's own AppImage (its folder on the library and program
+// paths: a game would load Boxshelf's copies of GTK, libnotify…), then the game's own variables
+function cleanEnv(extra = {}) {
+  const e = { ...process.env }, own = process.env.APPDIR;
+  for (const k of ['APPDIR', 'APPIMAGE', 'ARGV0', 'OWD']) delete e[k];
+  for (const k of ['LD_LIBRARY_PATH', 'PATH', 'XDG_DATA_DIRS', 'GSETTINGS_SCHEMA_DIR']) if (own && e[k]) { e[k] = e[k].split(':').filter(p => p && !p.startsWith(own)).join(':'); if (!e[k]) delete e[k]; }
+  return { ...e, ...extra };
+}
+// The Proton options Heroic sets for a game, from its Heroic settings (GamesConfig), or Heroic's defaults when it has none:
+// the anti-cheat runtimes (Easy Anti-Cheat and BattlEye: without them a game such as Rocket League waits on an empty Wine
+// window), NVAPI (DLSS / Reflex on NVIDIA), fsync / esync, Wayland, HDR, WoW64, the FPS counter; LD_PRELOAD emptied (the
+// Steam overlay's library from the session would be loaded into the game) and Steam's app ids at 0, as Heroic does.
+const runtimeDir = (heroicName, steamName) => [path.join(heroicDir() || path.join(H(), '.config', 'heroic'), 'tools', 'runtimes', heroicName), ...STEAM_COMMON().map(c => path.join(c, steamName))].find(isDir) || '';
+function protonOptions(g, title) {
+  g = g && typeof g === 'object' ? g : {}; const on = (k, d) => g[k] === undefined || g[k] === null ? d : !!g[k];
+  const e = { LD_PRELOAD: '', STEAM_COMPAT_APP_ID: '0', SteamAppId: '0', SteamGameId: 'heroic-' + String(title || 'game').toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 60) };
+  if (on('eacRuntime', true)) { const r = runtimeDir('eac_runtime', 'Proton EasyAntiCheat Runtime'); if (r) e.PROTON_EAC_RUNTIME = r; }
+  if (on('battlEyeRuntime', true)) { const r = runtimeDir('battleye_runtime', 'Proton BattlEye Runtime'); if (r) e.PROTON_BATTLEYE_RUNTIME = r; }
+  if (on('autoInstallDxvkNvapi', true)) { e.PROTON_ENABLE_NVAPI = '1'; e.DXVK_NVAPI_ALLOW_OTHER_DRIVERS = '1'; }
+  if (!on('enableFsync', true)) e.PROTON_NO_FSYNC = '1';
+  if (!on('enableEsync', true)) e.PROTON_NO_ESYNC = '1';
+  if (on('enableWineWayland', false)) e.PROTON_ENABLE_WAYLAND = '1';
+  if (on('enableHDR', false)) e.PROTON_ENABLE_HDR = '1';
+  if (on('enableWoW64', false)) e.PROTON_USE_WOW64 = '1';
+  if (on('showFps', false)) e.DXVK_HUD = 'fps';
+  return e;
+}
+// umu-run's Steam Linux Runtime isn't there yet: the first Proton start downloads it (about 700 MB) before the game shows
+const umuNeedsRuntime = () => { if (!umuRun()) return false; try { return !fs.readdirSync(path.join(H(), '.local', 'share', 'umu'), { withFileTypes: true }).some(e => e.isDirectory() && /^steamrt/.test(e.name)); } catch { return true; } };
 // end whatever is left in a prefix (wineserver) once its game has closed or been forced
 function endPrefix(runner, prefix) {
   if (!runner || !prefix) return;
@@ -125,7 +152,22 @@ function heroicGame(appName) {
   const d = heroicDir(); if (!d || !/^[\w.-]{1,120}$/.test(appName)) return null;
   const j = readJson(path.join(d, 'GamesConfig', appName + '.json')), g = j && j[appName]; if (!g) return null;
   const env = {}; for (const e of Array.isArray(g.enviromentOptions) ? g.enviromentOptions : []) if (e && /^[A-Za-z_][A-Za-z0-9_]{0,80}$/.test(String(e.key || ''))) env[e.key] = String(e.value ?? '').replace(/^"(.*)"$/, '$1').slice(0, 2000);
-  return { runner: runnerFromHeroic(g.wineVersion), prefix: typeof g.winePrefix === 'string' && path.isAbsolute(g.winePrefix) ? g.winePrefix : '', env };
+  return { runner: runnerFromHeroic(g.wineVersion), prefix: typeof g.winePrefix === 'string' && path.isAbsolute(g.winePrefix) ? g.winePrefix : '', env, settings: g };
+}
+// Heroic's sideloaded games (its "Add game": a Windows program or a Linux one, a script, an AppImage), read only. Each
+// keeps its Heroic settings (heroicGame by its app name) and its cover (art_cover, usually SteamGridDB's).
+function heroicSideload() {
+  const d = heroicDir(), j = d && readJson(path.join(d, 'sideload_apps', 'library.json')), out = [];
+  for (const g of j && Array.isArray(j.games) ? j.games.slice(0, 2000) : []) {
+    if (!g || typeof g !== 'object' || g.is_installed === false || !/^[\w.-]{1,120}$/.test(String(g.app_name || ''))) continue;
+    const inst = g.install && typeof g.install === 'object' ? g.install : {}, exe = String(inst.executable || '');
+    if (!exe || !path.isAbsolute(exe) || !isFile(exe)) continue; // (its program is gone, or on a drive that isn't here)
+    const folder = typeof g.folder_name === 'string' && path.isAbsolute(g.folder_name) && isDir(g.folder_name) ? g.folder_name : path.dirname(exe);
+    const cover = [g.art_cover, g.art_square].find(u => typeof u === 'string' && /^https:\/\//.test(u)) || '';
+    out.push({ id: 'heroic-' + slug(g.app_name), source: 'heroic', title: String(g.title || path.basename(exe)).trim().slice(0, 120), appName: g.app_name, exe, dir: folder,
+      platform: /^win/i.test(String(inst.platform || '')) || isWindowsProgram(exe) ? 'Windows' : 'linux', coverUrl: cover });
+  }
+  return out.sort((a, b) => a.title.localeCompare(b.title));
 }
 // where Heroic installs games (its Settings → Default install path), when it's a folder that can be written
 function heroicInstallDir() {
@@ -180,9 +222,16 @@ function epicGames() {
   for (const [app, g] of Object.entries(j).slice(0, 2000)) {
     if (!g || typeof g !== 'object' || g.is_dlc || !/^[\w.-]{1,120}$/.test(app)) continue;
     const dir = String(g.install_path || ''); if (!dir || !isDir(dir)) continue;
-    out.push({ id: 'epic-' + slug(app), source: 'epic', title: String(g.title || app).trim().slice(0, 120), appName: app, dir, exe: g.executable ? path.join(dir, String(g.executable)) : '', platform: String(g.platform || 'Windows') });
+    out.push({ id: 'epic-' + slug(app), source: 'epic', title: String(g.title || app).trim().slice(0, 120), appName: app, dir, exe: g.executable ? path.join(dir, String(g.executable)) : '', platform: String(g.platform || 'Windows'), coverUrl: epicCover(app) });
   }
   return out.sort((a, b) => a.title.localeCompare(b.title));
+}
+// Epic's own box art for a game (legendary keeps each game's store details in metadata/<app>.json): the tall box, else the
+// wide one; '' when there's none
+function epicCover(app) {
+  const m = readJson(path.join(legendaryConfig().dir, 'metadata', app + '.json')), imgs = m && m.metadata && Array.isArray(m.metadata.keyImages) ? m.metadata.keyImages : [];
+  const pick = t => imgs.find(i => i && i.type === t && typeof i.url === 'string' && /^https:\/\//.test(i.url));
+  const i = pick('DieselGameBoxTall') || pick('OfferImageTall') || pick('DieselGameBox'); return i ? i.url : '';
 }
 // sign in with the code from Epic's login page (main.js shows it and reads the code); { ok, name } or { error }
 async function epicSignIn(bin, code) {
@@ -256,5 +305,5 @@ async function epicLaunchInfo(bin, appName) {
   return { exe: path.join(String(j.game_directory), String(j.game_executable)), args: [...strs(j.game_parameters), ...strs(j.egl_parameters), ...strs(j.user_parameters)], cwd: String(j.working_directory || j.game_directory), env, offline: off, outdated };
 }
 
-module.exports = { init, runners, pickRunner, runnerFromHeroic, windowsCommand, endPrefix, isWindowsProgram, prefixFor, prefixRoot, umuRun, umuId,
+module.exports = { init, runners, pickRunner, runnerFromHeroic, windowsCommand, cleanEnv, protonOptions, umuNeedsRuntime, endPrefix, isWindowsProgram, prefixFor, prefixRoot, umuRun, umuId, heroicSideload, epicCover,
   heroicDir, heroicGame, legendaryBin, legendaryConfig, epicAccount, epicGames, epicSignIn, epicSignOut, epicLibrary, epicInstall, epicCancel, epicUninstall, epicJob, epicInstallDir, epicLaunchInfo };

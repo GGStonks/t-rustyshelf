@@ -777,6 +777,10 @@ function linuxPcRows(){if(!onLinux()||!api.pcLinux)return[];lpcLoad();const L=lp
   rows.push(M("Epic library","epiclib","Install, update and uninstall the games on your Epic account.","Every game on your Epic account. Installed games are on the PC shelf; installs and updates run in the background, one at a time.",[{t:"dyn",fn:epicLibRows}],
     {when:()=>!!L.epicAccount,keys:"epic library install update uninstall download games",sub:()=>j&&j.state==="installing"?{text:`${j.update?"Updating":"Installing"} ${j.title} · ${epicPct(j)}`}:{text:"Install, update and uninstall"}}));
   rows.push(F("Epic install folder","pc.epicDir","folder","Where new Epic games are installed. Empty: Heroic's install folder when it has one, else Boxshelf's own Epic Games folder.",{ph:L.epicDir||"",want:"dir",pickTitle:"Choose where Epic games install",when:()=>!!L.epicAccount,keys:"epic install folder path"}));
+  rows.push(H("Heroic Games Launcher"));
+  rows.push(T("Show Heroic's games","pc.heroic",true,"The games added to Heroic by hand (its Add game: Windows programs, Linux games, scripts) join the PC shelf. Boxshelf starts each one with Heroic's own settings for it: its Wine / Proton, prefix and variables.",
+    {rescan:true,keys:"heroic sideload added games launcher",sub:()=>lpc==null?{text:"Looking…"}:L.heroicDir?{text:L.heroic?`${L.heroic} game${L.heroic===1?"":"s"} added in Heroic`:"None added in Heroic"}:{text:"Heroic isn't set up here"}}));
+  if(window.Shelf&&Shelf.pcGallery)rows.push(A("PC game covers","Open","Every PC game's cover and where it comes from (your pick, Epic's or Heroic's box art, Steam's, or a made-up case). Pick a game to change it. Also in Box art & manuals.",()=>{close();Shelf.pcGallery()},{ns:true,keys:"pc covers box art front gallery"}));
   return rows}
 function epicLibRows(){epicLibLoad();const rows=[],j=lpc&&lpc.job,busy=j&&j.state==="installing";
   if(busy)rows.push(A(`${j.update?"Updating":"Installing"} ${j.title}`,"Cancel","It keeps going while you play or browse the shelf. Cancel stops it; legendary picks up where it stopped next time.",()=>twice("epiccancel",async()=>{await api.epicCancel();toast("Stopped")},"Press again to stop it"),{ns:true,ask:"epiccancel",sub:()=>({text:epicPct(lpc&&lpc.job||j)})}));
@@ -1409,7 +1413,14 @@ function artNoCover(){if(!sInfo){if(api.artStudio&&isOpen)loadStudio();return 0}
 function artSummary(){if(!api.artStudio)return "";if(!sInfo){loadStudio();return ""}const C=sInfo.consoles,t=C.reduce((a,c)=>a+(c.total||0),0),n=artNoCover();
   return !t?"":n?`${t-n} of ${t} games have a cover · ${n} without`:`All ${t} games have a cover`}
 /* the Art page's rows: one per console */
-function studioRows(){if(!api.artStudio)return [];
+// the Art Studio's list ends with the PC games (Steam, Epic, Heroic, custom): their covers in a gallery of their own (app.js
+// pcGallery), each with where its cover comes from; consoles first, as before
+function studioRows(){const L=studioRows0(),S=window.Shelf,n=S&&S.pcArtCount?S.pcArtCount():{total:0,made:0};
+  if(!n.total||!S.pcGallery)return L;
+  return L.filter(r=>!(r.dim&&/No games on any shelf/.test(r.label))).concat([{t:"action",label:"PC games",btn:n.made?`${n.made} with a made-up case`:`${n.total} game${n.total===1?"":"s"}`,warnBtn:()=>n.made>0,ns:true,
+    keys:"art studio box art covers pc games steam epic heroic custom front",info:"Every PC game's cover as the shelf shows it, and where it comes from: your pick, the store's box art (Epic, Heroic), Steam's art, or a made-up case. Pick a game to change its cover.",
+    sub:()=>({text:"Steam, Epic, Heroic and custom games"}),run:()=>{close();S.pcGallery()}}])}
+function studioRows0(){if(!api.artStudio)return [];
   if(!sInfo)return [{t:"action",label:"Loading your consoles…",btn:"",info:"Art Studio: how each console's box art looks.",run:()=>{},ns:true,dim:true}];
   if(sInfo.err&&!sInfo.consoles.length)return [{t:"action",label:"Couldn't load the Art Studio",btn:"Try again",info:sInfo.err,run:()=>{sInfo=null;loadStudio()},ns:true}];
   if(!sInfo.consoles.length)return [{t:"action",label:"No games on any shelf yet",btn:"",info:"Add a games folder for a console (Consoles) and it shows up here.",run:()=>{},ns:true,dim:true}];

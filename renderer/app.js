@@ -1199,15 +1199,53 @@ function cpMove(dx,dy){if(!cp||!cp.tiles.length)return;const n=cp.tiles.length,j
 async function cpChoose(){if(!cp||cp.busy)return;const it=cp.items[cp.i],g=cp.g,term=cp.term,B=cp.batch;if(!it)return;cp.busy=true;
   const next=()=>{if(cp)cp.advance=true}; // (in a batch: this game is settled, on to the next one)
   try{
+    if(it.act==="game"){cp.busy=false;galleryBack=true;cpDone();play_("open");setTimeout(()=>pcCoverOpen(it.g,"",null),300);return} // (the PC games gallery: this game's picker)
     if(it.act==="skip"){next();cpDone();play_("tick",{dir:1});return}
-    if(it.act==="own"){const r=await api.pcCoverOwn(g.id);if(r&&r.ok){if(B)B.done++;next();cpDone();play_("toast");if(!B)toast(`New cover for ${g.title}`)}else if(cp)cp.busy=false;return}
-    if(it.act==="search"){cpDone();play_("panel");Setup.open({page:"coversearch",id:g.id,title:g.title,term:term||""});return}
-    if(it.act==="sgdb"){cpDone();play_("panel");cpReturn={id:g.id,term:term||""};Setup.open({page:"steamgriddb"});return} // (beta.9) the key's page; the picker again when Settings closes
-    if(it.act==="reset"){await api.pcCoverReset(g.id);next();cpDone();play_("toast");if(!B)toast(`${g.title} is back on its automatic cover`);return}
+    if(it.act==="own"){const r=await api.pcCoverOwn(g.id);if(r&&r.ok){if(B)B.done++;next();cp.changed=true;cpDone();play_("toast");if(!B)toast(`New cover for ${g.title}`)}else if(cp)cp.busy=false;return}
+    if(it.act==="search"){galleryBack=false;cpDone();play_("panel");Setup.open({page:"coversearch",id:g.id,title:g.title,term:term||""});return}
+    if(it.act==="sgdb"){galleryBack=false;cpDone();play_("panel");cpReturn={id:g.id,term:term||""};Setup.open({page:"steamgriddb"});return} // (beta.9) the key's page; the picker again when Settings closes
+    if(it.act==="reset"){await api.pcCoverReset(g.id);next();cp.changed=true;cpDone();play_("toast");if(!B)toast(`${g.title} is back on its automatic cover`);return}
     if(it.key==="current"){next();cpDone();return}
-    cp.note.textContent="Downloading the cover…";await api.pcCoverUse(g.id,it.key);if(B)B.done++;next();cpDone();play_("toast");if(!B)toast(`New cover for ${g.title}`);
+    cp.note.textContent="Downloading the cover…";await api.pcCoverUse(g.id,it.key);if(B)B.done++;next();cp.changed=true;cpDone();play_("toast");if(!B)toast(`New cover for ${g.title}`);
   }catch(e){if(cp){cp.busy=false;cp.note.textContent=String(e&&e.message||e)}play_("error")}
 }
+/* Settings → Box art & manuals → PC games: every PC game (Steam, Epic, Heroic, custom) with the front it shows now and
+   where that comes from (your pick, the store's box art, Steam's art, or a made-up case), the console Art Studio's view
+   for PC games. A (a click) opens that game's cover picker; when it closes, the gallery comes back */
+let galleryBack=false;
+const pcShelfGames=()=>allShelves.filter(s=>s.id==="pc"||s.id==="custom").flatMap(s=>(s._base||s.items||[]).filter(g=>g.kind==="steam").map(g=>({g,sh:s})));
+const artFromText=g=>g.artFrom==="yours"?"Your pick":g.artFrom==="store"?(g.source==="heroic"?"Heroic's cover":g.source==="epic"?"Epic's box art":"The store's box art"):g.artFrom==="steam"?"Steam's art":"Made-up case";
+function pcArtCount(){const L=pcShelfGames();return {total:L.length,made:L.filter(x=>!x.g.artFrom).length}}
+function pcGallery(){
+  if(!api.pcCoverOptions||cp||bp||(mode!=="browse"&&mode!=="details"))return;
+  const L=pcShelfGames().sort((a,b)=>String(a.g.title).localeCompare(String(b.g.title),undefined,{sensitivity:"base"}));if(!L.length){toast("No PC games on the shelves yet");return}
+  const el=document.createElement("div");el.className="buildpick coverpick pcgallery";
+  const card=document.createElement("div");card.className="bp-card";card.setAttribute("role","dialog");card.setAttribute("aria-label","PC games box art");
+  const t=document.createElement("div");t.className="bp-title";t.textContent="Box art · PC games";
+  const made=L.filter(x=>!x.g.artFrom).length;
+  const sub=document.createElement("div");sub.className="bp-game";sub.textContent=`${L.length} game${L.length===1?"":"s"}${made?` · ${made} with a made-up case`:""}`;
+  const note=document.createElement("div");note.className="cp-note";note.textContent="Each game's cover as the shelf shows it, and where it comes from. Pick one to change it.";
+  const grid=document.createElement("div");grid.className="cp-grid";
+  const f=document.createElement("div");f.className="bp-foot";f.textContent=`${btnWord("a")} change · ${btnWord("back")} back`;
+  card.append(t,sub,note,grid,f);el.append(card);el.addEventListener("click",e=>{if(e.target===el){cpDone();sfx.back()}});document.body.append(el);
+  const items=L.map(({g,sh})=>({act:"game",g,thumb:coverOf(sh,g),label:g.title,sub:`${PC_SRC[g.source]||"Steam"} · ${artFromText(g)}`,made:!g.artFrom}));
+  cp={el,grid,note,g:{id:"",title:""},term:"",items,tiles:[],i:0,prev:mode==="details"?"browse":mode,busy:false,batch:null,advance:false,gallery:true};if(mode==="details")closeDetails(true);mode="cover";
+  cp.tiles=items.map((it,j)=>{const b=document.createElement("button");b.type="button";b.className="cp-tile"+(it.made?" made":"");
+    const im=document.createElement("div");im.className="im";if(it.thumb)im.style.backgroundImage=`url("${String(it.thumb).replace(/"/g,"%22")}")`;
+    const l=document.createElement("b");l.textContent=it.label;const s=document.createElement("span");s.textContent=it.sub;b.append(im,l,s);
+    b.addEventListener("click",()=>{if(cp){cp.i=j;cpRender();cpChoose()}});b.addEventListener("pointerenter",()=>{if(cp&&inputMode==="pointer"){cp.i=j;cpRender()}});grid.append(b);return b});
+  requestAnimationFrame(()=>el.classList.add("on"));sfx.flip();cpRender();
+}
+/* The lower bar's Exit: held for 3 s (mouse, touch, or the X key) it closes Boxshelf. A card in the middle of the screen, over
+   a blurred shelf, fills a ring while it's held; letting go before the end keeps Boxshelf open */
+const EXIT_MS=3000;let hx=null;
+function holdExitStart(){if(hx||(mode!=="browse"&&mode!=="details"))return;
+  const el=document.createElement("div");el.className="buildpick holdexit";
+  el.innerHTML=`<div class="bp-card" role="dialog" aria-label="Exit Boxshelf"><div class="bp-title">Exit Boxshelf</div><svg class="he-ring" viewBox="0 0 120 120" aria-hidden="true"><circle class="bg" cx="60" cy="60" r="52"/><circle class="fg" cx="60" cy="60" r="52"/><path class="he-pow" d="M60 38v22M47 46a20 20 0 1 0 26 0"/></svg><div class="bp-game">Hold for 3 seconds to exit…</div><div class="bp-foot">Let go to stay</div></div>`;
+  document.body.append(el);hx={el,t:setTimeout(holdExitDone,EXIT_MS)};sfx.flip();
+  requestAnimationFrame(()=>{el.classList.add("on");requestAnimationFrame(()=>el.classList.add("go"))})}
+function holdExitCancel(){if(!hx||hx.done)return;const h=hx;hx=null;clearTimeout(h.t);h.el.classList.remove("go","on");setTimeout(()=>h.el.remove(),260);sfx.back()}
+function holdExitDone(){if(!hx)return;hx.done=true;hx.el.querySelector(".bp-game").textContent="See you soon";hx.el.querySelector(".bp-foot").textContent="";play_("toast");setTimeout(()=>{try{api.quit("lower bar: Exit held")}catch{}},350)}
 /* (beta.9) covers for every custom game at once (Recomps, ports, Quiver's games, programs added by hand or from Playnite:
    they never get an automatic cover, since their names often match an unrelated game). One by one in the picker (A uses,
    Skip moves on, B stops), or the best SteamGridDB match for each in one go, with Undo for that run */
@@ -1228,6 +1266,7 @@ async function pcCoverAuto(){if(!api.pcCoverMissing||cp||bp)return {n:0};const L
   coverUndo=done;play_("toast");toast(done.length?`New covers for ${done.length} of ${L.length} game${L.length===1?"":"s"}. Don't like them? Settings → Custom games → Undo`:"SteamGridDB had no covers for these games");return {n:done.length,of:L.length}}
 async function pcCoverUndo(){const L=coverUndo;coverUndo=[];for(const id of L){try{await api.pcCoverReset(id)}catch{}}if(L.length){play_("toast");toast(`${L.length} cover${L.length===1?"":"s"} put back`)}return L.length}
 function cpDone(){if(!cp)return;const c=cp;cp=null;mode=c.prev;c.el.classList.remove("on");setTimeout(()=>c.el.remove(),260)
+  if(c.gallery)galleryBack=false;else if(galleryBack&&!c.batch){galleryBack=false;setTimeout(()=>pcGallery(),c.changed?1500:350)} // (the gallery again, with the new cover once the shelf has it)
   if(c.batch){const b=c.batch;if(c.advance){b.i++;setTimeout(()=>cpBatchOpen(b),320)}else if(b.done)toast(`New covers for ${b.done} game${b.done===1?"":"s"}`)}} // (beta.9: B stops a batch)
 function cpKey(k){if(k==="ArrowLeft")cpMove(-1,0);else if(k==="ArrowRight")cpMove(1,0);else if(k==="ArrowUp")cpMove(0,-1);else if(k==="ArrowDown")cpMove(0,1);
   else if(k==="Enter"||k===" ")cpChoose();else if(k==="Escape"||k==="Backspace"){cpDone();sfx.back()}else return false;return true}
@@ -1602,7 +1641,7 @@ function renderIspHints(){
     if(!rd.open&&isp.state===2&&label==="Hold to play"){b.addEventListener("pointerdown",e=>{e.stopPropagation();holdBegin()});b.addEventListener("pointerup",e=>{e.stopPropagation();holdEnd(false)});b.addEventListener("pointerleave",()=>holdEnd(false))}
     else b.addEventListener("click",e=>{e.stopPropagation();acts[i]()});h.appendChild(b)});
 }
-addEventListener("keyup",e=>{if(e.key==="Enter"){holdEnd(false);musHoldEnd(false)}});
+addEventListener("keyup",e=>{if(e.key==="Enter"){holdEnd(false);musHoldEnd(false)}if(e.key==="x"||e.key==="X")holdExitCancel()});
 function inspectKey(e){
   const k=e.key;setInput("kbd");let handled=true;
   if(rd.open){
@@ -2377,6 +2416,7 @@ const PC_SRC={epic:"Epic Games",quiver:"Quiver",custom:"Custom",gog:"GOG",ubisof
 // (beta.7) the stores whose games are handed to their own launcher (Back returns to the shelf while they run)
 const PC_EXT={epic:"Epic Games Launcher",ubisoft:"Ubisoft Connect",ea:"EA app",xbox:"Xbox app"};
 // (Linux) Epic's games are started by Boxshelf itself, through Wine / Proton (main/linuxpc.js): like any game, not handed over
+PC_SRC.heroic="Heroic";PC_HOW.heroic="Added to Heroic Games Launcher. Boxshelf starts it with Heroic's own settings for it (Wine / Proton and its prefix for a Windows game), like any game.";
 if(window.bsPlatform&&bsPlatform.os==="linux"){delete PC_EXT.epic;PC_HOW.epic="Signed in to Epic through legendary (shared with Heroic when it's set up). Boxshelf starts it through Wine / Proton, with the quit combo like any game.";PC_HOW.custom="Added by you in Settings → Custom games. Windows programs run through Wine / Proton, each in a Wine prefix of its own."}
 // a quick rainbow lick over the tile as each cover flips past
 function flick(el){if(!el)return;el.classList.remove("flick");void el.offsetWidth;el.classList.add("flick");setTimeout(()=>el.classList.remove("flick"),520)}
@@ -3193,6 +3233,11 @@ function renderHints(){pvGuard();
     b.innerHTML=`<span class="keys">${keys}</span>`+(lab?`<span class="lab"></span>`:"")+(usePad&&hold?`<span class="hold"><i>hold</i> </span>`:"");
     if(lab)b.querySelector(".lab").textContent=lab;if(usePad&&hold)b.querySelector(".hold").append(hold);
     b.addEventListener("click",hn.act);h.appendChild(b)});
+  if(mode!=="details"&&api.quit){const b=document.createElement("button");b.type="button";b.className="hint hint-exit";b.title="Hold for 3 seconds to exit Boxshelf";
+    b.innerHTML=`<span class="keys">${usePad?'<span class="g">⏻</span>':'<span class="g">X</span>'}</span><span class="lab">Exit</span>`+(usePad?'<span class="hold"><i>hold</i></span>':"");
+    b.addEventListener("pointerdown",e=>{e.preventDefault();try{b.setPointerCapture(e.pointerId)}catch{}holdExitStart()});
+    for(const ev of ["pointerup","pointercancel","lostpointercapture"])b.addEventListener(ev,()=>holdExitCancel());
+    h.appendChild(b)}
 }
 let lastInputAt=0,yAt=0;
 addEventListener("pointerdown",()=>{wake()},true);addEventListener("wheel",()=>{lastInputAt=performance.now()},{capture:true,passive:true});
@@ -3259,6 +3304,9 @@ addEventListener("keydown",e=>{
   if(mode==="sort"){setInput("kbd");if(sortKey(e.key))e.preventDefault();return}
   if(mode==="build"){setInput("kbd");if(bpKey(e.key))e.preventDefault();return}
   if(mode==="cover"){setInput("kbd");if(cpKey(e.key))e.preventDefault();return}
+  // the lower bar's Exit, held on the keyboard (X on the shelf): the hold card stays while the key is down
+  if(hx){if(e.key==="Escape")holdExitCancel();e.preventDefault();return}
+  if((e.key==="x"||e.key==="X")&&mode==="browse"&&!e.repeat&&!e.ctrlKey&&!e.altKey&&!e.metaKey){setInput("kbd");holdExitStart();e.preventDefault();return}
   if((e.key==="-"||e.key==="_"||e.key==="="||e.key==="+")&&mode!=="inspect"&&mode!=="museum"){setVol(curVol()+(e.key==="-"||e.key==="_"?-.05:.05),true);play_("tick",{dir:1});e.preventDefault();return}
   if(mode==="inspect"){inspectKey(e);return}
   if(mode==="museum"&&musFind.open){const a=document.activeElement,typing=a&&a.tagName==="INPUT"&&musFind.el.contains(a);if(e.key==="Escape"){e.preventDefault();if(typing)a.blur();else if(!(window.BoxshelfIA&&BoxshelfIA.back&&BoxshelfIA.back()))musFindClose();return}if(typing)return;if(e.key==="PageDown"||e.key==="PageUp"){e.preventDefault();musFindScroll((e.key==="PageDown"?1:-1)*innerHeight*.5);return}if(e.key==="Tab"){e.preventDefault();musFindSection(e.shiftKey?-1:1);return}const m={ArrowUp:"up",ArrowDown:"down",ArrowLeft:"left",ArrowRight:"right",Backspace:"back"}[e.key];if(m){e.preventDefault();musFindKey(m)}return}
@@ -3914,7 +3962,8 @@ window.Shelf={
   // (beta.5) Settings → Search for a cover: the picker again for that game, with SteamGridDB's covers for the typed name
   pcCoverSearch:(id,term)=>{const g=allShelves.flatMap(s=>s.items||[]).find(x=>x&&x.id===id);if(g)setTimeout(()=>pcCoverOpen(g,term),350)},
   // (beta.9) Settings → Custom games: covers for every custom game (one by one in the picker, or the best match for each)
-  pcCoverBatch:()=>setTimeout(()=>pcCoverBatch(),350),pcCoverAuto:()=>pcCoverAuto(),pcCoverUndo:()=>pcCoverUndo(),coverUndoCount:()=>coverUndo.length,
+  pcCoverBatch:()=>setTimeout(()=>pcCoverBatch(),350),pcGallery:()=>setTimeout(()=>pcGallery(),350),pcArtCount:()=>pcArtCount(), // (Settings → Box art → PC games)
+  _exit:{start:()=>holdExitStart(),cancel:()=>holdExitCancel(),open:()=>!!hx}, // (tests)pcCoverAuto:()=>pcCoverAuto(),pcCoverUndo:()=>pcCoverUndo(),coverUndoCount:()=>coverUndo.length,
   // (beta.7) test hooks for the library pass: the filters on offer, picking one, the shelf's games and the one in view
   _lib:{filters:()=>filterList(),filter:v=>pickSort(1,v),cur:()=>{const g=curGame();return g?{id:g.id,title:g.title,kind:g.kind}:null},
     games:()=>(cur()?cur().items.filter(isGame):[]).map(g=>({id:g.id,year:yearOf(g),genres:genresOf(g)})),shelves:()=>shelves.map(s=>({id:s.id,name:s.name,col:!!s.col,ids:(s.items||[]).filter(isGame).map(g=>g.id),last:((s.items||[])[(s.items||[]).length-1]||{}).id||null}))},

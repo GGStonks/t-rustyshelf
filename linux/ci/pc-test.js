@@ -27,8 +27,16 @@ const launchJson = JSON.stringify({ game_executable: 'Binaries/Game.exe', game_d
 const listJson = JSON.stringify([{ app_name: 'FakeApp', app_title: 'Test Epic Game', metadata: { keyImages: [] } }, { app_name: 'Other', app_title: 'Not Installed Game', metadata: { keyImages: [{ type: 'DieselGameBoxTall', url: 'https://example.com/c.jpg' }] } }]);
 mk('.local/bin/legendary', `#!/bin/sh\necho "$LEGENDARY_CONFIG_PATH" > "${HOME}/legendary-config.txt"\ncase "$*" in\n  *launch*--json*) echo '${launchJson}' ;;\n  *list*--json*) echo '${listJson}' ;;\n  *) exit 0 ;;\nesac\n`, true);
 const umuOut = path.join(HOME, 'umu-run.txt');
-mk('.local/bin/umu-run', `#!/bin/sh\n{ echo "PWD=$PWD"; echo "WINEPREFIX=$WINEPREFIX"; echo "PROTONPATH=$PROTONPATH"; echo "STORE=$STORE"; echo "GAMEID=$GAMEID"; echo "HEROIC_SET=$HEROIC_SET"; echo "FROM_LEGENDARY=$FROM_LEGENDARY"; for a in "$@"; do echo "ARG=$a"; done; } >> "${umuOut}"\necho --- >> "${umuOut}"\nsleep 6\necho x >> "${umuOut}.ended"\nexit 0\n`, true);
+mk('.local/bin/umu-run', `#!/bin/sh\necho "umu-run: starting $1"\n{ echo "PWD=$PWD"; echo "WINEPREFIX=$WINEPREFIX"; echo "PROTONPATH=$PROTONPATH"; echo "STORE=$STORE"; echo "GAMEID=$GAMEID"; echo "HEROIC_SET=$HEROIC_SET"; echo "FROM_LEGENDARY=$FROM_LEGENDARY"; echo "PROTON_EAC_RUNTIME=$PROTON_EAC_RUNTIME"; echo "LD_PRELOAD=[$LD_PRELOAD]"; echo "SteamGameId=$SteamGameId"; echo "DXVK_HUD=$DXVK_HUD"; echo "PROTON_ENABLE_NVAPI=$PROTON_ENABLE_NVAPI"; for a in "$@"; do echo "ARG=$a"; done; } >> "${umuOut}"\necho --- >> "${umuOut}"\nsleep 6\necho x >> "${umuOut}.ended"\nexit 0\n`, true);
 const tool = mk('Games/Tools/Tool.exe', 'MZ');
+// Heroic: the anti-cheat runtime it keeps, and two games added by hand (a Windows one with its own prefix, a Linux script)
+mk('.config/heroic/tools/runtimes/eac_runtime/v2/lib64/easyanticheat_x64.so', 'x');
+const sideWin = mk('Games/Heroic/Side Game/Side.exe', 'MZ'), sidePfx = path.join(HOME, 'Games', 'Heroic', 'Prefixes', 'Side Game');
+const nativeOut = path.join(HOME, 'native-ran.txt'), sideNative = mk('Games/Heroic/Native Game/start.sh', `#!/bin/sh\necho "PWD=$PWD LD=$LD_LIBRARY_PATH" > "${nativeOut}"\nsleep 3\n`, true);
+mk('.config/heroic/sideload_apps/library.json', JSON.stringify({ games: [
+  { runner: 'sideload', app_name: 'SideWinApp', title: 'Side Windows Game', install: { executable: sideWin, platform: 'Windows' }, folder_name: path.dirname(sideWin), is_installed: true, art_cover: 'https://example.invalid/c.png' },
+  { runner: 'sideload', app_name: 'SideNativeApp', title: 'Side Native Game', install: { executable: sideNative, platform: 'linux' }, folder_name: path.dirname(sideNative), is_installed: true } ] }));
+mk('.config/heroic/GamesConfig/SideWinApp.json', JSON.stringify({ SideWinApp: { winePrefix: sidePfx, wineVersion: { bin: path.join(proton, 'proton'), type: 'proton', name: 'GE-Proton-Test' }, eacRuntime: true, showFps: true } }));
 mk('Boxshelf/data/config.json', JSON.stringify({ setupDone: true,
   ui: { bootIntro: 'off', sound: false, music: 'off', startFullscreen: true, openInto: 'last', autoCovers: false, lastSeenVersion: require('../../package.json').version },
   steam: { enabled: false }, pc: { epic: true, quiver: false, custom: [{ id: 'tool', title: 'Test Tool', exe: tool, args: '' }] }, systems: {} }, null, 2));
@@ -73,6 +81,8 @@ const shot = async (p, name) => { try { const r = await p.send('Page.captureScre
     await sleep(2500); const a = runs()[0] || {};
     check('Play starts the Epic game through umu-run with legendary\'s program and sign-in arguments', !!r1 && r1.ok && a.args && a.args[0] === path.join(gameDir, 'Binaries', 'Game.exe') && a.args.includes('-windowed') && a.args.includes('-AUTH_PASSWORD=fake-code'), JSON.stringify({ r1, a }));
     check('…in Heroic\'s prefix, with Heroic\'s Proton and environment, STORE=egs, from the game\'s folder', a.WINEPREFIX === heroicPfx && a.PROTONPATH === proton && a.STORE === 'egs' && a.HEROIC_SET === 'yes' && a.FROM_LEGENDARY === '1' && a.PWD === path.join(gameDir, 'Binaries'), JSON.stringify(a));
+    check('…with the anti-cheat runtime, NVAPI, an empty LD_PRELOAD and Steam\'s ids, as Heroic sets them', a.PROTON_EAC_RUNTIME === path.join(HOME, '.config', 'heroic', 'tools', 'runtimes', 'eac_runtime') && a.PROTON_ENABLE_NVAPI === '1' && a.LD_PRELOAD === '[]' && a.SteamGameId === 'heroic-testepicgame', JSON.stringify(a));
+    check('the game\'s output goes to data/logs/last-pc-game.log', fs.existsSync(path.join(HOME, 'Boxshelf', 'data', 'logs', 'last-pc-game.log')) && /umu-run: starting/.test(fs.readFileSync(path.join(HOME, 'Boxshelf', 'data', 'logs', 'last-pc-game.log'), 'utf8')));
     check('legendary used Heroic\'s folder (same sign-in and installs)', fs.readFileSync(path.join(HOME, 'legendary-config.txt'), 'utf8').trim() === legDir);
     await shot(p, 'pc-1-playing');
     check('the game is over when umu-run exits', await gameOver(1));
@@ -82,6 +92,34 @@ const shot = async (p, name) => { try { const r = await p.send('Page.captureScre
     await sleep(2500); const b = runs()[1] || {};
     check('a Windows program added by hand runs through Proton in a prefix of its own', !!r2 && r2.ok && b.args && b.args[0] === tool && b.PROTONPATH === proton && b.WINEPREFIX === path.join(HOME, 'Boxshelf', 'Prefixes', 'custom-tool') && b.STORE === 'none', JSON.stringify({ r2, b }));
     await gameOver(2);
+    // Heroic's games added by hand: on the PC shelf, each started its own way
+    const side = (pcShelf && pcShelf.games || []).filter(g => g.source === 'heroic').map(g => g.title).sort();
+    check('the games added to Heroic by hand are on the PC shelf', JSON.stringify(side) === JSON.stringify(['Side Native Game', 'Side Windows Game']), JSON.stringify(side));
+    const sw = pcShelf.games.find(g => g.title === 'Side Windows Game'), sn = pcShelf.games.find(g => g.title === 'Side Native Game');
+    const r3 = await p.ev(`window.boxshelf.launchPc(${JSON.stringify(sw ? sw.id : '')}).then(r => ({ ok: true }), e => ({ error: e.message }))`);
+    await sleep(2500); const c = runs()[2] || {};
+    check('a Windows game added to Heroic runs with its Heroic prefix, Proton and settings (FPS counter, anti-cheat)', !!r3 && r3.ok && c.args && c.args[0] === sideWin && c.WINEPREFIX === sidePfx && c.PROTONPATH === proton && c.DXVK_HUD === 'fps' && !!c.PROTON_EAC_RUNTIME, JSON.stringify({ r3, c }));
+    await gameOver(3);
+    const r4 = await p.ev(`window.boxshelf.launchPc(${JSON.stringify(sn ? sn.id : '')}).then(r => ({ ok: true }), e => ({ error: e.message }))`);
+    await sleep(1500); const nat = fs.existsSync(nativeOut) ? fs.readFileSync(nativeOut, 'utf8') : '';
+    check('a Linux game added to Heroic starts by itself, in its folder, without Boxshelf\'s own libraries', !!r4 && r4.ok && nat.includes('PWD=' + path.dirname(sideNative)) && !/mount_|appimage_extracted/.test(nat), JSON.stringify({ r4, nat }));
+    for (let i = 0; i < 12; i++) { await sleep(500); if (await p.ev('window.boxshelf.launchPc("x").then(() => true, e => !/already running/i.test(e.message))').catch(() => false)) break; }
+    await sleep(1000);
+    // Box art → PC games: the gallery, and the Settings row that opens it
+    const n = await p.ev('Shelf.pcArtCount()');
+    check('Settings counts the PC games for their covers', !!n && n.total >= 4, JSON.stringify(n));
+    await p.ev('Shelf.pcGallery(), 1'); await sleep(1200);
+    const gal = await p.ev('(() => { const g = document.querySelector(".pcgallery.on"); return g ? [...g.querySelectorAll(".cp-tile")].map(t => t.textContent) : null })()');
+    check('the PC games gallery shows every PC game with where its cover comes from', Array.isArray(gal) && gal.length === n.total && gal.some(t => /Side Windows Game/.test(t) && /Heroic/.test(t)), JSON.stringify(gal));
+    await shot(p, 'pc-4-gallery');
+    await p.ev('document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })), 1'); await sleep(600);
+    // the lower bar's Exit, held: the card shows, letting go keeps Boxshelf open
+    const hasBtn = await p.ev('!!document.querySelector("#hints .hint-exit")');
+    await p.ev('Shelf._exit.start(), 1'); await sleep(900); await shot(p, 'pc-5-exit-hold');
+    const card = await p.ev('(() => { const e = document.querySelector(".holdexit.on"); return e ? e.textContent : "" })()');
+    await p.ev('Shelf._exit.cancel(), 1'); await sleep(500);
+    const gone = await p.ev('!document.querySelector(".holdexit.on") && !Shelf._exit.open()');
+    check('the lower bar has an Exit button; holding shows "Hold for 3 seconds to exit…", letting go keeps Boxshelf open', hasBtn && /Hold for 3 seconds to exit/.test(card) && gone, JSON.stringify({ hasBtn, card, gone }));
     const lib = await p.ev('window.boxshelf.epicLibrary()');
     check('the Epic library lists owned games, installed or not', !!lib && Array.isArray(lib.games) && lib.games.length === 2 && lib.games.find(g => g.appName === 'FakeApp').installed && !lib.games.find(g => g.appName === 'Other').installed, JSON.stringify(lib));
     // Settings → PC games, and the Epic library page
