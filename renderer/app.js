@@ -3042,7 +3042,7 @@ function tvGuideRender(toNow){const G=tvS.guide;if(!G)return;const el=G.el,keep=
       L.appendChild(r);G.items.push(it)})});
   if(!G.items.length){const e=document.createElement("div");e.className="tg-empty";e.textContent=G.tab==="ads"?(tvS.loaded?"No commercials found yet. (T)rustyShelf is still looking for them in the background (the first time takes a while).":"Looking for commercials…"):G.tab==="trailers"?"No trailers yet. They come with your games' LaunchBox details.":"Nothing played yet. The games you play turn up here.";L.appendChild(e)}
   // the scan's progress: a small line under the list while the background round runs (gone when it ends or the tab changes)
-  { const word=tvProgWord(),foot=G.el.querySelector(".tg-prog");
+  { const word=tvProgWord();let foot=G.el.querySelector(".tg-prog"); // (let: the line is made here the first time)
     if(G.tab==="ads"&&word){ if(!foot){const f=document.createElement("div");f.className="tg-prog";el.appendChild(f);foot=f} if(foot.textContent!==word)foot.textContent=word }
     else if(foot)foot.remove() }
   // where the guide opens: on what's on now (when it's in this tab), else the top; a refresh keeps your place

@@ -323,8 +323,9 @@ SIL Open Font License (see `renderer\fonts\LICENSES`). (T)rustyShelf's PC games 
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 Contributors: [TrapEmAll](https://github.com/TrapEmAll) made the Museum's look left and right, and the side displays
-reachable from the wide view ([boxshelf-source pull request #4](https://github.com/sassiestrhihno/boxshelf-source/pull/4),
-brought into (T)rustyShelf as it was).
+reachable from the wide view ([boxshelf-source pull request #4](https://github.com/sassiestrhihno/boxshelf-source/pull/4)),
+and the Retro TV's live progress for the commercial search and ad downloads
+([pull request #5](https://github.com/sassiestrhihno/boxshelf-source/pull/5)), both brought into (T)rustyShelf as they were.
 
 ## Release builds
 
