@@ -49,7 +49,10 @@ Download the newest release from the [releases page](https://github.com/GGStonks
 Use **Start TrustyShelf (window).bat** to run it in a window instead of fullscreen. `npm run dist` builds a
 portable `TrustyShelf.exe` in `dist\` if you'd rather not keep Node around; keep the exe in this folder.
 
-On Linux: `npm install`, then `npm start` (`npm run windowed` for a window), or `npm run dist:linux` for
+On Linux (Arch, CachyOS, Omarchy, Fedora, Ubuntu …) from the source: install Node.js, npm and `unzip`, then run
+`./start-trustyshelf.sh` (`./start-trustyshelf.sh --windowed` for a window). The first run installs what it needs; if npm
+stops before Electron's download is unpacked, the script finishes the unpacking from the archive with `unzip` instead of
+starting over (`--check` only gets everything ready). Or `npm install` and `npm start` (`npm run windowed` for a window), or `npm run dist:linux` for
 `dist/TrustyShelf-<version>-linux.AppImage`. With no `data` folder beside the AppImage, (T)rustyShelf keeps its settings in
 `~/TrustyShelf`.
 
