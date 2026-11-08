@@ -35,7 +35,7 @@ window.BS_WHATSNEW = [
       ] },
       { h: 'Android', items: [
         ['PC games', 'A PC console: GameNative\'s Frontend sync files are its games, started in GameNative (every store) or DroidDeck (Steam), or any other app you pick.'],
-        ['Pause or cancel box art', 'The box art card has Pause, Resume and Cancel, as on Windows. Its Resume button now resumes on every platform.'],
+        ['Pause or cancel box art', 'While box art downloads, the quick menu\'s Box art download row has Pause, Resume and Cancel, as on Windows. (On Windows and Linux, the art card\'s Resume button now resumes instead of pausing again.)'],
         ['ARMSX2', 'ARMSX2\'s GitHub, nightly and debug builds are found by their ids too.']
       ] }
     ]
