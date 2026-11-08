@@ -256,7 +256,7 @@ function rumble(strong,weak,ms){try{if(attract||(cfgInfo&&cfgInfo.config.ui.rumb
 // change from Settings before it's saved; mmWant: whether the shelf wants music right now
 let mmTrack=null,mmLevel=null,mmWant=false;
 const MM_TRACKS=["drift","night","glow"],MM_OLD={calm:"drift",lounge:"night",chime:"glow"}; // (1.77: ambient tracks; 1.75's names still find theirs)
-function mmPick(){const u=(cfgInfo&&cfgInfo.config.ui)||{},v0=mmTrack!=null?mmTrack:u.music,v=MM_OLD[v0]||v0;return v==="off"||MM_TRACKS.includes(v)?v:"drift"}
+function mmPick(){const u=(cfgInfo&&cfgInfo.config.ui)||{},v0=mmTrack!=null?mmTrack:u.music,v=MM_OLD[v0]||v0;return v==="off"||v==="own"||MM_TRACKS.includes(v)?v:"drift"}
 function mmVol(){const u=(cfgInfo&&cfgInfo.config.ui)||{},v=mmLevel!=null?mmLevel:u.musicLevel;return typeof v==="number"&&isFinite(v)?Math.max(0,Math.min(1,v)):.4}
 document.addEventListener("visibilitychange",()=>ambient(mmWant));
 // small clock in the top-right corner ("Fri 17 Oct  3:42 PM"), ticks on the minute
@@ -271,7 +271,11 @@ clock();
 // each shelf's musical key: semitones from the voice's root, plus a pentatonic colour (major by default; a softer minor/suspended one for the darker shelves)
 const KEYS={home:{key:0},gc:{key:0},wii:{key:2},wiiu:{key:4,scale:[0,2,4,7,9]},sw:{key:-3,scale:[0,2,5,7,9]},sw2:{key:-1,scale:[0,2,5,7,9]},psp:{key:-5},ps3:{key:-6,scale:[0,2,4,7,9]},ps4:{key:-7,scale:[0,3,5,7,10]},ps5:{key:-8,scale:[0,2,4,7,9]},x360:{key:-2,scale:[0,3,5,7,10]},n3ds:{key:1,scale:[0,2,4,7,9]},ps2:{key:-9},pc:{key:-4},media:{key:3,scale:[0,2,5,7,9]}};
 function tuneTo(s){if(window.Sound)Sound.set(s&&KEYS[s.id]?KEYS[s.id]:{key:0})}
-function ambient(on){mmWant=!!on;if(!window.Sound)return;const m=mmPick(),lv=mmVol();if(!on||!soundOn||m==="off"||lv<=0||document.hidden){Sound.ambientStop();return}Sound.ambientStart({track:m,level:lv})}
+function ambient(on){mmWant=!!on;if(!window.Sound)return;const m=mmPick(),lv=mmVol();
+  if(!on||!soundOn||m==="off"||lv<=0||document.hidden){Sound.ambientStop();if(window.UserMusic)UserMusic.stop();return}
+  // ((T)rustyShelf) "Your music": the audio files in the Music folder play instead of the built-in tracks
+  if(m==="own"&&window.UserMusic&&api.musicList){Sound.ambientStop();UserMusic.start({level:lv,master:cfgInfo&&cfgInfo.config.ui.volume!=null?cfgInfo.config.ui.volume:.7});return}
+  if(window.UserMusic)UserMusic.stop();Sound.ambientStart({track:m,level:lv})}
 const sfx={tick:(dir)=>play_("tick",{dir}),flip:()=>play_("flip"),sys:(dir)=>play_("shelf",{dir}),go:()=>play_("go"),back:()=>play_("back")};
 
 /* ---------- cover images ---------- */
@@ -2175,7 +2179,7 @@ const ARTC={el:null,on:false,paused:false,stopping:false,done:0,total:0,t:0}; //
 const QM_THEMES=[["spectrum","Spectrum"],["classic","Classic"],["keys","Keys"],["arcade","Arcade"],["aurora","Aurora"],["midnight","Midnight"],["artwork","Artwork"],["blur","Blur"]];
 QM_THEMES.push(...XTHEMES.map(t=>[t.id,t.name])); // (the extra themes, after the original six)
 const QM_SOUNDS=[["aero","Aero"],["melody","Melody"],["musicbox","Music box"]];
-const QM_MUSIC=[["drift","Drift"],["night","Night"],["glow","Glow"],["off","Off"]];
+const QM_MUSIC=[["drift","Drift"],["night","Night"],["glow","Glow"],...(api&&api.musicList?[["own","Your music"]]:[]),["off","Off"]];
 const QM_MVOL=[["0.2","Quiet"],["0.4","Soft"],["0.7","Full"]];
 const qsMvolNow=()=>{const v=mmVol();return QM_MVOL.reduce((a,b)=>Math.abs(+b[0]-v)<Math.abs(+a[0]-v)?b:a)[0]};
 const QM_BGS=[["blur","Soft blur"],["art","Game artwork"]]; // (1.76: no longer a quick-menu line: Artwork and Blur are themes)
@@ -4136,6 +4140,7 @@ window.Shelf={
   _wake:()=>{lastInputAt=dimAt=performance.now()},padBlocked:()=>dimOn||dimSwallowPad,
   setMode:m=>{if(m!=="browse"&&m!=="details")qmClose(true);mode=m},closePanels:()=>{closeDetails(true);closeCustomize()},
   setButtons,
+  reloadMusic:()=>window.UserMusic?UserMusic.reload():Promise.resolve(0),
   reloadSongs:()=>window.Sound&&Sound.loadSongs?Sound.loadSongs(api,cfgInfo&&cfgInfo.config.ui.builtInSongs):Promise.resolve(null),
   _slide:(id,title)=>{const sh=shelves.find(x=>x.id===id)||{id,name:(WORDMARKS[id]||[id])[0],emulatorName:"Emulator"};const g=(sh.items||sh.games||[]).find(x=>x.kind==="rom"&&x.hue!=null)||{kind:"rom",id:"t_"+id,title:title||"Test Game",hue:200,art:{}};mode="launch";runSlide(sh,g,()=>{},false)},
   _slideHide:()=>{hideInsert();mode="browse"},

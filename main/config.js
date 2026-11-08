@@ -104,7 +104,7 @@ function upgrade(cfg) {
     // 1.77: the ambient tracks (Drift / Night / Glow) took over from Calm / Lounge / Chime. (1.82: new installs start with
     // the music off; a saved config always has ui.music, so existing choices are kept)
     const MU = { calm: 'drift', lounge: 'night', chime: 'glow' }; if (MU[cfg.ui.music]) cfg.ui.music = MU[cfg.ui.music];
-    if (!['drift', 'night', 'glow', 'off'].includes(cfg.ui.music || 'drift')) cfg.ui.music = 'drift';
+    if (!['drift', 'night', 'glow', 'own', 'off'].includes(cfg.ui.music || 'drift')) cfg.ui.music = 'drift'; // ('own': your own files, main/music.js)
     if (!['chime', 'crystal', 'pulse', 'horizon', 'keys'].includes(cfg.ui.bootSound || 'chime')) cfg.ui.bootSound = 'chime';
     if (typeof cfg.ui.discordPresence !== 'boolean') cfg.ui.discordPresence = false; cfg.ui.discordAppId = String(cfg.ui.discordAppId || '').replace(/\D/g, '').slice(0, 25); // (Discord Rich Presence: main/presence.js)
     if (!['en', 'pt'].includes(cfg.ui.language)) cfg.ui.language = 'en'; // ((T)rustyShelf) English, or Português (Brasil) (renderer/i18n.js, shared/i18n-main.js)

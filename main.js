@@ -241,6 +241,7 @@ function computeRoots() {
   if (!library._cacheSet) { library.setCacheRoot(path.join(app.getPath('userData'), 'library')); library._cacheSet = true; }
   const roots = [path.join(paths.appRoot(), 'themes'), path.join(paths.appRoot(), 'Custom themes'), path.join(app.getPath('userData'), 'custom-theme-cache'), icons.folder(), ...library.roots()].filter(Boolean); // (custom themes: their pictures, and the scaled copies of big ones)
   for (const s of Object.values(cfg.systems)) { roots.push(...(s.romDirs || [])); if (s.artDir) roots.push(paths.expand(s.artDir)); }
+  roots.push(...require('./main/music').folders()); // (your own menu music: the page plays these files straight from disk)
   roots.push(path.join(app.getPath('userData'), 'stremio-art'), path.join(app.getPath('userData'), 'commercials')); // the movie shelves' posters and art; the retro TV's ads
   if (paths.artLibrary()) roots.push(paths.artLibrary());
   if (artstudio.cacheDir()) roots.push(artstudio.cacheDir()); // Art Studio's downloaded candidates (the picker's thumbnails)
@@ -250,7 +251,8 @@ function computeRoots() {
   return roots.filter(Boolean).map(r => { r = path.resolve(r).toLowerCase(); return r.endsWith(path.sep) ? r : r + path.sep; });
 }
 
-const MIME = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', svg: 'image/svg+xml', gif: 'image/gif', mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime', glb: 'model/gltf-binary', gltf: 'model/gltf+json', bin: 'application/octet-stream', json: 'application/json' };
+const MIME = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', svg: 'image/svg+xml', gif: 'image/gif', mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime', glb: 'model/gltf-binary', gltf: 'model/gltf+json', bin: 'application/octet-stream', json: 'application/json',
+  mp3: 'audio/mpeg', ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/ogg', wav: 'audio/wav', flac: 'audio/flac', m4a: 'audio/mp4', aac: 'audio/aac', weba: 'audio/webm' }; // (audio: your own menu music, main/music.js)
 
 // Covers are asked for at the size they're shown (bsfile://…?t=<height>): big scans (Steam's are 1200×1800) are
 // scaled once, kept in data\thumbs and served from there, so the shelf never decodes or holds full-size images.
@@ -2024,6 +2026,10 @@ const songs = require('./main/songs');
 handle('songs:list', () => songs.list());
 handle('songs:read', ({ file }) => new Uint8Array(songs.read(file)));
 handle('songs:open', () => { fs.mkdirSync(songs.folder(), { recursive: true }); return shell.openPath(songs.folder()); });
+// ((T)rustyShelf) your own menu music (main/music.js): the files as addresses the page plays from, and the folder to open
+const ownMusic = require('./main/music');
+handle('music:list', () => ownMusic.list().map(t => ({ name: t.name, url: fileUrl(t.file) })));
+handle('music:open', () => { fs.mkdirSync(ownMusic.folder(), { recursive: true }); return shell.openPath(ownMusic.folder()); });
 // links from the page (e.g. a cover's source page) open in the default browser: https only
 handle('app:openExternal', ({ url: u }) => { let x; try { x = new URL(String(u)); } catch { throw new Error('Bad link.'); } if (x.protocol !== 'https:') throw new Error('Only https links open.'); return shell.openExternal(x.toString()); });
 // put back the emulator settings files (T)rustyShelf changed (each was backed up once as <file>.trustyshelf-bak)
