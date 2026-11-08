@@ -190,7 +190,9 @@ function log(...a) {
 }
 process.on('uncaughtException', e => log('ERROR', e && e.stack || e));
 process.on('unhandledRejection', e => log('ERROR', e && e.stack || e));
-log('Starting (T)rustyShelf', app.getVersion());
+// ((T)rustyShelf) the version people see: a release build is A.B.C.DDDD (built as A.B.C+DDDD, the form npm accepts)
+function appVersion() { return app.getVersion().replace('+', '.'); }
+log('Starting (T)rustyShelf', appVersion());
 if (linux.isLinux) { steamdeck.init({ log }); linuxpad.init({ log }); const d = steamdeck.info(); log('Linux start:', d.deck ? 'Steam Deck' : 'PC', '| started by Steam:', d.steam, '| Game Mode:', d.gameMode, '| options:', d.flags.join(' ') || 'none'); }
 
 // Only one (T)rustyShelf at a time: a second launch brings the first one forward.
@@ -856,9 +858,9 @@ function handle(name, fn) {
 // pressed (the page itself may not read the clipboard). Never logged.
 handle('clipboard:text', () => { const { clipboard } = require('electron'); return String(clipboard.readText() || '').split(/\r?\n/)[0].trim().slice(0, 512); });
 
-handle('config:get', () => ({ config: cfg, consoles: CONSOLES, apps: APPS, appRoot: paths.appRoot(), version: app.getVersion(), hasInfo: covers.hasInfo(), settingsBlocked: config.blocked() }));
+handle('config:get', () => ({ config: cfg, consoles: CONSOLES, apps: APPS, appRoot: paths.appRoot(), version: appVersion(), hasInfo: covers.hasInfo(), settingsBlocked: config.blocked() }));
 // (1.82) Settings → About: the newest beta (force: ask GitHub now, not the answer from this start) and the page's links
-handle('app:updateCheck', ({ force } = {}) => updates.check(app.getVersion(), !!force).then(r => ({ ...r, links: updates.LINKS })));
+handle('app:updateCheck', ({ force } = {}) => updates.check(appVersion(), !!force).then(r => ({ ...r, links: updates.LINKS })));
 handle('config:save', next => { if (!next || typeof next !== 'object' || !next.systems || !next.ui) throw new Error('Bad settings.'); scanForget(); return applyCfg({ ...next, art: cfg.art, games: cfg.games, emuSetup: { ...(next.emuSetup || {}), pending: (cfg.emuSetup || {}).pending || [] }, ui: { ...next.ui, sw2Last: cfg.ui.sw2Last } }); }); // Art Studio styles and locks change through art:* only: a Settings save with its older copy mustn't undo them. (beta.8) The same for what main itself keeps: each game's own name and emulator (Details → Rename / Emulator), Set up for me's waiting list and Switch 2's last build: a screen's older copy saved later used to undo a rename, or bring back a setup that was already done
 // settings saved (or restored from a backup): store them and put every change into effect now
 function applyCfg(next) { const prev = cfg, hadMenu = cfg.ui.homeMenu !== false; next = rememberEmus(prev, next); const x = o => o && o.systems && o.systems.x360 && o.systems.x360.emulator; if (x(next) !== x(prev)) next = fixXenia(next); /* (the folder walk only when that path changed) */ cfg = persistCfg(config.normalize(next)); applyArtLibrary(); applyScale(); setTimeout(watchRoms, 0); if (cfg.ui.wiimote === false) wiimote.stop(); else if (wmReady) wmStart(); /* (Settings → Controller → Wii remote, at once) */
@@ -2404,7 +2406,7 @@ handle('settings:backup', async () => {
   const r = await dialog.showSaveDialog(alive() ? win : undefined, { title: 'Back up (T)rustyShelf settings', defaultPath: freeName(dir, `(T)rustyShelf settings ${stamp()}`, '.json'), filters: [{ name: '(T)rustyShelf settings', extensions: ['json'] }] });
   if (!r || r.canceled || !r.filePath) return { ok: false, canceled: true };
   const h = loadHistory(), hist = {}; for (const [k, v] of Object.entries(h)) hist[k] = { count: v.count, ms: v.ms, last: v.last };
-  const data = { app: 'TrustyShelf', version: app.getVersion(), backup: BACKUP_V, at: new Date().toISOString(), config: stripSecrets(cfg), history: hist };
+  const data = { app: 'TrustyShelf', version: appVersion(), backup: BACKUP_V, at: new Date().toISOString(), config: stripSecrets(cfg), history: hist };
   try { await fs.promises.writeFile(r.filePath + '.tmp', JSON.stringify(data, null, 1)); await fs.promises.rename(r.filePath + '.tmp', r.filePath); }
   catch (e) { try { await fs.promises.unlink(r.filePath + '.tmp'); } catch {} log('settings backup failed', e.message); return { ok: false, error: e.message }; }
   log('Settings backed up'); return { ok: true, file: r.filePath };
@@ -2460,7 +2462,7 @@ function zipFolder(src, dest) {
 function execFileQ(cmd, args, opts, cb) { try { require('child_process').execFile(cmd, args, { windowsHide: true, timeout: 60000, ...opts }, err => cb(!err)); } catch { cb(false); } }
 async function reportInfo() {
   const os = require('os'), L = [];
-  L.push(`(T)rustyShelf ${app.getVersion()}`, `Electron ${process.versions.electron}  Chrome ${process.versions.chrome}  Node ${process.versions.node}`);
+  L.push(`(T)rustyShelf ${appVersion()}`, `Electron ${process.versions.electron}  Chrome ${process.versions.chrome}  Node ${process.versions.node}`);
   L.push(`OS: ${os.type()} ${os.release()} ${os.arch()}${typeof os.version === 'function' ? ' (' + os.version() + ')' : ''}`, `CPU: ${(os.cpus()[0] || {}).model || '?'} × ${os.cpus().length}`, `Memory: ${Math.round(os.totalmem() / 1073741824)} GB (${Math.round(os.freemem() / 1073741824)} GB free)`);
   L.push(`Packaged: ${app.isPackaged ? 'yes' : 'no'}  Windowed: ${WINDOWED ? 'yes' : 'no'}  Fullscreen now: ${alive() && win.isFullScreen() ? 'yes' : 'no'}`);
   // (1.82) how much memory (T)rustyShelf itself uses, per process (the shelf, the GPU, helpers), to tell from a report whether
@@ -2565,7 +2567,7 @@ function companionInput(m) {
   win.webContents.send('companion:input', { b, d: down });
 }
 function initCompanion() {
-  companion.init({ log, dataDir: app.getPath('userData'), webDir: path.join(__dirname, 'renderer', 'companion'), fontDir: path.join(__dirname, 'renderer', 'fonts'), version: app.getVersion(),
+  companion.init({ log, dataDir: app.getPath('userData'), webDir: path.join(__dirname, 'renderer', 'companion'), fontDir: path.join(__dirname, 'renderer', 'fonts'), version: appVersion(),
     library: () => { if (lastLib) return lastLib; try { return lastLib = JSON.parse(fs.readFileSync(libCacheFile(), 'utf8')); } catch { return []; } }, // the shelves as last scanned
     hidden: () => (Array.isArray(cfg.ui.hidden) ? cfg.ui.hidden : []), glyphs: () => ({ style: shelfGlyphs, swap: shelfSwap }), homeMenu: () => cfg.ui.homeMenu,
     running: () => (launching || launcher.isRunning() ? { id: histOpen && histOpen.id, kind: runKind } : null),
@@ -2635,7 +2637,7 @@ function startUp() {
   // (1.82) a newer beta on the public page: the shelf says so once (Settings → About → Check for new betas turns it off)
   updates.init(log);
   setTimeout(() => { if (cfg.ui.updateCheck === false) return;
-    updates.check(app.getVersion()).then(r => { if (r && r.newer && alive()) win.webContents.send('app:update', r); }).catch(() => {}); }, 25000);
+    updates.check(appVersion()).then(r => { if (r && r.newer && alive()) win.webContents.send('app:update', r); }).catch(() => {}); }, 25000);
   setTimeout(sweepTemp, 20000);
   // once: empty the web cache an older version let grow (the 64 MB limit keeps it small from here on)
   setTimeout(() => { try { const mark = path.join(app.getPath('userData'), '.cache-trimmed'); if (fs.existsSync(mark)) return; session.defaultSession.clearCache().then(() => { fs.writeFileSync(mark, ''); log('Web cache emptied'); }).catch(() => {}); } catch {} }, 25000);

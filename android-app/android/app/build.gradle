@@ -9,7 +9,7 @@ android {
         applicationId "io.github.trustyshelf"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode((System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInteger()) // every GitHub build is newer than the last
+        versionCode((System.getenv("TRUSTYSHELF_VERSION_CODE") ?: System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInteger()) // every GitHub build is newer than the last ((T)rustyShelf's releases: from A.B.C.DDDD, release.yml)
         versionName new groovy.json.JsonSlurper().parse(file("../../package.json")).version
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {

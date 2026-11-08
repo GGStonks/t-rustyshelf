@@ -13,17 +13,19 @@ const LINKS = { page: PAGE, releases: `${PAGE}/releases`, issues: `${PAGE}/issue
 let log = () => {}, last = null, inflight = null;
 function init(logger) { if (logger) log = logger; }
 
-// "1.82.0-beta.1" → { nums: [1, 82, 0], pre: ['beta', 1] }; a release without a pre part is newer than its betas
+// "1.82.0-beta.1" → { nums: [1, 82, 0, 0], pre: ['beta', 1] }; a release without a pre part is newer than its betas.
+// ((T)rustyShelf) a build number counts too: "2.12.4.284" (a release's tag) and "2.12.4+284" (the app's own version)
+// → nums [2, 12, 4, 284]
 function parse(v) {
-  const m = /^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:-([0-9A-Za-z.-]+))?/.exec(String(v || '').trim());
+  const m = /^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:[.+](\d+))?(?:-([0-9A-Za-z.-]+))?/.exec(String(v || '').trim());
   if (!m) return null;
-  return { nums: [+m[1], +(m[2] || 0), +(m[3] || 0)], pre: m[4] ? m[4].split('.').map(x => (/^\d+$/.test(x) ? +x : x)) : [] };
+  return { nums: [+m[1], +(m[2] || 0), +(m[3] || 0), +(m[4] || 0)], pre: m[5] ? m[5].split('.').map(x => (/^\d+$/.test(x) ? +x : x)) : [] };
 }
 // < 0: a is older; 0: the same; > 0: a is newer
 function compare(a, b) {
   const x = parse(a), y = parse(b);
   if (!x || !y) return 0;
-  for (let i = 0; i < 3; i++) if (x.nums[i] !== y.nums[i]) return x.nums[i] - y.nums[i];
+  for (let i = 0; i < 4; i++) if (x.nums[i] !== y.nums[i]) return x.nums[i] - y.nums[i];
   if (!x.pre.length || !y.pre.length) return (x.pre.length ? -1 : 0) + (y.pre.length ? 1 : 0);
   for (let i = 0; i < Math.max(x.pre.length, y.pre.length); i++) {
     const p = x.pre[i], q = y.pre[i];

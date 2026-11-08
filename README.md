@@ -18,8 +18,8 @@ each game's size on the shelf and a held Exit button. Those are marked *(new in 
 is Boxshelf's work, by its author.
 
 > **This is (T)rustyShelf's source code** (Windows: Electron; Linux: an Electron AppImage; Android: Capacitor, in
-> `android-app\`), released under the [GNU GPL v3.0](LICENSE). There are no ready-made downloads of (T)rustyShelf yet:
-> build it as below. **Looking for the official Boxshelf?** Its download is on the
+> `android-app\`), released under the [GNU GPL v3.0](LICENSE). Ready-made builds (Windows, Linux, Android) are on
+> (T)rustyShelf's [releases page](https://github.com/GGStonks/t-rustyshelf/releases) once one is out; or build it as below. **Looking for the official Boxshelf?** Its download is on the
 > [Boxshelf beta page](https://github.com/sassiestrhihno/boxshelf-beta/releases), and its bugs and ideas go to that page's
 > [issues](https://github.com/sassiestrhihno/boxshelf-beta/issues/new/choose) (not ones about (T)rustyShelf). Boxshelf's
 > [source](https://github.com/sassiestrhihno/boxshelf-source) is a snapshot of each beta (it starts at 1.82.0-beta.4);
@@ -325,6 +325,20 @@ SIL Open Font License (see `renderer\fonts\LICENSES`). (T)rustyShelf's PC games 
 Contributors: [TrapEmAll](https://github.com/TrapEmAll) made the Museum's look left and right, and the side displays
 reachable from the wide view ([boxshelf-source pull request #4](https://github.com/sassiestrhihno/boxshelf-source/pull/4),
 brought into (T)rustyShelf as it was).
+
+## Release builds
+
+Pushes to the `t-rustyshelf` branch build nothing unless the commit message asks for it
+(`.github/workflows/release.yml`); then GitHub builds the Windows exe, the Linux AppImage and the Android APK and
+publishes them as one release, version `A.B.C.DDDD` (`DDDD` is the build of version `A.B.C`):
+
+| In the commit message | Release |
+|---|---|
+| `For version 2.4.15` | `2.4.15.0`, a new version (stops if it's already released) |
+| `For build` | the next build of the newest version released (`2.12.4.283` → `2.12.4.284`) |
+| `For build 2.12.4` (or `2.12.4.283`) | the next build of that version |
+
+"For build" counts only as a phrase of its own (followed by a version, punctuation or the end of the line).
 
 ## Licence
 
