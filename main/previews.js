@@ -37,7 +37,7 @@ function index(dir) {
 function forget() { listing.clear(); }
 
 // ES-DE's own console folder names where they differ from (T)rustyShelf's
-const ESDE = { sw: 'switch', sw2: 'switch2', x360: 'xbox360', megadrive: 'genesis', segacd: 'megacd', pcengine: 'tg16' };
+const ESDE = { sw: 'switch', sw2: 'switch2', x360: 'xbox360', xbox: 'xbox', megadrive: 'genesis', segacd: 'megacd', pcengine: 'tg16' };
 function homes() { const h = process.env.USERPROFILE || process.env.HOME || os.homedir(); return h ? [h] : []; }
 // every folder that may hold this console's videos
 function dirsFor(def, sc, opts = {}) {

@@ -134,6 +134,18 @@ const CONSOLES = [
     coverSeconds: 6
   },
   {
+    // ((T)rustyShelf 1.0.2, asked for in Boxshelf's discussions) the original Xbox, in xemu: its disc images (XISO .iso).
+    // xemu needs its own BIOS, MCPX boot ROM and hard disk image set up first (xemu → Machine → System)
+    id: 'xbox', name: 'Xbox', emulatorName: 'xemu',
+    exeNames: ['xemu.exe'],
+    emulatorFolders: ['{app}\\xemu', '{app}\\Emulators\\xemu', '%LOCALAPPDATA%\\Programs\\xemu', '%ProgramFiles%\\xemu', '%APPDATA%\\xemu'],
+    romFolderNames: ['xbox', 'xbox original', 'original xbox', 'xemu', 'microsoft xbox'],
+    extensions: ['iso', 'xiso'],
+    gameArgs: '-full-screen -dvd_path "{rom}"',
+    emulatorArgs: '',
+    coverSeconds: 6
+  },
+  {
     id: 'n3ds', name: '3DS', emulatorName: 'Azahar',
     exeNames: ['azahar.exe', 'azahar-qt.exe', 'lime3ds.exe', 'lime3ds-gui.exe', 'citra-qt.exe'],
     emulatorFolders: ['{app}\\Azahar', '{app}\\azahar', '%ProgramFiles%\\Azahar', '%LOCALAPPDATA%\\Programs\\Azahar', '%LOCALAPPDATA%\\Azahar', '%APPDATA%\\Azahar', '{app}\\Citra', '%LOCALAPPDATA%\\Citra\\nightly', '%LOCALAPPDATA%\\Citra\\canary', '{app}\\Lime3DS'],
@@ -245,6 +257,7 @@ const LINUX_EMU = {
   ps3: ['rpcs3', 'net.rpcs3.RPCS3', 're:^rpcs3.*\\.appimage$'],
   ps4: ['shadps4', 'net.shadps4.shadPS4', 're:^shadps4.*\\.appimage$'],
   ps5: [], x360: [], // (Kyty and Xenia: Windows only)
+  xbox: ['xemu', 'app.xemu.xemu', 're:^xemu.*\\.appimage$'], // (xemu: its AppImage, Flatpak or package)
   n3ds: ['azahar', 'org.azahar_emu.Azahar', 're:^azahar.*\\.appimage$', 'lime3ds', 'citra-qt'],
   psx: ['duckstation-qt', 'org.duckstation.DuckStation', 're:^duckstation.*\\.appimage$'],
   n64: ['RMG', 'com.github.Rosalie241.RMG', 're:^rmg.*\\.appimage$'],

@@ -25,6 +25,7 @@ const CONSOLE_HELP={
   psp:"PPSSPP runs PSP games. Point to PPSSPPWindows64.exe.",
   wiiu:"Cemu runs Wii U games. Point to Cemu.exe. Games can be .wua files (Cemu's one-file format, best), .wud / .wux disc images, or extracted game folders (the shelf finds code\\*.rpx and reads the title from meta\\meta.xml). Disc images need your keys.txt set up in Cemu. Install updates and DLC inside Cemu (File → Install game title).",
   ps2:"PCSX2 runs PS2 games. Point to pcsx2-qt.exe. Games are .iso, .chd, .cso or .zso images. PCSX2 needs a PS2 BIOS of its own (set it up in PCSX2 once). RetroAchievements works here too: log in inside PCSX2 (Settings → Achievements).",
+  xbox:"xemu runs original Xbox games (.iso disc images). Point to xemu.exe. xemu needs its BIOS, MCPX boot ROM and hard disk image set up first, in xemu → Machine → System.",
   x360:"Xenia runs Xbox 360 games. Point to xenia_canary.exe (or xenia.exe; if you pick Xenia Manager, (T)rustyShelf finds the Canary build inside its Emulators folder). Titles, art and info come from the title ID inside each game, so file names don't have to be exact. Games can be .iso discs, extracted folders with a default.xex inside (the folder name is the title), XBLA .xex files or .zar archives.",
   ps3:"RPCS3 runs PS3 games. Point to rpcs3.exe (install the PS3 system software in RPCS3 first: File → Install Firmware). Disc games are folders (Game\\PS3_GAME\\USRDIR\\EBOOT.BIN); digital games live in RPCS3's dev_hdd0\\game folder — add that as a games folder too. Titles come from each game's PARAM.SFO; installed patches are left off the shelf.",
   n3ds:"Azahar runs 3DS games. Point to azahar.exe. Games are decrypted .3ds / .cci / .cxi images, Azahar's compressed .zcci, or decrypted .cia files ((T)rustyShelf installs a .cia into Azahar the first time you play it). Encrypted copies won't start.",
@@ -222,6 +223,7 @@ function renderBody(){
 // only at eden-emu.dev (look-alike sites serve fakes)
 const OFFICIAL={gc:[["Dolphin","https://dolphin-emu.org/download/"]],wii:[["Dolphin","https://dolphin-emu.org/download/"]],wiiu:[["Cemu","https://cemu.info/"]],sw:[["Eden","https://eden-emu.dev/downloads"]],sw2:[["Eglantine","https://github.com/Djihads80/Eglantine/releases"]],
   psp:[["PPSSPP","https://www.ppsspp.org/download/"]],ps2:[["PCSX2","https://pcsx2.net/downloads/"]],ps3:[["RPCS3","https://rpcs3.net/download"]],ps4:[["shadPS4","https://shadps4.net/downloads"]],ps5:[["KytyPS5","https://github.com/Jetsku/KytyPS5/releases"]],n3ds:[["Azahar","https://azahar-emu.org/pages/download/"]],
+  xbox:[["xemu","https://xemu.app/"]],
   x360:[["Xenia","https://xenia.jp/download/"],["Xenia Manager","https://github.com/xenia-manager/xenia-manager"]],
   // (beta.6) the retro shelves: RetroArch (one download for all of them; cores from its Online Updater) and each one's best standalone
   ...(()=>{const RA=["RetroArch","https://www.retroarch.com/?page=platforms"],o={psx:[["DuckStation","https://github.com/stenzek/duckstation/releases"],RA],nds:[["melonDS","https://melonds.kuribo64.net/downloads.php"],RA],
@@ -298,7 +300,7 @@ function pickCard(x,big){
 }
 // (beta.7) the folded "More consoles" list: small tick chips grouped by maker, so 30-odd consoles stay a tidy page
 const PICK_FAMILIES=[["Nintendo",["nes","snes","n64","gc","wii","wiiu","sw","sw2","gb","gbc","gba","nds","n3ds"]],["PlayStation",["psx","ps2","ps3","ps4","ps5","psp"]],
-  ["Sega",["mastersystem","megadrive","segacd","sega32x","saturn","dreamcast","gamegear"]],["Retro & arcade",[]],["Xbox, PC & apps",["x360","steam"]]];
+  ["Sega",["mastersystem","megadrive","segacd","sega32x","saturn","dreamcast","gamegear"]],["Retro & arcade",[]],["Xbox, PC & apps",["xbox","x360","steam"]]];
 function pickFamily(id){if(/^app:/.test(id))return "Xbox, PC & apps";for(const[f,ids]of PICK_FAMILIES)if(ids.includes(id))return f;return "Retro & arcade"}
 function pickChip(x){const on=x.on();
   return el("button",{type:"button",class:"wz2-chip"+(on?" on":""),role:"checkbox","aria-checked":String(on),"data-pick":x.id,title:x.status(),onclick:()=>{x.set(!x.on());changed();render()}},

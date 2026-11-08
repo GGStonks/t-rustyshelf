@@ -49,16 +49,18 @@ TrustyShelf\
   PCSX2\         pcsx2-qt.exe            PS2
   RPCS3\         rpcs3.exe               PS3
   shadPS4\       shadPS4.exe             PS4
+  xemu\          xemu.exe                Xbox
   Xenia\         xenia_canary.exe        Xbox 360
   Azahar\        azahar.exe              3DS
-  ROMS\Gamecube  ROMS\Wii  ROMS\Wii U  ROMS\Switch  ROMS\PSP  ROMS\PS2  ROMS\PS3  ROMS\PS4  ROMS\Xbox 360  ROMS\3DS
+  ROMS\Gamecube  ROMS\Wii  ROMS\Wii U  ROMS\Switch  ROMS\PSP  ROMS\PS2  ROMS\PS3  ROMS\PS4  ROMS\Xbox  ROMS\Xbox 360  ROMS\3DS
   themes\<system>\   logo.png · boot.mp4 · console.png | console.glb (+ console.json) · cart.glb | disc.glb | umd.glb
   data\          config.json, trustyshelf.log, caches (art database index, icons, achievements)
 ```
 
 Games in subfolders are found too; `DLC`, `Updates` and `Patches` folders are skipped, as are Switch update
 and DLC packages. PS4 games are folders with an `eboot.bin` inside (`CUSA00223\eboot.bin`); the title comes
-from `sce_sys\param.sfo`. Xbox 360 games are `.iso` discs, extracted folders with a `default.xex`, XBLA `.xex` files or `.zar`
+from `sce_sys\param.sfo`. Original Xbox games (xemu) are `.iso` disc images (XISO); set up xemu's BIOS, boot ROM and
+hard disk image in xemu first (Machine → System). Xbox 360 games are `.iso` discs, extracted folders with a `default.xex`, XBLA `.xex` files or `.zar`
 archives; the title ID inside the game gives the real name (via the Xenia compatibility list, cached in `data\`), so
 `DVD.iso` in a folder still shows up as the game. Details show Xenia's compatibility rating. Picking `XeniaManager.exe`
 is fine: (T)rustyShelf launches the Canary build from its `Emulators` folder. Wii `.nkit.iso` dumps and Switch `[titleid][v0]` names are cleaned up automatically.
