@@ -33,15 +33,20 @@
 //   Pass 22 "whatsnew": What's new once after updating, the update card with the release's highlights, Settings → What's new (ci/whatsnew-test.js).
 //   Pass 23 "addgames": Add games: several programs at once, a scanned folder, the Playnite import (experimental), the Add games tile (ci/addgames-pass.js).
 // Writes a table to the GitHub run's Summary and screenshots to out/device-test/. Exit code 1 = failed (APK not published).
-// Usage: node ci/web-device-test.js <www dir> <out dir> [--group=thor|screens|windows]
-//   (beta.7) --group runs one third of the passes, so GitHub runs the three at once (android.yml): thor = passes 1-9 (the
-//   Thor flow on the pretend device), screens = 10-17, windows = 18-24. No group (or all) runs every pass, one after another.
+// Usage: node ci/web-device-test.js <www dir> <out dir> [--group=thor|thor2|thor3|screens|screens2|windows|windows2]
+//   (beta.7) --group runs a part of the passes, so they run at the same time (scripts/test-all.js, android.yml). ((T)rustyShelf:
+//   seven parts of about the same length, 2.5-3.5 minutes each, from the passes' own times, TS_PASS_TIMES=1): thor = passes 1-2
+//   (the real bridge, the Thor flow on the pretend device), thor2 = 3, 3m, 5 (smoothness), 4; thor3 = 5 (setup wizard) to 9;
+//   screens = 10-14, screens2 = 15-17; windows = 18-21, windows2 = 22-24. No group (or all) runs every pass, one after another.
 'use strict';
 const http = require('http'), fs = require('fs'), path = require('path');
 const { chromium } = require('playwright');
 const ARGS = process.argv.slice(2).filter(a => !/^--group=/.test(a)), GROUP = ((process.argv.find(a => /^--group=/.test(a)) || '').split('=')[1] || 'all').toLowerCase();
-if (!['all', 'thor', 'screens', 'windows'].includes(GROUP)) { console.error('Unknown --group ' + GROUP + ' (thor, screens, windows or all)'); process.exit(2); }
+const GROUPS = ['thor', 'thor2', 'thor3', 'screens', 'screens2', 'windows', 'windows2'];
+if (GROUP !== 'all' && !GROUPS.includes(GROUP)) { console.error('Unknown --group ' + GROUP + ' (' + GROUPS.join(', ') + ' or all)'); process.exit(2); }
 const runs = g => GROUP === 'all' || GROUP === g;
+// TS_PASS_TIMES=1: when each pass starts (seconds since the start), on stderr: for keeping the groups the same length
+const T0 = Date.now(), mark = n => { if (process.env.TS_PASS_TIMES) console.error(`[pass-time] ${((Date.now() - T0) / 1000).toFixed(0)}s ${n}`); };
 const WWW = path.resolve(ARGS[0] || 'www'), OUT = path.resolve(ARGS[1] || '../out/device-test');
 fs.mkdirSync(OUT, { recursive: true });
 const SUM = process.env.GITHUB_STEP_SUMMARY;
@@ -89,9 +94,11 @@ server.listen(0, async () => {
   try {
     { const p = await browser.newPage({ viewport: { width: 360, height: 512 } }); // four plain test covers (no network in the test)
       for (let i = 0; i < 4; i++) { await p.setContent(`<body style="margin:0;background:hsl(${i * 90 + 20},60%,38%);font:bold 54px sans-serif;color:#fff;display:grid;place-items:center;height:512px">TEST ART ${i}</body>`);
-        ART[`/__art/${i}.jpg`] = await p.screenshot({ type: 'jpeg', quality: 80 }); }
+        // ((T)rustyShelf) a screenshot can fail while many browsers start at once (scripts/test-all.js runs seven groups together): tried again
+        for (let t = 0; ; t++) { try { ART[`/__art/${i}.jpg`] = await p.screenshot({ type: 'jpeg', quality: 80 }); break; } catch (e) { if (t >= 4 || !/Unable to capture screenshot|Target closed/.test(String(e && e.message))) throw e; await new Promise(r => setTimeout(r, 1500 * (t + 1))); } } }
       await p.close(); }
-    if (runs('thor')) { // ===== group thor: passes 1-9 =====
+    if (runs('thor')) { // ===== group thor: passes 1-2 (the real bridge, the whole Thor flow) =====
+    mark('pass 1');
     // ---------- pass 1: real bridge, fresh install ----------
     { const { ctx, page, errors, logs } = await newPage(browser, NATIVE_STANDIN + BRIDGE + HEADERS);
       await page.goto(base); await page.waitForTimeout(7000);
@@ -109,6 +116,7 @@ server.listen(0, async () => {
       say(`Build under test: ${st.build}`);
       await ctx.close(); }
 
+    mark('pass 2');
     // ---------- pass 2: the whole Thor flow on the adapter's pretend device ----------
     { const { ctx, page, errors } = await newPage(browser, null);
       const url = base + '?fakeNative=1';
@@ -548,6 +556,9 @@ server.listen(0, async () => {
       check('LaunchBox in the automatic fetch: real scans only, the game\'s own region first (front and back)', lbx.fetched, lbx.grp);
       check('No script errors in the Thor flow', !errors.length, errors.slice(0, 3).join(' | '));
       await ctx.close(); }
+    } // ===== end of group thor =====
+    if (runs('thor2')) { // ===== group thor2: passes 3, 3m, 5 (smoothness) and 4 =====
+    mark('pass 3');
     // ---------- pass 3: touch gestures (android-touch.js): swipe back, pinch to zoom ----------
     // Real touch input through Chromium's DevTools protocol, the same path a finger takes (touch + pointer events).
     // This runner draws in software: Inspect's WebGL case (with the art pictures on it) takes seconds per frame here, which
@@ -634,6 +645,7 @@ server.listen(0, async () => {
       check('Touch: swipe Back keeps the controller prompts', c0 && c1.scr === 'shelf' && c2, `pad prompts ${c0} → ${c2}, ${c1.scr}`);
       check('No script errors during touch gestures', !errors.length, errors.slice(0, 3).join(' | '));
       await ctx.close(); }
+    mark('pass 3m');
     // ---------- pass 3m: the museum on the top screen by touch (android-touch.js + BS_TOUCH.museum + Museum.pickAt) ----------
     // Real touch input through DevTools, as in pass 3. The wall isn't drawn (__musNoDraw: software drawing here takes
     // seconds a frame); the camera and cases still move, so taps hit what would be on screen.
@@ -694,6 +706,7 @@ server.listen(0, async () => {
       check('No script errors in museum touch', !errors.length, errors.slice(0, 3).join(' | '));
       await ctx.close(); }
 
+    mark('pass 5');
     // ---------- pass 5: smoothness guards (Thor feedback on 0.2.7: art loading in, stutter between cases, quick menu lag,
     // Inspect turning slowly). The demo shelf (?shelf=1, 15 cases: more than the built window) with picture covers.
     // Facts about what the page does, not frame times (this runner draws in software).
@@ -865,6 +878,7 @@ server.listen(0, async () => {
       check('No script errors in the smoothness pass', !errors.length, errors.slice(0, 3).join(' | '));
       await page.screenshot({ path: path.join(OUT, '6-smooth.png') });
       await ctx.close(); }
+    mark('pass 4');
     // ---------- pass 4: the bottom screen's own page, at the Thor's bottom screen size ----------
     { const ctx = await browser.newContext({ viewport: { width: 1240, height: 1080 }, deviceScaleFactor: 1, hasTouch: true });
       ctx.setDefaultTimeout(90000);
@@ -1047,6 +1061,9 @@ server.listen(0, async () => {
       check('Bottom page: nothing redraws when idle', idle.raf === 0 && idle.endless === 0, `${idle.raf} animation frames in 1.2 s, ${idle.endless} endless animations`);
       check('Bottom page: no script errors', !errors.length, errors.slice(0, 3).join(' | '));
       await ctx.close(); }
+    } // ===== end of group thor2 =====
+    if (runs('thor3')) { // ===== group thor3: passes 5 (the Android setup wizard) to 9 =====
+    mark('pass 5');
     // ---------- pass 5: the Android setup wizard, one main ROMs folder, and box art that's never fetched twice ----------
     { const { ctx, page, errors } = await newPage(browser, null);
       const url = base + '?fakeNative=1';
@@ -1181,6 +1198,7 @@ server.listen(0, async () => {
         `${a5.fetch.length} downloads (tree: ${[...new Set(a5.fetch.map(f => f.tree || 'none'))].join()}), new ROM-side files: ${romWrites.length}, re-used: ${a5.thumb.join(', ')}`);
       check('No script errors in the wizard / art passes', !errors.length, errors.slice(0, 3).join(' | '));
       await ctx.close(); }
+    mark('pass 6');
     // ---------- pass 6: less clutter on the Thor (setup wizard's Consoles page, the console bar) ----------
     // The wizard shows the consoles this device can already play first (an emulator app found / games folders) and folds
     // the rest under "More consoles"; the bar on the shelf lists only shelves with games, keeps the current one centred
@@ -1281,6 +1299,7 @@ server.listen(0, async () => {
           !!nb && !!before && !!after && after !== before && clicks === 1, `${st.cur} → flick → ${before} → tap the case beside it → ${after} (${clicks} click${clicks === 1 ? '' : 's'})`); }
       check('Less clutter pass: no script errors', !errors.length, errors.slice(0, 3).join(' | '));
       await ctx.close(); }
+    mark('pass 7');
     // ---------- pass 7: the handheld Art Studio (top screen) and its bottom-screen companion ----------
     // Opened from the bottom screen's Box art button (0.3.5: the quick menu's row opens the console's whole studio): a row per part with the versions side by side, the controller moves
     // (part, version) and A puts one in; the bottom screen shows the parts as tabs and the versions as a grid, and a tap
@@ -1419,6 +1438,7 @@ server.listen(0, async () => {
       check('Art Studio pass: no script errors', !errors.length, errors.slice(0, 3).join(' | '));
       await ctx.close(); }
 
+    mark('pass 8');
     // ---------- pass 8: box art progress card, queue order, download limits (a bigger pretend library: ?fakeMany=1) ----------
     { const { ctx, page, errors } = await newPage(browser, null);
       const url = base + '?fakeNative=1&fakeMany=1';
@@ -1460,6 +1480,7 @@ server.listen(0, async () => {
         JSON.stringify(c.peak) + ` · ${c.prog.done}/${c.prog.total}`);
       check('Art progress pass: no script errors', !errors.length, errors.slice(0, 3).join(' | '));
       await ctx.close(); }
+    mark('pass 9');
     // ---------- pass 9: heat (perf-meter.js counts the work): nothing drawn while idle, on either screen ----------
     // The pretend Thor with its controller plugged in (connected, untouched) and the bottom page in its preview frame.
     // Counts, not timings: frames the page asked for, WebGL draw calls, running animations.
@@ -1534,42 +1555,61 @@ server.listen(0, async () => {
         hud.off.view === 'off' && !hud.off.looping && !hud.off.shown && hud.a.view === 'big' && hud.b.view === 'small' && hud.c.view === 'hidden' && !hud.c.looping && hud.back.view === 'big' && hud.back.looping, JSON.stringify(hud));
       check('Heat pass: no script errors', !errors.length, errors.slice(0, 3).join(' | '));
       await ctx.close(); }
-    } // ===== end of group thor =====
-    if (runs('screens')) { // ===== group screens: passes 10-17 =====
+    } // ===== end of group thor3 =====
+    if (runs('screens')) { // ===== group screens: passes 10-14 =====
+    mark('pass 10');
     // ---------- pass 10: magazines & guides (0.3.2): the store, downloads, the reading corner (ci/reading-test.js) ----------
     await require('./reading-test')({ browser, base, check, newPage, OUT });
+    mark('pass 11');
     // ---------- pass 11: RetroAchievements (0.3.5): sign-in, matching (titles, ROM hashes), badges, unlocks (ci/ra-test.js) ----------
     await require('./ra-test')({ browser, base, check, newPage, OUT });
+    mark('pass 12');
     // ---------- pass 12: the extra shelf themes (0.3.5; Windows too since 1.75): each applies, the bottom screen wears
     // it, no frame loop at the Handheld level (ci/themes-test.js) ----------
     await require('./themes-test')({ browser, base, check, newPage, OUT });
+    mark('pass 13');
     // ---------- pass 13: menu music (1.75): on by default, the three tracks, quick menu and Settings (ci/music-test.js) ----------
     await require('./music-test')({ browser, base, check, newPage, OUT });
+    mark('pass 14');
     // ---------- pass 14: the box art screens (1.80): the Box art page, the games grid, a game's page with tabs (ci/artui-test.js) ----------
     await require('./artui-test')({ browser, base, check, newPage, OUT });
+    } // ===== end of group screens =====
+    if (runs('screens2')) { // ===== group screens2: passes 15-17 =====
+    mark('pass 15');
     // ---------- pass 15: the public beta (1.82): new-install defaults, version order, update notice and Settings rows (ci/beta-test.js) ----------
     await require('./beta-test')({ browser, base, check, newPage, OUT });
+    mark('pass 16');
     // ---------- pass 16: PC games beyond Steam (beta.4): Epic, Quiver Launcher, the Custom shelf (ci/pcgames-test.js) ----------
     await require('./pcgames-test')({ browser, base, check, newPage, OUT });
+    mark('pass 17');
     // ---------- pass 17: other Android screens (0.4.0): a 20:9 phone, a small phone, a 16:10 tablet (ci/screens-test.js) ----------
     await require('./screens-test')({ browser, base, check, newPage, OUT });
-    } // ===== end of group screens =====
-    if (runs('windows')) { // ===== group windows: passes 18-24 =====
+    } // ===== end of group screens2 =====
+    if (runs('windows')) { // ===== group windows: passes 18-21 =====
+    mark('pass 18');
     // ---------- pass 18: the retro shelves (beta.6): PlayStation, NES … Dreamcast through RetroArch (ci/retro-test.js) ----------
     await require('./retro-test')({ browser, base, check, newPage, OUT });
+    mark('pass 19');
     // ---------- pass 19: the library (beta.7): Details redone, filters by decade / genre / players, collections (ci/library-test.js) ----------
     await require('./library-test')({ browser, base, check, newPage, OUT });
+    mark('pass 20');
     // ---------- pass 20: beta.7 consoles, the arcade list, Set up for me, the tidy first run (ci/setup-test.js) ----------
     await require('./setup-test')({ browser, base, check, newPage, OUT });
+    mark('pass 21');
     // ---------- pass 21: video previews (beta.7): finding them, Details, YouTube, behind the shelf, Settings, first run (ci/previews-test.js) ----------
     await require('./previews-test')({ browser, base, check, newPage, OUT });
+    } // ===== end of group windows =====
+    if (runs('windows2')) { // ===== group windows2: passes 22-24 =====
+    mark('pass 22');
     // ---------- pass 22: What's new after updating, the update card with its highlights, the notes in Settings (ci/whatsnew-test.js) ----------
     await require('./whatsnew-test')({ browser, base, check, newPage, OUT });
+    mark('pass 23');
     // ---------- pass 23: Add games: several programs, a folder, Playnite (experimental), the Custom shelf's tile (ci/addgames-pass.js) ----------
     await require('./addgames-pass')({ browser, base, check, newPage, OUT });
+    mark('pass 24');
     // ---------- pass 24: beta testers' reports (beta.10): 8BitDo prompts, ARMSX2 and unknown emulator apps on Android, custom games on the PC shelf, the Switch's emulator name (ci/issues-test.js) ----------
     await require('./issues-test')({ browser, base, check, newPage, OUT });
-    } // ===== end of group windows =====
+    } // ===== end of group windows2 =====
     check('Every file the page loads is in the APK', !missing.size, [...missing].join(', '));
   } catch (e) { check('Test ran to the end', false, e && e.stack ? e.stack.split('\n').slice(0, 2).join(' ') : e); }
   await browser.close(); server.close();

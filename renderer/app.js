@@ -2080,7 +2080,9 @@ function libAfter(n0,watch){if(qm.open)qsSoft();const n=libGames()-n0;if(watch&&
 // console.json options with per-system defaults: front-slot consoles load the disc upright through the front; GameCube is top-loading
 const FRONT_SLOT=new Set(["wii","wiiu","ps2","ps3","ps4","ps5","x360"]);
 // 3D models that come with (T)rustyShelf: the PC shelf's gaming PC (an original model, made for (T)rustyShelf), turned so its glass side shows
-const BUILTIN_MODEL={pc:"models/pc.glb"},BUILTIN_OPTS={pc:{museumYaw:30}};
+// ((T)rustyShelf) the 3D PC model isn't in the public source: only when the app says a copy is there (config:get builtinModels), so a
+// build without it (GitHub's, Android's, the demo) never asks for a file it doesn't have
+const BUILTIN_FILES={pc:"models/pc.glb"},BUILTIN_MODEL=new Proxy({},{get:(t,id)=>typeof id==="string"&&BUILTIN_FILES[id]&&cfgInfo&&cfgInfo.builtinModels&&cfgInfo.builtinModels[id]?BUILTIN_FILES[id]:undefined}),BUILTIN_OPTS={pc:{museumYaw:30}};
 function modelOpts(id){const t=themes[id]||{};return Object.assign({slot:FRONT_SLOT.has(id)?"front":"top"},!t.model&&BUILTIN_OPTS[id]||{},t.modelOpts||{})}
 // The shelf's 3D console (for the insert animation when a game starts) sets up its own 3D view and reads the model:
 // a few hundred ms of work that used to land right as the shelf appeared (and on every change of shelf). It now waits

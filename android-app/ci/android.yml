@@ -77,7 +77,7 @@ jobs:
     strategy:
       fail-fast: false # (every group finishes: one red group still shows the others' results)
       matrix:
-        group: [thor, screens, windows]
+        group: [thor, thor2, thor3, screens, screens2, windows, windows2]
     steps:
       - uses: actions/checkout@v5
 

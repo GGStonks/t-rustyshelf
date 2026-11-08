@@ -884,7 +884,9 @@ function handle(name, fn) {
 // pressed (the page itself may not read the clipboard). Never logged.
 handle('clipboard:text', () => { const { clipboard } = require('electron'); return String(clipboard.readText() || '').split(/\r?\n/)[0].trim().slice(0, 512); });
 
-handle('config:get', () => ({ config: cfg, consoles: CONSOLES, apps: APPS, appRoot: paths.appRoot(), version: appVersion(), hasInfo: covers.hasInfo(), settingsBlocked: config.blocked() }));
+// ((T)rustyShelf) the 3D PC model isn't in the public source (renderer/models/*.glb is left out): the page uses it only when a copy is here
+const builtinModels = (() => { try { return { pc: fs.existsSync(path.join(__dirname, 'renderer', 'models', 'pc.glb')) }; } catch { return {}; } })();
+handle('config:get', () => ({ config: cfg, consoles: CONSOLES, apps: APPS, appRoot: paths.appRoot(), version: appVersion(), hasInfo: covers.hasInfo(), settingsBlocked: config.blocked(), builtinModels }));
 // (1.82) Settings → About: the newest beta (force: ask GitHub now, not the answer from this start) and the page's links
 handle('app:updateCheck', ({ force } = {}) => updates.check(appVersion(), !!force).then(r => ({ ...r, links: updates.LINKS })));
 handle('config:save', next => { if (!next || typeof next !== 'object' || !next.systems || !next.ui) throw new Error('Bad settings.'); scanForget(); return applyCfg({ ...next, art: cfg.art, games: cfg.games, emuSetup: { ...(next.emuSetup || {}), pending: (cfg.emuSetup || {}).pending || [] }, ui: { ...next.ui, sw2Last: cfg.ui.sw2Last } }); }); // Art Studio styles and locks change through art:* only: a Settings save with its older copy mustn't undo them. (beta.8) The same for what main itself keeps: each game's own name and emulator (Details → Rename / Emulator), Set up for me's waiting list and Switch 2's last build: a screen's older copy saved later used to undo a rename, or bring back a setup that was already done

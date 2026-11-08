@@ -1,13 +1,13 @@
 // Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
 // android-app/ci/device-test-parallel.js apart from the app's name ((T)rustyShelf).
-// The device test's three groups at the same time on this PC (the way GitHub runs them, android.yml):
+// The device test's groups at the same time on this PC (the way GitHub runs them, android.yml):
 //   node ci/device-test-parallel.js www <out dir>
 // Each group writes its screenshots and log to <out dir>/<group>; the failed checks of every group are listed at the end.
 // Exit code 1 = a group failed. (One after another: node ci/web-device-test.js www <out dir>)
 'use strict';
 const { spawn } = require('child_process'), fs = require('fs'), path = require('path');
 const WWW = process.argv[2] || 'www', OUT = path.resolve(process.argv[3] || '../out/device-test');
-const GROUPS = ['thor', 'screens', 'windows'], t0 = Date.now();
+const GROUPS = ['thor', 'thor2', 'thor3', 'screens', 'screens2', 'windows', 'windows2'], t0 = Date.now(); // ((T)rustyShelf: seven parts of about the same length)
 const runOne = g => new Promise(res => {
   const dir = path.join(OUT, g); fs.mkdirSync(dir, { recursive: true });
   const log = fs.createWriteStream(path.join(dir, 'log.txt'));

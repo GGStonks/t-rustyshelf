@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // (T)rustyShelf: every test, all at once. One command runs what used to be run by hand, one suite after another (about half an
-// hour), at the same time on this PC: it takes as long as the slowest part (a device group, about 8 minutes) instead of the sum.
+// hour), at the same time on this PC: it takes as long as the slowest part (a device group, a few minutes) instead of the sum.
 //
 //   node scripts/test-all.js                 everything (the app is built unpacked first: a few seconds; the AppImage is built beside the
 //                                            others, for the one suite that checks the AppImage itself)
@@ -8,6 +8,9 @@
 //   node scripts/test-all.js --skip-build    reuse the builds in dist/ts-unpacked and dist/ts-appimage as they are (nothing in the app changed)
 //   node scripts/test-all.js --jobs 6        how many run at the same time (default 8)
 //   node scripts/test-all.js --list          what would run, and nothing else
+//   node scripts/test-all.js --changed       only what the changes can affect: the files changed since what's pushed (and what isn't
+//                                            committed yet), each mapped to the tests that cover it (it prints why); for each change
+//                                            on its way. The full run is for releases. --changed <commit>: since that commit instead
 //
 // The kinds (nothing is left out, and a test file this script doesn't know is reported, so a new test can't be forgotten):
 //   node     linux/ci/*-test.js that need no app: the backend pieces, run on made-up folders
@@ -15,13 +18,14 @@
 //            from an AppImage), and app-test on the real AppImage (it checks what only the AppImage has: its name in Steam's
 //            shortcut, the wrapper's --no-sandbox and X11 options)
 //   demo     android-app/ci/*-test.js that drive the demo page on their own
-//   device   the three groups of android-app/ci/web-device-test.js (thor, screens, windows), the way GitHub runs them
+//   device   android-app/ci/web-device-test.js in seven parts of about the same length (thor, thor2, thor3, screens, screens2,
+//            windows, windows2), run at the same time
 // Each job's output is in linux-test-out/all/<name>.log. The exit code is 1 when a check fails that isn't in KNOWN.
 //
 // It runs under a memory cap (systemd-run, when there is one: --cap 12G) and at a lower priority, and every job's processes are
 // stopped when it ends, so nothing is left running.
 'use strict';
-const { spawn, spawnSync } = require('child_process');
+const { spawn, spawnSync, execFileSync } = require('child_process');
 const fs = require('fs'), os = require('os'), path = require('path');
 
 const ROOT = path.join(__dirname, '..');
@@ -33,13 +37,13 @@ const JOBS = Math.max(1, +arg('jobs') || 8), CAP = arg('cap') && arg('cap') !== 
 const NODE = ['detect', 'pad', 'portable', 'dataexport', 'release-version', 'presence', 'epicdl', 'storage', 'windowmode', 'hoyoplay', 'music', 'looks', 'artmatch'];
 const DESKTOP = ['app', 'pc', 'xbox', 'home', 'music-app', 'windowmode-app', 'epicdl-app', 'consolebox-app', 'artmatch-app'];
 const DEMO = ['android-artcard', 'android-pc', 'usermusic', 'windowmode', 'looks', 'artmatch', 'padnote'];
-const GROUPS = ['screens', 'thor', 'windows'];
+const GROUPS = ['screens', 'screens2', 'windows', 'thor3', 'thor2', 'thor', 'windows2']; // (the device test's seven parts, longest first: each 1.5-3.5 minutes)
 // not tests of their own: run by a device group, or a probe
 const NOT_STANDALONE = new Set(['heat-probe.js', 'web-device-test.js', 'device-test-parallel.js']);
 // checks that failed before and are known (printed as known, they don't fail the run)
 // what a test harness says when its browser didn't start (under load), not a check that failed: the job runs once more
 const HARNESS = /Unable to capture screenshot|Target page, context or browser has been closed|browserType\.launch: |Navigation timeout of \d+ ms exceeded/;
-const KNOWN = ["Bottom page becomes the museum's companion (its row, the chosen case)"];
+const KNOWN = []; // (the Thor's museum-companion check passes since the missing 3D PC model is no longer asked for)
 
 function unlisted() { // test files this script doesn't know
   const out = [];
@@ -50,6 +54,47 @@ function unlisted() { // test files this script doesn't know
     if (/server\.listen\(/.test(src) && !/module\.exports/.test(src) && !DEMO.includes(f.replace(/-test\.js$/, ''))) out.push('android-app/ci/' + f);
   }
   return out;
+}
+
+// ---- --changed: the files changed, and the tests that cover them ----
+function changedFiles(base) {
+  const git = a => { try { return execFileSync('git', a, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split('\n').filter(Boolean); } catch { return null; } };
+  let b = base && base !== true ? String(base) : null;
+  if (!b) { const up = git(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']); b = up && up[0] ? up[0] : 'HEAD'; } // (not pushed yet: since the branch's remote)
+  const diff = git(['diff', '--name-only', b]); if (diff === null) return null; // (committed since then, and the working tree)
+  return { base: b, files: [...new Set([...diff, ...(git(['ls-files', '--others', '--exclude-standard']) || [])])] };
+}
+function passGroups() { // android-app/ci/<pass>.js → the device group that requires it
+  const out = {}; let g = null;
+  try { for (const l of fs.readFileSync(path.join(ROOT, 'android-app', 'ci', 'web-device-test.js'), 'utf8').split('\n')) {
+    const m = /if \(runs\('([a-z0-9]+)'\)\)/.exec(l); if (m) g = m[1];
+    const r = /require\('\.\/([\w-]+)'\)/.exec(l); if (r && g) out[r[1]] = g; } } catch {}
+  return out;
+}
+function changedPlan(files) {
+  const kinds = new Set(), named = new Set(), why = [], groups = passGroups();
+  const say = (f, what) => why.push(`  ${f} → ${what}`);
+  for (const f of files) {
+    let m;
+    if ((m = /^linux\/ci\/(.+)-test\.js$/.exec(f)) && [...NODE, ...DESKTOP].includes(m[1])) { named.add(m[1] + '-test'); say(f, 'that test'); continue; }
+    if (/^android-app\/ci\/[^/]*\.(yml|sh|bat)$/.test(f)) { say(f, 'nothing (a CI setting, not the app\'s code)'); continue; }
+    if ((m = /^android-app\/ci\/([\w-]+)\.js$/.exec(f))) {
+      const t = m[1].replace(/-test$/, '');
+      if (DEMO.includes(t)) { named.add('demo-' + t); say(f, 'that test'); continue; }
+      if (m[1] === 'web-device-test') { kinds.add('device'); say(f, 'every device group'); continue; }
+      if (groups[m[1]]) { named.add('device-' + groups[m[1]]); say(f, `the device group that runs it (${groups[m[1]]})`); continue; }
+      say(f, 'nothing (not a test that runs on its own)'); continue;
+    }
+    if (/^(main\.js|main\/|preload[\w-]*\.js$|shared\/)/.test(f)) { kinds.add('node'); kinds.add('desktop'); say(f, 'node and desktop (the desktop app\'s own code)'); continue; }
+    if (/^renderer\//.test(f)) { kinds.add('desktop'); kinds.add('demo'); kinds.add('device'); say(f, 'desktop, demo and device (the screen, shared by every app)'); continue; }
+    if (/^android-app\//.test(f)) { kinds.add('demo'); kinds.add('device'); say(f, 'demo and device (the Android app)'); continue; }
+    if (f === 'scripts/test-all.js') { kinds.add('node'); say(f, 'node (a short run of this runner itself)'); continue; }
+    if (f === 'scripts/release-version.js') { named.add('release-version-test'); say(f, 'release-version-test'); continue; }
+    if (/^package(-lock)?\.json$/.test(f)) { ['node', 'desktop', 'demo', 'device'].forEach(k => kinds.add(k)); say(f, 'everything (the app\'s packages and version)'); continue; }
+    if (/^(\.github\/|android-app\/ci\/[^/]*\.(yml|sh|bat)$|android-app\/ci\/fixtures\/README|scripts\/(community-report|release-notes|push-build)\.js$|start-trustyshelf\.sh$|\.gitignore$|LICENSE|[^/]*\.(md|txt|bat)$)/.test(f)) { say(f, 'nothing (not the app\'s code)'); continue; }
+    ['node', 'desktop', 'demo', 'device'].forEach(k => kinds.add(k)); say(f, 'everything (not known to this script: to be safe)');
+  }
+  return { kinds, named, why };
 }
 
 const logDir = path.join(ROOT, 'linux-test-out', 'all');
@@ -65,6 +110,14 @@ for (const t of DESKTOP) { // (app-test on the real AppImage, the others on the 
 for (const t of DEMO) add('demo', 'demo-' + t, process.execPath, ['ci/' + t + '-test.js', 'www', path.join(ROOT, 'out', 'all-' + t)], { cwd: path.join(ROOT, 'android-app'), wait: ['web'] });
 for (const t of NODE) add('node', t + '-test', process.execPath, [path.join('linux', 'ci', t + '-test.js')]);
 
+const CHANGED = arg('changed');
+if (CHANGED) {
+  const c = changedFiles(CHANGED); if (!c) { console.log('--changed: git could not say what changed'); process.exit(2); }
+  const pl = changedPlan(c.files), keep = jobs.filter(j => pl.kinds.has(j.kind) || pl.named.has(j.name));
+  console.log(`--changed: ${c.files.length} file${c.files.length === 1 ? '' : 's'} changed since ${c.base}`); for (const w of pl.why) console.log(w);
+  jobs.length = 0; jobs.push(...keep);
+  if (!jobs.length) { console.log('Nothing to test for these changes.'); process.exit(0); }
+}
 if (arg('list')) { for (const j of jobs) console.log(`${j.kind.padEnd(8)} ${j.name}`); const u = unlisted(); if (u.length) console.log('NOT IN THE LISTS:', u.join(', ')); process.exit(0); }
 
 // run under a memory cap and a lower priority, once (when systemd can do that for this user)

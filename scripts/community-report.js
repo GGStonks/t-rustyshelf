@@ -28,9 +28,13 @@
 //   data.json       everything collected, for other tools
 //   seen.json       what was there last time (every message's id), so "new" is exact
 //   cache.json      what doesn't need asking again (README texts, fork work) while the repository hasn't changed
-//   done.json       yours to edit: { "<link>": { "status": "done" | "skip" | "answered" | "later", "note": "…",
-//                   "until": "<date>" } }: "skip" / "answered" take a thread off the waiting list (messages written
-//                   after "until", when given, still count)
+//   done.json       what was decided about each thread (yours, or the AI's, to edit): { "<link>": { "status": "done" | "skip" |
+//                   "answered" | "later", "note": "…", "until": "<date>" } }: "skip" / "answered" take a thread off the waiting
+//                   list (messages written after "until", when given, still count). The quick way to record a decision:
+//                     node scripts/community-report.js --mark <link> skip "no reply needed: a thanks"   (until = now)
+//                     node scripts/community-report.js --mark <link> clear                               (forget it)
+// It also remembers what you said: your promises ("in the next release", "I'll add", "will do", …) are listed until a later
+// message of yours in that thread says it's out, and discussions' polls are read with their votes.
 // A thread waits for you when someone (not you, not a bot) wrote in it after your last message, or you never wrote in it.
 'use strict';
 const fs = require('fs'), path = require('path'), crypto = require('crypto'), { execFileSync } = require('child_process');
@@ -63,6 +67,16 @@ const TONE_RULES = `# Rules for replies (edit this file to change them; tone.md 
 function token() {
   if (process.env.GITHUB_TOKEN) return process.env.GITHUB_TOKEN;
   try { return execFileSync('gh', ['auth', 'token'], { encoding: 'utf8' }).trim(); } catch { return ''; }
+}
+// --mark <link> <status> [note]: what was decided about a thread, kept in done.json (until = now: someone writing later brings
+// it back); --mark <link> clear forgets it. No network: it only edits the file
+if (argv.includes('--mark')) {
+  const i = argv.indexOf('--mark'), link = argv[i + 1], status = argv[i + 2], note = argv.slice(i + 3).filter(a => !a.startsWith('--')).join(' ');
+  if (!link || !status || !/^https:\/\/github\.com\//.test(link)) { console.error('--mark <link> <done|skip|answered|later|clear> [note]'); process.exit(2); }
+  if (!['done', 'skip', 'answered', 'later', 'clear'].includes(status)) { console.error('status: done, skip, answered, later or clear'); process.exit(2); }
+  fs.mkdirSync(OUT, { recursive: true }); const f = path.join(OUT, 'done.json'); let d = {}; try { d = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
+  if (status === 'clear') delete d[link]; else d[link] = { status, ...(note ? { note } : {}), until: new Date().toISOString() };
+  fs.writeFileSync(f, JSON.stringify(d, null, 2) + '\n'); console.log(status === 'clear' ? `Forgot ${link}` : `${link}: ${status}${note ? ` (${note})` : ''}, until now`); process.exit(0);
 }
 const TOKEN = token(); if (!TOKEN) { console.error('No GitHub sign-in: run `gh auth login` or set GITHUB_TOKEN.'); process.exit(2); }
 const H = { Authorization: `Bearer ${TOKEN}`, 'User-Agent': 'trustyshelf-community-report', Accept: 'application/vnd.github+json' };
@@ -107,7 +121,7 @@ const F = {
     comments(first:100){ ${MORE} nodes{ ${CMT} reactions{totalCount} } }
     reviews(first:50){ ${MORE} nodes{ ${MSG} state comments(first:100){ ${MORE} nodes{ ${CMT} path } } } }
     files(first:100){ nodes{ path additions deletions } } commits(first:100){ nodes{ commit{ oid messageHeadline } } } additions deletions`,
-  Discussion: `id number title body url createdAt updatedAt lastEditedAt closed ${A} category{name} upvoteCount ${REACT} answer{ url }
+  Discussion: `id number title body url createdAt updatedAt lastEditedAt closed ${A} category{name} upvoteCount ${REACT} answer{ url } poll{ question totalVoteCount options(first:20){ nodes{ option totalVoteCount } } }
     comments(first:100){ ${MORE} nodes{ ${CMT} upvoteCount replies(first:100){ ${MORE} nodes{ ${CMT} } } } }`,
 };
 const LIST = { issues: ['issues', 'Issue', 40], pulls: ['pullRequests', 'PullRequest', 20], discussions: ['discussions', 'Discussion', 30] };
@@ -174,6 +188,7 @@ function item(repo, kind, x) {
     key: x.url, repo, kind: k, number: x.number, title: x.title, url: x.url, nodeId: x.id,
     author: who(x), created: x.createdAt, updated: x.updatedAt, state: x.merged ? 'merged' : x.closed ? 'closed' : String(x.state || 'open').toLowerCase(),
     labels: ((x.labels && x.labels.nodes) || []).map(l => l.name), category: x.category && x.category.name, plus: plus(x), answered: !!(x.answer && x.answer.url),
+    ...(x.poll ? { poll: { question: x.poll.question, votes: x.poll.totalVoteCount, options: ((x.poll.options && x.poll.options.nodes) || []).map(o => ({ option: o.option, votes: o.totalVoteCount })) } } : {}),
     body: x.body || '', messages, comments, commentCount: comments.length,
     ...(k === 'pull' ? { head: `${(x.headRepository || {}).nameWithOwner || '?'}:${x.headRefName}`, base: x.baseRefName, additions: x.additions, deletions: x.deletions,
       files: ((x.files && x.files.nodes) || []).map(f => `${f.path} (+${f.additions} −${f.deletions})`), commits: ((x.commits && x.commits.nodes) || []).map(c => c.commit.messageHeadline) } : {}),
@@ -293,6 +308,21 @@ function mentioned(it, commits) { // → { level: 'mentioned' | 'maybe' | '', co
     if (maybe.length && words.length) return { level: 'maybe', commits: maybe };
   }
   return { level: '', commits: [] };
+}
+
+// ---------- what you said you'd do ----------
+// a message of yours that promises something (it'll be in the next release, you'll add / fix / look at it) stays "open" until a
+// later message of yours in the same conversation says it's out (released, "it's out", "is in <version>", "shipped")
+const PROMISE = /\b(next release|upcoming release|next version|going into the next|will be (in|added|fixed)|i'?ll (add|fix|look|make|check|follow|do|try|bring|work)|will do|on my list|haven'?t forgotten|i'm (going to|beginning to) (add|work|look))\b/i;
+const TOLD_OUT = /\b(it'?s out|is out|out now|released|shipped|it'?s in (the )?(\(T\)rustyShelf )?\d+\.\d+|is in (the )?(\(T\)rustyShelf )?\d+\.\d+(\.\d+)*( release)?|out in \d+\.\d+|in the (\(T\)rustyShelf )?\d+\.\d+(\.\d+)* release|release \(?v?\d+\.\d+|releases\/tag\/v?\d+)\b/i;
+function promisesOf(it) {
+  const mine = it.messages.filter(m => isMe(m.author)), open = [];
+  // (an offer that waits for the other person isn't a promise: "if …, tell me … and I'll look")
+  const COND = /^\s*if\b|\b(tell me|let me know)\b[^.!?]{0,120}\band i'?ll\b/i;
+  for (const m of mine) { const t = plain(m.body), said = t.split(/(?<=[.!?])\s+/).filter(x => PROMISE.test(x) && !COND.test(x)); if (!said.length) continue;
+    const told = mine.some(x => String(x.at) > String(m.at) && TOLD_OUT.test(plain(x.body)));
+    if (!told) open.push({ at: m.at, url: m.url, text: said.join(' ').slice(0, 300) }); }
+  return open;
 }
 
 // ---------- how you write (tone.md) ----------
@@ -465,6 +495,7 @@ const kindsFor = r => [...(r.has_issues ? ['issues'] : []), 'pulls', ...(r.has_d
     for (const m of it.waiting) if (THANKS.test(plain(m.body))) m.thanks = true;
     // done in (T)rustyShelf after your last message here: maybe they don't know yet
     it.notTold = it.done.filter(c => String(c.date) > lastMine && !isMe(it.author));
+    it.promises = ['done', 'skip'].includes(it.status) ? [] : promisesOf(it); // (what you said you'd do here, not told as out yet)
   }
   const shown = data.items.filter(it => !SINCE || new Date(it.updated || it.created) >= SINCE);
 
@@ -492,10 +523,11 @@ const kindsFor = r => [...(r.has_issues ? ['issues'] : []), 'pulls', ...(r.has_d
     ? { how: 'discussion', discussionId: it.nodeId, replyToId: m && m.type === 'reply' ? m.parent : m && m.type === 'comment' ? m.id : null,
         command: `gh api graphql -f query='mutation($d:ID!,$r:ID,$b:String!){addDiscussionComment(input:{discussionId:$d,replyToId:$r,body:$b}){comment{url}}}' -f d=${it.nodeId}${m && m.type !== 'post' ? ` -f r=${m.type === 'reply' ? m.parent : m.id}` : ''} -f b="$(cat reply.md)"` }
     : { how: it.kind, command: `gh ${it.kind === 'pull' ? 'pr' : 'issue'} comment ${it.number} -R ${it.repo} --body-file reply.md` };
-  const answerJson = waitingItems.map(it => ({ key: it.key, where: where(it), title: it.title, kind: it.kind, type: it.type, state: it.state, yours: it.repo === MINE,
+  const answerJson = waitingItems.map(it => ({ key: it.key, where: where(it), title: it.title, kind: it.kind, type: it.type, state: it.state, yours: it.repo === MINE, decided: it.status ? { status: it.status, note: it.note } : null, promises: it.promises, poll: it.poll || null, markedAnswered: !!it.answered,
     waiting: it.waiting.map(m => ({ author: m.author, at: m.at, url: m.url, type: m.type, text: plain(m.body), body: m.body, thanks: !!m.thanks, isNew: m.isNew })),
     reply: howToReply(it, it.waiting[it.waiting.length - 1]), doneInTrustyShelf: it.done, conversation: it.messages.map(m => ({ author: m.author, at: m.at, type: m.type, url: m.url, text: plain(m.body) })) }));
-  fs.writeFileSync(path.join(OUT, 'to-answer.json'), JSON.stringify({ at: data.at, me: ME, latestRelease: release, tone: 'tone.md', threads: answerJson,
+  const promised = data.items.filter(it => it.promises.length);
+  fs.writeFileSync(path.join(OUT, 'to-answer.json'), JSON.stringify({ at: data.at, me: ME, latestRelease: release, tone: 'tone.md', threads: answerJson, promised: promised.map(it => ({ key: it.key, where: where(it), title: it.title, promises: it.promises })),
     notTold: notToldItems.map(it => ({ key: it.key, where: where(it), title: it.title, lastMine: it.lastMine, done: it.notTold, reply: howToReply(it, null) })) }, null, 1));
   const T = [`# Waiting for an answer from ${ME}`, '', `Made ${when(data.at)} UTC by scripts/community-report.js. Latest (T)rustyShelf release: ${release || '(none)'}.`, '',
     `For the AI that answers: reply in ${ME}'s voice, as described in tone.md (next to this file; it starts with the rules ${ME} set, then quotes all of ${ME}'s comments). For each thread below: read the whole conversation, check what (T)rustyShelf already did (commits, and the release they're in, or "not released yet"), and decide whether a reply is needed (a plain "thanks, it works" may need none). Post with the command given (the reply's text in reply.md). After posting, run the script again: the thread leaves this list and tone.md is rebuilt.`, ''];
@@ -503,6 +535,10 @@ const kindsFor = r => [...(r.has_issues ? ['issues'] : []), 'pulls', ...(r.has_d
   for (const it of waitingItems) {
     const last = it.waiting[it.waiting.length - 1];
     T.push(`## [${esc(it.title)}](${it.url})`, '', `${where(it)} · ${it.kind === 'pull' ? 'pull request' : it.kind} · ${it.state} · ${it.type}${it.repo === MINE ? ' · **your repository**' : ''}${it.via ? ' · found through your notifications' : ''}`, '');
+    if (it.note || it.status) T.push(`Decided before: ${it.status || ''}${it.note ? ` (${esc(it.note)})` : ''}`, '');
+    if (it.promises.length) T.push(`You promised here: ${it.promises.map(p => `"${esc(p.text)}" (${when(p.at)})`).join('; ')}`, '');
+    if (it.poll) T.push(`Poll: ${esc(it.poll.question)}: ${it.poll.options.map(o => `${esc(o.option)} ${o.votes}`).join(', ')} (${it.poll.votes} votes)`, '');
+    if (it.answered) T.push('Marked as answered on GitHub.', '');
     T.push(`Waiting: ${it.waiting.map(m => `${m.author} (${when(m.at)}${m.isNew ? ', new' : ''}${m.thanks ? ', a thanks' : ''})`).join(', ')}${it.lastMine ? ` · your last message: ${when(it.lastMine)}` : ' · you haven\'t written here yet'}`, '');
     T.push(it.done.length ? `(T)rustyShelf did: ${it.done.map(c => `${c.sha} "${esc(c.subject)}" (${day(c.date)}, ${c.release ? 'in ' + c.release : 'not released yet'})`).join('; ')}` : '(T)rustyShelf did: nothing that names this thread in a commit (check by hand: it may be done under another name).', '');
     T.push(`Reply: \`${howToReply(it, last).command}\``, '', 'Conversation:', '');
@@ -511,6 +547,11 @@ const kindsFor = r => [...(r.has_issues ? ['issues'] : []), 'pulls', ...(r.has_d
   if (notToldItems.length) {
     T.push('# Done in (T)rustyShelf after your last message, maybe not told yet', '');
     for (const it of notToldItems) T.push(`- [${esc(it.title)}](${it.url}) · ${where(it)} · ${it.notTold.map(c => `${c.sha} "${esc(c.subject)}" (${day(c.date)}, ${c.release || 'not released yet'})`).join('; ')} · your last message ${it.lastMine ? when(it.lastMine) : 'none'} · reply: \`${howToReply(it, null).command}\``);
+    T.push('');
+  }
+  if (promised.length) {
+    T.push('# Promised by you, not told as out yet', '', 'Your messages that say something will come (the next release, "I\'ll add …"), with no later message of yours in that thread saying it\'s out. When it ships, tell them; when it won\'t, say so, or `--mark <link> skip "why"`.', '');
+    for (const it of promised) T.push(`- [${esc(it.title)}](${it.url}) · ${where(it)}: ${it.promises.map(p => `"${esc(p.text)}" (${when(p.at)}, [link](${p.url}))`).join('; ')}`);
     T.push('');
   }
   fs.writeFileSync(path.join(OUT, 'to-answer.md'), T.join('\n') + '\n');
@@ -524,6 +565,8 @@ const kindsFor = r => [...(r.has_issues ? ['issues'] : []), 'pulls', ...(r.has_d
     for (const m of it.waiting) L.push(`  - ${m.author}, ${when(m.at)}${m.isNew ? ' · **new**' : ''}${m.thanks ? ' · a thanks' : ''}: ${esc(excerpt(plain(m.body), 400))} ([link](${m.url}))`); }
   if (waitingItems.length) L.push('');
   if (notToldItems.length) { L.push(`## Done in (T)rustyShelf, maybe not told yet (${notToldItems.length})`, ''); for (const it of notToldItems) L.push(`- [${esc(it.title)}](${it.url}) · ${where(it)} · ${it.notTold.map(c => `${c.sha} ${esc(c.subject)} (${c.release || 'not released yet'})`).join('; ')}`); L.push(''); }
+  const promisedR = data.items.filter(it => it.promises.length);
+  if (promisedR.length) { L.push(`## Promised by you, not told as out yet (${promisedR.length})`, ''); for (const it of promisedR) L.push(`- [${esc(it.title)}](${it.url}) · ${where(it)}: ${it.promises.map(p => `"${esc(excerpt(p.text, 160))}" (${day(p.at)})`).join('; ')}`); L.push(''); }
   const open = shown.filter(it => !['done', 'skip'].includes(it.status) && it.state !== 'closed' && it.state !== 'merged' || (it.kind === 'pull' && !it.mine && !it.status));
   if (before) {
     L.push(`## New since the last report (${when(before.at)} UTC)`, '');
@@ -553,6 +596,7 @@ const kindsFor = r => [...(r.has_issues ? ['issues'] : []), 'pulls', ...(r.has_d
     for (const it of list) {
       L.push(`### [${esc(it.title)}](${it.url})`, '', `${where(it)} · ${it.state} · by ${it.author || '?'} on ${day(it.created)} · 👍 ${it.plus} · ${it.comments.length} comments${it.labels.length ? ' · ' + it.labels.join(', ') : ''}${it.category ? ' · ' + it.category : ''} · status: ${status(it)}${it.waiting.length ? ' · **waiting for your answer**' : ''}`, '');
       if (excerpt(it.body)) L.push(`> ${excerpt(it.body)}`, '');
+      if (it.poll) L.push(`Poll: ${esc(it.poll.question)}: ${it.poll.options.map(o => `${esc(o.option)} ${o.votes}`).join(', ')} (${it.poll.votes} votes)`, '');
       if (it.asks.length) { L.push('What is asked / reported:'); for (const a of it.asks) L.push(`- ${esc(a)}`); L.push(''); }
       if (it.done.length) L.push(`(T)rustyShelf: ${it.done.map(c => `${c.sha} ${esc(c.subject)} (${c.release || 'not released yet'})`).join('; ')}`, '');
       if (it.kind === 'pull') { L.push(`Code: ${it.head} → ${it.base}, +${it.additions} −${it.deletions}${it.commits.length ? `; commits: ${it.commits.slice(0, 8).map(esc).join(' · ')}` : ''}`, ''); if (it.files.length) L.push(`Files: ${it.files.slice(0, 20).map(esc).join(', ')}`, ''); }

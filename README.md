@@ -403,6 +403,16 @@ newest version released (`2.12.4.283` → `2.12.4.284`); `For build 2.12.4` the 
 commit stops with an error if that version is already released. "For build" counts only as a phrase of its own
 (followed by a version, punctuation or the end of the line).
 
+`node scripts/push-build.js "Build: what it is"` makes that build commit, pushes it and returns at once (a build takes
+about 3 minutes on GitHub); `--status` shows how the latest runs are going, and the next build push waits only if one is
+still running.
+
+## Tests
+
+`node scripts/test-all.js` runs every test at the same time (the Node tests, the real app on a virtual screen, the demo
+page and the device test in seven parts): about 4 minutes. `--changed` runs only what the changes since the last push can
+affect, and says why for each file; the full run is for releases. `--list` shows what would run.
+
 ## Community report
 
 `node scripts/community-report.js` gathers what people around Boxshelf ask for, report and build on GitHub: the issues,
