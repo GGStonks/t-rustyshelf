@@ -2,7 +2,7 @@
 # (scripts/release-version.js) and decides one of three things:
 #   none     a normal commit: this run finishes here, nothing else runs
 #   build    "For build…" → calls build.yml: the Windows, Linux and Android builds, kept as the run's downloads
-#   release  "For version A.B.C" → calls release-publish.yml: the same builds, then a GitHub release vA.B.C.0
+#   release  "For version A.B.C" → calls release.yml: the same builds, then a GitHub release vA.B.C.0
 # The version is A.B.C.DDDD (DDDD the build of A.B.C). Desktop builds carry it as A.B.C+DDDD (npm and electron-builder
 # take that form) and show it as A.B.C.DDDD; Android as its versionName, with a versionCode that grows with every build.
 name: Build/release check
@@ -71,7 +71,7 @@ jobs:
     name: Release
     needs: check
     if: needs.check.outputs.kind == 'release'
-    uses: ./.github/workflows/release-publish.yml
+    uses: ./.github/workflows/release.yml
     with:
       version: ${{ needs.check.outputs.version }}
       semver: ${{ needs.check.outputs.semver }}

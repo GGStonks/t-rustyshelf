@@ -396,7 +396,7 @@ commit message and does one of three things:
 |---|---|
 | nothing special | the check finishes there: nothing is built |
 | `For build` (or `For build 2.12.4`) | the Windows, Linux and Android builds run (`build.yml`) and are kept as the run's downloads, for 14 days. No release. |
-| `For version 2.4.15` | the same builds, then a GitHub release `2.4.15.0` (`release-publish.yml`), as the latest release |
+| `For version 2.4.15` | the same builds, then a GitHub release `2.4.15.0` (`release.yml`), as the latest release |
 
 Versions are `A.B.C.DDDD` (`DDDD` is the build of version `A.B.C`). `For build` on its own builds the next number of the
 newest version released (`2.12.4.283` → `2.12.4.284`); `For build 2.12.4` the next one of that version. A "For version"

@@ -1,6 +1,6 @@
 # (T)rustyShelf release: the builds (build.yml), then a GitHub release vA.B.C.0 with them, as the latest release. Called by
 # build-release-check.yml for a "For version A.B.C" commit.
-name: Release (publish)
+name: Release
 
 on:
   workflow_call:

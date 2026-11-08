@@ -1,5 +1,5 @@
 # (T)rustyShelf builds: Windows (portable exe), Linux (AppImage) and Android (APK), as the run's downloads. Called by
-# build-release-check.yml (a "For build" commit) and by release-publish.yml (a release). Nothing is published here.
+# build-release-check.yml (a "For build" commit) and by release.yml (a release). Nothing is published here.
 name: Build
 
 on:
