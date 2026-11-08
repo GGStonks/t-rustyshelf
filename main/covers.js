@@ -553,11 +553,38 @@ function libretroAll(names, game) {
   for (const t of lookupNames(game.title)) { const l = idx.get(norm(t)) || []; for (const n of l) if (!out.includes(n)) out.push(n); if (l.length) break; }
   return out;
 }
+// ((T)rustyShelf issue #2) Art match: the name a game's art is looked up under, picked by hand (Details → Art match) for a ROM
+// hack, a translation or a mod whose file name or serial isn't the original game's. artNameFn(game) → that name or ''; every
+// lookup by title (box art downloads, the Art Studio's candidates, game info) goes through artGame()
+let artNameFn = null;
+function setArtName(fn) { artNameFn = typeof fn === 'function' ? fn : null; }
+function artGame(game) { let n = ''; try { n = artNameFn && game && game.id ? String(artNameFn(game) || '').trim() : ''; } catch {} return n && n !== game.title ? { ...game, title: n, shownTitle: game.title } : game; }
+// the games of a console in the box art databases whose names hold every word typed, for picking a game's art match:
+// [{ name, source: 'launchbox' | 'libretro', thumb, pictures }], the closest names first. Reads the LaunchBox index already
+// built (never builds it from here) and libretro's list (fetched once a week, waited for opts.lrWait ms at most)
+async function artMatches(sysId, term, opts = {}) {
+  const want = norm(term); if (!want) return [];
+  const words = want.split(' ').filter(Boolean), fits = n => words.every(w => (' ' + n + ' ').includes(' ' + w) || n.includes(w)), out = new Map();
+  const idx = opts.index !== undefined ? opts.index : readyIndex(), list = idx && LAUNCHBOX[sysId] ? idx.games[LAUNCHBOX[sysId]] : null;
+  for (const g of list || []) {
+    if (!g || !g.n || !fits(g.n)) continue;
+    const imgs = (idx.images && idx.images[g.id]) || [], pictures = imgs.filter(i => /^(Box - |Disc$)/.test(i.type)).length, front = pickImages(imgs, 'Box - Front', opts.region)[0];
+    const prev = out.get(g.n); if (prev && prev.pictures >= pictures) continue;
+    out.set(g.n, { name: g.name, source: 'launchbox', thumb: front ? LB_IMG + encodeURI(front.file) : '', pictures });
+  }
+  if (LIBRETRO[sysId] && opts.libretro !== false) {
+    let names = null, t; try { names = await Promise.race([libretroIndex(sysId), new Promise(r => { t = setTimeout(() => r(null), opts.lrWait || 6000); })]); } catch {} finally { clearTimeout(t); }
+    for (const n of names || []) { const title = cleanTitle(n + '.png').title, k = norm(title); if (!k || out.has(k) || !fits(k)) continue; out.set(k, { name: title, source: 'libretro', thumb: '', pictures: 1 }); }
+  }
+  const rank = x => { const k = norm(x.name); return (k === want ? 3 : k.startsWith(want) ? 2 : 1) * 1e6 - k.length * 10 + Math.min(9, x.pictures); };
+  return [...out.values()].sort((a, b) => rank(b) - rank(a) || a.name.localeCompare(b.name)).slice(0, opts.max || 24);
+}
 const TDB_SYS = { gc: 'wii', wii: 'wii', wiiu: 'wiiu' }; // GameTDB keeps GameCube under its Wii art
 // For one part of one game: [{ url, ext, source, type, region, edition, kind, label, cut? ('spine': cut from a full wrap), exact? }]
 // Reads only cached indexes (the LaunchBox index is never built from here: opts.index / readyIndex()); libretro's list
 // is fetched once a week and waited for at most opts.lrWait ms.
 async function candidates(sysId, game, part, opts = {}) {
+  game = artGame(game); // (Details → Art match)
   const out = [], idx = opts.index !== undefined ? opts.index : readyIndex();
   if (idx && LAUNCHBOX[sysId]) {
     let g0 = null; try { g0 = launchboxMatch(idx, sysId, game); } catch {}
@@ -697,11 +724,13 @@ async function coversRun(systems, progress, plan, opts, tok) {
     if (!games.length) continue;
     progress({ system: def.name, systemId: def.id, stage: `Looking up ${def.name} art…`, done: 0, total: games.length });
     const names = want('front') ? await libretroIndex(def.id) : null;
-    if (!lb && !lbError) { try { lb = lbOverride || await launchboxIndex(info => { if (!tok.c) progress(info); }, tok.ac.signal); } catch (e) { if (tok.c) break; lbError = e.message; log('LaunchBox ERROR', e.stack || e); } } // (beta.10: Cancel stops the wait for the index)
+    if (!lb && !lbError && opts.indexReadyOnly) lb = lbOverride || readyIndex(); // ((T)rustyShelf: a single game fetched again after its art match: the index only if it's built)
+    if (!lb && !lbError && !opts.indexReadyOnly) { try { lb = lbOverride || await launchboxIndex(info => { if (!tok.c) progress(info); }, tok.ac.signal); } catch (e) { if (tok.c) break; lbError = e.message; log('LaunchBox ERROR', e.stack || e); } } // (beta.10: Cancel stops the wait for the index)
     await held(tok); if (tok.c) break; // (beta.10) paused while the index was built: wait here, not in the first games
     let done = 0;
-    await pool(games, 4, async game => {
+    await pool(games, 4, async game0 => {
       if (tok.c) return; await held(tok); if (tok.c) return; // (beta.10) Pause: the next game waits
+      const game = artGame(game0); // ((T)rustyShelf: Details → Art match, looked up under the name picked)
       const dir = artDirFor(cfg, game.file), base = artBase(game.file);
       let touched = false, lg, lgDone = false; const missing = [];
       // Switch / 3DS: GameTDB's full cover scan, downloaded once per game for both its back and its spine (deleted after)
@@ -859,6 +888,6 @@ function hasInfo() { return idxStamp() > 0; } // cheap: never parses the index j
 
 // the index, built (downloaded) if it has to be: Art Studio's "build the LaunchBox index" button
 async function buildIndex(progress) { if (lbOverride) return true; await launchboxIndex(progress || (() => {})); return true; }
-module.exports = { _setIndex: x => { lbOverride = x; }, LAUNCHBOX, PC_BOX_PLATS, consoleBox, init, matchTitle, matchName, lookupNames, sgMatch, setSpineCutter, setCartMaker, makeCart, CART_SYS, discId, downloadCovers, coverage, cancel, pause, isPaused, isImageBuf, HD_MIN, gameInfo, flushInfoCache, hasInfo, invalidateInfo, norm, launchboxMatch, libretroMatch, pickImages,
+module.exports = { _setIndex: x => { lbOverride = x; }, LAUNCHBOX, PC_BOX_PLATS, consoleBox, setArtName, artGame, artMatches, init, matchTitle, matchName, lookupNames, sgMatch, setSpineCutter, setCartMaker, makeCart, CART_SYS, discId, downloadCovers, coverage, cancel, pause, isPaused, isImageBuf, HD_MIN, gameInfo, flushInfoCache, hasInfo, invalidateInfo, norm, launchboxMatch, libretroMatch, pickImages,
   // Art Studio (main/artstudio.js) reuses these rather than keeping its own copies
   candidates, libretroAll, libretroIndex, readyIndex, indexState, buildIndex, refreshIndex, cancelRefresh, indexInfo, edition, lbRegion, lrRegion, tdbRegion, download, downloadEx, sizeOf, artFile, isLow, placeArt, setOnPlaced, replacedFor, cutSpine, cutBack, canCut: () => !!spineCutter, pool, KINDS, ART_EXT, REPLACED };

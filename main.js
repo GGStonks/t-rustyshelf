@@ -36,6 +36,7 @@ function ownNames(def, gs) { const G = cfg && cfg.games; if (!G) return gs;
   return gs.map(g => { const o = G[def.id + ':' + g.file]; return o && o.title && o.title !== g.title ? { ...g, fileTitle: g.title, title: o.title } : g; });
 }
 const ownTitle = id => { const o = cfg && cfg.games && cfg.games[String(id)]; return o && o.title ? o.title : ''; }; // (PC games, by id)
+const artNameOf = id => { const o = cfg && cfg.games && cfg.games[String(id)]; return o && o.artName ? o.artName : ''; }; // ((T)rustyShelf issue #2) a console game's art match: the name its art is looked up under
 const { scanSteam, steamRoot, isMainSteam } = require('./main/steam');
 const steamart = require('./main/steamart');
 const pcgames = require('./main/pcgames'); // (beta.4) Epic, Quiver Launcher and games added by hand
@@ -637,7 +638,7 @@ async function buildLibrary() {
     // and the per-game details with a breath every 25 ms (thousands of games' info lookups in one go stalled it too)
     const games = []; let t0 = Date.now();
     for (const g of await scanSystemAsync(def, sc)) { if (Date.now() - t0 > 25) { await new Promise(r => setImmediate(r)); t0 = Date.now(); }
-      games.push({ ...g, info: covers.gameInfo(def.id, g.title), manualMiss: manualMiss(def.id, g), art: { front: fileUrl(g.art.front), hero: fileUrl(g.art.hero), back: fileUrl(g.art.back), madeBack: g.art.madeBack || undefined, spine: fileUrl(g.art.spine), madeSpine: g.art.madeSpine || undefined, disc: fileUrl(g.art.disc), manual: def.id === 'wiiu' ? await withCoverAsync(def.id, g, (g.art.manual || []).map(fileUrl)) /* (beta.10: async) */ : (g.art.manual || []).map(fileUrl), manualPdf: fileUrl(g.art.manualPdf) } }); }
+      games.push({ ...g, ...(artNameOf(g.id) ? { artName: artNameOf(g.id) } : {}), info: covers.gameInfo(def.id, artNameOf(g.id) || g.title), manualMiss: manualMiss(def.id, g), art: { front: fileUrl(g.art.front), hero: fileUrl(g.art.hero), back: fileUrl(g.art.back), madeBack: g.art.madeBack || undefined, spine: fileUrl(g.art.spine), madeSpine: g.art.madeSpine || undefined, disc: fileUrl(g.art.disc), manual: def.id === 'wiiu' ? await withCoverAsync(def.id, g, (g.art.manual || []).map(fileUrl)) /* (beta.10: async) */ : (g.art.manual || []).map(fileUrl), manualPdf: fileUrl(g.art.manualPdf) } }); }
     // (beta.7) arcade zips are named from FinalBurn Neo's list: fetched once in the background, then the shelf refreshes
     if (games.length && arcadenames.SYSTEMS.has(def.id) && !arcadenames.ready()) arcadenames.fetchNames().then(ok => { if (ok && alive()) win.webContents.send('library:changed', { arcade: 1 }); });
     shelves.push({ id: def.id, kind: 'console', name: def.name, emulatorName: emuShown(def, sc.emulator), hasEmulator: !!sc.emulator && paths.isFile(emuPath(sc.emulator)) /* (1.82) an uninstalled one gets no Open tile */, emulator: sc.emulator, emulatorIcon: fileUrl(await iconQuick(sc.emulator)), gameArgs: sc.gameArgs, bootOnLaunch: sc.bootOnLaunch !== false, useIpl: def.id === 'gc' && !!sc.useIpl, insertAnim: sc.insertAnim !== false, games });
@@ -1757,6 +1758,43 @@ handle('epic:remove', ({ id } = {}) => linuxpc.epicRemove(id));
 handle('epic:move', ({ id, delta } = {}) => linuxpc.epicMove(id, delta < 0 ? -1 : 1));
 handle('epic:clearDone', () => linuxpc.epicClearDone());
 // Details → Installation: '' (as the shelf finds it), 'installed' or 'notinstalled'; cfg.games[<game id>].install, for Epic games
+// ((T)rustyShelf issue #2) Details → Art match: a console game's art looked up under another game's name (a ROM hack, a
+// translation, a mod named after its serial). art:matchSearch lists the console's games in the box art databases whose names
+// hold the words typed; art:matchSet keeps the one picked with the game (cfg.games[id].artName; '' = automatic again) and
+// fetches the game's art again under it, in the background (pictures chosen in the Art Studio are left alone; the ones
+// replaced are kept in the art folder's backup, as with every redo)
+const romOf = id => { const m = /^([a-z0-9]+):(.+)$/i.exec(String(id || '')); const def = m && CONSOLES.find(d => d.id === m[1]); return def && cfg.systems[def.id] && String(id).length <= 2048 ? { def, sc: cfg.systems[def.id], file: m[2] } : null; };
+handle('art:matchSearch', async ({ id, term } = {}) => {
+  const r = romOf(id); if (!r) throw new Error("That isn't a console game on the shelf.");
+  const q = String(term || '').replace(/\s+/g, ' ').trim().slice(0, 120); if (!q) return { list: [], index: covers.indexState() };
+  return { list: await covers.artMatches(r.def.id, q, { region: cfg.ui.artRegion }), index: covers.indexState() };
+});
+let artRefetchQ = Promise.resolve();
+function artRefetch(r, id) { // one game's art again (after its art match changed), after any download already running
+  artRefetchQ = artRefetchQ.then(async () => {
+    for (let i = 0; i < 600 && (coversBusy || autoRunning); i++) await new Promise(res => setTimeout(res, 1000));
+    if (coversBusy) { log('Art match: art not fetched again (another download is running)', id); return; }
+    coversBusy = true;
+    try {
+      await artstudio.ready();
+      const rep = await covers.downloadCovers([{ def: r.def, cfg: r.sc }], () => {}, ['redo-front', 'redo-back', 'redo-spine', 'redo-disc'], { only: new Set([String(id)]), region: cfg.ui.artRegion, hd: cfg.ui.artHD !== false, indexReadyOnly: true, ...artOpts(true) });
+      const got = (rep.systems || []).reduce((a, x) => a + x.front + x.back + x.spine + x.disc, 0);
+      log('Art match: fetched again', id, got, 'pictures'); artstudio.forget();
+      if (alive()) win.webContents.send('library:changed', { covers: 0, artMatch: String(id) });
+    } catch (e) { log('Art match: fetching again failed', e.message); } finally { coversBusy = false; }
+  });
+  return artRefetchQ;
+}
+handle('art:matchSet', ({ id, name } = {}) => {
+  const r = romOf(id); if (!r) throw new Error("That isn't a console game on the shelf.");
+  const n = String(name || '').replace(/\s+/g, ' ').trim().slice(0, 120), key = String(id), games = { ...(cfg.games || {}) }, cur = { ...(games[key] || {}) };
+  if (n) cur.artName = n; else delete cur.artName;
+  if (Object.keys(cur).length) games[key] = cur; else delete games[key];
+  applyCfg({ ...cfg, games }); log('Art match:', key, n ? `"${n}"` : 'automatic');
+  scanForget(); if (alive()) win.webContents.send('library:changed', { artMatch: key });
+  artRefetch(r, key);
+  return { artName: n, games: cfg.games };
+});
 handle('game:install', ({ id, install } = {}) => {
   const g = id ? pcgames.byId(id) : null; if (!g || g.source !== 'epic') throw new Error("That isn't an Epic game on the shelf.");
   const m = install === 'installed' || install === 'notinstalled' ? install : '', key = String(id), games = { ...(cfg.games || {}) }, cur = { ...(games[key] || {}) };
@@ -2734,7 +2772,8 @@ function startUp() {
   // Switch 2: builds come and go (forks get swapped often); a shelf build that's gone points at the newest one there is
   { const e = cfg.systems.sw2 && cfg.systems.sw2.emulator; if (e && !paths.isFile(emuPath(e))) nx2.builds(sw2Roots()).then(l => { const b = l.sort((a, c) => c.date - a.date)[0]; if (b && cfg.systems.sw2 && !paths.isFile(emuPath(cfg.systems.sw2.emulator))) { log('Switch 2: shelf build gone, now', b.label); applyCfg({ ...cfg, systems: { ...cfg.systems, sw2: { ...cfg.systems.sw2, emulator: b.exe } } }); } }).catch(() => {}); }
   if (cfg.ra && cfg.ra.key) { try { const raw = JSON.parse(fs.readFileSync(config.file(), 'utf8')); if (raw && raw.ra && raw.ra.key) persistCfg(cfg); } catch {} } // an older plain-text key: encrypt it now
-  covers.init(app.getPath('userData'), log); require('./main/steamgrid').init({ dataDir: app.getPath('userData'), log, key: () => (cfg && cfg.keys && cfg.keys.steamgriddb) || '' }); require('./main/screenscraper').init({ dataDir: app.getPath('userData'), log, creds: () => { const k = (cfg && cfg.keys) || {}; return { user: k.ssUser || '', pass: k.ssPass || '', devId: k.ssDevId || '', devPass: k.ssDevPass || '' }; } }); initArtStudio(); initManualStudio(); // (SteamGridDB: the Art Studio's optional poster source)
+  covers.init(app.getPath('userData'), log); covers.setArtName(g => artNameOf(g.id)); // ((T)rustyShelf issue #2: Details → Art match)
+  require('./main/steamgrid').init({ dataDir: app.getPath('userData'), log, key: () => (cfg && cfg.keys && cfg.keys.steamgriddb) || '' }); require('./main/screenscraper').init({ dataDir: app.getPath('userData'), log, creds: () => { const k = (cfg && cfg.keys) || {}; return { user: k.ssUser || '', pass: k.ssPass || '', devId: k.ssDevId || '', devPass: k.ssDevPass || '' }; } }); initArtStudio(); initManualStudio(); // (SteamGridDB: the Art Studio's optional poster source)
   commercials.init({ log, dir: path.join(app.getPath('userData'), 'commercials'), memoFile: path.join(app.getPath('userData'), 'commercials.json'), fetchBuf: async url => { const r = await net.fetch(url, { signal: AbortSignal.timeout(30000) }); /* (beta.10: a stalled answer gives up) */ if (r.status === 404) return null; if (!r.ok) throw new Error('archive.org answered ' + r.status); return Buffer.from(await r.arrayBuffer()); }, // (busy / down: a failure, so no game is noted as "no ad" for a month)
     // url → file, streamed; resolves to the bytes written (0: not found), rejects past max bytes
     // (beta.10) gives up when nothing arrives for 60 s or it takes over 15 minutes in all (a stalled storage server hung it

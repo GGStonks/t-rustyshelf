@@ -1140,6 +1140,25 @@ async function renameSave(v){const s=renameState;if(!s||!api.renameGame)return;v
   try{await api.renameGame({...s.ref,title:back?"":v});s.renamed=!back;s.name=back?s.file:v;s.saved=s.name;play("tick",1);toast(back?"Back to its file name":`Renamed to ${v}`);shelf("refresh",true)} /* (true: the shelf stays on this game) */catch(e){if(s.saved!=null)s.name=s.saved;toast(errMsg(e));play("error")}bump()} // (beta.10) a failed rename shows the name it still has
 // (beta.5) the cover picker's Search by name: a name typed here (keyboard, or the on-screen one on a controller); Enter
 // closes Settings and the picker opens again with SteamGridDB's covers for that name
+// ((T)rustyShelf issue #2) Art match: the box art databases' games whose names hold the words typed; Use keeps one with the game
+// (main.js art:matchSet), and its art is fetched again under that name
+let artMatch=null;
+const amWhat=m=>m.source==="launchbox"?`LaunchBox · ${m.pictures} picture${m.pictures===1?"":"s"}`:"libretro · front cover";
+function artMatchRows(){const s=artMatch;if(!s)return [];const rows=[];
+  if(!s.row)s.row=X("Search for","",`A game's name to look up in the box art databases (LaunchBox, libretro). Enter searches.`,{get:()=>s.term,set:v=>{s.term=String(v||"")},nosave:true,live:v=>artMatchGo(v),ns:true,keys:"art match search name"});
+  rows.push(s.row);
+  if(s.current)rows.push(A("Back to automatic","Automatic",`Now: "${s.current}". Automatic looks this game's art up under its own name again.`,()=>artMatchUse(""),{ns:true,keys:"art match automatic"}));
+  if(s.busy){rows.push(H("Looking…"));return rows}
+  if(s.list){
+    if(!s.list.length)rows.push(H(s.index!=="ready"?`Nothing found for "${s.q}". The LaunchBox box art database isn't downloaded yet (Box art & manuals builds it the first time box art is fetched).`:`Nothing found for "${s.q}". Try fewer words, or another spelling.`));
+    else{rows.push(H(`Found (${s.list.length})`));
+      s.list.forEach(m=>rows.push(A(m.name,s.current===m.name?"In use":"Use",`${amWhat(m)}. Its box art becomes ${s.title}'s, fetched again now (art you picked in the Art Studio stays).`,()=>artMatchUse(m.name),{ns:true,keys:"art match "+m.name,sub:()=>({text:amWhat(m)})})))}}
+  return rows}
+async function artMatchGo(v){const s=artMatch;v=String(v||"").replace(/\s+/g," ").trim();if(!s||!v)return;s.q=v;s.busy=true;bump();
+  try{const r=await api.artMatchSearch(s.id,v);if(artMatch!==s)return;s.list=(r&&r.list)||[];s.index=(r&&r.index)||""}catch(e){s.list=[];toast(errMsg(e))}finally{s.busy=false;bump()}}
+async function artMatchUse(name){const s=artMatch;if(!s)return;
+  try{const r=await api.artMatchSet(s.id,name);const ci=shelf("config");if(r&&r.games&&ci&&ci.config)ci.config.games=r.games;if(cfg&&r&&r.games)cfg.games=JSON.parse(JSON.stringify(r.games));
+    s.current=name;play("open");await close();shelf("toast",name?`${s.title}: its art comes from "${name}" now`:`${s.title}: art looked up under its own name again`)}catch(e){toast(errMsg(e))}} // (said on the shelf: Settings has closed)
 let coverSearch=null;
 function coverSearchRows(){const s=coverSearch;if(!s)return [];
   if(!s.row)s.row=X("Search for","",`A name to look up on SteamGridDB instead of "${s.title}". Enter searches. The game's own name stays as it is (Rename changes that).`,{get:()=>s.term,set:v=>{s.term=String(v||"")},nosave:true,live:v=>coverSearchGo(v),ns:true,keys:"search cover name steamgriddb"});
@@ -1354,6 +1373,10 @@ function route(page,o){if(!page)return;o=o||{};
   if(page==="collections"&&o.id!=null){colState={gid:String(o.id),title:String(o.title||"This game"),newName:""};
     MORE.collections={id:"collections",name:`Collections: ${colState.title}`.slice(0,60),lead:"Put this game on shelves of your own. Each collection is a shelf beside Home.",rows:[{t:"dyn",fn:colRows}]};
     goSecId("shelf");focus="page";rowI=0;openSub({kind:"more",id:"collections"});return}
+  // ((T)rustyShelf issue #2) Details → Art match: search the box art databases by name for the game this one's art comes from
+  if(page==="artmatch"&&o.id){artMatch={id:String(o.id),title:String(o.title||""),term:String(o.term||o.title||""),current:String(o.current||""),list:null,busy:false,index:"",q:""};
+    MORE.artmatch={id:"artmatch",name:"Art match",lead:`Which game ${artMatch.title}'s box art comes from. For a ROM hack, a translation or a mod whose file name or serial isn't the original game's: search its original name and pick it. It's remembered for this game.`,rows:[{t:"dyn",fn:artMatchRows}]};
+    goSecId("art");focus="page";rowI=0;openSub({kind:"more",id:"artmatch"});artMatchGo(artMatch.term);return}
   if(page==="coversearch"&&o.id){coverSearch={id:String(o.id),title:String(o.title||""),term:String(o.term||o.title||"")};
     MORE.coversearch={id:"coversearch",name:"Search for a cover",lead:`Covers for ${coverSearch.title} under another name.`,rows:[{t:"dyn",fn:coverSearchRows}]};
     goSecId(/^(steam|epic)-/.test(coverSearch.id)?"pc":"custom");focus="page";rowI=0;openSub({kind:"more",id:"coversearch"});return}

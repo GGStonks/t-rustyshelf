@@ -951,6 +951,7 @@ function fillDetails(){
   {const b=$("dHide");if(b)b.hidden=!isHideable(g);} // (supalii: only where hiding works)
   paintWinBtn(g); // (Details → Window: a PC game the shelf starts itself)
   paintInstBtn(g); // (Details → Installation: an Epic game)
+  paintArtMatchBtn(g); // (Details → Art match: a console game)
   {const b=$("dChooseManual");if(b){b.hidden=!(g.kind==="rom"&&api.manualStudio&&g.file);b.textContent=hasManual(g)?"Choose manual…":"Find a manual…";b.title=!hasManual(g)&&g.manualMiss?`(T)rustyShelf looked online on ${new Date(g.manualMiss).toLocaleDateString()} and found no manual for this game. Search or add one here.`:""}}
   {const b=$("dGameEmu");if(b){const own=g.kind==="rom"?gameEmu(g):"";b.hidden=!(g.kind==="rom"&&api.gameEmulator);b.textContent=own?(emuLabel(own).length>16?emuLabel(own).slice(0,15)+"…":emuLabel(own)):"Emulator";b.title=own?`Runs in ${own} (just this game). Press to change.`:`Runs in the shelf's ${s.emulatorName||"emulator"}. Press to pick a different build for just this game.`;b.classList.toggle("own",!!own)}}
   renderHints(); // Y's prompt follows this game's trailer / achievements row (updateInfo drew the bar before this fill)
@@ -4142,6 +4143,14 @@ function paintInstBtn(g){const b=$("dInstall");if(!b)return;b.hidden=!instOk(g);
 (function(){const c=$("dActEnd");if(!c||$("dWindow"))return;const b=document.createElement("button");b.className="btn";b.type="button";b.id="dWindow";b.hidden=true;b.title="How this game's window is shown: its own way, borderless (no frame, over the whole screen) or windowed (the taskbar stays)";
   b.addEventListener("click",async()=>{const g=curGame();if(!winOk(g))return;const next=WIN_NEXT[gameWinMode(g)];
     try{const r=await api.gameWindow(g.id,next);if(r&&r.games&&cfgInfo)cfgInfo.config.games=r.games;play_("toast");toast(WIN_SAYS[next]);paintWinBtn(g)}catch(e){toast(String(e&&e.message||"Couldn't change it").replace(/^Error invoking remote method '[^']+': (Error: )?/,""))}});
+  c.before(b)})();
+// ((T)rustyShelf issue #2) Details → Art match: which game a console game's box art is looked up under (a ROM hack, a translation,
+// a mod named after its serial): Settings' Art match page searches the box art databases by name; the pick is kept with the game
+const artMatchOk=g=>!!(g&&g.kind==="rom"&&api.artMatchSearch&&api.artMatchSet&&window.Setup&&Setup.open);
+const gameArtName=g=>{const o=g&&cfgInfo&&cfgInfo.config.games&&cfgInfo.config.games[g.id];return (o&&o.artName)||""};
+function paintArtMatchBtn(g){const b=$("dArtMatch");if(!b)return;b.hidden=!artMatchOk(g);if(b.hidden)return;const n=gameArtName(g);b.textContent="Art match: "+(n?(n.length>28?n.slice(0,27)+"…":n):"automatic")}
+(function(){const c=$("dActEnd");if(!c||$("dArtMatch"))return;const b=document.createElement("button");b.className="btn";b.type="button";b.id="dArtMatch";b.hidden=true;b.title="Which game this one's box art is looked up under: automatic (its own name), or a game you pick by name (for ROM hacks, translations and mods)";
+  b.addEventListener("click",()=>{const g=curGame();if(!artMatchOk(g))return;const n=gameArtName(g);play_("panel");Setup.open({page:"artmatch",id:g.id,title:g.title,term:n||g.title,current:n})});
   c.before(b)})();
 // (beta.7) Details → Collections: this game on shelves of your own (a page in Settings: a switch per collection, or a new one)
 (function(){const c=$("dActEnd");if(!c||$("dCols"))return;const b=document.createElement("button");b.className="btn";b.type="button";b.id="dCols";b.textContent="Collections";b.title="Put this game on shelves of your own";b.addEventListener("click",()=>{const g=curGame();if(!g||!isGame(g)||!window.Setup)return;closeDetails(true);Setup.open({page:"collections",id:g.id,title:g.title})});c.before(b)})();

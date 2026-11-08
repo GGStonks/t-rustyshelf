@@ -30,13 +30,15 @@ const only = arg('only') && arg('only') !== true ? String(arg('only')).split(','
 const JOBS = Math.max(1, +arg('jobs') || 8), CAP = arg('cap') && arg('cap') !== true ? String(arg('cap')) : '12G';
 
 // the tests, by kind (the first of each is the slowest: they start first)
-const NODE = ['detect', 'pad', 'portable', 'dataexport', 'release-version', 'presence', 'epicdl', 'storage', 'windowmode', 'hoyoplay', 'music', 'looks'];
-const DESKTOP = ['app', 'pc', 'xbox', 'home', 'music-app', 'windowmode-app', 'epicdl-app', 'consolebox-app'];
-const DEMO = ['android-artcard', 'android-pc', 'usermusic', 'windowmode', 'looks'];
+const NODE = ['detect', 'pad', 'portable', 'dataexport', 'release-version', 'presence', 'epicdl', 'storage', 'windowmode', 'hoyoplay', 'music', 'looks', 'artmatch'];
+const DESKTOP = ['app', 'pc', 'xbox', 'home', 'music-app', 'windowmode-app', 'epicdl-app', 'consolebox-app', 'artmatch-app'];
+const DEMO = ['android-artcard', 'android-pc', 'usermusic', 'windowmode', 'looks', 'artmatch'];
 const GROUPS = ['screens', 'thor', 'windows'];
 // not tests of their own: run by a device group, or a probe
 const NOT_STANDALONE = new Set(['heat-probe.js', 'web-device-test.js', 'device-test-parallel.js']);
 // checks that failed before and are known (printed as known, they don't fail the run)
+// what a test harness says when its browser didn't start (under load), not a check that failed: the job runs once more
+const HARNESS = /Unable to capture screenshot|Target page, context or browser has been closed|browserType\.launch: |Navigation timeout of \d+ ms exceeded/;
 const KNOWN = ["Bottom page becomes the museum's companion (its row, the chosen case)"];
 
 function unlisted() { // test files this script doesn't know
@@ -112,7 +114,9 @@ process.on('SIGINT', () => process.exit(130)); process.on('SIGTERM', () => proce
       const lines = out.split('\n'), bad = lines.filter(l => /^(FAIL|❌)|^\| ❌/.test(l)), good = lines.filter(l => /^(PASS|✅)|^\| ✅/.test(l)).length;
       const unknown = bad.filter(l => !KNOWN.some(k => l.includes(k))), known = bad.length - unknown.length;
       const ok = code === 0 || (code === 1 && bad.length > 0 && !unknown.length);
-      const r = { name: j.name, kind: j.kind, ok, code, secs: secs(t), passed: good, failed: unknown, known };
+      // a headless browser that couldn't start properly while many others were starting (not a failed check): once more, later
+      if (!ok && !j.retried && HARNESS.test(out)) { j.retried = true; console.log(`again ${j.name.padEnd(22)} (the browser failed to start: ${(HARNESS.exec(out) || [''])[0]}), once more`); queue.push(j); return res(); }
+      const r = { name: j.name + (j.retried ? ' (2nd try)' : ''), kind: j.kind, ok, code, secs: secs(t), passed: good, failed: unknown, known };
       results.push(r); console.log(`${ok ? 'ok  ' : 'FAIL'} ${j.name.padEnd(24)} ${r.secs.padStart(5)}${good ? '  ' + good + ' checks' : ''}${known ? '  (' + known + ' known)' : ''}${ok ? '' : '  exit ' + code}`);
       for (const l of unknown.slice(0, 6)) console.log('       ' + l.slice(0, 220));
       res();
