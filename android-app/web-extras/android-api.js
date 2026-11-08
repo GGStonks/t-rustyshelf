@@ -426,9 +426,9 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
   // first libretro cover of each console doesn't wait for its own list
   function prefetchLists() { const ids = new Set(); for (const j of art.q) if (j.part === 'front' && !j.noNet && LR[j.sysId]) ids.add(j.sysId); for (const id of ids) lrList(id); }
   const WORKERS = 4;
-  // (Boxshelf's issue 9) the shelf's art card (renderer/app.js artCardOn), as on Windows: the run's progress a few times a
-  // second and its end. Pause holds the workers before their next game; Cancel drops what's still queued (the pictures
-  // already on their way finish)
+  // (Boxshelf's issue 9) the run's progress a few times a second and its end, for renderer/app.js artCardOn: on Android that
+  // gives the quick menu its Box art download row (Pause / Resume / Cancel); the card on screen stays this file's own.
+  // Pause holds the workers before their next game; Cancel drops what's still queued (the pictures on their way finish)
   const autoFns = []; let autoT = 0, autoAt = 0;
   function autoSay(now) { if (!autoFns.length || !art.running) return; const t = Date.now();
     if (!now && t - autoAt < 400) { if (!autoT) autoT = setTimeout(() => { autoT = 0; autoSay(true); }, 420); return; }
@@ -447,10 +447,8 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
     try { await Promise.all(Array.from({ length: WORKERS }, worker)); } finally { card.finish();
       art.running = false; if (quiet()) flushArrived(true); else flushArrived(); saveArt(true); ssSave(); idleTurn().then(() => store('library.json', st.library)); paintArt(true); // the writes wait for a still shelf
       log('box art: done', art.added, 'of', art.total, art.stopping ? '(cancelled)' : '');
-      // the art card says how it went when it was up ("Box art: N added"); otherwise the toasts below, as before
-      const said = art.cardRun && art.added > 0; autoEnd(said ? { got: art.added } : {}); art.held = false; art.stopping = false;
-      if (said) {}
-      else if (art.added) { if (art.reason === 'now' || !cardOn() || !card.shown()) shelfToast(`Added box art for ${art.added} game${art.added === 1 ? '' : 's'}`); } // (else the card says it)
+      autoEnd({}); art.held = false; art.stopping = false; // (the card and the toasts below say how it went, as before)
+      if (art.added) { if (art.reason === 'now' || !cardOn() || !card.shown()) shelfToast(`Added box art for ${art.added} game${art.added === 1 ? '' : 's'}`); } // (else the card says it)
       else if (art.reason === 'now') shelfToast(art.found ? `Added ${art.found} more picture${art.found === 1 ? '' : 's'} (backs, spines, discs)` : 'No new box art found');
       // something queued in the moment between the last job and here would wait for the next start otherwise
       if (art.q.length) setTimeout(() => { if (!art.running && art.q.length) { art.total = art.q.length; art.done = 0; art.added = 0; art.found = 0; art.reason = 'more'; runArt(); } }, 0);
@@ -656,7 +654,7 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
     function vis(v) { if (v === shown) return; shown = v; el.classList.toggle('show', v); }
     function draw() {
       clearTimeout(drawT); drawT = 0; if (!el) return;
-      const want = (live || hideT) && allowed() && onShelf() && !document.hidden && !(src === art && document.querySelector('.art-card.on')); // (the shelf's art card, with Pause / Cancel, says it then)
+      const want = (live || hideT) && allowed() && onShelf() && !document.hidden;
       if (!want) { vis(false); return; }
       if (sliding()) { drawT = setTimeout(draw, 300); return; } // mid-slide: nothing changes until the shelf is still
       lastAt = performance.now();

@@ -3814,12 +3814,15 @@ function toastDone(msg){toastAdd({msg:String(msg),kind:"done"})}
 // (beta.10) Background box art (main.js autoCovers): a small card in the shelf's bottom-left corner, "Box art 312 of 2,000",
 // with Pause / Resume and Cancel for the mouse and touch. A controller gets the same in the quick menu ("Box art download"
 // row), so the card never takes the D-pad from the shelf. Only where the run can be paused or cancelled (Windows and Linux;
-// Android too since (T)rustyShelf 1.0.1, Boxshelf's issue 9); it goes when the run ends. Its updates wait while the shelf slides
+// on Android since (T)rustyShelf 1.0.1, Boxshelf's issue 9, through the quick menu's row only: Android shows its own card); it
+// goes when the run ends. Its updates wait while the shelf slides
 function artCardText(){const n=x=>Number(x||0).toLocaleString();return ARTC.stopping?"Stopping…":ARTC.total?`${n(Math.min(ARTC.done,ARTC.total))} of ${n(ARTC.total)}${ARTC.paused?" · paused":""}`:"Getting ready…"}
 function artCardEl(){if(ARTC.el)return ARTC.el;const el=document.createElement("div");el.className="art-card";el.setAttribute("role","status");
   el.innerHTML='<div class="ac-top"><span class="ac-t">Box art</span><span class="ac-n"></span></div><div class="ac-bar"><i></i></div><div class="ac-btns"><button type="button" class="ac-b" data-k="pause" tabindex="-1"></button><button type="button" class="ac-b" data-k="cancel" tabindex="-1">Cancel</button></div><div class="ac-hint"></div>';
   el.addEventListener("click",e=>{const b=e.target.closest(".ac-b");if(!b)return;e.stopPropagation();b.blur();setInput("pointer");artCmd(b.dataset.k==="pause"&&ARTC.paused?"resume":b.dataset.k)});app.append(el);ARTC.el=el;return el} // (the Pause button reads Resume while paused: it resumes then; it used to pause again)
 function artCardPaint(){clearTimeout(ARTC.t);ARTC.t=0;if(!ARTC.on)return;if(window.BS_BUSY&&BS_BUSY()){ARTC.t=setTimeout(artCardPaint,500);return}
+  // (Android: its own art card shows the run, made for the Thor; Pause / Resume / Cancel are the quick menu's Box art download row)
+  if(ANDROID){if(qm.open&&qm.sub==null){const x=qm.rows.find(x=>x.r.id==="artrun"),v=x&&x.el.querySelector(".qm-val");if(v)v.textContent=artCardText()}return}
   const el=artCardEl(),p=el.querySelector('[data-k="pause"]');el.querySelector(".ac-n").textContent=artCardText();el.querySelector(".ac-bar i").style.transform=`scaleX(${ARTC.total?Math.min(1,ARTC.done/ARTC.total).toFixed(3):0})`;
   p.hidden=!api.pauseCovers||ARTC.stopping;p.textContent=ARTC.paused?"Resume":"Pause";el.querySelector('[data-k="cancel"]').hidden=!api.cancelCovers||ARTC.stopping;
   el.querySelector(".ac-hint").innerHTML=showPad()&&!ARTC.stopping?`${glyph("☰")}<span>Menu: pause or cancel</span>`:"";el.classList.toggle("paused",ARTC.paused);
@@ -3844,6 +3847,7 @@ async function artCmd(k){if(!ARTC.on||ARTC.stopping)return;
   artCardPaint();if(qm.open)qsSoft()}
 if(api&&api.onCoversAuto&&(api.pauseCovers||api.cancelCovers))api.onCoversAuto(artCardOn);
 window.BS_artCard=artCardOn; // (tests: the demo page has no background run to feed it)
+window.BS_artCmd=artCmd;window.BS_artOn=()=>({on:ARTC.on,paused:ARTC.paused,stopping:ARTC.stopping,text:artCardText()}); // (tests: what the quick menu's row does and says)
 // (beta.10) the graphics process went away and came back (main.js): the cases go up again, as a step to another shelf puts
 // them up (they could stay black until then). Never mid-slide; elsewhere (the museum, a game) it waits for the shelf
 let gpuT=0,gpuTries=0;
