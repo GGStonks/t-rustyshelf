@@ -19,6 +19,7 @@ const linuxpad = require('./main/linuxpad'); // (beta.9) Linux: hold Select + St
 paths.setAppRoot(linux.isLinux ? linux.appRoot(app.isPackaged, __dirname) : app.isPackaged ? (process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(process.execPath)) : __dirname);
 
 const config = require('./main/config');
+const windowmode = require('./main/windowmode'); // (a PC game's own window mode: Details → Window)
 const presence = require('./main/presence'); // (Discord Rich Presence while a game runs: Settings → Display)
 const i18nMain = require('./shared/i18n-main'); // ((T)rustyShelf) the system windows in Português (Brasil) when that's the language
 i18nMain.install(require('electron'));
@@ -568,7 +569,7 @@ function watchPad(opts) {
       keepUp: () => launcher.isRunning() && !quitCover }); // (beta.10: a helper that dies mid-game is started again, not during a Quit)
 }
 function onExit(info) {
-  linuxpad.end(); try { presence.clear(); } catch {} // (beta.9: the Linux pad watcher only runs during a game)
+  linuxpad.end(); try { presence.clear(); } catch {} try { windowmode.stop(); } catch {} // (beta.9: the Linux pad watcher only runs during a game)
   markEvent('game exited'); clearQuitCover(); wiimote.resume(); // (the Wii remote back to the shelf, after Dolphin had it)
   // (1.82) a game's emulator that closed by itself within 5 s (a missing BIOS, keys or firmware, bad launch options) wasn't a
   // play: the shelf says which emulator closed instead of quietly coming back, and the history isn't touched
@@ -1605,12 +1606,24 @@ handle('launch:pc', async ({ id }) => {
     const p = spawn('explorer.exe', ['shell:AppsFolder\\' + g.shellApp], { detached: true, stdio: 'ignore' }); p.on('error', e => log('Xbox launch', e.message)); p.unref(); return { external: true }; }
   if (!paths.isFile(g.exe)) throw new Error(`${g.title} isn't at ${g.exe} any more. ${g.source === 'quiver' ? 'Check it in Quiver Launcher.' : g.source === 'gog' ? 'Check it in GOG Galaxy.' : g.source === 'hoyoplay' ? 'Check it in HoYoPlay.' : g.source === 'folder' ? 'Check its folder in the PC games folder.' : 'Remove it in Settings → Custom games and add it again.'}`);
   busyCheck();
-  launching = true; try { await taskbarHide(); } finally { launching = false; } // (beta.6)
+  const winMode = windowmode.modeOf(cfg, g.id); // ((T)rustyShelf) '', 'borderless' or 'windowed' (Details → Window)
+  if (winMode !== 'windowed') { launching = true; try { await taskbarHide(); } finally { launching = false; } } // (beta.6; a game kept in a window keeps the taskbar)
   let r; try { r = launcher.launchApp(g.exe, onExit, launcher.buildArgs(g.args || '', '')); } catch (e) { taskbarShow('the game did not start'); throw e; } runKind = 'app'; pendingPower = null; launcher.setRunningName(g.title); log('PC launch:', g.source, g.title);
   const onCon = g.shelf && CONSOLES.find(c => c.id === g.shelf); // (supalii) put on a console's shelf: the Home menu names that console
   if (cfg.ui.homeMenu !== false) homemenu.begin({ systemId: onCon ? onCon.id : 'pc', exe: g.exe, systemName: onCon ? onCon.name : g.shelf === 'pc' ? 'PC' : PC_SYSTEM[g.source] || 'Custom', title: g.title, hotkeys: {} });
+  if (winMode === 'borderless') windowmode.borderless(r.pid, g.dir || path.dirname(g.exe), log); // (its frame off, over the screen, while it runs)
+  log('PC launch window mode:', winMode || 'the game\'s own');
   watchPad({ mouse: false, appPid: r.pid, fullscreenKey: null, home: true });
   return { ...r, cover: coverWhileStarting(10) };
+});
+// a PC game's window mode (Details → Window): '', 'borderless' or 'windowed'; cfg.games[<game id>].window
+handle('game:window', ({ id, window: mode }) => {
+  const g = pcgames.byId(id); if (!g || !windowmode.SOURCES.includes(g.source)) throw new Error("That game isn't one the shelf starts itself.");
+  const m = windowmode.MODES.includes(mode) ? mode : '', key = String(id), games = { ...(cfg.games || {}) }, cur = { ...(games[key] || {}) };
+  if (m) cur.window = m; else delete cur.window;
+  if (Object.keys(cur).length) games[key] = cur; else delete games[key];
+  applyCfg({ ...cfg, games }); log('Game window mode:', key, m || 'the game\'s own');
+  return { window: m, games: cfg.games };
 });
 // the name the Home menu gives a PC game's source
 const PC_SYSTEM = { epic: 'Epic Games', folder: 'PC', quiver: 'Quiver', gog: 'GOG', hoyoplay: 'HoYoPlay' };

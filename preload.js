@@ -122,6 +122,7 @@ contextBridge.exposeInMainWorld('trustyshelf', {
   songs: () => call('songs:list'),
   songRead: file => call('songs:read', { file }),
   openSongsFolder: () => call('songs:open'),
+  gameWindow: (id, window) => call('game:window', { id, window }), // ((T)rustyShelf) a PC game's window mode
   musicList: () => call('music:list'), openMusicFolder: () => call('music:open'), // ((T)rustyShelf) your own menu music
   raProgress: (systemId, title, force) => call('ra:progress', { systemId, title, force }),
   raShelf: (systemId, titles) => call('ra:shelf', { systemId, titles }),

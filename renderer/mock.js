@@ -225,6 +225,7 @@ window.trustyshelf={
   musicList:async()=>{if(/[?&]music=0/.test(location.search))return [];window.__mockTracks=window.__mockTracks||["Track A","Track B","Track C"].map((n,i)=>{const rate=8000,sec=2+i,n16=rate*sec,b=new ArrayBuffer(44+n16*2),v=new DataView(b),w=(o,t)=>{for(let k=0;k<t.length;k++)v.setUint8(o+k,t.charCodeAt(k))};
       w(0,"RIFF");v.setUint32(4,36+n16*2,true);w(8,"WAVEfmt ");v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,rate,true);v.setUint32(28,rate*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,"data");v.setUint32(40,n16*2,true);
       return {name:n,url:URL.createObjectURL(new Blob([b],{type:"audio/wav"}))}});return window.__mockTracks},openMusicFolder:async()=>true,
+  gameWindow:async(id,w)=>{config.games=config.games||{};const o=config.games[id]=config.games[id]||{};if(w)o.window=w;else delete o.window;if(!Object.keys(o).length)delete config.games[id];window.__winCalls=(window.__winCalls||[]).concat({id,w});return {window:w||"",games:config.games}}, // ((T)rustyShelf) a PC game's window mode
   library:async()=>[],libraryCover:async()=>null,libraryPages:async()=>[],stremioLibrary:async()=>[],stremioPoster:async()=>null,stremioDetails:async()=>null,
   tvScan:async()=>true,tvList:async()=>[],tvAdFor:async()=>null,tvLocal:async()=>null,
   manualCoverage:async()=>consoles.filter(c=>config.systems[c.id]&&config.systems[c.id].romDirs.length).map(c=>({id:c.id,name:c.name,total:titles[c.id].length,have:0,low:0})),

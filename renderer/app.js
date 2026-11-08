@@ -949,6 +949,7 @@ function fillDetails(){
   {const pc=g.kind==="steam"&&!!api.pcCoverOptions,b=$("dBoxArt"),p=$("dBoxArtPc");if(b)b.hidden=!(g.kind==="rom"&&api.artStudio&&g.file);if(p)p.hidden=!pc;} /* (beta.9) a PC game's Box art sits beside Play (it has no manual or Inspect), not in More */{const b=$("dRename");if(b)b.hidden=!(api.renameGame&&((g.kind==="rom"&&g.file)||g.kind==="steam"));} /* (beta.5: PC games too, through the cover picker) */
   {const b=$("dCols");if(b)b.hidden=!isGame(g)||g.kind==="app";}
   {const b=$("dHide");if(b)b.hidden=!isHideable(g);} // (supalii: only where hiding works)
+  paintWinBtn(g); // (Details → Window: a PC game the shelf starts itself)
   {const b=$("dChooseManual");if(b){b.hidden=!(g.kind==="rom"&&api.manualStudio&&g.file);b.textContent=hasManual(g)?"Choose manual…":"Find a manual…";b.title=!hasManual(g)&&g.manualMiss?`(T)rustyShelf looked online on ${new Date(g.manualMiss).toLocaleDateString()} and found no manual for this game. Search or add one here.`:""}}
   {const b=$("dGameEmu");if(b){const own=g.kind==="rom"?gameEmu(g):"";b.hidden=!(g.kind==="rom"&&api.gameEmulator);b.textContent=own?(emuLabel(own).length>16?emuLabel(own).slice(0,15)+"…":emuLabel(own)):"Emulator";b.title=own?`Runs in ${own} (just this game). Press to change.`:`Runs in the shelf's ${s.emulatorName||"emulator"}. Press to pick a different build for just this game.`;b.classList.toggle("own",!!own)}}
   renderHints(); // Y's prompt follows this game's trailer / achievements row (updateInfo drew the bar before this fill)
@@ -4107,6 +4108,18 @@ async function chooseGameEmu(g){if(!g||g.kind!=="rom"||!api.gameEmulator)return;
   b.addEventListener("click",()=>{const g=curGame();if(!g||g.kind!=="rom"||!g.file||!api.manualStudio)return;const s=shelfFor(g);play_("panel");Setup.open({page:"manualgame",systemId:s.id,file:g.file,title:g.title})});$("dActEnd").before(b)})(); /* (beta.7: in the More menu) */
 // the Details panel's "Hide from shelf" button (made here: index.html belongs to the Settings work)
 (function(){const c=$("dActEnd");if(!c||$("dHide"))return;const b=document.createElement("button");b.className="btn";b.type="button";b.id="dHide";b.textContent="Hide from shelf";b.title="Hide this game or shelf tile (undo it in Settings → Hidden games & tiles)";b.addEventListener("click",()=>hideGame(curGame()));c.before(b)})();
+// ((T)rustyShelf, main/windowmode.js) Details → Window: a PC game's own window mode, for the games the shelf starts itself.
+// Each press goes on to the next: the game's own → borderless (its frame comes off and it fills the screen) → windowed (a window,
+// the taskbar kept) → the game's own. Windows only.
+const WIN_NAME={"":"the game's own",borderless:"borderless",windowed:"windowed"},WIN_NEXT={"":"borderless",borderless:"windowed",windowed:""},WIN_SRC=["custom","quiver","gog","hoyoplay","folder"];
+const WIN_SAYS={"":"Window: the game decides, as before",borderless:"Window: borderless. Its frame comes off and it fills the screen when it starts",windowed:"Window: windowed. It stays a window, with the taskbar kept"};
+const gameWinMode=g=>{const o=g&&cfgInfo&&cfgInfo.config.games&&cfgInfo.config.games[g.id];return o&&o.window||""};
+const winOk=g=>!!(g&&g.kind==="steam"&&WIN_SRC.includes(g.source)&&api.gameWindow&&!ANDROID&&!(window.bsPlatform&&bsPlatform.os==="linux"));
+function paintWinBtn(g){const b=$("dWindow");if(!b)return;b.hidden=!winOk(g);if(!b.hidden)b.textContent="Window: "+WIN_NAME[gameWinMode(g)]}
+(function(){const c=$("dActEnd");if(!c||$("dWindow"))return;const b=document.createElement("button");b.className="btn";b.type="button";b.id="dWindow";b.hidden=true;b.title="How this game's window is shown: its own way, borderless (no frame, over the whole screen) or windowed (the taskbar stays)";
+  b.addEventListener("click",async()=>{const g=curGame();if(!winOk(g))return;const next=WIN_NEXT[gameWinMode(g)];
+    try{const r=await api.gameWindow(g.id,next);if(r&&r.games&&cfgInfo)cfgInfo.config.games=r.games;play_("toast");toast(WIN_SAYS[next]);paintWinBtn(g)}catch(e){toast(String(e&&e.message||"Couldn't change it").replace(/^Error invoking remote method '[^']+': (Error: )?/,""))}});
+  c.before(b)})();
 // (beta.7) Details → Collections: this game on shelves of your own (a page in Settings: a switch per collection, or a new one)
 (function(){const c=$("dActEnd");if(!c||$("dCols"))return;const b=document.createElement("button");b.className="btn";b.type="button";b.id="dCols";b.textContent="Collections";b.title="Put this game on shelves of your own";b.addEventListener("click",()=>{const g=curGame();if(!g||!isGame(g)||!window.Setup)return;closeDetails(true);Setup.open({page:"collections",id:g.id,title:g.title})});c.before(b)})();
 
