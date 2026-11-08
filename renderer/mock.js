@@ -187,8 +187,8 @@ window.trustyshelf={
   restoreSettings:async()=>{config=Object.assign(JSON.parse(JSON.stringify(config)),{ui:Object.assign({},config.ui,{theme:"aurora"})});(apiHooks.lib||[]).forEach(f=>f({restored:1}));(apiHooks.hist||[]).forEach(f=>f({restored:1}));return {ok:true}},
   reportProblem:async()=>({ok:true,file:"C:\\Users\\you\\Desktop\\TrustyShelf problem report.zip"}),
   // (1.82) the beta page: a newer beta is out (tests check the Settings rows and the shelf's notice)
-  updateCheck:async()=>({current:"1.82.0-beta.1",latest:"1.82.0-beta.2",newer:true,url:"https://example.com/releases/beta.2",notes:"## What's new\n- **Video previews** in Details\n- A new [Details](https://example.com) page\n- <b>Ten</b> more consoles",links:{page:"https://example.com/",releases:"https://example.com/releases",issues:"https://example.com/issues/new/choose"},checkedAt:Date.now()}),
-  onUpdate:cb=>{if(/[?&]update=1/.test(location.search))setTimeout(()=>cb({current:"1.82.0-beta.1",latest:"1.82.0-beta.2",newer:true,url:"https://example.com/releases/beta.2",notes:"## What's new\n- **Video previews** in Details\n- A new [Details](https://example.com) page\n- <b>Ten</b> more consoles\n- Fourth item"}),4000)}, // only on a test page that asks for it
+  updateCheck:async()=>({current:"1.0.1.0",latest:"1.0.1.0",newer:false,url:"https://github.com/GGStonks/t-rustyshelf/releases",notes:""}),
+  onUpdate:cb=>{if(/[?&]update=1/.test(location.search))setTimeout(()=>cb({current:"1.0.1.0",latest:"1.0.1.0",newer:false,url:"https://github.com/GGStonks/t-rustyshelf/releases",notes:""}),400)},
   clearHistory:async()=>{(apiHooks.hist||[]).forEach(f=>f({cleared:1}));return {ok:true}},
   onHistoryChanged:fn=>{(apiHooks.hist=apiHooks.hist||[]).push(fn)},
   onLibraryChanged:fn=>{(apiHooks.lib=apiHooks.lib||[]).push(fn)},

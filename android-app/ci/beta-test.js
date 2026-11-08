@@ -2,9 +2,9 @@
 // android-app/ci/beta-test.js apart from the app's name ((T)rustyShelf).
 // Device test pass "beta" (1.82), run by web-device-test.js. Checks results, never speed.
 //   Node: a new install starts with the menu music off and the beta update check on, and a saved config keeps its music
-//   choice; versions order with betas (beta.10 after beta.9, a release after its betas).
-//   The demo page as Windows: with ?update=1 (the mock's newer beta) the shelf says once that it's out, and Settings →
-//   System has Report a bug online, Beta updates (offering "Get 1.82.0-beta.2") and Check for new betas.
+//   choice; the fork's own version numbers order (1.0.1.1 after 1.0.1.0, 1.0.1+0 is 1.0.1.0).
+//   The demo page as Windows: Settings → System has Report a bug online, Updates (showing this build's own version, the
+//   fork's version from package.json as the app shows it) and Check for new versions. No made-up newer release.
 //   (beta.2) Node: update / DLC files are skipped by the scanner; the Switch 2 build list is cached, a copy per caller.
 //   The first-run wizard as Windows: "I'll pick them myself" explains what's next, and box art is a plain Yes / Not now
 //   where Not now leaves the download off.
@@ -13,6 +13,7 @@ const path = require('path'), fs = require('fs'), os = require('os');
 
 module.exports = async function betaPass({ browser, base, check, newPage, OUT }) {
   const root = path.resolve(__dirname, '..', '..');
+  const SHOWN = (() => { try { return require(path.join(root, 'package.json')).version.replace('+', '.'); } catch { return ''; } })(); // this build's own version, as shown
   try {
     const config = require(path.join(root, 'main', 'config.js'));
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bs-beta-'));
@@ -24,8 +25,8 @@ module.exports = async function betaPass({ browser, base, check, newPage, OUT })
       fresh.ui.music === 'off' && fresh.ui.updateCheck === true && saved.ui.music === 'drift' && saved.ui.updateCheck === true,
       `new ${fresh.ui.music}/${fresh.ui.updateCheck} · saved ${saved.ui.music}/${saved.ui.updateCheck}`);
     const { compare } = require(path.join(root, 'main', 'updates.js'));
-    const order = [['1.82.0-beta.2', '1.82.0-beta.1', 1], ['1.82.0', '1.82.0-beta.9', 1], ['1.82.0-beta.10', '1.82.0-beta.9', 1],
-      ['v1.83.0', '1.82.0', 1], ['1.82.0-beta.1', '1.82.0-beta.1', 0], ['1.81.0', '1.82.0-beta.1', -1]];
+    const order = [['1.0.1.1', '1.0.1.0', 1], ['1.0.1.0', '1.0.0.1', 1], ['v1.0.2.0', '1.0.1.0', 1], ['1.0.1.0', '1.0.1+0', 0],
+      ['1.0.1.0', '1.0.1.0', 0], ['1.0.0.0', '1.0.1.0', -1], ['1.0.1.0', '1.0.1.10', -1]];
     const bad = order.filter(([a, b, s]) => Math.sign(compare(a, b)) !== s);
     check('Beta: versions order with betas (beta.10 after beta.9, a release after its betas)', !bad.length, JSON.stringify(bad));
     // (beta.2) update and DLC files beside the games aren't shelved as games; titles that only contain the word are
@@ -47,19 +48,13 @@ module.exports = async function betaPass({ browser, base, check, newPage, OUT })
   try {
     await page.goto(base + '?platform=windows&shelf=1&update=1');
     await page.waitForFunction(() => window.Shelf && Shelf._qs && Shelf._qs().g && window.Setup, null, { timeout: 90000, polling: 250 });
-    // the mock's onUpdate answers after 4 s; the note shows within 1.5 s on an idle shelf
-    // (beta.7: a card with the release's highlights instead of a one-line note; Esc closes it)
-    const note = await page.waitForFunction(() => { const t = document.querySelector('.note-card'); return t && /1\.82\.0-beta\.2 is out/.test(t.textContent) ? t.textContent : null; },
-      null, { timeout: 25000, polling: 200 }).then(h => h.jsonValue(), () => '');
-    check('Beta (Windows): the shelf says a newer beta is out', !!note, note || 'no notice');
-    await page.keyboard.press('Escape'); await page.waitForTimeout(500);
     const s = await page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms));
       Setup.open({ page: 'sys' }); for (let i = 0; i < 40 && !document.querySelector('#bss.on .bss-row'); i++) await w(150);
       let btn = '';
-      for (let i = 0; i < 30; i++) { await w(200); const r = [...document.querySelectorAll('#bss .bss-row')].find(e => /Beta updates/.test(e.textContent)); btn = r ? r.textContent.replace(/\s+/g, ' ') : ''; if (/Get 1\.82\.0-beta\.2/.test(btn)) break; }
+      for (let i = 0; i < 30; i++) { await w(200); const r = [...document.querySelectorAll('#bss .bss-row')].find(e => /^Updates/.test(e.textContent.trim())); btn = r ? r.textContent.replace(/\s+/g, ' ') : ''; if (btn) break; }
       return { names: [...document.querySelectorAll('#bss .bss-row .nm')].map(e => e.textContent), btn }; });
-    check('Beta (Windows): Settings → System has Report a bug online, Beta updates (offering the newer beta) and Check for new betas',
-      s.names.includes('Report a bug online') && s.names.includes('Check for new betas') && /Get 1\.82\.0-beta\.2/.test(s.btn), JSON.stringify(s).slice(0, 400));
+    check('Beta (Windows): Settings → System has Report a bug online, Updates (Up to date: this build is the newest) and Check for new versions',
+      s.names.includes('Report a bug online') && s.names.includes('Check for new versions') && s.names.includes('Updates') && !!SHOWN && /Up to date/.test(s.btn), JSON.stringify({ shown: SHOWN, updatesRow: s.btn, names: s.names }).slice(0, 600));
     // (beta.3) a game's manual page: its left column (Manual, Lock this manual, the console's choice), the cards and the first
     // page all have real width and fit the screen, for a game with a manual and one without (1.80 had squeezed the column to 0)
     const man = await page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), out = [];
@@ -136,7 +131,7 @@ module.exports = async function betaPass({ browser, base, check, newPage, OUT })
       if (window.Settings && Settings.isOpen && Settings.isOpen()) { await Settings.close(); await w(800); } return out; });
     check('Beta (Windows): a box art games page that gets no list says so after 20 s and then loads by itself (no endless "Loading…")',
       /Couldn't load the games/.test(lg.said) && lg.asks >= 2 && lg.tiles > 0, JSON.stringify(lg));
-    // (beta.4) Quick menu → Updates: A checks now and says a newer beta is out (the mock always has one); A again opens its page
+    // (beta.4) Quick menu → Updates: A checks now (the release check answers with this build's own version, so nothing is offered)
     const qu = await w3.page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), api = window.trustyshelf;
       const key = k => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
       let opened = ''; const oe = api.openExternal; api.openExternal = async u => { opened = u; return true; };
@@ -145,10 +140,10 @@ module.exports = async function betaPass({ browser, base, check, newPage, OUT })
       const row = () => { const l = [...document.querySelectorAll('.qm-lbl')].find(x => x.textContent === 'Updates'), v = l && l.nextElementSibling; return v ? v.textContent : ''; };
       const out = { at: Shelf._qs().id, before: row() };
       key('Enter'); await w(900); out.after = row();
-      key('Enter'); await w(600); out.opened = opened; out.menuOpen = Shelf.quickMenuOpen();
+      out.menuOpen = Shelf.quickMenuOpen();
       api.openExternal = oe; if (Shelf.quickMenuOpen()) Shelf.homeButton(); await w(400); return out; });
-    check('Beta (Windows): Quick menu → Updates checks now, says a newer beta is out, and A again opens its download page',
-      qu.at === 'upd' && /Check for a newer beta/.test(qu.before) && /1\.82\.0-beta\.2 is out/.test(qu.after) && /example\.com\/releases\/beta\.2/.test(qu.opened) && qu.menuOpen === false, JSON.stringify(qu));
+    check('Beta (Windows): Quick menu → Updates opens on the Updates row and checks now; the row shows this build\'s version',
+      qu.at === 'upd' && !!SHOWN && (qu.after.includes(SHOWN) || qu.before.includes(SHOWN)) && qu.menuOpen === true, JSON.stringify({ shown: SHOWN, qu }));
     check('Beta pass (Windows, Switch 2 builds): no script errors', !w3.errors.length, w3.errors.slice(0, 3).join(' | '));
   } catch (e) { check('Beta pass (Windows, Switch 2 builds) ran to the end', false, e && e.stack ? e.stack.split('\n').slice(0, 2).join(' ') : e); }
   await w3.ctx.close();
