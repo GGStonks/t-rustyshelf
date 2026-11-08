@@ -122,6 +122,10 @@ contextBridge.exposeInMainWorld('trustyshelf', {
   songs: () => call('songs:list'),
   songRead: file => call('songs:read', { file }),
   openSongsFolder: () => call('songs:open'),
+  epicDownloads: () => call('epic:downloads'), epicPause: id => call('epic:pause', { id }), epicResume: id => call('epic:resume', { id }), epicStop: id => call('epic:stop', { id }),
+  epicRemove: id => call('epic:remove', { id }), epicMove: (id, delta) => call('epic:move', { id, delta }), epicClearDone: () => call('epic:clearDone'),
+  onEpicQueue: fn => { const h = (_e, l) => fn(l); ipcRenderer.on('epic:queue', h); return () => ipcRenderer.removeListener('epic:queue', h); }, // ((T)rustyShelf) the Epic download manager
+  gameInstall: (id, install) => call('game:install', { id, install }), pcStorage: () => call('pc:storage'), // Details → Installation; Settings → PC games → Storage
   gameWindow: (id, window) => call('game:window', { id, window }), // ((T)rustyShelf) a PC game's window mode
   musicList: () => call('music:list'), openMusicFolder: () => call('music:open'), // ((T)rustyShelf) your own menu music
   raProgress: (systemId, title, force) => call('ra:progress', { systemId, title, force }),

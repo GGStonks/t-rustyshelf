@@ -243,15 +243,24 @@ async function epicSignIn(bin, code) {
   return { error: "Couldn't sign in to Epic Games. Try again in a moment." };
 }
 async function epicSignOut(bin) { const r = await runLegendary(bin, ['auth', '--delete'], { ms: 30000 }); try { fs.unlinkSync(libraryFile()); } catch {} log('Epic: signed out', r.code); return { ok: !epicAccount() }; }
-// one install at a time: { appName, title, pct, speed, eta, state: 'installing' | 'done' | 'failed' | 'cancelled' }
-let job = null;
-function epicJob() { return job ? { appName: job.appName, title: job.title, pct: job.pct, speed: job.speed, eta: job.eta, state: job.state, error: job.error, update: !!job.update } : null; }
+// The installs and updates are a queue run one at a time (main/epicdl.js): { id, appName, title, pct, speed, eta, state: 'queued' |
+// 'installing' | 'paused' | 'done' | 'failed' | 'cancelled' }. main.js hands in how to find legendary and who to tell (epicHooks).
+const epicdl = require('./epicdl');
+let dl = null, hooks = { bin: null, onChange: null, onSettled: null };
+function epicHooks(h) { hooks = { ...hooks, ...(h || {}) }; }
+function downloads() {
+  if (!dl) dl = epicdl.create({ file: path.join(dataDir, 'epic-downloads.json'), bin: () => (hooks.bin ? hooks.bin() : legendaryBin()), run: (bin, args, o) => runLegendary(bin, args, { ms: 0, onLine: o && o.onLine }), appRe: APP,
+    noteUnfinished: (dirs, app, finished) => noteUnfinished(dirs, app, finished), onChange: (l, j) => { if (hooks.onChange) hooks.onChange(l, j); }, onSettled: it => { if (hooks.onSettled) hooks.onSettled(it); }, log: (...a) => log(...a) });
+  return dl;
+}
+const epicJob = () => downloads().job();
+const epicDownloads = () => downloads().list();
 // the folders of Epic installs not finished yet (downloading now, or stopped half way: legendary picks them up next time),
 // kept in data/epic-unfinished.json: { "<folder>": "<app name>" }. They aren't games of the PC games folder.
 const unfinishedFile = () => path.join(dataDir, 'epic-unfinished.json');
 function epicUnfinished() {
   const m = readJson(unfinishedFile()) || {}, done = new Set(epicInstalled().map(g => path.resolve(g.dir)));
-  return [...Object.keys(m).filter(d => !done.has(path.resolve(d))), ...(job && job.state === 'installing' && job.newDirs ? job.newDirs() : [])];
+  return [...Object.keys(m).filter(d => !done.has(path.resolve(d))), ...downloads().unfinishedDirs()];
 }
 function noteUnfinished(dirs, appName, finished) {
   const m = readJson(unfinishedFile()) || {};
@@ -261,33 +270,16 @@ function noteUnfinished(dirs, appName, finished) {
 }
 // where Epic games install: the folder chosen for them, else the PC games folder, else <(T)rustyShelf>/Epic Games
 const epicInstallDir = (custom, gamesDir) => [custom, gamesDir].find(d => d && path.isAbsolute(d)) || path.join(root(), 'Epic Games');
+// (bin and onChange: from the older single-install call; main.js now hands both in once, through epicHooks)
 function epicInstall(bin, appName, title, baseDir, onChange, update = false) {
   if (!APP.test(String(appName || ''))) throw new Error('Unknown Epic game.');
-  if (job && job.state === 'installing') throw new Error(`${job.title} is installing. Wait for it to finish, or cancel it.`);
-  if (!update) try { fs.mkdirSync(baseDir, { recursive: true }); } catch (e) { throw new Error(`Can't use ${baseDir} for games: ${e.message}`); }
-  // (the folders that appear in baseDir while it installs are this game's: left off the PC games folder's games until it's done)
-  const listDir = () => { try { return fs.readdirSync(baseDir); } catch { return []; } }, before = new Set(update ? [] : listDir());
-  const newDirs = () => update ? [] : listDir().filter(n => !before.has(n)).map(n => path.join(baseDir, n));
-  job = { appName, title: String(title || appName).slice(0, 120), pct: 0, speed: '', eta: '', state: 'installing', error: '', update, newDirs };
-  const me = job, tell = () => { try { onChange(epicJob()); } catch {} };
-  log(update ? 'Epic: updating' : 'Epic: installing', appName, update ? '' : 'into ' + baseDir);
-  const onLine = l => {
-    let m = /Progress:\s*([\d.]+)%.*?ETA:\s*([\d:]+)/.exec(l); if (m) { me.pct = Math.min(100, +m[1]); me.eta = m[2]; tell(); return; }
-    m = /\+ Download\s*-\s*([\d.]+ \w+\/s)/.exec(l); if (m) me.speed = m[1];
-  };
-  const p = runLegendary(bin, update ? ['install', appName, '--update-only', '--skip-dlcs', '--skip-sdl', '-y'] : ['install', appName, '--base-path', baseDir, '--platform', 'Windows', '--skip-dlcs', '--skip-sdl', '-y'], { ms: 0, onLine });
-  me.proc = p.proc;
-  p.then(r => {
-    noteUnfinished(newDirs(), appName, me.state !== 'cancelled' && r.code === 0);
-    if (me.state === 'cancelled') { tell(); return; }
-    me.state = r.code === 0 ? 'done' : 'failed';
-    if (r.code !== 0) { const e = (r.err.match(/ERROR: (.+)/g) || []).pop(); me.error = e ? e.replace(/^ERROR: /, '').slice(0, 200) : 'The install stopped.'; log('Epic install failed', appName, me.error); }
-    else { me.pct = 100; log('Epic: installed', appName); }
-    tell();
-  });
-  return epicJob();
+  if (bin && !hooks.bin) hooks.bin = () => bin;
+  if (onChange && !hooks.onChange) hooks.onChange = (l, j) => onChange(j);
+  return downloads().add({ appName, title, baseDir, update });
 }
-function epicCancel() { if (!job || job.state !== 'installing') return false; job.state = 'cancelled'; const p = job.proc; try { if (p) p.kill('SIGTERM'); } catch {} log('Epic: install cancelled', job.appName); return true; }
+const epicCancel = () => downloads().cancelCurrent();
+const epicPause = id => downloads().pause(id), epicResume = id => downloads().resume(id), epicStop = id => downloads().stop(id), epicRemove = id => downloads().remove(id);
+const epicMove = (id, d) => downloads().move(id, d), epicClearDone = () => downloads().clearDone();
 async function epicUninstall(bin, appName) {
   if (!APP.test(String(appName || ''))) throw new Error('Unknown Epic game.');
   const r = await runLegendary(bin, ['uninstall', appName, '-y'], { ms: 300000 });
@@ -309,4 +301,5 @@ async function epicLaunchInfo(bin, appName) {
 }
 
 module.exports = { init, runners, pickRunner, windowsCommand, cleanEnv, gameHome, protonEnv, umuNeedsRuntime, endPrefix, isWindowsProgram, prefixFor, prefixRoot, prefixName, umuRun, umuId,
-  legendaryBin, getLegendary, legendaryConfig, epicAccount, epicInstalled, epicOwned, epicLibrary, libraryAge, epicSignIn, epicSignOut, epicInstall, epicCancel, epicUninstall, epicJob, epicInstallDir, epicUnfinished, epicLaunchInfo };
+  legendaryBin, getLegendary, legendaryConfig, epicAccount, epicInstalled, epicOwned, epicLibrary, libraryAge, epicSignIn, epicSignOut, epicInstall, epicCancel, epicUninstall, epicJob, epicInstallDir, epicUnfinished, epicLaunchInfo,
+  epicHooks, epicDownloads, epicPause, epicResume, epicStop, epicRemove, epicMove, epicClearDone, runLegendary };

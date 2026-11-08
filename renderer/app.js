@@ -950,6 +950,7 @@ function fillDetails(){
   {const b=$("dCols");if(b)b.hidden=!isGame(g)||g.kind==="app";}
   {const b=$("dHide");if(b)b.hidden=!isHideable(g);} // (supalii: only where hiding works)
   paintWinBtn(g); // (Details → Window: a PC game the shelf starts itself)
+  paintInstBtn(g); // (Details → Installation: an Epic game)
   {const b=$("dChooseManual");if(b){b.hidden=!(g.kind==="rom"&&api.manualStudio&&g.file);b.textContent=hasManual(g)?"Choose manual…":"Find a manual…";b.title=!hasManual(g)&&g.manualMiss?`(T)rustyShelf looked online on ${new Date(g.manualMiss).toLocaleDateString()} and found no manual for this game. Search or add one here.`:""}}
   {const b=$("dGameEmu");if(b){const own=g.kind==="rom"?gameEmu(g):"";b.hidden=!(g.kind==="rom"&&api.gameEmulator);b.textContent=own?(emuLabel(own).length>16?emuLabel(own).slice(0,15)+"…":emuLabel(own)):"Emulator";b.title=own?`Runs in ${own} (just this game). Press to change.`:`Runs in the shelf's ${s.emulatorName||"emulator"}. Press to pick a different build for just this game.`;b.classList.toggle("own",!!own)}}
   renderHints(); // Y's prompt follows this game's trailer / achievements row (updateInfo drew the bar before this fill)
@@ -2180,6 +2181,13 @@ const ARTC={el:null,on:false,paused:false,stopping:false,done:0,total:0,t:0}; //
 const QM_THEMES=[["spectrum","Spectrum"],["classic","Classic"],["keys","Keys"],["arcade","Arcade"],["aurora","Aurora"],["midnight","Midnight"],["artwork","Artwork"],["blur","Blur"]];
 QM_THEMES.push(...XTHEMES.map(t=>[t.id,t.name])); // (the extra themes, after the original six)
 const QM_SOUNDS=[["aero","Aero"],["melody","Melody"],["musicbox","Music box"]];
+// ((T)rustyShelf) the Epic download manager's list, as main.js tells it (epic:queue): the quick menu shows a row while one is live
+const EPDL=(()=>{let list=[];const live=()=>list.filter(i=>["queued","installing","paused"].includes(i.state)),running=()=>live().find(i=>i.state==="installing");
+  const text=()=>{const r=running(),n=live().length;if(r)return`${r.update?"Updating":"Installing"} ${r.title} · ${(+r.pct||0).toFixed(0)}%${n>1?` (+${n-1})`:""}`;const p=live()[0];return p?`${p.state==="paused"?"Paused":"Waiting"}: ${p.title}${n>1?` (+${n-1})`:""}`:""};
+  const set=l=>{list=Array.isArray(l)?l:[];if(typeof qm!=="undefined"&&qm.open&&qm.sub==null){const x=qm.rows.find(x=>x.r.id==="epdl"),v=x&&x.el.querySelector(".qm-val");if(v)v.textContent=text();else if(!!x!==!!live().length)qsSoft()}};
+  const cmd=async k=>{try{if(k==="pause"){const r=running();if(r)await api.epicPause(r.id)}else if(k==="resume"){const p=live().find(i=>i.state==="paused");if(p)await api.epicResume(p.id)}else if(k==="open"){qmClose(true);Setup.open({page:"epicdl"})}}catch(e){toast(String(e&&e.message||"Couldn't do that").replace(/^Error invoking remote method '[^']+': (Error: )?/,""))}};
+  if(api&&api.epicDownloads){api.epicDownloads().then(set).catch(()=>{});if(api.onEpicQueue)api.onEpicQueue(set)}
+  return {live,running,text,cmd}})();
 const QM_MUSIC=[["drift","Drift"],["night","Night"],["glow","Glow"],...(api&&api.musicList?[["own","Your music"]]:[]),["off","Off"]];
 const QM_MVOL=[["0.2","Quiet"],["0.4","Soft"],["0.7","Full"]];
 const qsMvolNow=()=>{const v=mmVol();return QM_MVOL.reduce((a,b)=>Math.abs(+b[0]-v)<Math.abs(+a[0]-v)?b:a)[0]};
@@ -2237,6 +2245,8 @@ function qsRows(){const ui=qsUi(),r=qsAch(),g=qsGame(),out=[];
   if(ANDROID)qsAndroidOrder(out,ui); // (0.3.2) the Thor's order: Museum, Art Studio, Trophies first; then the looks, sounds and sorting
   // (beta.10) while box art downloads in the background: the controller's way to its Pause / Resume and Cancel (the card in
   // the corner takes the mouse and touch; the shelf keeps the D-pad)
+  // ((T)rustyShelf) the Epic download manager: while installs are going, waiting or paused, Pause / Resume and the way to its page
+  if(EPDL.live().length)out.push({id:"epdl",icon:QS_I.image,lbl:"Epic downloads",val:EPDL.text,lines:()=>[{k:"epdl",opts:[EPDL.running()?["pause","Pause"]:["resume","Resume"],["open","Manage"]],big:1}]});
   if(ARTC.on&&!ARTC.stopping)out.push({id:"artrun",icon:QS_I.image,lbl:"Box art download",val:artCardText,lines:()=>[{k:"artrun",opts:[...(api.pauseCovers?[ARTC.paused?["resume","Resume"]:["pause","Pause"]]:[]),...(api.cancelCovers?[["cancel","Cancel"]]:[])],big:1}]});
   out.push({sep:1});
   if(api.updateCheck&&!ANDROID)out.push({id:"upd",icon:QS_I.info,lbl:"Updates",val:qsUpdVal}); // (beta.4) check for a newer beta from here
@@ -2390,6 +2400,7 @@ function qsUnpreview(){clearTimeout(qsThemeT);qsThemeT=0;if(!qm.pv)return;const 
 function qsChoose(){const f=qsFocusEl();if(!f)return;const k=f.dataset.k,v=f.dataset.v,ui=qsUi();
   if(f.dataset.hold){qsHoldStart(f);return}
   if(k==="artrun"){artCmd(v);return} // (beta.10) the background box art run
+  if(k==="epdl"){EPDL.cmd(v);return} // ((T)rustyShelf) the Epic downloads
   if(k==="go"){qmClose(true);play_("open");if(v==="achg")openAchievements();else if(v==="rasetup")Setup.open({page:"ra"});return}
   if(k==="pow"){qmClose(true);if(v==="quit")api.quit("quick menu: Power → Exit");else if(api.power)api.power(v);return} // Windows: sleep (restart / shut down are held); Android: its own options
   if(k==="song"){if(window.Sound&&Sound.nextSong){Sound.nextSong("shelf");play_("tick",{dir:1})}qsSoft();return}
@@ -4116,6 +4127,18 @@ const WIN_SAYS={"":"Window: the game decides, as before",borderless:"Window: bor
 const gameWinMode=g=>{const o=g&&cfgInfo&&cfgInfo.config.games&&cfgInfo.config.games[g.id];return o&&o.window||""};
 const winOk=g=>!!(g&&g.kind==="steam"&&WIN_SRC.includes(g.source)&&api.gameWindow&&!ANDROID&&!(window.bsPlatform&&bsPlatform.os==="linux"));
 function paintWinBtn(g){const b=$("dWindow");if(!b)return;b.hidden=!winOk(g);if(!b.hidden)b.textContent="Window: "+WIN_NAME[gameWinMode(g)]}
+// ((T)rustyShelf) Details → Installation: an Epic game set by hand to installed or not installed, so Play starts it (or offers to
+// install it) whatever the shelf found. Each press goes on: as found → installed → not installed → as found. Linux, where Epic
+// runs through legendary.
+const INST_NAME={"":"as found",installed:"installed",notinstalled:"not installed"},INST_NEXT={"":"installed",installed:"notinstalled",notinstalled:""};
+const INST_SAYS={"":"Installation: the shelf decides, as before",installed:"Installation: marked as installed. Play starts it",notinstalled:"Installation: marked as not installed. Play offers to install it"};
+const gameInstMode=g=>{const o=g&&cfgInfo&&cfgInfo.config.games&&cfgInfo.config.games[g.id];return o&&o.install||""};
+const instOk=g=>!!(g&&g.kind==="steam"&&g.source==="epic"&&api.gameInstall&&api.epicInstallGame&&!ANDROID&&window.bsPlatform&&bsPlatform.os==="linux");
+function paintInstBtn(g){const b=$("dInstall");if(!b)return;b.hidden=!instOk(g);if(!b.hidden)b.textContent="Installation: "+INST_NAME[gameInstMode(g)]}
+(function(){const c=$("dActEnd");if(!c||$("dInstall"))return;const b=document.createElement("button");b.className="btn";b.type="button";b.id="dInstall";b.hidden=true;b.title="Whether the shelf treats this Epic game as installed: as it finds it, installed (Play starts it) or not installed (Play offers to install it)";
+  b.addEventListener("click",async()=>{const g=curGame();if(!instOk(g))return;const next=INST_NEXT[gameInstMode(g)];
+    try{const r=await api.gameInstall(g.id,next);if(r&&r.games&&cfgInfo)cfgInfo.config.games=r.games;play_("toast");toast(INST_SAYS[next]);paintInstBtn(g)}catch(e){toast(String(e&&e.message||"Couldn't change it").replace(/^Error invoking remote method '[^']+': (Error: )?/,""))}});
+  c.before(b)})();
 (function(){const c=$("dActEnd");if(!c||$("dWindow"))return;const b=document.createElement("button");b.className="btn";b.type="button";b.id="dWindow";b.hidden=true;b.title="How this game's window is shown: its own way, borderless (no frame, over the whole screen) or windowed (the taskbar stays)";
   b.addEventListener("click",async()=>{const g=curGame();if(!winOk(g))return;const next=WIN_NEXT[gameWinMode(g)];
     try{const r=await api.gameWindow(g.id,next);if(r&&r.games&&cfgInfo)cfgInfo.config.games=r.games;play_("toast");toast(WIN_SAYS[next]);paintWinBtn(g)}catch(e){toast(String(e&&e.message||"Couldn't change it").replace(/^Error invoking remote method '[^']+': (Error: )?/,""))}});

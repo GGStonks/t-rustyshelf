@@ -171,6 +171,7 @@ function build(){
     T("Show installed EA games","pc.ea",true,"Adds the games the EA app has installed to the PC shelf. They start through the EA app, so its sign-in and cloud saves work as usual.",{rescan:true,keys:"ea app origin electronic arts store",sub:()=>pcCount("ea")}),
     T("Show installed HoYoPlay games","pc.hoyoplay",true,"Adds Genshin Impact, Honkai: Star Rail, Zenless Zone Zero and Honkai Impact 3rd, as HoYoPlay lists them, to the PC shelf. (T)rustyShelf starts the game itself, so HoYoPlay doesn't have to run; a game that needs administrator rights gets Windows' usual prompt. Updates stay in HoYoPlay.",{rescan:true,keys:"hoyoplay hoyoverse genshin honkai star rail zenless mihoyo",sub:()=>pcCount("hoyoplay")}),
     T("Show installed Xbox games","pc.xbox",true,"Adds the games the Xbox app has installed (Game Pass included) to the PC shelf. They start like any Xbox app game, signed in with your Microsoft account.",{rescan:true,keys:"xbox game pass microsoft store",sub:()=>pcCount("xbox")}),
+    M("Storage","pcstorage","Every installed PC game with its size, by drive, and how much room each drive has.","The PC games that are installed (Steam, Epic, GOG, HoYoPlay and the PC games folder) with the room they take, on each drive, biggest first.",[{t:"dyn",fn:pcStorageRows}],{when:()=>!!api.pcStorage,keys:"storage disk space drive size games installed free",sub:()=>({text:pcStor&&pcStor.drives?`${pcStor.drives.length} drive${pcStor.drives.length===1?"":"s"}`:"Disk space per drive"})}),
     {t:"dyn",fn:pcFolderRows}, // the PC games folder: each folder in it is a game
     {t:"dyn",fn:linuxPcRows}, // (Linux) Wine / Proton and the Epic Games account
   ]},
@@ -818,6 +819,17 @@ const onLinux=()=>!!(window.bsPlatform&&bsPlatform.os==="linux");
 let lpc=null,lpcAsking=false,epicLib=null,epicLibAsking=false,epicSigning=false,lgGetting=false;
 function lpcLoad(force){if(lpcAsking||!api.pcLinux||(lpc&&!force))return;lpcAsking=true;Promise.resolve(api.pcLinux()).then(r=>{lpc=r||{}}).catch(()=>{lpc={}}).finally(()=>{lpcAsking=false;bump()})}
 function epicLibLoad(force){if(epicLibAsking||!api.epicLibrary||(epicLib&&!force))return;epicLibAsking=true;epicLib=null;bump();Promise.resolve(api.epicLibrary()).then(r=>{epicLib=r||{error:"Couldn't read the Epic library."}}).catch(e=>{epicLib={error:errMsg(e)}}).finally(()=>{epicLibAsking=false;bump()})}
+if(api.onEpicQueue)api.onEpicQueue(l=>{if(lpc)lpc.downloads=Array.isArray(l)?l:[];bump()}); // ((T)rustyShelf) the download manager's list
+let pcStor=null,pcStorAsking=false;
+const gb=b=>b>=1073741824?(b/1073741824).toFixed(1)+" GB":b>=1048576?Math.round(b/1048576)+" MB":"0 MB";
+function pcStorageLoad(force){if(pcStorAsking||!api.pcStorage||(pcStor&&!force))return;pcStorAsking=true;Promise.resolve(api.pcStorage()).then(r=>{pcStor=r&&r.drives?r:{drives:[]}}).catch(()=>{pcStor={drives:[]}}).finally(()=>{pcStorAsking=false;bump()})}
+function pcStorageRows(){pcStorageLoad();const rows=[];
+  if(pcStor==null){rows.push(H("Counting the games' folders…"));return rows}
+  if(!pcStor.drives.length){rows.push({t:"action",label:"No installed PC games with a folder",btn:"—",info:"Steam, Epic, GOG, HoYoPlay and PC games folder games show up here once they're installed.",run:()=>{},ns:true,dim:true});return rows}
+  for(const d of pcStor.drives){rows.push(H(`${d.root} · ${d.free!=null?gb(d.free)+" free of "+gb(d.total)+" · ":""}games ${gb(d.gamesBytes)}`));
+    d.games.forEach(g=>rows.push(A(g.title,g.bytes?gb(g.bytes):"…",`${g.dir}`,()=>{},{ns:true,keys:"storage size "+g.title,sub:()=>({text:g.source?g.source[0].toUpperCase()+g.source.slice(1):""})})))}
+  rows.push(A("Count again","Refresh","Reads the folders' sizes again (a game's size is measured in the background and kept for a week).",()=>pcStorageLoad(true),{ns:true}));
+  return rows}
 if(api.onEpicJob)api.onEpicJob(j=>{if(lpc)lpc.job=j;if(j&&j.state!=="installing"){if(j.state==="done"){toast(j.update?`${j.title} is up to date`:`${j.title} is installed: it's on the PC shelf`);epicLibLoad(true)}else if(j.state==="failed")toast(`${j.title}: ${j.error||"the install stopped"}`)}bump()});
 const epicPct=j=>`${(+j.pct||0).toFixed(1)}%${j.speed?" · "+j.speed:""}${j.eta?" · "+j.eta+" left":""}`;
 function linuxPcRows(){if(!onLinux()||!api.pcLinux)return[];lpcLoad();const L=lpc||{},rows=[];cfg.pc=cfg.pc||{};
@@ -843,20 +855,36 @@ function linuxPcRows(){if(!onLinux()||!api.pcLinux)return[];lpcLoad();const L=lp
   const j=L.job;
   rows.push(M("Epic library","epiclib","Install, update and uninstall the games on your Epic account.","Every game on your Epic account. Installed games are on the PC shelf; installs and updates run in the background, one at a time.",[{t:"dyn",fn:epicLibRows}],
     {when:()=>!!L.epicAccount,keys:"epic library install update uninstall download games",sub:()=>j&&j.state==="installing"?{text:`${j.update?"Updating":"Installing"} ${j.title} · ${epicPct(j)}`}:{text:"Install, update and uninstall"}}));
+  // ((T)rustyShelf) the download manager: every install and update in the order they run
+  rows.push(M("Downloads","epicdl","The Epic installs and updates, in order: pause, resume, move up or remove.","The Epic downloads, one at a time. Pause stops a download without losing what's done: Resume goes on from there. A game asked for while another downloads waits its turn.",[{t:"dyn",fn:epicDlRows}],
+    {when:()=>!!L.epicAccount,keys:"epic downloads queue pause resume install update progress speed",sub:()=>{const q=epicQ().filter(i=>["queued","installing","paused"].includes(i.state)),r=q.find(i=>i.state==="installing");return q.length?{text:`${q.length} in the list${r?" · "+epicPct(r):""}`}:{text:"Nothing downloading"}}}));
   rows.push(F("Epic install folder","pc.epicDir","folder","Where new Epic games are installed. Empty: the PC games folder when there's one, else (T)rustyShelf's own Epic Games folder.",{ph:L.epicDir||"",want:"dir",pickTitle:"Choose where Epic games install",when:()=>!!L.epicAccount,keys:"epic install folder path"}));
   if(window.Shelf&&Shelf.pcGallery)rows.push(A("PC game covers","Open","Every PC game's cover and where it comes from (your pick, Epic's box art, Steam's, or a made-up case). Pick a game to change it. Also in Box art & manuals.",()=>{close();Shelf.pcGallery()},{ns:true,keys:"pc covers box art front gallery"}));
   return rows}
+// ((T)rustyShelf) the installs are a queue (main/epicdl.js): a game asked for while another downloads waits its turn
+const epicQ=()=>(lpc&&lpc.downloads)||[],epicMine=g=>epicQ().find(i=>i.appName===g.appName&&["queued","installing","paused"].includes(i.state));
+const epicState=i=>i.state==="installing"?epicPct(i):i.state==="queued"?"Waiting for its turn":i.state==="paused"?`Paused · ${(+i.pct||0).toFixed(1)}%`:i.state==="failed"?`Failed · ${i.error||"the install stopped"}`:i.state==="cancelled"?`Stopped · ${(+i.pct||0).toFixed(1)}%`:"Done";
+function epicDlRows(){const rows=[],Q=epicQ();
+  if(!Q.length){rows.push({t:"action",label:"No downloads",btn:"—",info:"Install or update a game from the Epic library and it shows up here, with its progress.",run:()=>{},ns:true,dim:true});return rows}
+  for(const [st,title] of [["installing","Downloading now"],["queued","Waiting"],["paused","Paused"],["failed","Failed"],["cancelled","Stopped"],["done","Finished"]]){
+    const part=Q.filter(i=>i.state===st);if(!part.length)continue;rows.push(H(`${title} (${part.length})`));
+    part.forEach(i=>{const act=st==="installing"||st==="queued"?["Pause",()=>api.epicPause(i.id)]:st==="done"?null:["Resume",()=>api.epicResume(i.id).catch(e=>toast(errMsg(e)))];
+      rows.push(A((i.update?"Update · ":"")+i.title,act?act[0]:"—",epicState(i),act?act[1]:()=>{},{ns:true,keys:"download epic "+i.title,sub:()=>({text:epicState(i)})}));
+      if(st==="queued"||st==="paused")rows.push(A("Move up "+i.title,"Up","Moves it ahead of the downloads before it.",()=>api.epicMove(i.id,-1),{ns:true}));
+      if(st!=="done")rows.push(A("Remove "+i.title,"Remove","Takes it off the list. What it downloaded so far stays, so a later install goes on from there.",()=>twice("epicdl:"+i.id,()=>api.epicRemove(i.id),"Press again to remove it"),{ns:true,ask:"epicdl:"+i.id}))})}
+  if(Q.some(i=>["done","failed","cancelled"].includes(i.state)))rows.push(A("Clear finished","Clear","Takes the finished, failed and stopped ones off the list.",()=>api.epicClearDone(),{ns:true}));
+  return rows}
 function epicLibRows(){epicLibLoad();const rows=[],j=lpc&&lpc.job,busy=j&&j.state==="installing";
-  if(busy)rows.push(A(`${j.update?"Updating":"Installing"} ${j.title}`,"Cancel","It keeps going while you play or browse the shelf. Cancel stops it; legendary picks up where it stopped next time.",()=>twice("epiccancel",async()=>{await api.epicCancel();toast("Stopped")},"Press again to stop it"),{ns:true,ask:"epiccancel",sub:()=>({text:epicPct(lpc&&lpc.job||j)})}));
+  if(busy)rows.push(A(`${j.update?"Updating":"Installing"} ${j.title}`,"Pause","It keeps going while you play or browse the shelf. Pause stops it without losing what's done; the Downloads page above resumes it.",async()=>{try{await api.epicPause(j.id)}catch(e){toast(errMsg(e))}},{ns:true,sub:()=>({text:epicPct(lpc&&lpc.job||j)})}));
   if(epicLib==null){rows.push(H("Asking Epic for your library…"));return rows}
   if(epicLib.error){rows.push(H(epicLib.error));rows.push(A("Try again","Retry","Asks Epic for the library again.",()=>epicLibLoad(true),{ns:true}));return rows}
   const G=epicLib.games||[],inst=G.filter(g=>g.installed),rest=G.filter(g=>!g.installed);
-  const go=(g,update)=>async()=>{if(busy){toast(`${j.title} is ${j.update?"updating":"installing"}: wait for it, or cancel it`);return}try{await api.epicInstall(g.appName,g.title,update);toast(`${update?"Updating":"Installing"} ${g.title}…`);lpcLoad(true)}catch(e){toast(errMsg(e))}};
+  const go=(g,update)=>async()=>{if(epicMine(g)){toast(`${g.title} is already in the downloads`);return}try{await api.epicInstall(g.appName,g.title,update);toast(busy?`${g.title} will start after ${j.title}`:`${update?"Updating":"Installing"} ${g.title}…`);lpcLoad(true)}catch(e){toast(errMsg(e))}};
   rows.push(H(`Installed (${inst.length})`));
-  inst.forEach(g=>{rows.push(A(g.title,"Update","Checks Epic for an update and installs it.",go(g,true),{ns:true,keys:"update "+g.title,sub:()=>busy&&j.appName===g.appName?{text:epicPct(j)}:{text:"Installed · on the PC shelf"}}));
+  inst.forEach(g=>{rows.push(A(g.title,"Update","Checks Epic for an update and installs it.",go(g,true),{ns:true,keys:"update "+g.title,sub:()=>epicMine(g)?{text:epicState(epicMine(g))}:{text:"Installed · on the PC shelf"}}));
     rows.push(A("Uninstall "+g.title,"Uninstall","Deletes the game's files. Its Wine prefix (saves, settings) is kept.",()=>twice("epicun:"+g.appName,async()=>{toast(`Uninstalling ${g.title}…`);try{const r=await api.epicUninstall(g.appName);toast(r&&r.ok?`${g.title} uninstalled`:`Couldn't uninstall ${g.title}`);epicLibLoad(true)}catch(e){toast(errMsg(e))}},"Press again to delete its files"),{ns:true,ask:"epicun:"+g.appName}))});
   rows.push(H(`Not installed (${rest.length})`));
-  rest.forEach(g=>rows.push(A(g.title,"Install",`Downloads it into ${(lpc&&lpc.epicDir)||"the Epic install folder"}. It joins the PC shelf when it's done.`,go(g,false),{ns:true,keys:"install "+g.title,sub:()=>busy&&j.appName===g.appName?{text:epicPct(j)}:null})));
+  rest.forEach(g=>rows.push(A(g.title,"Install",`Downloads it into ${(lpc&&lpc.epicDir)||"the Epic install folder"}. It joins the PC shelf when it's done.`,go(g,false),{ns:true,keys:"install "+g.title,sub:()=>epicMine(g)?{text:epicState(epicMine(g))}:null})));
   return rows}
 const sw2Low=x=>String(x||"").toLowerCase();
 function sw2Fixed(){const c=sysCfg("sw2");if(c.askBuild!==false||!c.emulator)return null;return (sw2b||[]).find(b=>sw2Low(b.exe)===sw2Low(c.emulator))||{exe:c.emulator,label:progName(c.emulator)}}
@@ -1074,7 +1102,7 @@ function checkPathsSoon(){if(!pathAsk.size||!api.checkPaths)return;const L=[...p
 
 /* ---------- open / close / the classic pages ---------- */
 function ensureCfg(){cfg.ui=cfg.ui||{};cfg.steam=cfg.steam||{enabled:true,path:""};cfg.apps=cfg.apps||{};cfg.ra=cfg.ra||{user:"",key:"",enabled:true};cfg.keys=cfg.keys||{};cfg.systems=cfg.systems||{};(info.apps||[]).forEach(a=>{cfg.apps[a.id]=cfg.apps[a.id]||{enabled:true,path:""}})}
-const PAGE_MAP={bottom:["display","Bottom screen"],phone:"phone",consoles:"consoles",steam:"pc",pc:"pc",epic:"pc",custom:"custom",quiver:"custom",media:"apps",apps:"apps",ra:{svc:"ra"},connections:["acct","fanart.tv"],screenscraper:{svc:"screenscraper"},steamgriddb:{svc:"steamgriddb"},acct:"acct",accounts:"acct",display:"display",perf:"perf",performance:"perf",sound:"sound",controller:"pad",pad:"pad",museum:"museum",shelf:"shelf",library:["art","Fetch manuals for new games"],art:"art",previews:"previews",videos:"previews",trailers:"previews",reading:["reading","Find on the Internet Archive"],magazines:"reading",guides:"reading",manuals:"art",startup:"sys",system:"sys",sys:"sys"};
+const PAGE_MAP={bottom:["display","Bottom screen"],phone:"phone",consoles:"consoles",steam:"pc",pc:"pc",epic:"pc",custom:"custom",quiver:"custom",media:"apps",apps:"apps",ra:{svc:"ra"},connections:["acct","fanart.tv"],screenscraper:{svc:"screenscraper"},steamgriddb:{svc:"steamgriddb"},epicdl:["pc","Downloads"],pcstorage:["pc","Storage"],acct:"acct",accounts:"acct",display:"display",perf:"perf",performance:"perf",sound:"sound",controller:"pad",pad:"pad",museum:"museum",shelf:"shelf",library:["art","Fetch manuals for new games"],art:"art",previews:"previews",videos:"previews",trailers:"previews",reading:["reading","Find on the Internet Archive"],magazines:"reading",guides:"reading",manuals:"art",startup:"sys",system:"sys",sys:"sys"};
 // (beta.5) Details → Rename: one game's name, on a page of its own (typed, or with the on-screen keyboard on a controller).
 // Saved by main (cfg.games[key].title) the moment Enter is pressed; "Use the file's name" puts the scanned one back
 let renameState=null;

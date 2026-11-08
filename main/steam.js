@@ -133,6 +133,7 @@ function scanSteam(givenPath, opts = {}) {
         appid,
         title: name,
         sizeBytes: +(vdf.get(st, 'SizeOnDisk') || 0),
+        dir: vdf.get(st, 'installdir') ? path.join(lib, 'steamapps', 'common', String(vdf.get(st, 'installdir'))) : undefined, // (its folder: Settings → PC games → Storage)
         minutes: s.minutes || 0,
         lastPlayed: s.lastPlayed || +(vdf.get(st, 'LastPlayed') || 0),
         art: findArt(steamPath, appid)

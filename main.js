@@ -660,6 +660,8 @@ async function buildLibrary() {
   // (Linux: every game the Epic account owns; the ones not installed are greyed and Play offers to install them. They play
   // through Wine / Proton, main/linuxpc.js)
   if (pc.epic !== false) try { epic.push(...(linux.isLinux ? linuxpc.epicOwned() : pcgames.epicGames())); epicRefresh(); } catch (e) { log('Epic library', e.message); }
+  // ((T)rustyShelf) Details → Installation: an Epic game set by hand to installed / not installed (Play then starts it, or offers to install it)
+  for (const g of epic) { if (g.source !== 'epic') continue; const o = ((cfg.games || {})[g.id] || {}).install; if (o === 'installed') g.installed = true; else if (o === 'notinstalled') g.installed = false; }
   // the PC games folder (Settings → PC games): every folder in it is a game, native or through Wine (main/pcfolder.js).
   // Epic's installs there are already on the shelf
   try { epic.push(...folderGames(epic)); } catch (e) { log('PC games folder', e.message); }
@@ -1708,7 +1710,7 @@ async function launchLinuxPc(g) {
 const legendaryOf = () => { const b = linuxpc.legendaryBin((cfg.pc || {}).legendaryPath); if (!b) throw new Error('legendary not found: Settings → PC games → Get legendary.'); return b; };
 handle('pc:linux', () => { if (!linux.isLinux) return null; const pc = cfg.pc || {}, list = linuxpc.runners(), pick = linuxpc.pickRunner(pc.runner, list);
   return { runners: list.map(r => ({ id: r.id, name: r.name, kind: r.kind })), runner: pick ? pick.id : '', umu: !!linuxpc.umuRun(), prefixDir: linuxpc.prefixRoot(pc.prefixDir),
-    legendary: !!linuxpc.legendaryBin(pc.legendaryPath), epicAccount: linuxpc.epicAccount(), epicDir: linuxpc.epicInstallDir(pc.epicDir, pc.gamesDir), job: linuxpc.epicJob() }; });
+    legendary: !!linuxpc.legendaryBin(pc.legendaryPath), epicAccount: linuxpc.epicAccount(), epicDir: linuxpc.epicInstallDir(pc.epicDir, pc.gamesDir), job: linuxpc.epicJob(), downloads: linuxpc.epicDownloads() }; });
 handle('pc:getLegendary', async () => { if (!linux.isLinux) throw new Error('Only on Linux.'); await linuxpc.getLegendary(); return { ok: true }; });
 // Settings → PC games: the PC games folder's games and the programs each could start with (for a folder holding several)
 handle('pc:folderGames', () => { let epicGames = []; try { epicGames = linux.isLinux ? linuxpc.epicInstalled() : pcgames.epicGames(); } catch {}
@@ -1738,6 +1740,35 @@ handle('epic:signOut', async () => { const r = await linuxpc.epicSignOut(legenda
 handle('epic:library', () => linuxpc.epicLibrary(legendaryOf()));
 // installs and updates run one at a time in the background; the page hears how far along they are, the shelf refreshes after
 const epicTell = j => { if (!alive()) return; win.webContents.send('epic:job', j); if (j && j.state !== 'installing') win.webContents.send('library:changed', { epic: 1 }); };
+// ((T)rustyShelf) the download manager (main/epicdl.js): a queue; the page hears the whole list and the running install, and the shelf
+// refreshes when an install finishes, stops or fails
+linuxpc.epicHooks({ bin: () => linuxpc.legendaryBin((cfg.pc || {}).legendaryPath),
+  onChange: (list, job) => { if (!alive()) return; win.webContents.send('epic:queue', list); if (job) win.webContents.send('epic:job', job); },
+  onSettled: () => { if (alive()) win.webContents.send('library:changed', { epic: 1 }); } });
+handle('epic:downloads', () => linuxpc.epicDownloads());
+handle('epic:pause', ({ id } = {}) => linuxpc.epicPause(id));
+handle('epic:resume', ({ id } = {}) => { legendaryOf(); return linuxpc.epicResume(id); });
+handle('epic:stop', ({ id } = {}) => linuxpc.epicStop(id));
+handle('epic:remove', ({ id } = {}) => linuxpc.epicRemove(id));
+handle('epic:move', ({ id, delta } = {}) => linuxpc.epicMove(id, delta < 0 ? -1 : 1));
+handle('epic:clearDone', () => linuxpc.epicClearDone());
+// Details → Installation: '' (as the shelf finds it), 'installed' or 'notinstalled'; cfg.games[<game id>].install, for Epic games
+handle('game:install', ({ id, install } = {}) => {
+  const g = id ? pcgames.byId(id) : null; if (!g || g.source !== 'epic') throw new Error("That isn't an Epic game on the shelf.");
+  const m = install === 'installed' || install === 'notinstalled' ? install : '', key = String(id), games = { ...(cfg.games || {}) }, cur = { ...(games[key] || {}) };
+  if (m) cur.install = m; else delete cur.install;
+  if (Object.keys(cur).length) games[key] = cur; else delete games[key];
+  applyCfg({ ...cfg, games }); log('Game installation status:', key, m || 'as found');
+  if (alive()) win.webContents.send('library:changed', { epic: 1 });
+  return { install: m, games: cfg.games };
+});
+// Settings → PC games → Storage: every installed PC game that has a folder, by drive (main/storage.js)
+handle('pc:storage', async () => {
+  const games = [];
+  for (const s of lastLib || []) for (const g of s.games || []) if (g && g.kind === 'steam' && g.dir && g.installed !== false) games.push({ id: g.id, title: g.title, source: g.source || 'steam', dir: g.dir, bytes: g.sizeBytes || 0 });
+  for (const g of pcgames.all()) if (g && g.dir && g.installed !== false && ['epic', 'gog', 'hoyoplay', 'folder'].includes(g.source)) games.push({ id: g.id, title: g.title, source: g.source, dir: g.dir, bytes: (g.dir ? dirsize.get(g.dir) : 0) || g.installSize || 0 });
+  return require('./main/storage').summary(games);
+});
 // (a game on the shelf can be named by its id: Play on a greyed one)
 handle('epic:install', ({ id, appName, title, update } = {}) => { const g = id ? pcgames.byId(id) : null; if (id && !(g && g.source === 'epic')) throw new Error("That game isn't on the shelf any more.");
   const pc = cfg.pc || {}; return linuxpc.epicInstall(legendaryOf(), String(g ? g.appName : appName || ''), String(g ? g.title : title || ''), linuxpc.epicInstallDir(pc.epicDir, pc.gamesDir), epicTell, !!update); });
