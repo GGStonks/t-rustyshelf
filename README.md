@@ -101,6 +101,13 @@ Cover art by hand: images named like the game file (`Pikmin (USA).png`, `-back`,
 `-manual-01.jpg …`) in a `covers` folder inside the games folder. App and emulator tiles use each program's
 own icon.
 
+*(new in (T)rustyShelf)* **Art match**: a ROM hack, a translation or a mod whose file name or serial isn't the original game's
+gets no art, because nobody's game has that name. Details → **Art match** (console games, Windows and Linux) searches the
+console's games in the LaunchBox database already downloaded and libretro's list by name; **Use** keeps the game you pick
+with this one, its box art is fetched again under that name (pictures you picked in the Art Studio stay; the ones replaced
+go to the art folder's backup), and the box art downloads, the Art Studio and Details' game info keep using it.
+**Back to automatic** looks the art up under the game's own name again.
+
 ## Controls
 
 | Action | Keyboard | Xbox / PlayStation |

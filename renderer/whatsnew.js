@@ -8,6 +8,29 @@
 //   sections: [{ h, items: [[headline, more]] }] }; newest first.
 window.BS_WHATSNEW = [
   {
+    version: '1.2.0.0', android: '1.2.0.0', date: '2026-11-08', title: "Art match for console games, and console box art that shows",
+    highlights: [
+      "Art match: pick by name which game a console game's box art comes from, for ROM hacks, translations and mods",
+      "Console box art for PC games shows again: the covers had gone back to the made-up cases",
+      "Automatic PC posters show too",
+      "Settings → Controller says what to do when a PlayStation pad does nothing while Steam is open"
+    ],
+    platforms: [
+      "Windows and Linux: everything above.",
+      "Android: no changes in this release."
+    ],
+    sections: [
+      { h: "Box art", items: [
+        ["Art match", "A ROM hack, a translation or a mod named after its serial or file name got no box art. Details → Art match searches the console's games in the box art databases by name: pick the right one and its box art is fetched for this game, and remembered. Back to automatic undoes it. Asked for by jhonam05 in (T)rustyShelf's issue 2."],
+        ["Console box art shows again", "With Settings → PC games → Console box art on, the console boxes were made but never shown: the shelf fell back to the made-up cases. They show now, back and spine too. Reported by jhonam05 in (T)rustyShelf's issue 1."],
+        ["Automatic PC posters", "The automatic SteamGridDB posters and store box art for PC games had the same problem, and show now as well."]
+      ] },
+      { h: "Controllers", items: [
+        ["PlayStation pads and Steam", "While Steam is open, Steam Input can take a DualSense or DualShock 4 for itself. Settings → Controller now says so and where to turn it off: \"PlayStation pad does nothing?\""]
+      ] }
+    ]
+  },
+  {
     version: '1.1.0.0', android: '1.1.0.0', date: '2026-11-08', title: "Window modes, HoYoPlay, Epic downloads, your own music and saved looks",
     highlights: [
       "A window mode for each PC game (borderless or windowed), a HoYoPlay shelf, and a start through Windows' administrator prompt",
