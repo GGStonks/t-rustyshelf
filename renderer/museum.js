@@ -1,5 +1,6 @@
-// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
-// renderer/museum.js apart from the app's name ((T)rustyShelf).
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): most of this file is Boxshelf's
+// renderer/museum.js; modified for (T)rustyShelf (see the git history). Looking left and right, and reaching the side displays
+// from the wide view, are by TrapEmAll (https://github.com/TrapEmAll), from boxshelf-source pull request #4.
 /* Museum: your whole collection as one tall shelving wall. One shelf row per system, every game as a real-sized
    case standing spine-out (real spine art when you have it), the console (your .glb or an original stand-in) at
    the end of its row with a plaque. Opening: the picture lights come on row by row while the camera pulls back to

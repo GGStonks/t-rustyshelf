@@ -322,6 +322,10 @@ SIL Open Font License (see `renderer\fonts\LICENSES`). (T)rustyShelf's PC games 
 [legendary](https://github.com/derrod/legendary) and [umu-launcher](https://github.com/Open-Wine-Components/umu-launcher). Bundled libraries and their licences: see
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
+Contributors: [TrapEmAll](https://github.com/TrapEmAll) made the Museum's look left and right, and the side displays
+reachable from the wide view ([boxshelf-source pull request #4](https://github.com/sassiestrhihno/boxshelf-source/pull/4),
+brought into (T)rustyShelf as it was).
+
 ## Licence
 
 (T)rustyShelf is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
