@@ -24,6 +24,7 @@
 //   to-answer.md    for the AI that answers: each thread that waits for you, with the whole conversation, what
 //   to-answer.json  (T)rustyShelf did about it (commits, the release they're in), and how to post the reply
 //   tone.md         how you write on GitHub, worked out from all your comments (rebuilt whenever you've posted a new one)
+//   tone-rules.md   yours to edit: rules for replies that always apply (tone.md starts with them); made with the first one if missing
 //   data.json       everything collected, for other tools
 //   seen.json       what was there last time (every message's id), so "new" is exact
 //   cache.json      what doesn't need asking again (README texts, fork work) while the repository hasn't changed
@@ -50,6 +51,13 @@ const DERIVED = /sassiestrhihno|\b(fork of|based on|port of|built on|made from)\
 const CODE_QUERIES = ['sassiestrhihno', '"boxshelf-beta"', '"boxshelf-source"']; // the app's own fingerprints (its forks' file headers, its package entries)
 const isBot = a => !a || /\[bot\]$/i.test(a) || /^(github-actions|dependabot|copilot)$/i.test(a);
 const isMe = a => String(a || '').toLowerCase() === me;
+// the rules tone-rules.md starts with (yours to edit there: tone.md always puts them first)
+const TONE_RULES = `# Rules for replies (edit this file to change them; tone.md always starts with them)
+
+- Don't repeat what the comment right above already says: not the bug, the feature or the request being talked about (the person
+  knows what they asked). Go straight to what's new and expand on it: it's done or out, why it happened, how to use it, what to
+  try next, what to watch for.
+`;
 
 // ---------- GitHub ----------
 function token() {
@@ -295,7 +303,7 @@ function plain(s) {
   const lines = String(s || '').replace(/```[\s\S]*?```/g, ' ').split(/\r?\n/), cut = lines.findIndex(l => MAIL_TAIL.test(l) || /^\s*Reply to this email directly/i.test(l));
   return (cut > 0 ? lines.slice(0, cut) : lines).filter(l => !/^\s*>/.test(l)).join('\n').replace(/<[^>]+>/g, ' ').trim();
 }
-function toneMd(mine, at) {
+function toneMd(mine, at, rules) {
   const texts = mine.map(m => plain(m.body)).filter(Boolean), n = texts.length;
   const pct = f => n ? Math.round(100 * texts.filter(f).length / n) : 0;
   const words = texts.map(t => t.split(/\s+/).filter(Boolean).length).sort((a, b) => a - b), q = p => words[Math.min(words.length - 1, Math.floor(p * words.length))] || 0;
@@ -315,12 +323,13 @@ function toneMd(mine, at) {
     ['a long dash (— or –)', /[—–]/], ['honesty about limits ("I can only", "couldn\'t test")', /\b(can only|cannot test|can't test|couldn't|haven't been able|not on a real)\b/i], ['credit to other people ("by …", "thanks to")', /\bby [A-Z@]\w+|\bthanks to\b|\bcredited\b/]];
   const L = [`# How ${ME} writes on GitHub`, '',
     `Worked out from all ${n} of ${ME}'s comments and replies collected by scripts/community-report.js (rebuilt whenever a new one appears; last ${String(at).slice(0, 16).replace('T', ' ')} UTC). The opening posts of ${ME}'s own pull requests are left out: they're technical write-ups, not replies to people.`, '',
+    ...(rules ? ['## Rules ' + ME + ' set (always follow these)', '', rules.replace(/^#[^\n]*\n+/, '').trim(), ''] : []),
     '## In short', ''];
   if (!n) { L.push('No comments yet.'); return L.join('\n') + '\n'; }
   const greet = pct(t => /^\s*(hey|hi|hello)\b/i.test(t)), ex = pct(t => /!/.test(t)), ctr = pct(t => /\b\w+'(s|re|ll|d|ve|t|m)\b/i.test(t)), md = pct(t => /\*\*|^\s*[-*]\s|`/m.test(t)), emo = pct(t => /\p{Extended_Pictographic}/u.test(t)), dash = pct(t => /[—–]/.test(t));
   L.push(`- Short and plain: most replies are ${q(.25)}–${q(.75)} words (median ${q(.5)}), in sentences of about ${sentLen} words. One paragraph, rarely two.`);
   L.push(`- Friendly and direct, written in the first person, like talking to someone: contractions in ${ctr}% of replies${greet >= 20 ? `; opens with "Hey" / "Hi" in ${greet}%` : ''}.`);
-  L.push(`- Says what changed in everyday words and where to find it (a Settings → path in ${pct(t => /Settings →/.test(t))}%), names the fork as "the (T)rustyShelf fork" (${pct(t => /the \(T\)rustyShelf fork/i.test(t))}%) and the version or release it's in (${pct(t => /\b\d+\.\d+(\.\d+){0,2}\b|\brelease\b/i.test(t))}%).`);
+  L.push(`- Goes straight to what's new (it's done or out, why it happened, how to use it), in everyday words, without restating what the person just wrote; says where to find it (a Settings → path in ${pct(t => /Settings →/.test(t))}%), names the fork as "the (T)rustyShelf fork" (${pct(t => /the \(T\)rustyShelf fork/i.test(t))}%) and the version or release it's in (${pct(t => /\b\d+\.\d+(\.\d+){0,2}\b|\brelease\b/i.test(t))}%).`);
   L.push(`- Ends by asking the person to try it and say how it goes, or with a warm line (see "How replies end" below).`);
   L.push(`- Exclamation marks in ${ex}% of replies, for warmth ("Good idea!", "Thanks!", "It's out now!")${emo ? '' : '; no emoji'}${md <= 15 ? '; almost no markdown (no headings, bold or lists)' : ''}${dash <= 5 ? '; no long dashes: commas, colons and full stops instead' : ''}.`);
   if (pct(t => /\b(can only|cannot test|can't test|couldn't|haven't been able|not on a real)\b/i.test(t))) L.push('- Honest about what couldn\'t be checked (for example only Linux at hand), and asks the person to confirm on their machine.');
@@ -463,12 +472,16 @@ const kindsFor = r => [...(r.has_issues ? ['issues'] : []), 'pulls', ...(r.has_d
   const where = it => it.repo === MINE ? `(T)rustyShelf ${it.kind} #${it.number}` : `${it.fork ? `${it.fork} (fork)` : it.repo.split('/')[1]} ${it.kind} #${it.number}`;
   const mineMsgs = data.items.flatMap(it => it.messages.filter(m => isMe(m.author) && !(m.type === 'post' && it.kind === 'pull')).map(m => ({ ...m, where: `${where(it)}: ${it.title}` })));
   const toneHash = crypto.createHash('sha1').update(mineMsgs.map(m => m.id + (m.edited || '')).sort().join(',')).digest('hex');
-  const toneFile = path.join(OUT, 'tone.md'), toneNew = TONE_ALWAYS || !fs.existsSync(toneFile) || !before || before.tone !== toneHash;
-  if (toneNew) fs.writeFileSync(toneFile, toneMd(mineMsgs, data.at));
+  const rulesFile = path.join(OUT, 'tone-rules.md');
+  if (!fs.existsSync(rulesFile)) fs.writeFileSync(rulesFile, TONE_RULES);
+  const rules = (() => { try { return fs.readFileSync(rulesFile, 'utf8'); } catch { return ''; } })();
+  const rulesHash = crypto.createHash('sha1').update(rules).digest('hex');
+  const toneFile = path.join(OUT, 'tone.md'), toneNew = TONE_ALWAYS || !fs.existsSync(toneFile) || !before || before.tone !== toneHash || before.toneRules !== rulesHash;
+  if (toneNew) fs.writeFileSync(toneFile, toneMd(mineMsgs, data.at, rules));
 
   fs.writeFileSync(path.join(OUT, 'data.json'), JSON.stringify(data, null, 1));
   fs.writeFileSync(cacheFile, JSON.stringify(cache));
-  fs.writeFileSync(seenFile, JSON.stringify({ version: 2, at: data.at, tone: toneHash,
+  fs.writeFileSync(seenFile, JSON.stringify({ version: 2, at: data.at, tone: toneHash, toneRules: rulesHash,
     items: Object.fromEntries(data.items.map(it => [it.key, it.messages.length - 1])), messages: Object.fromEntries(data.items.flatMap(it => it.messages.map(m => [m.id, m.edited || '']))),
     forks: Object.fromEntries(data.forks.map(f => [f.full, f.work.flatMap(w => w.commits.map(c => c.sha))])) }, null, 1));
 
@@ -485,7 +498,7 @@ const kindsFor = r => [...(r.has_issues ? ['issues'] : []), 'pulls', ...(r.has_d
   fs.writeFileSync(path.join(OUT, 'to-answer.json'), JSON.stringify({ at: data.at, me: ME, latestRelease: release, tone: 'tone.md', threads: answerJson,
     notTold: notToldItems.map(it => ({ key: it.key, where: where(it), title: it.title, lastMine: it.lastMine, done: it.notTold, reply: howToReply(it, null) })) }, null, 1));
   const T = [`# Waiting for an answer from ${ME}`, '', `Made ${when(data.at)} UTC by scripts/community-report.js. Latest (T)rustyShelf release: ${release || '(none)'}.`, '',
-    `For the AI that answers: reply in ${ME}'s voice, as described in tone.md (next to this file; it quotes all of ${ME}'s comments). For each thread below: read the whole conversation, check what (T)rustyShelf already did (commits, and the release they're in, or "not released yet"), and decide whether a reply is needed (a plain "thanks, it works" may need none). Post with the command given (the reply's text in reply.md). After posting, run the script again: the thread leaves this list and tone.md is rebuilt.`, ''];
+    `For the AI that answers: reply in ${ME}'s voice, as described in tone.md (next to this file; it starts with the rules ${ME} set, then quotes all of ${ME}'s comments). For each thread below: read the whole conversation, check what (T)rustyShelf already did (commits, and the release they're in, or "not released yet"), and decide whether a reply is needed (a plain "thanks, it works" may need none). Post with the command given (the reply's text in reply.md). After posting, run the script again: the thread leaves this list and tone.md is rebuilt.`, ''];
   if (!waitingItems.length) T.push('Nothing is waiting for an answer.', '');
   for (const it of waitingItems) {
     const last = it.waiting[it.waiting.length - 1];
