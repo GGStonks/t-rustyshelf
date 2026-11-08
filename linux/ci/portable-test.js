@@ -22,6 +22,16 @@ const name = (id, re) => (CONSOLES.find(c => c.id === id).exeNames || []).find(n
     const r = detect.emulatorsIn(path.join(tmp, 'Stick'));
     check('Find emulators in a folder: DuckStation (PS1) and PCSX2 (PS2) are found where they are, Dolphin five folders down isn\'t',
       r.systems.psx === duck && r.systems.ps2 === pcsx2 && !r.systems.gc, JSON.stringify(r.systems));
+    // (Boxshelf's issue 17) DeSmuME for the DS and VisualBoyAdvance-M for the Game Boys are found too
+    const desmume = mk(`Stick/Emulators/DeSmuME/${name('nds', /desmume/i)}`), vbam = mk(`Stick/Emulators/VBA-M/${name('gba', /visualboy/i)}`);
+    const r2 = detect.emulatorsIn(path.join(tmp, 'Stick'));
+    check('Find emulators in a folder: DeSmuME for the DS, VisualBoyAdvance-M for the Game Boy Advance, Game Boy and Game Boy Color', r2.systems.nds === desmume && r2.systems.gba === vbam && r2.systems.gb === vbam && r2.systems.gbc === vbam, JSON.stringify(r2.systems));
+    { // the Windows names, as Windows sees the list (versioned DeSmuME builds, VBA-M, DuckStation's ARM64 build)
+      const out = require('child_process').execFileSync(process.execPath, ['-e', `Object.defineProperty(process, 'platform', { value: 'win32' }); const C = require(${JSON.stringify(path.join(ROOT, 'main', 'systems.js'))}).CONSOLES; process.stdout.write(JSON.stringify(Object.fromEntries(['psx', 'nds', 'gba', 'gb'].map(id => [id, C.find(c => c.id === id).exeNames]))))`], { encoding: 'utf8' });
+      const L = JSON.parse(out), hits = (id, f) => L[id].some(n => n.startsWith('re:') ? new RegExp(n.slice(3), 'i').test(f) : n.toLowerCase() === f.toLowerCase());
+      const want = [['nds', 'DeSmuME_0.9.13_x64.exe'], ['nds', 'DeSmuME-VS2022-x64-Release.exe'], ['nds', 'melonDS.exe'], ['gba', 'visualboyadvance-m.exe'], ['gb', 'VisualBoyAdvance-M.exe'], ['psx', 'duckstation-qt-ARM64-ReleaseLTCG.exe'], ['psx', 'duckstation-qt-x64-ReleaseLTCG.exe']];
+      const miss = want.filter(([id, f]) => !hits(id, f));
+      check('Windows: DeSmuME (versioned builds), VisualBoyAdvance-M and DuckStation\'s builds are names detection knows', !miss.length, JSON.stringify(miss)); }
     check('Find emulators in a folder: a folder that isn\'t there finds nothing (no error)', JSON.stringify(detect.emulatorsIn(path.join(tmp, 'nope')).systems) === '{}');
 
     // RetroAchievements in portable copies

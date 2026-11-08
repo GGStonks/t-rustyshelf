@@ -1519,6 +1519,11 @@ async function launchGameNow(systemId, file, sc) {
   // (beta.8) Switch through Ryujinx (EmuDeck's usual pick): its own options, not Eden's / Citron's "-f -g" (an edited
   // command line is left as it is)
   if (systemId === 'sw' && /ryujinx|ryubing/i.test(path.basename(sc.emulator || '')) && /^\s*-f\s+-g\s+"\{rom\}"\s*$/.test(sc.gameArgs || '')) { sc = { ...sc, gameArgs: '--fullscreen "{rom}"' }; log('Switch launch: Ryujinx options'); }
+  // ((T)rustyShelf, Boxshelf's issue 17) DeSmuME (DS) and VisualBoyAdvance-M (the Game Boys) get their own options while the
+  // shelf's are still its default (melonDS's / mGBA's / RetroArch's): DeSmuME --windowed-fullscreen, VBA-M -f (both checked
+  // against their sources)
+  { const d0 = CONSOLES.find(c => c.id === systemId), b = path.basename(sc.emulator || ''), alt = /desmume/i.test(b) ? '--windowed-fullscreen "{rom}"' : /visualboyadvance|^vbam/i.test(b) ? '-f "{rom}"' : null;
+    if (alt && d0 && String(sc.gameArgs || '').trim() === String(d0.gameArgs || '').trim()) { sc = { ...sc, gameArgs: alt }; log(`${d0.name} launch: ${emuName.knownName(b) || b}'s own options`); } }
   // (beta.6) RetroArch: this console's core from RetroArch's cores folder, fullscreen; a core that isn't downloaded yet is
   // said plainly (RetroArch itself would just open its menu)
   { const def = CONSOLES.find(c => c.id === systemId);
