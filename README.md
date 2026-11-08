@@ -326,6 +326,10 @@ Contributors: [TrapEmAll](https://github.com/TrapEmAll) made the Museum's look l
 reachable from the wide view ([boxshelf-source pull request #4](https://github.com/sassiestrhihno/boxshelf-source/pull/4)),
 and the Retro TV's live progress for the commercial search and ad downloads
 ([pull request #5](https://github.com/sassiestrhihno/boxshelf-source/pull/5)), both brought into (T)rustyShelf as they were.
+[supalii](https://github.com/supalii) made, in [their Boxshelf fork](https://github.com/supalii/boxshelf-source), custom games'
+own settings pages with a Platform (Custom, PC or any console's shelf) and launch arguments, the Xbox One shelf for PC
+ports, automatic SteamGridDB posters for PC games with no cover, hiding the Open emulator and Surprise me tiles, and
+`docs/LOCALIZATION.md`; brought into (T)rustyShelf on top of Boxshelf beta.10.
 
 ## Release builds
 

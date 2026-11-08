@@ -15,6 +15,7 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 
+const ON_SHELF = new Set(['pc', ...require('./systems').CONSOLES.map(c => c.id)]); // (the shelves a game added by hand can sit on besides Custom)
 let log = () => {}, dataDir = '';
 const isFile = p => { try { return fs.statSync(p).isFile(); } catch { return false; } };
 const isDir = p => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
@@ -256,7 +257,7 @@ function quiverGames(chosen) {
 // ---------- games added by hand (cfg.pc.custom: [{ id, title, exe, args }]) ----------
 function customGames(list) {
   return (Array.isArray(list) ? list : []).filter(c => c && typeof c.exe === 'string' && c.exe && isFile(c.exe)).slice(0, 500)
-    .map(c => ({ id: 'custom-' + slug(c.id || c.title || path.basename(c.exe)), source: 'custom', title: String(c.title || path.basename(c.exe, '.exe')).trim().slice(0, 120), exe: c.exe, args: typeof c.args === 'string' ? c.args.slice(0, 1000) : '', ...(c.shelf === 'pc' ? { shelf: 'pc' } : {}) })); // (beta.10: shelf 'pc' = shown on the PC shelf instead of Custom)
+    .map(c => ({ id: 'custom-' + slug(c.id || c.title || path.basename(c.exe)), source: 'custom', title: String(c.title || path.basename(c.exe, '.exe')).trim().slice(0, 120), exe: c.exe, args: typeof c.args === 'string' ? c.args.slice(0, 1000) : '', ...(ON_SHELF.has(c.shelf) ? { shelf: c.shelf } : {}) })); // (beta.10: shelf 'pc' = shown on the PC shelf instead of Custom; supalii: or a console's)
 }
 // a title from a program's name: "SoH-Ship-of-Harkinian.exe" → "SoH Ship of Harkinian"
 const titleFromExe = exe => path.basename(String(exe || ''), path.extname(String(exe || ''))).replace(/[_\-.]+/g, ' ').replace(/\s+/g, ' ').trim() || 'Game';

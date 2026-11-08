@@ -56,7 +56,7 @@ function sectionList(){
 }
 
 function dotFor(sec){
-  if(sec.console){const c=cfg.systems[sec.id];if(!c.enabled)return"off";return c.emulator&&c.romDirs.length?"ok":c.emulator||c.romDirs.length?"warn":""}
+  if(sec.console){const c=cfg.systems[sec.id];if(!c.enabled)return"off";if(sec.console.standalone)return"ok";return c.emulator&&c.romDirs.length?"ok":c.emulator||c.romDirs.length?"warn":""}
   if(sec.id==="steam")return !cfg.steam.enabled?"off":cfg.steam.path?"ok":"";
   if(sec.id==="media")return Object.values(cfg.apps).some(a=>a.enabled&&a.path)?"ok":"";
   if(sec.id==="pick")return pickItems().some(x=>x.on())?"ok":"";
@@ -392,7 +392,7 @@ function artLookSection(b){
   const on=cfg.ui.autoCovers===true,look=lookNow();
   head(b,"Step 3 of 3","How should your boxes look?","(T)rustyShelf finds the covers, backs, spines and discs for your games online.");
   b.append(card("","",toggle("Download box art automatically",on,v=>{cfg.ui.autoCovers=v;render()},"wz2-ac"),
-    el("div",{class:"hint-text",text:"Sends your game titles (and GameCube / Wii disc IDs) to LaunchBox, libretro, GameTDB and the Super Mario Wiki to find pictures (SteamGridDB too, if you add a key later). Nothing else about you or your PC is sent."})));
+    el("div",{class:"hint-text",text:"Sends your game titles (and GameCube / Wii disc IDs) to LaunchBox, libretro, GameTDB and the Super Mario Wiki to find pictures. If you add a SteamGridDB key later, PC games, ports and recomps with no cover are looked up there by title too. Nothing else about you or your PC is sent."})));
   const g=el("div",{class:"wz2-looks"+(on?"":" off")});
   LOOKS.forEach(([id,t,d,tag])=>g.append(el("button",{type:"button",class:"wz2-look"+(look===id?" on":""),role:"radio","aria-checked":String(look===id),disabled:!on,onclick:()=>setLook(id)},
     el("span",{class:"wz2-art "+id,"aria-hidden":"true"}),el("span",{class:"wz2-name",text:t}),el("span",{class:"wz2-st",text:d}),tag?el("span",{class:"wz2-tag",text:tag}):null)));
@@ -495,6 +495,13 @@ function applyLook(){
 
 function consoleSection(b,def){
   const c=cfg.systems[def.id];
+  // (supalii's fork) a standalone shelf (Xbox One): PC programs, no emulator or games folder
+  if(def.standalone){
+    head(b,"Standalone games",def.name,`A shelf for ${def.name} games that run as PC programs. No emulator or games folder is needed.`);
+    b.append(card("Shelf","",toggle(`Show the ${def.name} shelf`,c.enabled,v=>{c.enabled=v},"en-"+def.id)),
+      card("Games","",el("div",{class:"hint-text",text:"After setup, add a program in Settings → Custom games and choose "+def.name+" under Platform. (T)rustyShelf starts it directly. The shelf shows up once it has a game."})));
+    return;
+  }
   head(b,def.emulatorName,def.name,CONSOLE_HELP[def.id]);
   b.append(card("Shelf","",toggle(`Show the ${def.name} shelf`,c.enabled,v=>{c.enabled=v},"en-"+def.id)));
 

@@ -99,4 +99,20 @@ async function own(id, file) {
   return save(String(id), await fs.promises.readFile(file), ext);
 }
 
-module.exports = { init, cover, autoCover, fetchAuto, options, use, own, reset: id => clear(String(id)) };
+// (supalii's fork) PC games with no cover at all (programs added by hand, Quiver's, a store game Steam has no art for): the
+// best SteamGridDB poster for the exact title, kept with the automatic covers, so a cover you chose, the store's own or
+// Steam's always wins. Only with a SteamGridDB key (Settings → Accounts & services); a game is looked up once it has none.
+async function fillMissing(games) {
+  if (!o.steamgrid || !o.steamgrid.enabled()) return { checked: 0, downloaded: 0 };
+  const want = new Map();
+  for (const g of Array.isArray(games) ? games : []) { if (!g || !g.id || !g.title || (g.art && g.art.front) || cover(g.id) || autoCover(g.id)) continue; want.set(String(g.id), g); }
+  let checked = 0, downloaded = 0;
+  for (const g of want.values()) {
+    checked++; let posters = [];
+    try { posters = await o.steamgrid.posters(g.appid ? { appid: g.appid, title: g.title } : { title: g.title, names: [g.title] }, o.match) || []; } catch (e) { o.log('PC poster', g.title, e.message); continue; }
+    for (const p of posters.slice(0, 3)) { let f = null; try { f = await fetchAuto(g.id, p.url); } catch {} if (f) { downloaded++; break; } }
+  }
+  return { checked, downloaded };
+}
+
+module.exports = { init, cover, autoCover, fetchAuto, fillMissing, options, use, own, reset: id => clear(String(id)) };

@@ -1,5 +1,6 @@
-// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
-// android-app/ci/library-test.js apart from the app's name ((T)rustyShelf).
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): most of this file is Boxshelf's
+// android-app/ci/library-test.js; modified for (T)rustyShelf: the hidden shelf tiles check is by supalii
+// (https://github.com/supalii/boxshelf-source).
 // Device test pass "library" (beta.7), run by web-device-test.js: the demo page as Windows on a 1920x1080 TV.
 //   Details, redone in Settings' look: Close in the header, section labels, no empty fact rows, the hint bar shows what
 //   Details does (Back; not the shelf's Letter / Shuffle), and the buttons leave most of the panel to the game.
@@ -38,6 +39,32 @@ module.exports = async function libraryPass({ browser, base, check, OUT }) {
     check('Details (Windows): the panel is roomy (over 600 px on a 1080p TV) and the buttons take under half of it; Collections is there',
       d.width > 600 && d.actShare < .5 && d.cols, JSON.stringify({ width: Math.round(d.width), actShare: d.actShare.toFixed(2), cols: d.cols }));
     await page.keyboard.press('Escape'); await pause(900);
+    // Surprise and emulator entries are shelf tiles, not ROM/PC games, but they must use the same hide/restore flow.
+    async function hideTile(kind) {
+      const item = await page.evaluate(kind => {
+        const tile = (Shelf._lib.shelves().find(s => s.id === 'gc') || { tiles: [] }).tiles.find(t => t.kind === kind);
+        if (!tile || !Shelf._lib.select(tile.id)) return null;
+        return Shelf._lib.cur();
+      }, kind);
+      if (!item || item.kind !== kind) return { found: false, kind };
+      await page.keyboard.press('i');
+      await page.waitForFunction(() => Shelf.getMode() === 'details' && document.getElementById('dHide') && !document.getElementById('dHide').hidden, null, { timeout: 10000 });
+      await page.locator('#dMoreBtn').click();
+      await page.waitForFunction(() => { const b = document.getElementById('dHide'); return b && b.getClientRects().length > 0; }, null, { timeout: 10000 });
+      await page.locator('#dHide').click();
+      await page.waitForFunction(id => Shelf.hiddenList().some(g => g.id === id) &&
+        !Shelf._lib.shelves().some(s => s.tiles.some(t => t.id === id)), item.id, { timeout: 10000 });
+      const hidden = await page.evaluate(id => Shelf.hiddenList().some(g => g.id === id), item.id);
+      await page.evaluate(id => Shelf.setHidden(id, false), item.id);
+      await page.waitForFunction(id => Shelf._lib.shelves().some(s => s.tiles.some(t => t.id === id)), item.id, { timeout: 10000 });
+      return { found: true, id: item.id, hidden, restored: true };
+    }
+    const hiddenRandom = await hideTile('random');
+    check('Hide from shelf: Surprise me can be hidden from Details, listed, and restored',
+      hiddenRandom.found && hiddenRandom.hidden && hiddenRandom.restored, JSON.stringify(hiddenRandom));
+    const hiddenEmulator = await hideTile('emulator');
+    check('Hide from shelf: the emulator .exe tile can be hidden from Details, listed, and restored',
+      hiddenEmulator.found && hiddenEmulator.hidden && hiddenEmulator.restored, JSON.stringify(hiddenEmulator));
     // filters: a decade and a genre from the library itself
     const f = await page.evaluate(async () => {
       const w = ms => new Promise(r => setTimeout(r, ms)), L = Shelf._lib, list = L.filters(), dec = list.find(x => /^dec:/.test(x[0])), gen = list.find(x => /^genre:/.test(x[0]));

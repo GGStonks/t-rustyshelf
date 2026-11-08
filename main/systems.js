@@ -179,7 +179,10 @@ const CONSOLES = [
     ['atarilynx', 'Lynx', 'RetroArch', [], [], ['atarilynx', 'lynx', 'atari lynx'], ['lnx', 'zip', '7z'], '', 'handy'],
     ['wonderswan', 'WonderSwan', 'RetroArch', [], [], ['wonderswan', 'wonderswancolor', 'wonderswan color', 'wsc', 'ws'], ['ws', 'wsc', 'zip', '7z'], '', 'mednafen_wswan'],
     ['dos', 'DOS', 'RetroArch', [], [], ['dos', 'msdos', 'ms-dos', 'pc dos'], ['zip', 'dosz'], '', 'dosbox_pure'],
-  ])
+  ]),
+  // (supalii's fork) a standalone shelf: Xbox One ports and recompilations that run as PC programs. No emulator and no
+  // games folder: its games are the programs put on it in Settings → Custom games (→ the game → Platform)
+  { id: 'xboxone', name: 'Xbox One', emulatorName: '', standalone: true, exeNames: [], emulatorFolders: [], romFolderNames: [], extensions: [], gameArgs: '', emulatorArgs: '', coverSeconds: 0 },
 ];
 // (beta.6) one retro shelf: [id, name, emulator name, standalone exe names, its folders, ROM folder names, extensions,
 // standalone launch options, RetroArch core, standalone first?]. RetroArch's usual homes are searched for every one of them;

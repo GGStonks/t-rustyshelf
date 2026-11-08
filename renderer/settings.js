@@ -102,11 +102,11 @@ function consoleList(){return info&&info.consoles||[]}
 // through this, so a tile and its index always agree
 function tileList(){const L=consoleList();return [...L.filter(c=>sysCfg(c.id).enabled!==false),...L.filter(c=>sysCfg(c.id).enabled===false)]}
 function sysCfg(id){cfg.systems=cfg.systems||{};const c=cfg.systems[id]||(cfg.systems[id]={enabled:true,emulator:"",gameArgs:"",emulatorArgs:"",romDirs:[],artDir:"",bootOnLaunch:true});if(!Array.isArray(c.romDirs))c.romDirs=[];return c}
-function conState(c){const s=sysCfg(c.id);if(s.enabled===false)return "off";return s.emulator&&s.romDirs.length?"ok":s.emulator||s.romDirs.length?"warn":""}
+function conState(c){const s=sysCfg(c.id);if(s.enabled===false)return "off";if(c.standalone)return "ok";return s.emulator&&s.romDirs.length?"ok":s.emulator||s.romDirs.length?"warn":""}
 // (games counted on the last scan: "13 games"; until a scan has run, the folders)
 const gameCount=id=>{const m=shelf("gameCounts");return m&&typeof m[id]==="number"?m[id]:null};
 function conStatus(c){const s=sysCfg(c.id),d=conState(c),n=s.romDirs.length,g=gameCount(c.id);
-  return d==="off"?"Shelf hidden":d==="ok"?(g!=null?`Ready · ${g} game${g===1?"":"s"}`:`Ready · ${n} folder${n===1?"":"s"}`):d==="warn"?(s.emulator?"Add a games folder":`Needs ${conEmu(c)||"its emulator"}`):"Not set up"}
+  return d==="off"?"Shelf hidden":c.standalone?(g!=null?`Ready · ${g} game${g===1?"":"s"}`:"Standalone games"):d==="ok"?(g!=null?`Ready · ${g} game${g===1?"":"s"}`:`Ready · ${n} folder${n===1?"":"s"}`):d==="warn"?(s.emulator?"Add a games folder":`Needs ${conEmu(c)||"its emulator"}`):"Not set up"}
 // a program shown by its name ("Dolphin.exe" → "Dolphin"); the whole path stays in the row's explanation
 const progName=p=>String(p||"").split(/[\\/]/).pop().replace(/\.exe$/i,"");
 // the emulator a console uses: the one set up when it's a known emulator ("Lichii", "Citron"), else the console's usual one
@@ -170,7 +170,7 @@ function build(){
     {t:"dyn",fn:linuxPcRows}, // (Linux) Wine / Proton and the Epic Games account
   ]},
   // (beta.4) the Custom shelf: Quiver Launcher's apps (recomps, ports) and any program added by hand
-  {g:"Games",id:"custom",name:"Custom games",ic:"pc",lead:"Recomps, PC ports and any other program, on a Custom shelf of their own.",rows:[{t:"dyn",fn:customRows}]},
+  {g:"Games",id:"custom",name:"Custom games",ic:"pc",lead:"Recomps, PC ports and any other program. Each goes on the Custom shelf, or on PC or a console's shelf if you choose its Platform. Quiver Launcher's games stay on Custom.",rows:[{t:"dyn",fn:customRows}]},
   {g:"Games",id:"apps",name:"Apps",ic:"apps",dot:()=>Object.values(cfg.apps||{}).some(a=>a&&a.enabled!==false&&a.path)?"ok":null,lead:"Stremio and Nuvio, launched from the Media shelf.",rows:appRows},
   {g:"Look & sound",id:"display",name:"Display",ic:"display",lead:"How the shelf looks from the couch.",rows:[
     C("Interface size","ui.uiScale",[[1,"Standard"],[1.15,"Large"],[1.3,"Extra large"]],1,"Bigger text and buttons for a TV across the room.",{more:"Large suits most 55\" and bigger TVs at 2–3 m. Extra large for very far seating.",live:()=>fit(),keys:"zoom text big small scale"}),
@@ -309,7 +309,7 @@ function build(){
       A("Refresh art database",()=>lbRef?"Cancel":"Refresh","Downloads the LaunchBox game database again (about 110 MB) and rebuilds (T)rustyShelf's index of it, so newer picture types (reconstructed fronts and backs, new scans) show up in Art Studio. Your box art isn't touched; the old index keeps working until the new one is ready.",refreshIndex,{when:()=>!!api.artRefreshIndex,warnBtn:()=>!!lbRef,keys:"launchbox index database rebuild update metadata refresh reconstructed",sub:()=>({text:refText(),cls:lbRef?"warn":""})}),
     ],{when:()=>!!api.artStudio,keys:"art studio box art covers style look region hd special edition missing no cover",btn:()=>{const n=artNoCover();return n?`${n} without a cover`:""},warnBtn:()=>artNoCover()>0,
       sub:()=>{const L=Object.values(sJobs).filter(j=>j.state==="run"&&!j.man);return L.length?{text:`${L.length} re-fetch${L.length===1?"":"es"} running`,cls:"warn"}:{text:"Choose how each console's box art looks, and fix any game"}}}),
-    T("Fetch box art for new games","ui.autoCovers",false,api.artStudio?"Covers, backs, spines and discs for new games, in the background, the way each console's shelf style asks. Searching sends game titles to LaunchBox, libretro, GameTDB and GamesDatabase.org; no accounts needed.":"Covers, backs, spines and discs for new games, in the background. Searching sends game titles to LaunchBox, libretro, GameTDB and GamesDatabase.org; no accounts needed.",{keys:"covers scrape download"}),
+    T("Fetch box art for new games","ui.autoCovers",false,api.artStudio?"Covers, backs, spines and discs for new games, in the background, the way each console's shelf style asks. Searching sends game titles to LaunchBox, libretro, GameTDB and GamesDatabase.org; no accounts needed. With a SteamGridDB key, PC games with no cover get a poster from SteamGridDB too (their titles are sent there).":"Covers, backs, spines and discs for new games, in the background. Searching sends game titles to LaunchBox, libretro, GameTDB and GamesDatabase.org; no accounts needed. With a SteamGridDB key, PC games with no cover get a poster from SteamGridDB too (their titles are sent there).",{keys:"covers scrape download"}),
     ...(window.bsPlatform&&bsPlatform.os==="android"?[]:[T("Make missing backs and spines","ui.makeBacks",true,"A game with a cover but no scanned back or spine anywhere (most Switch 2 games, for now) gets them made: the back from its artwork, screenshots, description and rating, the spine in its console's style with the game's logo. A real scan replaces either as soon as one is found.",{keys:"back spine cover generate make missing switch 2"})]),
     // (Android swaps these two rows for its own by their old labels: android-api.js BS_SETTINGS_PATCH)
     M(window.bsPlatform&&bsPlatform.os==="android"?"Download box art now":"Download missing art now","art-get","Pick the consoles and what to get (covers, backs, spines, discs), then download with progress and Cancel.","Pick the consoles and what to get. Pictures you already have are kept, and each console follows its Art Studio style.",[{t:"dyn",fn:artGetRows}],{when:()=>!!api.artCoverage&&!!api.downloadCovers,keys:"download box art now covers scrape",sub:()=>AG.busy?{text:"Downloading…",cls:"warn"}:null}),
@@ -322,7 +322,7 @@ function build(){
     ],{when:()=>!!api.manualStudio,keys:"manual studio manuals booklet choose language region"}),
     H("Library"),
     F("Art library folder","ui.artLibrary","folder","One folder for all box art and manuals, so a fresh setup finds them instead of downloading again. Art already beside your games is copied there in the background (nothing is moved or deleted).",{ph:"Beside each console's games (a covers folder)",d:"",rescan:true,want:"dir",pickTitle:"Choose a folder for your box art and manuals",keys:"covers folder path"}),
-    M("Hidden games","art-hidden","Games you hid from their Details panel. Bring any of them back here.","Hidden from every shelf, the museum, shuffle and the idle show.",[],{when:()=>!!(window.Shelf&&Shelf.hiddenList),extra:hiddenRows,sub:()=>hidden&&hidden.length?{text:`${hidden.length} hidden`}:null}),
+    M("Hidden games & tiles","art-hidden","Games and shelf tiles (Open emulator, Surprise me) you hid from their Details panel. Bring any of them back here.","Hidden from every shelf, the museum, shuffle and the idle show.",[],{when:()=>!!(window.Shelf&&Shelf.hiddenList),extra:hiddenRows,sub:()=>hidden&&hidden.length?{text:`${hidden.length} hidden`}:null}),
   ]},
   // (beta.8) video previews (app.js PV, main/previews.js, main/ytclips.js): a section of its own, easy to find (it was a
   // page inside Box art & manuals). Left out where previews don't exist yet (Android: see below SECTIONS).
@@ -415,7 +415,7 @@ function svcPage0(id){const n=SVC_N[id]||id,P=(lead,rows)=>({g:"Library",id:"acc
     X("Key","keys.fanart","Your personal fanart.tv API key. Stored encrypted.",{secret:true,ph:"Not set",fan:true,keys:"api key movies fanart"}),
     test("Test the key","Checks the key."),
     A("Get a key","Open site","Opens fanart.tv's page for a free personal key.",()=>openLink("https://fanart.tv/get-an-api-key/"),{keys:"fanart"})]);
-  if(id==="steamgriddb")return P("Community-made posters for your games, offered in Art Studio next to the real box scans (Pick exact on the Front; the HD shelf style may use them). Optional.",[
+  if(id==="steamgriddb")return P("Community-made posters for your games, offered in Art Studio next to the real box scans (Pick exact on the Front; the HD shelf style may use them), and, with automatic box art on, a poster for PC games, ports and recomps that have no cover (their titles are sent to SteamGridDB). Optional.",[
     X("Key","keys.steamgriddb","Your SteamGridDB API key. Stored encrypted.",{secret:true,ph:"Not set",fan:true,keys:"api key steamgriddb steam grid posters"}),
     test("Test the key","Checks the key."),
     A("Get a free key","Open site","Sign in at steamgriddb.com (a free Steam sign-in), then Preferences → API → copy the key and paste it above.",()=>openLink("https://www.steamgriddb.com/profile/preferences/api"),{keys:"steamgriddb"})]);
@@ -480,14 +480,22 @@ async function emuAct(sys){const e=emuOf(sys);if(!e||e.state==="unsupported"){in
   if(emuAsk===sys&&api.launchEmulator){emuAsk=null;await save();toast(`Opening ${e.emulator||"the emulator"}…`);try{await api.launchEmulator(sys)}catch(err){toast(errMsg(err))}render();return}
   emuAsk=sys;infoOpen=true;play("open");render()}
 function hiddenRows(){if(!(window.Shelf&&Shelf.hiddenList))return [];const L=hidden||[];
-  if(!L.length)return [{t:"action",label:"No hidden games",btn:"—",info:"Hide a game from its Details panel (Hide). It shows up here so you can bring it back.",run:()=>{},ns:true,dim:true}];
+  if(!L.length)return [{t:"action",label:"Nothing hidden",btn:"—",info:"Hide a game or shelf tile from its Details panel (Hide). It shows up here so you can bring it back.",run:()=>{},ns:true,dim:true}];
   const names=Object.fromEntries(consoleList().map(c=>[c.id,c.name]));
   return L.map(g=>({t:"action",label:g.title||g.id,btn:"Unhide",info:"Hidden from every shelf, the museum, shuffle and the idle show. Unhide puts it back.",sub:()=>({text:names[g.system]||g.system||""}),ns:true,keys:"hidden hide",
-    run:async()=>{await save();shelf("setHidden",g.id,false);if(Array.isArray(cfg.ui.hidden))cfg.ui.hidden=cfg.ui.hidden.filter(x=>x!==g.id);hidden=(hidden||[]).filter(x=>x.id!==g.id);toast(`${g.title||"Game"} is back on its shelf`);bump()}}))}
+    run:async()=>{await save();shelf("setHidden",g.id,false);if(Array.isArray(cfg.ui.hidden))cfg.ui.hidden=cfg.ui.hidden.filter(x=>x!==g.id);hidden=(hidden||[]).filter(x=>x.id!==g.id);toast(`${g.title||"Item"} is back on the shelf`);bump()}}))}
 
 // one console's page
 function conPages(id){
   const def=consoleList().find(c=>c.id===id)||{id,name:id,emulatorName:"Emulator",exeNames:["emulator.exe"]},c=sysCfg(id),p=`systems.${id}.`,emu=def.emulatorName||"Emulator",exe=(def.exeNames||["emulator.exe"])[0];
+  // (supalii's fork) a standalone shelf (Xbox One): on / off, and where its games come from (Custom games → Platform)
+  if(def.standalone){
+    const rows=[T("Show this shelf",p+"enabled",true,"Turn this shelf off without losing its settings. Its programs go back to the Custom shelf meanwhile.",{rescan:true,keys:"hide shelf console off",sub:()=>({text:conStatus(def),cls:conState(def)==="ok"?"ok":""})}),
+      H("Standalone games"),
+      A("Add or assign a game","Open",`Add a program in Settings → Custom games, then choose ${def.name} under Platform. (T)rustyShelf starts it directly; no emulator is involved.`,()=>goSecId("custom"),{ns:true,keys:"add exe port recomp game"})];
+    return {main:{g:"Games",id:"console",sys:id,name:def.name,ic:"games",lead:`A shelf for ${def.name} ports and recompilations that run as PC programs. No emulator is needed.`,rows},
+      adv:{g:"Games",id:"console",sys:id,name:"Standalone games",lead:`${def.name} games on this shelf are started directly from their program.`,rows}};
+  }
   // the shelf on / off first, with where it stands ("Ready · 13 games", "Needs Dolphin"); then the emulator and games
   // folders by name (the whole path is in the explanation on the right)
   const rows=[T("Show this shelf",p+"enabled",true,"Turn a console off without losing its settings.",{rescan:true,keys:"hide shelf console off",sub:()=>{const st=conState(def);return {text:conStatus(def),cls:st==="ok"?"ok":st==="warn"?"warn":""}}}),
@@ -547,7 +555,7 @@ function conPages(id){
 }
 const consolePage=id=>conPages(id).main,conAdvPage=id=>conPages(id).adv;
 // the console order: A picks a shelf up, up / down moves it, A (or B) puts it down
-function orderList(){const known=[...consoleList().filter(c=>sysCfg(c.id).enabled!==false).map(c=>[c.id,c.name]),...(cfg.steam&&cfg.steam.enabled!==false?[["pc","PC"]]:[]),["media","Media"]];
+function orderList(){const pcMine=((cfg.pc&&cfg.pc.custom)||[]).some(g=>g&&g.shelf==="pc"); /* (supalii: a game added by hand on the PC shelf brings it, Steam or not) */const known=[...consoleList().filter(c=>sysCfg(c.id).enabled!==false).map(c=>[c.id,c.name]),...(cfg.steam&&cfg.steam.enabled!==false||pcMine?[["pc","PC"]]:[]),["media","Media"]];
   const saved=(cfg.ui.shelfOrder||[]).filter(id=>known.some(k=>k[0]===id));return {known,order:[...saved,...known.map(k=>k[0]).filter(id=>!saved.includes(id))]}}
 function orderPage(){const {known,order}=orderList(),nm=id=>(known.find(k=>k[0]===id)||[id,id])[1];
   return {g:"(T)rustyShelf",id:"order",name:"Console order",ic:"shelf",lead:"The order of the shelves along the top. Home always comes first. Pick one up, move it, put it down.",
@@ -726,7 +734,7 @@ const sw2Row=()=>!!api.sw2Builds&&!(window.bsPlatform&&bsPlatform.os==="android"
 // (beta.4) Settings → Custom games: Quiver Launcher (found where it usually is, or found / chosen once for a portable
 // copy) and the programs added by hand, each named here. pcSt: what main sees ({ quiver: folder, epic: count }), asked
 // for when the page is drawn
-let pcSt=null,pcAsking=false;const customNameRows=new WeakMap();
+let pcSt=null,pcAsking=false;const customNameRows=new WeakMap();let customPageN=0; // (each custom game's page id: unique even for two games of one name)
 // (beta.7) a store row's line: "3 installed" / "None installed" once main has counted (null while asking)
 function pcCount(k){if(!pcSt)setTimeout(pcStatus,0);return pcSt&&pcSt[k]!=null?{text:pcSt[k]?`${pcSt[k]} installed`:"None installed"}:null}
 function pcStatus(){if(pcAsking||!api.pcStatus)return;pcAsking=true;Promise.resolve(api.pcStatus()).then(r=>{pcSt=r||{};pcAsking=false;bump()}).catch(()=>{pcSt={};pcAsking=false;bump()})}
@@ -755,13 +763,19 @@ function customRows(){if(!pcSt)setTimeout(pcStatus,0);cfg.pc=cfg.pc||{epic:true,
     rows.push(A("Use the best cover for each","Find","Picks SteamGridDB's top cover for every custom game without one, in one go. A recomp can share its name with another game: look them over, and Undo puts them all back.",
       async()=>{if(!n){toast("Every custom game has a cover already");return}if(COV.busy)return;COV.busy=true;bump();try{await S.pcCoverAuto()}finally{COV.busy=false;covLoad(true)}},{ns:true,keys:"covers best match all automatic steamgriddb",sub:()=>({text:COV.busy?"Finding covers…":"Needs a SteamGridDB key"})}));
     if(S.coverUndoCount&&S.coverUndoCount())rows.push(A(`Undo the ${S.coverUndoCount()} covers just found`,"Undo","Puts back the made-up cases those games had before.",async()=>{await S.pcCoverUndo();covLoad(true)},{ns:true,keys:"undo covers"}));}
-  pc.custom.forEach((c,i)=>{
-    // (beta.5) the name row is kept per game (the text editor finds its row by identity: a new object each draw never edited)
-    let nr=customNameRows.get(c);if(!nr){nr=X(c.title||"Game","",`Its name on the shelf. Program: ${c.exe}`,{get:()=>c.title||"",set:v=>{c.title=String(v||"").slice(0,120);nr.label=c.title||"Game"},rescan:true,ns:true,keys:"rename custom game",sub:()=>({text:folderName(c.exe)})});customNameRows.set(c,nr)}
-    rows.push(nr);
-    // (beta.10) which shelf it sits on: Custom, or the PC shelf beside the store games
-    rows.push(A("Shelf",()=>c.shelf==="pc"?"PC":"Custom","Which shelf this game is on: Custom (games you added) or PC (with your Steam and store games). Press to move it.",()=>{if(c.shelf==="pc")delete c.shelf;else c.shelf="pc";changed({rescan:true});toast(`${c.title||"The game"} is on the ${c.shelf==="pc"?"PC":"Custom"} shelf now`)},{ns:true,keys:"shelf move pc custom shelf"}));
-    rows.push(A("Remove "+(c.title||"this game"),"Remove","Takes it off its shelf. Nothing is deleted.",()=>twice("pcx:"+c.exe+"|"+(c.title||""),()=>{const k=pc.custom.indexOf(c);if(k>=0)pc.custom.splice(k,1);changed({rescan:true});toast("Removed from the Custom shelf (nothing was deleted)")},"Press again to remove it"),{ns:true,ask:"pcx:"+c.exe+"|"+(c.title||"")}))}); // (beta.10) keyed by the game, not its place in the list
+  pc.custom.forEach(c=>{
+    // (supalii's fork) each game gets a page of its own: its name, launch options, the shelf it sits on (Custom, PC beside the
+    // store games (beta.10), or a console's, beside its ROMs) and Remove. The rows are kept per game (beta.5: the text editor
+    // finds its row by identity, so a new object each draw was never edited)
+    let pg=customNameRows.get(c);
+    if(!pg){const id="custom-game-"+String(c.id||c.title||c.exe).replace(/[^a-z0-9_-]/gi,"-").slice(0,60)+"-"+(++customPageN),ask="pcx:"+c.exe+"|"+(c.title||"");
+      const name=X("Game name","","The name shown on its shelf.",{get:()=>c.title||"",set:v=>{c.title=String(v||"").slice(0,120);if(MORE[id])MORE[id].name=c.title||"Game";pg.row.label=c.title||"Game"},rescan:true,ns:true,keys:"rename custom game"});
+      const args=X("Launch arguments","","Passed to the program when it starts, for example -dx12. Put quotes around anything with spaces.",{get:()=>c.args||"",set:v=>{c.args=String(v||"").slice(0,1000)},rescan:true,ns:true,mono:true,keys:"launch command arguments flags options dx12"});
+      const shelfR=C("Platform","",()=>[["custom","Custom"],["pc","PC"],...consoleList().map(x=>[x.id,x.name])],"custom","Which shelf it sits on: Custom (games you added), PC (with your Steam and store games) or a console's, beside its games. (T)rustyShelf starts the program itself either way: a console's shelf doesn't run it through the emulator.",{get:()=>c.shelf||"custom",set:v=>{if(v==="custom")delete c.shelf;else c.shelf=v;delete c.platform},rescan:true,ns:true,keys:"shelf move pc custom console platform assign"});
+      const rem=A("Remove game","Remove","Takes it off its shelf. Nothing is deleted.",()=>twice(ask,()=>{const k=pc.custom.indexOf(c);if(k>=0)pc.custom.splice(k,1);changed({rescan:true});leaveSub();render();toast("Removed from its shelf (nothing was deleted)")},"Press again to remove it"),{ns:true,ask});
+      pg={id,rows:[name,args,shelfR,rem]};pg.row=M(c.title||"Game",id,`${c.title||"This game"}: its name, launch arguments and platform (the shelf it sits on).`,`Program: ${c.exe}`,pg.rows,{btn:"Edit",keys:"custom game name launch arguments platform shelf",sub:()=>({text:c.shelf==="pc"?"PC shelf":c.shelf?((consoleList().find(x=>x.id===c.shelf)||{}).name||c.shelf)+" shelf":folderName(c.exe)})});customNameRows.set(c,pg)}
+    else MORE[pg.id]={id:pg.id,name:c.title||"Game",lead:`Program: ${c.exe}`,rows:pg.rows}; // (a redraw: the page stays reachable)
+    rows.push(pg.row)});
   return rows}
 // Settings → PC games → PC games folder (main/pcfolder.js): every folder in it is a game. pcf: its games as main sees them,
 // with the programs each could start with (a folder holding several gets a choice)
@@ -2374,7 +2388,7 @@ function renderInfo(){const r=curRow(),s=sec();E.info.classList.toggle("open",in
   if(!r){E.ih.textContent=s.name;E.ip.textContent=s.lead||"";E.im.textContent="";E.is.innerHTML="";E.it.innerHTML=`<div class="pv">${device==="pad"?"Right or "+btnName("a"):"→ or Enter"} opens this page</div>`;return}
   const R=r.t==="result"?r.row:r,c=r.t==="consoles"?tileList()[ci]:null;
   E.ih.textContent=c?c.name:r.label;
-  E.ip.textContent=c?`Uses ${conEmu(c)||"its emulator"}. ${conStatus(c)}.`:(r.info||"");
+  E.ip.textContent=c?`${c.standalone?"Standalone games; no emulator is needed.":`Uses ${conEmu(c)||"its emulator"}.`} ${conStatus(c)}.`:(r.info||"");
   if(c)st=stHtml(conState(c)==="ok"?"ok":conState(c)==="warn"?"warn":"none",conStatus(c));
   E.im.textContent=R&&(typeof R.more==="function"?R.more():R.more)||"";
   if(R&&R.status){const x=svcState(R.status);st=svcChip(R.status);if(x.at&&(x.state==="ok"||x.state==="fail"))meta.push(["",`Checked ${when(x.at)}`])}

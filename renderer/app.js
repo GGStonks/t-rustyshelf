@@ -21,6 +21,7 @@ const STYLE={
   ps3:{id:"ps3",rc:0.065,re:0.26,hue:221,ratio:0.787,depth:0.1,edge:.03,caseColor:"#203553",caseSide:"#16263f",spineInk:"#ffffff",band:{bg:"#0c0d10",fg:"#ffffff",label:"PS3"},spineBand:{bg:"#0c0d10",fg:"#ffffff",label:"PS3"},tint:["#24406e","#090f1e"],glow:"#7ab4ff"},
   ps2:{id:"ps2",rc:0.035,re:0.2,hue:226,ratio:0.711,depth:0.104,edge:.03,caseColor:"#0f1d55",caseSide:"#0a1440",spineInk:"#ffffff",band:{bg:"#0f1d55",fg:"#dfe6ff",label:"PS2"},spineBand:{bg:"#0f1d55",fg:"#dfe6ff",label:"PS2"},tint:["#1b2a7a","#070b24"],glow:"#8fa6ff"},
   x360:{id:"x360",rc:0.04,re:0.22,hue:115,ratio:0.711,depth:0.104,edge:.03,caseColor:"#1a7f1a",caseSide:"#0f5a12",spineInk:"#ffffff",band:{bg:"#107c10",fg:"#ffffff",label:"XBOX 360"},spineBand:{bg:"#107c10",fg:"#ffffff",label:"X360"},tint:["#145a16","#061a07"],glow:"#7ee87e"},
+  xboxone:{id:"xboxone",rc:0.04,re:0.22,hue:118,ratio:0.711,depth:0.104,edge:.03,caseColor:"#107c10",caseSide:"#0b580b",spineInk:"#ffffff",band:{bg:"#107c10",fg:"#ffffff",label:"XBOX ONE"},spineBand:{bg:"#107c10",fg:"#ffffff",label:"XBOX ONE"},tint:["#145a16","#061a07"],glow:"#7ee87e"}, // (supalii's fork)
   psp:{id:"psp",rc:0.055,re:0.24,hue:235,ratio:0.589,depth:0.14,edge:.03,caseColor:"#101014",caseSide:"#07070a",spineInk:"#e8e8f0",band:{bg:"#0a0a0d",fg:"#ffffff",label:"PSP"},spineBand:{bg:"#0a0a0d",fg:"#ffffff",label:"PSP"},tint:["#4a4f63","#0b0c12"],glow:"#cfd6ff"},
   n3ds:{id:"n3ds",rc:0.05,re:0.24,hue:352,ratio:1.127,depth:0.1,h:.64,edge:.03,caseColor:"#f4f4f6",caseSide:"#dcdde2",spineInk:"#3a3d45",band:{bg:"#ffffff",fg:"#d40f2a",label:"NINTENDO 3DS"},spineBand:{bg:"#ffffff",fg:"#d40f2a",label:"3DS"},tint:["#c0182e","#3a0710"],glow:"#ff7a8a"},
   pc:{id:"pc",rc:0.02,re:0.16,hue:207,ratio:.667,depth:.07,edge:.015,caseColor:"#1b1f27",caseSide:"#11141a",spineInk:"#dfe8f3",band:null,spineBand:{bg:"#11141a",fg:"#8fb4d9",label:"PC"},tint:["#1d4a6e","#0a121c"],glow:"#8fc3ff"},
@@ -29,7 +30,7 @@ const STYLE={
   home:{id:"home",rc:0.04,re:0.22,hue:268,ratio:.71,depth:.09,edge:.025,caseColor:"#1b1d27",caseSide:"#101218",spineInk:"#e8e8f0",band:{bg:"#1b1d27",fg:"#c9cfe0",label:"HOME"},spineBand:{bg:"#2a2d3a",fg:"#c9cfe0",label:"HOME"},tint:["#3b2f6e","#0a0b16"],glow:"#c9b8ff"},
   media:{id:"media",rc:0.03,re:0.18,hue:285,ratio:.71,depth:.06,edge:.02,caseColor:"#1a1c24",caseSide:"#0e0f14",spineInk:"#e8e8f0",band:{bg:"#1a1c24",fg:"#9aa3b8",label:"APP"},spineBand:{bg:"#2a2d38",fg:"#c8cede",label:"APP"},tint:["#2a3550","#0a0d16"],glow:"#b9a6ff"}
 };
-const WORDMARKS={home:["Home","Continue & favorites"],gc:["GameCube","Home console"],wii:["Wii","Motion console"],wiiu:["Wii U","Home console"],sw:["Switch","Hybrid console"],sw2:["Switch 2","Hybrid console"],psp:["PSP","Handheld"],ps3:["PS3","Home console"],ps4:["PS4","Home console"],ps5:["PS5","Home console"],x360:["Xbox 360","Home console"],n3ds:["3DS","Handheld"],ps2:["PS2","Home console"],pc:["PC","Steam, Epic & more"],custom:["Custom","PC ports & recomps"],media:["Media","Streaming"]};
+const WORDMARKS={home:["Home","Continue & favorites"],gc:["GameCube","Home console"],wii:["Wii","Motion console"],wiiu:["Wii U","Home console"],sw:["Switch","Hybrid console"],sw2:["Switch 2","Hybrid console"],psp:["PSP","Handheld"],ps3:["PS3","Home console"],ps4:["PS4","Home console"],ps5:["PS5","Home console"],x360:["Xbox 360","Home console"],xboxone:["Xbox One","Standalone games"],n3ds:["3DS","Handheld"],ps2:["PS2","Home console"],pc:["PC","Steam, Epic & more"],custom:["Custom","PC ports & recomps"],media:["Media","Streaming"]};
 if(window.BS_SYSTEMS_EXTRA){Object.assign(STYLE,BS_SYSTEMS_EXTRA.style||{});Object.assign(WORDMARKS,BS_SYSTEMS_EXTRA.wordmarks||{})} // extra shelves (renderer/systems-extra.js)
 const APP_HUE={stremio:265,nuvio:200};
 
@@ -76,7 +77,8 @@ function quote(p){return /\s/.test(p)?`"${p}"`:p}
 function argsPreview(tpl,rom){return (tpl||"").replace(/\{rom\}/g,rom||"")}
 
 // Turn scanned shelves into display items with seeds, hues and an emulator tile.
-// Games you've hidden (Details → Hide from shelf; Settings → Hidden games) never reach a shelf, so Home, the museum,
+// Games and shelf tiles you've hidden (Details → Hide from shelf; Settings → Hidden games & tiles; supalii's fork: the Open
+// emulator and Surprise me tiles too) never reach a shelf, so Home, the museum,
 // Shuffle, attract mode and letter jumps all skip them; the scan itself stays whole (lastLib) for the Settings list.
 let lastLib=null;
 function hiddenSet(){const h=cfgInfo&&cfgInfo.config.ui.hidden;return new Set(Array.isArray(h)?h.map(String):[])}
@@ -85,7 +87,7 @@ function prepare(list){
   const out=list.map(s0=>{
     const all=s0.games||[],games=hid.size?all.filter(g=>!hid.has(String(g.id))):all,s={...s0,games,_hiddenN:all.length-games.length};
     const items=games.map(g=>{const seed=hash(g.title);return {...g,seed,hue:g.kind==="app"?(APP_HUE[g.appId]||seed%360):seed%360,scene:g.kind==="app"?"media":undefined}});
-    if(s.kind==="console"&&s.hasEmulator){
+    if(s.kind==="console"&&s.hasEmulator&&!hid.has("emu-"+s.id)){ // (supalii: the tile can be hidden too)
       const t=`Open ${s.emulatorName}`;const seed=hash(t+s.id);
       items.unshift({kind:"emulator",id:"emu-"+s.id,title:t,seed,hue:seed%360,scene:"media",art:{icon:s.emulatorIcon||null}});
     }
@@ -94,7 +96,7 @@ function prepare(list){
     // (beta.7) the Custom shelf ends in an "Add games" tile: Settings → Custom games → Add games (several at once, a folder, Playnite)
     if(s.id==="custom"&&!ANDROID){const seed=hash("setup-custom");items.push({kind:"setup",addGames:true,tail:true,id:"setup-custom",title:"Add games",seed,hue:210,scene:"media",art:{front:Covers.setupFront(STYLE.custom||STYLE.media)}})}
     // "Surprise me" tile at the front of every shelf that has games on it
-    if((s.kind==="console"||s.kind==="steam")&&s.games.length>1){
+    if((s.kind==="console"||s.kind==="steam")&&s.games.length>1&&!hid.has("rnd-"+s.id)){
       const seed=hash("random"+s.id),style=STYLE[s.id]||STYLE.media;
       items.unshift({kind:"random",id:"rnd-"+s.id,title:"Surprise me",seed,hue:300,scene:"media",art:{front:Covers.randomFront(style)}});
     }
@@ -862,6 +864,8 @@ function infoRows(g){
   if(g.kind==="setup")return [["Games found","None yet"],["Fix it in","Settings → "+s.name]];
   if(g.kind==="random")return [...(g.pick?[["Picked",g.pick.game.title],["Shelf",(g.pick.sh||shelves[g.pick.shelf]).name]]:[]),["Picks from",shuffleAll()?"Every shelf":"This shelf"],["Change","Settings → Shelf"]];
   if(g.kind==="app")return [["Type","Streaming app"],["Program",g.path],["Returns","When you close the app"]];
+  // (supalii's fork) a game added by hand: where it comes from, the shelf it was put on, its program and launch options
+  if(g.kind==="steam"&&g.exe&&!(g.info&&(g.info.dev||g.info.release||g.info.year)))return [["Source",PC_SRC[g.source]||"Custom"],...(g.platform?[["Shelf",g.platform==="pc"?"PC":s.name]]:[]),["Program",g.exe],...(g.args?[["Launch options",g.args]]:[]),["Playtime",g.minutes?`${(g.minutes/60).toFixed(1)} hours`:"Not played yet"]];
   if(g.kind==="steam"){const si=g.info||{};return [...(si.release||si.year?[["Released",fmtRelease(si.release,si.year)]]:[]),...(si.dev?[["Developer",si.dev]]:[]),...(si.pub&&si.pub!==si.dev?[["Publisher",si.pub]]:[]),...(si.genres?[["Genre",si.genres.replace(/;/g,", ")]]:[]),...(si.metacritic?[["Metacritic",si.metacritic+" / 100"]]:[]),["Playtime",g.minutes?`${(g.minutes/60).toFixed(1)} hours`:"Not played yet"],["Last played",fmtDate(g.lastPlayed)],...(showSize()&&g.sizeBytes?[["Install size",fmtSize(g.sizeBytes)]]:[]),["Steam ID",g.appid]];}
   const i=g.info||{};const rows=[];
   if(i.release||i.year)rows.push(["Released",fmtRelease(i.release,i.year)]);
@@ -882,6 +886,7 @@ function descFor(g){
   if(g.kind==="setup")return `No games found for ${s.name} yet. Opens its page in Settings, where you can pick the folder your games are in.`;
   if(g.kind==="emulator")return `Opens ${s.emulatorName} on its own so you can change controllers, graphics and other settings. Close it to come back here.`;
   if(g.kind==="app")return `Opens ${g.title}. Close it to come back to the shelf.`;
+  if(g.kind==="steam"&&g.platform&&g.source==="custom")return g.platform==="pc"?"Added by you, on the PC shelf. (T)rustyShelf starts its program directly.":`Added by you, on the ${s.name} shelf. (T)rustyShelf starts its program directly${s.emulatorName?`, not through ${s.emulatorName}`:""}.`; // (supalii)
   if(g.kind==="steam")return PC_HOW[g.source]||"Starts through Steam, so updates, cloud saves and the Steam overlay work as usual.";
   return g.kind==="rom"?"":`Opens ${g.title}.`;
 }
@@ -900,7 +905,7 @@ function fillDetails(){
   const i=g.info||{},chips=$("dChips");chips.innerHTML="";
   const chip=(t,cls)=>{if(!t)return;const c=document.createElement("span");c.className="chipx"+(cls?" "+cls:"");c.textContent=t;chips.append(c)};
   if(g.kind==="rom"){chip(i.release?String(i.release).slice(0,4):i.year);chip(i.genres&&i.genres.split(";")[0].trim());chip(i.players?(i.players==="1"?"1 player":`${i.players} players`):null);chip(i.esrb?i.esrb.replace(/ - .*$/,""):null,"esrb");chip(i.rating?`★ ${(+i.rating).toFixed(1)}`:null,"score");chip(i.metacritic?`Metacritic ${i.metacritic}`:null,"score");if(g.compat)chip(`Xenia: ${g.compat}`,/playable|gameplay/i.test(g.compat)?"score":"esrb")}
-  else if(g.kind==="steam"){chip(PC_SRC[g.source]||"Steam");chip(yearOf(g));chip(genreOf(g));chip(i.metacritic?`Metacritic ${i.metacritic}`:null,"score");chip(g.minutes?`${(g.minutes/60).toFixed(1)} h played`:"Not played yet")}
+  else if(g.kind==="steam"){chip(g.platform&&g.platform!=="pc"?"Standalone executable":PC_SRC[g.source]||"Steam");chip(yearOf(g));chip(genreOf(g));chip(i.metacritic?`Metacritic ${i.metacritic}`:null,"score");chip(g.minutes?`${(g.minutes/60).toFixed(1)} h played`:"Not played yet")}
   else if(g.kind==="app")chip("Streaming app");else if(g.kind==="emulator")chip("Emulator");else if(g.kind==="random")chip("Shuffle");
   // your history with this game (launches / time / last played), kept by (T)rustyShelf
   // (beta.7) as tiles under the header: time played, last played, launches (Steam's own hours for a Steam game)
@@ -929,7 +934,7 @@ function fillDetails(){
   let cmd="";
   if(g.kind==="rom")cmd=`${quote(gameEmu(g)||s.emulator||s.emulatorName)} ${argsPreview(s.gameArgs,g.file)}`;
   else if(g.kind==="emulator")cmd=quote(s.emulator||"");
-  else if(g.kind==="steam")cmd=g.source&&g.source!=="steam"?(PC_EXT[g.source]||g.title):`steam://rungameid/${g.appid}`;
+  else if(g.kind==="steam")cmd=g.source&&g.source!=="steam"?(PC_EXT[g.source]||(g.exe?`${quote(g.exe)}${g.args?" "+g.args:""}`:g.title)):`steam://rungameid/${g.appid}`;
   else if(g.kind==="app")cmd=quote(g.path);
   $("dCmd").textContent=cmd;$("dCmd").hidden=!cmd;
   const how=$("dHow");if(how){how.textContent=g.kind==="rom"?`Plays in ${s.emulatorName}${s.bootOnLaunch&&!s.useIpl&&((themes[s.id]||{}).boot||s.insertAnim===false)?" after the boot "+((themes[s.id]||{}).boot?"video":"intro"):""}. Close the emulator to come back here.`:"";how.hidden=g.kind!=="rom"}
@@ -939,6 +944,7 @@ function fillDetails(){
   $("dEmu").hidden=!(g.kind==="rom"&&s.hasEmulator);$("dEmu").textContent=`Open ${s.emulatorName||"emulator"}`;
   {const pc=g.kind==="steam"&&!!api.pcCoverOptions,b=$("dBoxArt"),p=$("dBoxArtPc");if(b)b.hidden=!(g.kind==="rom"&&api.artStudio&&g.file);if(p)p.hidden=!pc;} /* (beta.9) a PC game's Box art sits beside Play (it has no manual or Inspect), not in More */{const b=$("dRename");if(b)b.hidden=!(api.renameGame&&((g.kind==="rom"&&g.file)||g.kind==="steam"));} /* (beta.5: PC games too, through the cover picker) */
   {const b=$("dCols");if(b)b.hidden=!isGame(g)||g.kind==="app";}
+  {const b=$("dHide");if(b)b.hidden=!isHideable(g);} // (supalii: only where hiding works)
   {const b=$("dChooseManual");if(b){b.hidden=!(g.kind==="rom"&&api.manualStudio&&g.file);b.textContent=hasManual(g)?"Choose manual…":"Find a manual…";b.title=!hasManual(g)&&g.manualMiss?`(T)rustyShelf looked online on ${new Date(g.manualMiss).toLocaleDateString()} and found no manual for this game. Search or add one here.`:""}}
   {const b=$("dGameEmu");if(b){const own=g.kind==="rom"?gameEmu(g):"";b.hidden=!(g.kind==="rom"&&api.gameEmulator);b.textContent=own?(emuLabel(own).length>16?emuLabel(own).slice(0,15)+"…":emuLabel(own)):"Emulator";b.title=own?`Runs in ${own} (just this game). Press to change.`:`Runs in the shelf's ${s.emulatorName||"emulator"}. Press to pick a different build for just this game.`;b.classList.toggle("own",!!own)}}
   renderHints(); // Y's prompt follows this game's trailer / achievements row (updateInfo drew the bar before this fill)
@@ -2452,6 +2458,7 @@ const SHAPES={
 let shuffling=false;
 const shuffleAll=()=>!(cfgInfo&&cfgInfo.config.ui.shuffleAll===false);
 const isGame=g=>g.kind==="rom"||g.kind==="steam";
+const isHideable=g=>!!g&&(isGame(g)||g.kind==="random"||g.kind==="emulator"); // (supalii) what Hide from shelf works on
 // (beta.4) PC games carry their source: Steam, Epic, Quiver or added by hand (main/pcgames.js)
 const PC_SRC={epic:"Epic Games",folder:"PC games folder",quiver:"Quiver",custom:"Custom",gog:"GOG",ubisoft:"Ubisoft",ea:"EA",xbox:"Xbox"},PC_HOW={epic:"Starts through the Epic Games Launcher, so its sign-in, cloud saves and overlay work as usual.",quiver:"Installed with Quiver Launcher. (T)rustyShelf starts it from its own folder; updates stay in Quiver.",custom:"Added by you in Settings → Custom games. (T)rustyShelf starts it from its own folder.",folder:"A folder in your PC games folder (Settings → PC games). (T)rustyShelf starts it from there.",
   gog:"Installed with GOG Galaxy. GOG games have no copy protection: (T)rustyShelf starts it itself; updates stay in GOG Galaxy.",ubisoft:"Starts through Ubisoft Connect, so its sign-in and cloud saves work as usual.",ea:"Starts through the EA app, so its sign-in and cloud saves work as usual.",xbox:"An Xbox app game (Game Pass included). It starts like any Xbox app game, signed in with your Microsoft account."};
@@ -4043,7 +4050,11 @@ function applyUi_(u){
 function applyUiAll(){const u=uiNow();applyUi_({safeArea:u.safeArea,reduceMotion:u.reduceMotion,clock:u.clock,clock24:u.clock24,confirmButton:u.confirmButton,scrollSpeed:u.scrollSpeed,audioOut:u.audioOut,dimMinutes:u.dimMinutes})}
 function applyUi(partial){if(!partial||typeof partial!=="object")return;try{if(cfgInfo){const ui=cfgInfo.config.ui;for(const k of Object.keys(partial))ui[k]=partial[k]}applyUi_(partial)}catch(e){console.warn("applyUi",e)}}
 // Hidden games: the list for Settings (from the whole scan, hidden ones included) and the switch itself
-function hiddenList(){const hid=hiddenSet();if(!hid.size||!lastLib)return [];const out=[];lastLib.forEach(s=>(s.games||[]).forEach(g=>{if(hid.has(String(g.id)))out.push({id:String(g.id),title:g.title,system:s.name})}));return out.sort((a,b)=>a.system.localeCompare(b.system)||a.title.localeCompare(b.title))}
+function hiddenList(){const hid=hiddenSet();if(!hid.size||!lastLib)return [];const out=[];lastLib.forEach(s=>{
+  (s.games||[]).forEach(g=>{if(hid.has(String(g.id)))out.push({id:String(g.id),title:g.title,system:s.name})});
+  // (supalii) the shelf's own tiles
+  if(s.kind==="console"&&hid.has("emu-"+s.id))out.push({id:"emu-"+s.id,title:`Open ${s.emulatorName||"emulator"}`,system:s.name});
+  if((s.kind==="console"||s.kind==="steam")&&hid.has("rnd-"+s.id))out.push({id:"rnd-"+s.id,title:"Surprise me",system:s.name})});return out.sort((a,b)=>a.system.localeCompare(b.system)||a.title.localeCompare(b.title))}
 async function setHidden(id,on){if(!cfgInfo||id==null)return false;id=String(id);on=!!on;const ui=cfgInfo.config.ui,list=new Set((Array.isArray(ui.hidden)?ui.hidden:[]).map(String));if(on===list.has(id))return true;
   if(on)list.add(id);else list.delete(id);ui.hidden=[...list];
   // the game in view is going away: the shelf lands on its neighbour instead of jumping to the start
@@ -4053,7 +4064,7 @@ async function setHidden(id,on){if(!cfgInfo||id==null)return false;id=String(id)
   // an open Settings screen would swap the object it is editing)
   if(lastLib){if(mode==="browse"||mode==="details")await refresh(true,lastLib);else pendingLib=lastLib}
   return true}
-function hideGame(g){if(!g||!isGame(g))return;const id=String(g.id),title=g.title;closeDetails(true);play_("back");rumble(0,.25,60);
+function hideGame(g){if(!isHideable(g))return;const id=String(g.id),title=g.title;closeDetails(true);play_("back");rumble(0,.25,60);
   setHidden(id,true).then(()=>{const fn=()=>{if(undoHide!==fn)return;toastEnd();setHidden(id,false).then(()=>{toast(`${title} is back on the shelf`);play_("toast")})};
     // (beta.10) through the toast queue: it waits for nothing (your own action), and a toast from the background waits for it
     const pad=showPad(),el=$("toast");toastShow({msg:`Hidden: ${title}  `,kind:"undo"});undoHide=fn;const b=document.createElement("button");b.type="button";b.className="t-undo";b.innerHTML=pad?`${glyph("sq")}<span>Undo</span>`:`<span class="g">U</span><span>Undo</span>`;b.addEventListener("click",e=>{e.stopPropagation();fn()});el.append(b);
@@ -4082,7 +4093,7 @@ async function chooseGameEmu(g){if(!g||g.kind!=="rom"||!api.gameEmulator)return;
 (function(){const m=$("dManual");if(!m||$("dChooseManual"))return;const b=document.createElement("button");b.className="btn";b.type="button";b.id="dChooseManual";b.textContent="Choose manual…";b.title="Every manual found for this game, side by side: pick another language, region or scan, or add your own PDF";
   b.addEventListener("click",()=>{const g=curGame();if(!g||g.kind!=="rom"||!g.file||!api.manualStudio)return;const s=shelfFor(g);play_("panel");Setup.open({page:"manualgame",systemId:s.id,file:g.file,title:g.title})});$("dActEnd").before(b)})(); /* (beta.7: in the More menu) */
 // the Details panel's "Hide from shelf" button (made here: index.html belongs to the Settings work)
-(function(){const c=$("dActEnd");if(!c||$("dHide"))return;const b=document.createElement("button");b.className="btn";b.type="button";b.id="dHide";b.textContent="Hide from shelf";b.title="Hide this game from every shelf (undo it in Settings → Hidden games)";b.addEventListener("click",()=>hideGame(curGame()));c.before(b)})();
+(function(){const c=$("dActEnd");if(!c||$("dHide"))return;const b=document.createElement("button");b.className="btn";b.type="button";b.id="dHide";b.textContent="Hide from shelf";b.title="Hide this game or shelf tile (undo it in Settings → Hidden games & tiles)";b.addEventListener("click",()=>hideGame(curGame()));c.before(b)})();
 // (beta.7) Details → Collections: this game on shelves of your own (a page in Settings: a switch per collection, or a new one)
 (function(){const c=$("dActEnd");if(!c||$("dCols"))return;const b=document.createElement("button");b.className="btn";b.type="button";b.id="dCols";b.textContent="Collections";b.title="Put this game on shelves of your own";b.addEventListener("click",()=>{const g=curGame();if(!g||!isGame(g)||!window.Setup)return;closeDetails(true);Setup.open({page:"collections",id:g.id,title:g.title})});c.before(b)})();
 
@@ -4098,8 +4109,8 @@ window.Shelf={
   _play:id=>{const g=allShelves.flatMap(x=>x.items||x.games||[]).find(x=>x&&x.id===id);if(g)launchNow(g);return !!g}, // (tests: Play on a game by id)
   pcCoverAuto:()=>pcCoverAuto(),pcCoverUndo:()=>pcCoverUndo(),coverUndoCount:()=>coverUndo.length,
   // (beta.7) test hooks for the library pass: the filters on offer, picking one, the shelf's games and the one in view
-  _lib:{filters:()=>filterList(),filter:v=>pickSort(1,v),cur:()=>{const g=curGame();return g?{id:g.id,title:g.title,kind:g.kind}:null},
-    games:()=>(cur()?cur().items.filter(isGame):[]).map(g=>({id:g.id,year:yearOf(g),genres:genresOf(g)})),shelves:()=>shelves.map(s=>({id:s.id,name:s.name,col:!!s.col,ids:(s.items||[]).filter(isGame).map(g=>g.id),last:((s.items||[])[(s.items||[]).length-1]||{}).id||null}))},
+  _lib:{filters:()=>filterList(),filter:v=>pickSort(1,v),select:id=>{const i=cur()?cur().items.findIndex(g=>g.id===id):-1;if(i<0)return false;go(i);return true},cur:()=>{const g=curGame();return g?{id:g.id,title:g.title,kind:g.kind}:null},
+    games:()=>(cur()?cur().items.filter(isGame):[]).map(g=>({id:g.id,year:yearOf(g),genres:genresOf(g)})),shelves:()=>shelves.map(s=>({id:s.id,name:s.name,col:!!s.col,ids:(s.items||[]).filter(isGame).map(g=>g.id),tiles:(s.items||[]).filter(g=>g.kind==="random"||g.kind==="emulator").map(g=>({id:g.id,kind:g.kind,title:g.title})),last:((s.items||[])[(s.items||[]).length-1]||{}).id||null}))},
   // (beta.7) Settings changed your collections: their shelves are made again (the one you're on stays, if it still has games)
   previewStop:()=>{if(PV){pvStop();pvBackStop()}},setCollections:list=>{if(!cfgInfo||!Array.isArray(list))return;cfgInfo.config.ui.collections=list;const was=cur();buildHome();
     // (beta.10) the shelf you were on is gone (buildHome keeps the index, so another shelf slid into it): show that shelf's own cases, from its first game

@@ -620,7 +620,7 @@ async function buildLibrary() {
     const sc = cfg.systems[def.id];
     if (!sc || !sc.enabled) continue;
     await new Promise(r => setImmediate(r)); // let covers and IPC through between shelves: a big folder scan shouldn't freeze everything
-    if (!sc.emulator && !(sc.romDirs || []).length) continue;
+    if (def.standalone || !sc.emulator && !(sc.romDirs || []).length) continue; // (supalii: a standalone shelf has no folder to scan; its programs join it below)
     markEvent('scan ' + def.id); // (beta.9) the freeze watch names the console being scanned (these showed up as "start")
     if (def.id === 'x360') { let t; try { await Promise.race([x360.ensureDb(), new Promise(r => { t = setTimeout(r, 15000); })]); } catch {} finally { clearTimeout(t); } }
     // (beta.10) the folders read with fs.promises (a games folder on a NAS held the whole app up: no pictures, no input),
@@ -665,15 +665,24 @@ async function buildLibrary() {
   // unrelated Steam game, "Quarantine" got a puzzle game's cover; they keep the made-up case)
   // (artFrom: where the front comes from, for Settings → Box art → PC games: the player's pick, the store's own box art
   // (Epic's), Steam's, or none: a made-up case)
+  const MINE_SRC = new Set(['custom', 'quiver']); // (supalii) Details shows these games' program and launch options
   const pcGame = g => { const sid = STORE_SRC.has(g.source) ? pcgames.steamIdOf(g.title) : null, l = sid ? steamart.local(sid) : {};
     const chosen = pccovers.cover(g.id), auto = !chosen && pccovers.autoCover(g.id), front = chosen || auto || l.front;
     // (its size: its folder as measured in the background, until then what Epic says it installed (a game can download
     // more itself, MTG Arena does); Steam's games bring their own)
     const sizeBytes = g.installed === false ? 0 : (SIZED_SRC.has(g.source) && g.dir ? dirsize.get(g.dir) : 0) || g.installSize || 0;
-    return { kind: 'steam', source: g.source, id: g.id, title: g.title, ...(g.installed === false ? { installed: false } : {}), ...(sizeBytes ? { sizeBytes } : {}), ...(sid ? { info: steamart.gameInfo(sid) } : {}), artFrom: chosen ? 'yours' : auto ? 'store' : l.front ? 'steam' : '', art: { front: fileUrl(front), hero: fileUrl(l.hero), icon: g.icon || undefined } }; };
+    return { kind: 'steam', source: g.source, id: g.id, title: g.title, ...(MINE_SRC.has(g.source) && g.exe ? { exe: g.exe, ...(g.args ? { args: g.args } : {}) } : {}), ...(g.shelf ? { platform: g.shelf } : {}), ...(g.installed === false ? { installed: false } : {}), ...(sizeBytes ? { sizeBytes } : {}), ...(sid ? { info: steamart.gameInfo(sid) } : {}), artFrom: chosen ? 'yours' : auto ? 'store' : l.front ? 'steam' : '', art: { front: fileUrl(front), hero: fileUrl(l.hero), icon: g.icon || undefined } }; };
   pcAutoCovers([...epic, ...mine]);
-  // (beta.10) a game added by hand can be moved to the PC shelf (Settings → Custom games → the game → Shelf)
-  const toPc = mine.filter(g => g.shelf === 'pc'), onCustom = mine.filter(g => g.shelf !== 'pc');
+  // (beta.10) a game added by hand can be moved to the PC shelf (Settings → Custom games → the game → Shelf); (supalii's
+  // fork) or to a console's shelf, beside its ROMs: it's still started as its own program, not through the emulator. A
+  // console shelf that's switched off sends its games back to Custom; one with no emulator or games folder is made for them
+  const toCon = new Map(), back = [];
+  for (const g of mine) if (g.shelf && g.shelf !== 'pc') { const sc = cfg.systems[g.shelf]; if (!sc || !sc.enabled) { back.push(g); continue; } if (!toCon.has(g.shelf)) toCon.set(g.shelf, []); toCon.get(g.shelf).push(g); }
+  for (const def of CONSOLES) { const list = toCon.get(def.id); if (!list) continue; const games = list.map(pcGame), sh = shelves.find(x => x.id === def.id && x.kind === 'console');
+    if (sh) { sh.games.push(...games); continue; }
+    const sc = cfg.systems[def.id], emu = sc.emulator || '';
+    shelves.push({ id: def.id, kind: 'console', name: def.name, emulatorName: emuShown(def, emu), hasEmulator: !!emu && paths.isFile(emuPath(emu)), emulator: emu, emulatorIcon: emu ? fileUrl(await iconQuick(emu)) : null, gameArgs: sc.gameArgs, bootOnLaunch: sc.bootOnLaunch !== false, useIpl: def.id === 'gc' && !!sc.useIpl, insertAnim: sc.insertAnim !== false, games }); }
+  const toPc = mine.filter(g => g.shelf === 'pc'), onCustom = mine.filter(g => !g.shelf).concat(back);
   if (epic.length || toPc.length) pcShelf = pcShelf.concat([...epic, ...toPc].map(pcGame)).sort((a, b) => String(a.title).localeCompare(String(b.title), undefined, { sensitivity: 'base' }));
   pcShelf.forEach(g => { if (!g.source && g.artFrom == null) g.artFrom = g.art && g.art.front ? (pccovers.cover(g.id) ? 'yours' : 'steam') : ''; }); // (Steam's own games)
   if (pcShelf.length) shelves.push({ id: 'pc', kind: 'steam', name: 'PC', games: pcShelf });
@@ -1110,7 +1119,11 @@ function renderEpubManual(root, pages) {
 // Steam games missing a cover (or store info): fetch them in the background, then refresh the shelf once
 let steamFilling = false;
 async function steamFill(lib) {
-  if (steamFilling || cfg.ui.autoCovers === false) return; const pcs = lib.filter(s => s.kind === 'steam'); if (!pcs.length) return;
+  if (steamFilling || cfg.ui.autoCovers === false) return; const pcs = lib.filter(s => s.kind === 'steam');
+  // (supalii's fork) PC games that aren't Steam's, wherever they sit (a program can be on a console's shelf): posters for
+  // the ones with no cover at all (pccovers.fillMissing, SteamGridDB, only with its key)
+  const noSteam = lib.flatMap(s => s.games || []).filter(g => g.kind === 'steam' && g.source && g.source !== 'steam');
+  if (!pcs.length && !noSteam.length) return;
   steamFilling = true;
   try {
     const all = pcs.flatMap(s => s.games); let games = all.filter(g => !g.source || g.source === 'steam'), matched = 0;
@@ -1121,7 +1134,9 @@ async function steamFill(lib) {
       matched = await pcgames.matchSteam(others.map(g => g.title));
       games = games.concat(others.map(g => { const id = pcgames.steamIdOf(g.title); return id ? { appid: String(id), title: g.title, art: { front: g.art.front, hero: g.art.hero } } : null; }).filter(Boolean));
     }
-    const r = await steamart.fill(games); if ((r.covers || r.other || matched) && alive()) win.webContents.send('library:changed', { covers: r.covers });
+    const r = games.length ? await steamart.fill(games) : { covers: 0, other: 0 };
+    let posters = 0; try { posters = (await pccovers.fillMissing(noSteam)).downloaded; } catch (e) { log('PC posters failed', e.message); }
+    if ((r.covers || r.other || matched || posters) && alive()) win.webContents.send('library:changed', { covers: (r.covers || 0) + posters });
   } /* heroes and store info: a quiet refresh, no toast */ catch (e) { log('steam art failed', e.message); } finally { steamFilling = false; }
 }
 let autoManualsDone = false, autoManualJob = null, manualSeen = null, manualAgain = false;
@@ -1575,7 +1590,8 @@ handle('launch:pc', async ({ id }) => {
   busyCheck();
   launching = true; try { await taskbarHide(); } finally { launching = false; } // (beta.6)
   let r; try { r = launcher.launchApp(g.exe, onExit, launcher.buildArgs(g.args || '', '')); } catch (e) { taskbarShow('the game did not start'); throw e; } runKind = 'app'; pendingPower = null; launcher.setRunningName(g.title); log('PC launch:', g.source, g.title);
-  if (cfg.ui.homeMenu !== false) homemenu.begin({ systemId: 'pc', exe: g.exe, systemName: PC_SYSTEM[g.source] || 'Custom', title: g.title, hotkeys: {} });
+  const onCon = g.shelf && CONSOLES.find(c => c.id === g.shelf); // (supalii) put on a console's shelf: the Home menu names that console
+  if (cfg.ui.homeMenu !== false) homemenu.begin({ systemId: onCon ? onCon.id : 'pc', exe: g.exe, systemName: onCon ? onCon.name : g.shelf === 'pc' ? 'PC' : PC_SYSTEM[g.source] || 'Custom', title: g.title, hotkeys: {} });
   watchPad({ mouse: false, appPid: r.pid, fullscreenKey: null, home: true });
   return { ...r, cover: coverWhileStarting(10) };
 });

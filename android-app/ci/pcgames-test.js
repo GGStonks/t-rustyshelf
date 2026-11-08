@@ -1,5 +1,6 @@
-// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
-// android-app/ci/pcgames-test.js apart from the app's name ((T)rustyShelf).
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): most of this file is Boxshelf's
+// android-app/ci/pcgames-test.js; modified for (T)rustyShelf: the checks for custom games' own pages, platforms (shelves), the
+// Xbox One shelf and automatic PC posters are by supalii (https://github.com/supalii/boxshelf-source), adapted.
 // Device test pass "pcgames" (beta.4), run by web-device-test.js. Checks results, never speed.
 //   Node (main/pcgames.js on made-up folders): Epic's install list keeps installed games only (not the engine, plugins or
 //   half-installed ones) and starts them through the launcher's link; Quiver 3 (apps.json beside its program) and Quiver 4
@@ -7,7 +8,8 @@
 //   gone are left out; a saved config keeps only clean entries.
 //   The demo page as Windows with ?pcx=1: the PC shelf has the Epic game, a Custom shelf has the Quiver recomp; Play on it
 //   goes through launch:pc by id (and back to the shelf when it closes), the Epic game says it starts through Epic;
-//   Settings → Custom games adds a program, names it, removes it (twice); Settings → PC games has the Epic switch.
+//   Settings → Custom games adds three programs with separate settings pages, edits one, and removes them (twice);
+//   Settings → PC games has the Epic switch.
 'use strict';
 const path = require('path'), fs = require('fs'), os = require('os');
 
@@ -63,12 +65,34 @@ module.exports = async function pcGamesPass({ browser, base, check, newPage }) {
     check('PC games: Quiver 4 gives each install its program and the name the player chose',
       g4.length === 1 && g4[0].title === 'Ship of Harkinian' && /soh\.exe$/.test(g4[0].exe), JSON.stringify(g4.map(g => ({ t: g.title, e: path.basename(g.exe) }))));
     // games added by hand: a missing program is left out; the config keeps clean entries only
-    const c = pcg.customGames([{ id: 'a', title: 'Mine', exe: path.join(q3, 'QuiverLauncher.exe') }, { id: 'b', title: 'Gone', exe: path.join(tmp, 'gone.exe') }]);
+    const c = pcg.customGames([{ id: 'a', title: 'Mine', exe: path.join(q3, 'QuiverLauncher.exe'), shelf: 'ps2' }, { id: 'b', title: 'Gone', exe: path.join(tmp, 'gone.exe') }]);
     const config = require(path.join(root, 'main', 'config.js'));
-    const clean = config.normalize({ pc: { custom: [{ title: 'Ok', exe: 'C:\\x.exe' }, { title: 'No exe' }, 'junk'], epic: 'yes' } }).pc;
+    const clean = config.normalize({ pc: { custom: [{ title: 'Ok', exe: 'C:\\x.exe', platform: 'ps2' }, { title: 'PC game', exe: 'C:\\y.exe', platform: 'pc', args: '-dx12' }, { title: 'Bad platform', exe: 'C:\\z.exe', platform: 'not-a-console' }, { title: 'No exe' }, 'junk'], epic: 'yes' } }).pc;
+    // (main/launcher.js asks for Electron's shell, which plain Node can't load: a stand-in while it loads; buildArgs doesn't use it)
+    const Mod = require('module'), load0 = Mod._load; Mod._load = function (r, ...x) { return r === 'electron' ? { shell: {} } : load0.call(this, r, ...x); };
+    let launcher; try { launcher = require(path.join(root, 'main', 'launcher.js')); } finally { Mod._load = load0; }
+    const pcc = require(path.join(root, 'main', 'pccovers.js')), coverDir = path.join(tmp, 'pc-art');
+    let lookedUp = '', sgEnabled = true;
+    pcc.init({ dataDir: coverDir, steamgrid: { enabled: () => sgEnabled, posters: async g => { lookedUp = g.title; return [{ url: 'https://steamgriddb.com/poster.jpg', ext: '.jpg' }]; } }, fetchImage: async () => Buffer.from('poster image'), match: () => null, log: () => {} });
+    const ownFile = path.join(tmp, 'picked.png'); fs.writeFileSync(ownFile, 'my selected art');
+    await pcc.own('picked-art', ownFile);
+    const artResult = await pcc.fillMissing([
+      { id: 'quiver-art', title: 'A Recomp', source: 'quiver' },
+      { id: 'picked-art', title: 'A Picked Cover', source: 'custom' },
+      { id: 'existing-art', title: 'Already Covered', source: 'custom', art: { front: 'bsfile://existing.jpg' } },
+    ]);
+    sgEnabled = false;
+    const noKey = await pcc.fillMissing([{ id: 'no-key', title: 'No Key', source: 'custom' }]);
+    check('PC artwork: automatic SteamGridDB posters fill missing standalone-game art, but never replace a user choice or existing cover',
+      artResult.checked === 1 && artResult.downloaded === 1 && lookedUp === 'A Recomp' && !!pcc.autoCover('quiver-art') &&
+        fs.readFileSync(pcc.cover('picked-art'), 'utf8') === 'my selected art' && !pcc.autoCover('existing-art') &&
+        noKey.checked === 0 && noKey.downloaded === 0, JSON.stringify({ artResult, noKey, lookedUp, downloaded: !!pcc.autoCover('quiver-art') }));
     fs.rmSync(tmp, { recursive: true, force: true });
-    check('PC games: a hand-added game whose program is gone is left out; a saved config keeps clean entries only',
-      c.length === 1 && c[0].title === 'Mine' && clean.custom.length === 1 && clean.custom[0].exe === 'C:\\x.exe' && clean.epic === true, JSON.stringify({ c, clean }));
+    check('PC games: a hand-added game keeps its console assignment (supalii\'s fork\'s platform key read as beta.10\'s shelf), missing files and unknown platforms are excluded',
+      c.length === 1 && c[0].title === 'Mine' && c[0].shelf === 'ps2' && clean.custom.length === 3 && clean.custom[0].exe === 'C:\\x.exe' && clean.custom[0].shelf === 'ps2' && clean.custom[1].shelf === 'pc' && clean.custom[1].args === '-dx12' && !clean.custom[2].shelf && clean.epic === true, JSON.stringify({ c, clean }));
+    check('PC games: Xbox One is a standalone platform and launch arguments split into executable arguments',
+      require(path.join(root, 'main', 'systems.js')).CONSOLES.find(s => s.id === 'xboxone').standalone === true &&
+        JSON.stringify(launcher.buildArgs('-dx12 --profile "Palworld World"', '')) === JSON.stringify(['-dx12', '--profile', 'Palworld World']), JSON.stringify(launcher.buildArgs('-dx12 --profile "Palworld World"', '')));
     // (beta.7) the new stores, from made-up installs: the registry's text (GOG, Ubisoft), EA's installer file, Xbox's game config
     const reg = pcg.parseReg('\r\nHKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\GOG.com\\Games\\1207658924\r\n    gameName    REG_SZ    Lantern Keep\r\n    path    REG_SZ    C:\\GOG Games\\Lantern Keep\r\n    dependsOn    REG_SZ    \r\n\r\nHKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Ubisoft\\Launcher\\Installs\\4740\r\n    InstallDir    REG_SZ    C:/Ubisoft/Harbor Run/\r\n');
     const g1 = reg.get('HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\GOG.com\\Games\\1207658924') || {}, u1 = reg.get('HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Ubisoft\\Launcher\\Installs\\4740') || {};
@@ -136,7 +160,7 @@ module.exports = async function pcGamesPass({ browser, base, check, newPage }) {
       /Custom/i.test(play.shelf) && play.game === 'Quarantine' && play.launched.includes('quiver-quarantine') && play.mode === 'launch' && play.back === 'browse', JSON.stringify(play));
     check('PC games (Windows): a Quiver game says where it came from (no Steam wording)', /Quiver/.test(play.how + play.chips) && !/Steam/.test(play.how), JSON.stringify({ how: play.how, chips: play.chips }));
     // Settings → Custom games: add a program (named from its file), rename it, remove it (twice); PC games has the Epic switch
-    const st = await page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), out = {};
+    const st = await page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), out = {}, key = k => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
       const names = () => [...document.querySelectorAll('#bss .bss-row .nm')].map(e => e.textContent);
       const row = n => [...document.querySelectorAll('#bss .bss-row')].find(r => ((r.querySelector('.nm') || {}).textContent || '') === n);
       const cfg = async () => (await window.trustyshelf.getConfig()).config.pc || {};
@@ -146,16 +170,56 @@ module.exports = async function pcGamesPass({ browser, base, check, newPage }) {
       if (window.Settings && Settings.isOpen && Settings.isOpen()) { await Settings.close(); await w(800); }
       Setup.open({ page: 'custom' }); for (let i = 0; i < 40 && !row('Add games'); i++) await w(150); await w(800); // (beta.7: Add games, a page of its own)
       out.page = names(); out.quiverRow = (row('Quiver Launcher') || {}).textContent || '';
-      row('Add games').click(); for (let i = 0; i < 40 && !row('Add one program'); i++) await w(150); await w(400); row('Add one program').click(); await w(1200); out.added = (await cfg()).custom;
-      if (window.Settings && Settings.isOpen && Settings.isOpen()) { await Settings.close(); await w(800); }
-      Setup.open({ page: 'custom' }); for (let i = 0; i < 40 && !row('Add games'); i++) await w(150); await w(800); out.after = names();
-      const rm = names().find(n => /^Remove /.test(n)); if (rm) { row(rm).click(); await w(300); row(rm).click(); await w(1200); }
+      row('Add games').click(); for (let i = 0; i < 40 && !row('Add one program'); i++) await w(150); await w(400);
+      for (let i = 0; i < 3; i++) { row('Add one program').click(); await w(1000); }
+      out.added = (await cfg()).custom;
+      key('Escape'); await w(500); Setup.open({ page: 'custom' }); for (let i = 0; i < 40 && !row('program'); i++) await w(150); await w(500); out.after = names();
+      const firstGame = row('program'); if (firstGame) { firstGame.click(); await w(700); }
+      out.gameSettings = names();
+      const platform = row('Platform'); if (platform) { platform.click(); key('ArrowRight'); await w(500); }
+      const argRow = row('Launch arguments'); if (argRow) { argRow.click(); await w(150); const input = document.querySelector('.bss-edit'); if (input) { input.value = '-dx12'; input.dispatchEvent(new Event('input', { bubbles: true })); key('Enter'); }
+        else { for (const ch of '-dx12') { const k=[...document.querySelectorAll('.bss-key')].find(x=>x.textContent===ch); if(k)k.click(); await w(100); } const done=[...document.querySelectorAll('.bss-key')].find(x=>x.textContent==='Done'); if(done)done.click(); } await w(700); }
+      out.assigned = ((await cfg()).custom || [])[0] && (await cfg()).custom[0].shelf || '';
+      out.args = ((await cfg()).custom || [])[0] && (await cfg()).custom[0].args || '';
+      key('Escape'); await w(500);
+      const secondGame = row('program2'); if (secondGame) { secondGame.click(); await w(700); }
+      out.secondSettings = names(); out.secondGame = ((await cfg()).custom || [])[1] || null;
+      key('Escape'); await w(500);
+      if (window.Settings && Settings.isOpen && Settings.isOpen()) { await Settings.close(); await w(1500); }
+      const word = () => (document.getElementById('sysWord') || {}).textContent || '';
+      for (let i = 0; i < 30 && !/^PC/.test(word().trim()); i++) { key('ArrowDown'); await w(250); }
+      for (let i = 0; i < 20 && Shelf._qs().g !== 'program'; i++) { key('ArrowRight'); await w(250); }
+      out.platformShelf = word(); out.platformGame = Shelf._qs().g;
+      if (out.platformGame === 'program') { key('i'); await w(500); out.command = (document.getElementById('dCmd')||{}).textContent||''; key('i'); await w(300); key('Enter'); await w(1400); out.platformLaunch = (window.__pcLaunched || []).includes('custom-'+((await cfg()).custom[0]||{}).id); out.launchArgs=(window.__pcLaunches||[]).slice(-1)[0]||null; }
+      for (let i = 0; i < 30 && Shelf.getMode() !== 'browse'; i++) await w(250);
+      Setup.open({ page: 'custom' }); for (let i = 0; i < 40 && !row('program'); i++) await w(150); await w(500);
+      const firstAgain=row('program'); if(firstAgain)firstAgain.click(); await w(700);
+      const platformAgain=row('Platform'); if(platformAgain){platformAgain.click();for(let i=0;i<20&&(((await cfg()).custom||[])[0]||{}).shelf!=='xboxone';i++){key('ArrowRight');await w(200)}}
+      out.xboxAssigned=((await cfg()).custom||[])[0]&&((await cfg()).custom||[])[0].shelf||'';
+      if (window.Settings && Settings.isOpen && Settings.isOpen()) { await Settings.close(); await w(1200); }
+      const xboxTab=[...document.querySelectorAll('#tabs .tab')].find(t=>t.textContent.trim()==='Xbox One');if(xboxTab){xboxTab.click();await w(1400)}
+      for(let i=0;i<20&&Shelf._qs().g!=='program';i++){key('ArrowRight');await w(250)}
+      out.xboxShelf=word();out.xboxGame=Shelf._qs().g;
+      if(out.xboxGame==='program'){key('Enter');await w(1400);out.xboxLaunch=(window.__pcLaunches||[]).slice(-1)[0]||null}
+      for(let i=0;i<30&&Shelf.getMode()!=='browse';i++)await w(250);
+      Setup.open({ page: 'custom' }); for (let i = 0; i < 40 && !row('Add games'); i++) await w(150); await w(500);
+      for (const game of ['program','program2','program3']) { const entry=row(game); if(entry){entry.click();await w(500);const rm=row('Remove game');if(rm){rm.click();await w(300);rm.click();await w(700)}} }
       out.removed = (await cfg()).custom;
       if (window.Settings && Settings.isOpen && Settings.isOpen()) { await Settings.close(); await w(800); } return out; });
-    check('PC games (Windows): Settings → PC games has the Epic switch; Custom games has Quiver and Add games',
+    check('PC games (Windows): Settings → PC games has the Epic switch; Custom games has Quiver and Add a game',
       st.pcPage.includes('Show installed Epic Games') && st.page.includes("Show Quiver's games") && st.page.includes('Add games') && /Found/.test(st.quiverRow), JSON.stringify({ pc: st.pcPage, page: st.page, q: st.quiverRow }).slice(0, 500));
-    check('PC games (Windows): Add games → Add one program puts it on the Custom shelf named from its file; Remove (pressed twice) takes it off',
-      (st.added || []).length === 1 && st.added[0].title === 'program' && /program\.exe$/.test(st.added[0].exe) && st.after.includes('program') && (st.removed || []).length === 0, JSON.stringify({ added: st.added, removed: st.removed }).slice(0, 400));
+    check('PC games (Windows): each custom executable has its own settings page; name, arguments and platform are not mixed into the game list',
+      (st.added || []).length === 3 && st.after.includes('program') && st.after.includes('program2') && st.after.includes('program3') &&
+        !st.after.includes('Launch arguments') && !st.after.includes('Platform') && st.gameSettings.includes('Game name') &&
+        st.gameSettings.includes('Launch arguments') && st.gameSettings.includes('Platform') && st.gameSettings.includes('Remove game') &&
+        st.secondSettings.includes('Game name') && st.secondSettings.includes('Platform') && st.secondGame && !st.secondGame.args && !st.secondGame.shelf,
+      JSON.stringify({ added: st.added, list: st.after, first: st.gameSettings, second: st.secondSettings, secondGame: st.secondGame }).slice(0, 700));
+    check('PC games (Windows): Remove from a game settings page (confirmed twice) takes only that game off the list',
+      (st.removed || []).length === 0, JSON.stringify(st.removed));
+    check('PC games (Windows): a standalone executable can be assigned to PC with editable arguments, displayed as its command and launched with those arguments',
+      st.assigned === 'pc' && st.args === '-dx12' && /^PC/.test(st.platformShelf.trim()) && st.platformGame === 'program' && /program\.exe.*-dx12/.test(st.command) && st.platformLaunch && st.launchArgs && st.launchArgs.args === '-dx12', JSON.stringify({ assigned: st.assigned, args: st.args, shelf: st.platformShelf, game: st.platformGame, command: st.command, launch: st.launchArgs }));
+    check('PC games (Windows): Xbox One has a standalone shelf and starts assigned executables without an emulator',
+      st.xboxAssigned === 'xboxone' && /Xbox One/.test(st.xboxShelf) && st.xboxGame === 'program' && st.xboxLaunch && st.xboxLaunch.platform === 'xboxone' && st.xboxLaunch.args === '-dx12', JSON.stringify({ assigned: st.xboxAssigned, shelf: st.xboxShelf, game: st.xboxGame, launch: st.xboxLaunch }));
     // (beta.5) a PC game's cover picker: Details → Box art opens it with the options (SteamGridDB's, a picture of yours);
     // the arrows move, A uses one (by key), the picker closes and the shelf says so; opened again, Automatic cover is offered
     const cv = await page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms));
