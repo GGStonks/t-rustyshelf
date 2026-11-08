@@ -198,6 +198,9 @@ function build(){
     A("Find themes again","Find","Looks in the custom themes folder again after you add, change or remove a theme.",async()=>{await shelf("reloadCustomThemes");const n=(window.BS_CUSTOM_THEMES||[]).length;toast(n?`${n} custom theme${n===1?"":"s"}`:"No custom themes yet")},
       {when:()=>!!api.customThemes,keys:"custom themes reload refresh",ns:true})],
       {when:()=>!!api.customThemeCreate,keys:"custom own themes picture wallpaper photo image background make create folder"}),
+    // ((T)rustyShelf) Looks: the theme, size, clock, order, filter and sound you have now, saved by name and put back later in one press
+    M("Looks","looks","Save the look you have now (theme, size, clock, order, filter and sound) under a name, and switch back to it later.","A look keeps the settings that make the shelf look and sound the way it does. Applying one sets them all and reloads the screen.",[{t:"dyn",fn:looksRows}],
+      {keys:"looks look workspace preset layout theme profile save colour color",sub:()=>({text:looks().length?`${looks().length} saved`:"Save the look you have now"})}),
     C("Clock","ui.clock",[["full","Day, date and time"],["time","Time only"],["off","Hidden"]],"full","What shows in the top corner of the shelf.",{keys:"time date",live:v=>applyUi({clock:v})}),
     T("24-hour clock","ui.clock24",false,"Shows 18:30 instead of 6:30 PM.",{keys:"time 24 hour",live:v=>applyUi({clock24:v})}),
     // a second screen (the AYN Thor's bottom screen): only offered when the device has one (Android: android-bottom.js)
@@ -820,6 +823,28 @@ let lpc=null,lpcAsking=false,epicLib=null,epicLibAsking=false,epicSigning=false,
 function lpcLoad(force){if(lpcAsking||!api.pcLinux||(lpc&&!force))return;lpcAsking=true;Promise.resolve(api.pcLinux()).then(r=>{lpc=r||{}}).catch(()=>{lpc={}}).finally(()=>{lpcAsking=false;bump()})}
 function epicLibLoad(force){if(epicLibAsking||!api.epicLibrary||(epicLib&&!force))return;epicLibAsking=true;epicLib=null;bump();Promise.resolve(api.epicLibrary()).then(r=>{epicLib=r||{error:"Couldn't read the Epic library."}}).catch(e=>{epicLib={error:errMsg(e)}}).finally(()=>{epicLibAsking=false;bump()})}
 if(api.onEpicQueue)api.onEpicQueue(l=>{if(lpc)lpc.downloads=Array.isArray(l)?l:[];bump()}); // ((T)rustyShelf) the download manager's list
+// ((T)rustyShelf) Looks. A look is { name, set: { theme, uiScale, clock, … } }: the settings below, as they were when it was saved
+const LOOK_KEYS=["theme","background","uiScale","clock","clock24","homeLayout","sort","filter","soundTheme","music","musicLevel","museumLight","reduceMotion"];
+const looks=()=>{const l=gp("ui.looks");return Array.isArray(l)?l:[]};
+function lookNow(){const set={};for(const k of LOOK_KEYS){const v=gp("ui."+k);if(v!==undefined&&v!==null&&typeof v!=="object")set[k]=v}return set}
+const LOOK_SIZE={1:"Standard size",1.15:"Large",1.3:"Extra large"},LOOK_CLOCK={full:"Day, date and time",time:"Time only",off:"No clock"},LOOK_SORT={az:"A–Z",year:"by year",recent:"by last played",most:"by play time",rating:"by rating",genre:"by genre"};
+function lookText(set){const t=(THEMES.find(x=>x[0]===set.theme)||(window.BS_CUSTOM_THEMES||[]).map(x=>[x.id,x.name]).find(x=>x[0]===set.theme)||[])[1]||set.theme;
+  return [t&&`Theme ${t}`,LOOK_SIZE[set.uiScale],LOOK_CLOCK[set.clock],LOOK_SORT[set.sort],set.filter&&set.filter!=="all"?`Filter ${set.filter.replace(/^(dec|genre):/,"")}`:"",set.music&&set.music!=="off"?`Music ${set.music==="own"?"Your music":set.music}`:""].filter(Boolean).join(" · ")||"Nothing saved"}
+function lookSave(list,note){sp("ui.looks",list);changed(null);if(note)toast(note)}
+async function lookApply(i){const l=looks()[i];if(!l)return;toast(`Applying ${l.name}…`);
+  for(const k of LOOK_KEYS)if(l.set&&k in l.set)sp("ui."+k,l.set[k]);
+  pending=true;await save();location.reload()}
+function looksRows(){const rows=[],L=looks();
+  rows.push(H("Save"));
+  rows.push(A("Save the current look","Save","Keeps the theme, size, clock, order, filter and sound you have now as a new look.",()=>{if(L.length>=20){toast("20 looks is the most: delete one first");return}
+    let n=1;const names=new Set(L.map(x=>x.name));while(names.has("Look "+n))n++;lookSave([...L,{name:"Look "+n,set:lookNow()}],`Saved as Look ${n}`)},{ns:true,keys:"save look new current"}));
+  if(!L.length){rows.push({t:"action",label:"No looks saved yet",btn:"—",info:"Set the shelf up the way you like it, then press Save the current look.",run:()=>{},ns:true,dim:true});return rows}
+  rows.push(H(`Your looks (${L.length})`));
+  L.forEach((l,i)=>{rows.push(A(l.name,"Apply",lookText(l.set||{}),()=>lookApply(i),{ns:true,keys:"look apply "+l.name,sub:()=>({text:lookText(l.set||{})})}));
+    rows.push(X("Rename "+l.name,"ui.looks."+i+".name","The look's name.",{ns:true}));
+    rows.push(A("Update "+l.name,"Update","Saves the look you have now over this one.",()=>twice("lookup:"+i,()=>lookSave(L.map((x,j)=>j===i?{name:x.name,set:lookNow()}:x),`${l.name} updated`),"Press again to replace it with the look you have now"),{ns:true,ask:"lookup:"+i}));
+    rows.push(A("Delete "+l.name,"Delete","Forgets the look. The shelf stays as it is.",()=>twice("lookdel:"+i,()=>lookSave(L.filter((x,j)=>j!==i),`${l.name} deleted`),"Press again to delete it"),{ns:true,ask:"lookdel:"+i}))});
+  return rows}
 let pcStor=null,pcStorAsking=false;
 const gb=b=>b>=1073741824?(b/1073741824).toFixed(1)+" GB":b>=1048576?Math.round(b/1048576)+" MB":"0 MB";
 function pcStorageLoad(force){if(pcStorAsking||!api.pcStorage||(pcStor&&!force))return;pcStorAsking=true;Promise.resolve(api.pcStorage()).then(r=>{pcStor=r&&r.drives?r:{drives:[]}}).catch(()=>{pcStor={drives:[]}}).finally(()=>{pcStorAsking=false;bump()})}
@@ -1102,7 +1127,7 @@ function checkPathsSoon(){if(!pathAsk.size||!api.checkPaths)return;const L=[...p
 
 /* ---------- open / close / the classic pages ---------- */
 function ensureCfg(){cfg.ui=cfg.ui||{};cfg.steam=cfg.steam||{enabled:true,path:""};cfg.apps=cfg.apps||{};cfg.ra=cfg.ra||{user:"",key:"",enabled:true};cfg.keys=cfg.keys||{};cfg.systems=cfg.systems||{};(info.apps||[]).forEach(a=>{cfg.apps[a.id]=cfg.apps[a.id]||{enabled:true,path:""}})}
-const PAGE_MAP={bottom:["display","Bottom screen"],phone:"phone",consoles:"consoles",steam:"pc",pc:"pc",epic:"pc",custom:"custom",quiver:"custom",media:"apps",apps:"apps",ra:{svc:"ra"},connections:["acct","fanart.tv"],screenscraper:{svc:"screenscraper"},steamgriddb:{svc:"steamgriddb"},epicdl:["pc","Downloads"],pcstorage:["pc","Storage"],acct:"acct",accounts:"acct",display:"display",perf:"perf",performance:"perf",sound:"sound",controller:"pad",pad:"pad",museum:"museum",shelf:"shelf",library:["art","Fetch manuals for new games"],art:"art",previews:"previews",videos:"previews",trailers:"previews",reading:["reading","Find on the Internet Archive"],magazines:"reading",guides:"reading",manuals:"art",startup:"sys",system:"sys",sys:"sys"};
+const PAGE_MAP={bottom:["display","Bottom screen"],phone:"phone",consoles:"consoles",steam:"pc",pc:"pc",epic:"pc",custom:"custom",quiver:"custom",media:"apps",apps:"apps",ra:{svc:"ra"},connections:["acct","fanart.tv"],screenscraper:{svc:"screenscraper"},steamgriddb:{svc:"steamgriddb"},epicdl:["pc","Downloads"],pcstorage:["pc","Storage"],looks:["display","Looks"],acct:"acct",accounts:"acct",display:"display",perf:"perf",performance:"perf",sound:"sound",controller:"pad",pad:"pad",museum:"museum",shelf:"shelf",library:["art","Fetch manuals for new games"],art:"art",previews:"previews",videos:"previews",trailers:"previews",reading:["reading","Find on the Internet Archive"],magazines:"reading",guides:"reading",manuals:"art",startup:"sys",system:"sys",sys:"sys"};
 // (beta.5) Details → Rename: one game's name, on a page of its own (typed, or with the on-screen keyboard on a controller).
 // Saved by main (cfg.games[key].title) the moment Enter is pressed; "Use the file's name" puts the scanned one back
 let renameState=null;

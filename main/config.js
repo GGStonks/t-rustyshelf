@@ -216,6 +216,10 @@ function sanitize(cfg) {
   ui.previewDirs = [...new Set((Array.isArray(ui.previewDirs) ? ui.previewDirs : []).filter(x => typeof x === 'string' && x && x.length <= 1024))].slice(0, 20);
   ui.collections = (Array.isArray(ui.collections) ? ui.collections : []).filter(c => isObj(c) && typeof c.id === 'string' && c.id && typeof c.name === 'string').slice(0, 50)
     .map(c => ({ id: c.id.slice(0, 40), name: c.name.replace(/\s+/g, ' ').trim().slice(0, 40) || 'Collection', ids: [...new Set((Array.isArray(c.ids) ? c.ids : []).filter(x => typeof x === 'string' && x && x.length <= 1024))].slice(0, 5000) }));
+  // ((T)rustyShelf) Looks (Settings -> Display -> Looks): named sets of look settings; plain values only, the screen decides which keys it uses
+  ui.looks = (Array.isArray(ui.looks) ? ui.looks : []).filter(l => isObj(l) && typeof l.name === 'string').slice(0, 20).map(l => { const set = {};
+    if (isObj(l.set)) for (const [k, v] of Object.entries(l.set).slice(0, 30)) if (/^[A-Za-z][A-Za-z0-9]{0,30}$/.test(k) && ((typeof v === 'string' && v.length <= 80) || (typeof v === 'number' && Number.isFinite(v)) || typeof v === 'boolean')) set[k] = v;
+    return { name: l.name.replace(/\s+/g, ' ').trim().slice(0, 40) || 'Look', set }; });
   // (beta.4) games added by hand: plain paths and names only, a sane number of them
   if (isObj(cfg.pc)) { const s = (v, n) => typeof v === 'string' ? v.trim().slice(0, n) : '';
     // which shelf a game added by hand sits on: Custom (none), PC, or a console's shelf (supalii's fork: "platform")

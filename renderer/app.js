@@ -150,14 +150,14 @@ function filterList(){
   if(flCache&&flCache.n===games.length&&flCache.a===allShelves)return flCache.list;
   const dec=new Set(),gen=new Map();let multi=false,coop=false;
   for(const g of games){const y=yearOf(g);if(y)dec.add(Math.floor(y/10)*10);for(const x of genresOf(g))gen.set(x,(gen.get(x)||0)+1);if((playersOf(g)||0)>=2)multi=true;if(coopOf(g))coop=true}
-  const list=[...FILTERS];if(multi)list.push(["multi","2+ players"]);if(coop)list.push(["coop","Co-op"]);
+  const list=[...FILTERS];if(games.some(g=>g.installed===false)||filterBy==="installed")list.push(["installed","Installed"]); /* ((T)rustyShelf) when some games are greyed (Epic games not installed yet) */if(multi)list.push(["multi","2+ players"]);if(coop)list.push(["coop","Co-op"]);
   [...dec].sort((a,b)=>a-b).forEach(d=>list.push(["dec:"+d,d+"s"]));
   [...gen].sort((a,b)=>b[1]-a[1]).slice(0,12).map(x=>x[0]).sort((a,b)=>a.localeCompare(b)).forEach(n=>list.push(["genre:"+n,n]));
   flCache={n:games.length,a:allShelves,list};return list;
 }
 const filterName=v=>(filterList().find(f=>f[0]===v)||FILTERS[0])[1];
 function filterFn(v){
-  const base={fav:g=>isFav(g),played:g=>!!(histOf(g)&&histOf(g).count),unplayed:g=>!(histOf(g)&&histOf(g).count),multi:g=>(playersOf(g)||0)>=2,coop:coopOf}[v];if(base)return base;
+  const base={installed:g=>g.installed!==false,fav:g=>isFav(g),played:g=>!!(histOf(g)&&histOf(g).count),unplayed:g=>!(histOf(g)&&histOf(g).count),multi:g=>(playersOf(g)||0)>=2,coop:coopOf}[v];if(base)return base;
   let m=/^dec:(\d{4})$/.exec(v||"");if(m){const d=+m[1];return g=>{const y=yearOf(g);return !!y&&y>=d&&y<d+10}}
   m=/^genre:(.+)$/.exec(v||"");if(m){const n=m[1];return g=>genresOf(g).includes(n)}
   return ()=>true;
