@@ -2530,6 +2530,26 @@ async function reportInfo() {
 }
 let reporting = null;
 handle('app:reportProblem', () => reporting || (reporting = makeReport().finally(() => { reporting = null; })));
+// ((T)rustyShelf, Boxshelf's issue 18) Settings → System → Export everything / Import everything (main/dataexport.js): the
+// settings, the downloads (art, manuals, the box art database …) and the art kept next to the games, carried to another PC
+let dataMoving = null;
+const dataStep = (what) => s => { try { if (alive()) win.webContents.send('data:progress', { what, ...s }); } catch {} };
+handle('data:export', ({ dest } = {}) => {
+  if (dataMoving) throw new Error('An export or import is already running.');
+  return (dataMoving = (async () => { await persistCfg(cfg); log('Export everything to', dest);
+    const r = await require('./main/dataexport').exportAll({ dest: String(dest || ''), appRoot: paths.appRoot(), dataDir: app.getPath('userData'), cfg, artDirsFor: paths.artDirsFor, artLib: paths.artLibrary(), version: appVersion(), onStep: dataStep('export') });
+    log('Exported:', r.files, 'files,', Math.round(r.bytes / 1048576), 'MB'); return r; })().finally(() => { dataMoving = null; }));
+});
+handle('data:import', ({ src } = {}) => {
+  if (dataMoving) throw new Error('An export or import is already running.');
+  if (launcher.isRunning()) throw new Error('Close the game first.');
+  return (dataMoving = (async () => { log('Import everything from', src);
+    const r = await require('./main/dataexport').importAll({ src: String(src || ''), appRoot: paths.appRoot(), dataDir: app.getPath('userData'), artDirsFor: paths.artDirsFor, artLib: paths.artLibrary(), readCfg: () => { try { return config.load(); } catch { return null; } }, onStep: dataStep('import') });
+    log('Imported', r.parts, 'parts', r.skipped.length ? `(no place for: ${r.skipped.join('; ')})` : '');
+    // the imported settings take over: start again (an AppImage from its own file: the mounted copy goes away on exit)
+    setTimeout(() => { try { app.relaunch(process.env.APPIMAGE ? { execPath: process.env.APPIMAGE } : undefined); } catch {} app.exit(0); }, 2500);
+    return r; })().finally(() => { dataMoving = null; }));
+});
 async function makeReport() {
   let desk; try { desk = app.getPath('desktop'); } catch {} if (!desk || !fs.existsSync(desk)) desk = require('os').homedir();
   const name = `TrustyShelf problem report ${stamp()}`, tmp = await fs.promises.mkdtemp(path.join(require('os').tmpdir(), 'trustyshelf-report-'));

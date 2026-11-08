@@ -379,6 +379,9 @@ function build(){
     H("Backup & help"),
     A("Back up settings","Save","Saves your settings, favourites and play history to a file you can restore later or on a new PC. Keys and passwords aren't included.",backup,{when:()=>!!api.backupSettings,keys:"backup export"}),
     A("Restore settings","Open","Loads a backup file. Your current keys and passwords are kept.",restoreBackup,{when:()=>!!api.restoreSettings,keys:"backup import restore"}),
+    // ((T)rustyShelf, Boxshelf's issue 18) a big collection's art and manuals, carried to another PC whole
+    A("Export everything",()=>dataBusy==="export"?"Exporting…":"Export","Your settings, favourites and play history, everything (T)rustyShelf downloaded (box art, manuals, the box art database) and the art kept next to your games, copied into a folder you choose. Take it to another PC and use Import everything there. Sign-ins aren't included.",exportEverything,{when:()=>!!api.exportData,keys:"export copy move transfer another pc all art manuals downloads"}),
+    A("Import everything",()=>dataBusy==="import"?"Importing…":"Import","Copies an export into this (T)rustyShelf: its settings and downloads replace these (your current settings are kept beside them as a backup file), art goes back next to your games, then (T)rustyShelf starts again. Account keys may need entering again.",importEverything,{when:()=>!!api.importData,ask:"dataimport",keys:"import restore move transfer another pc all art manuals downloads"}),
     A("Smoothness test","Run","Scrolls the shelf by itself for about 45 seconds, switching effects off one at a time, and writes how smooth each was to the log. Leave the controller alone while it runs; Esc stops it.",async()=>{await close();setTimeout(()=>{if(window.Shelf&&Shelf.smoothTest)Shelf.smoothTest()},900)},{when:()=>!!(window.Shelf&&Shelf.smoothTest),keys:"performance fps frame rate lag stutter smooth benchmark"}),
     A("Report a problem","Create","Bundles the log and settings (keys removed) into one file on your Desktop, ready to send.",report,{when:()=>!!api.reportProblem,keys:"bug log help support"}),
     A("Report a bug online","Open","Opens the beta's bug form on GitHub in your browser. Attach the file Report a problem makes, and say what you were doing.",reportOnline,{when:()=>!!api.updateCheck,keys:"bug issue github feedback beta tester"}),
@@ -995,6 +998,15 @@ async function runFolderDetect(){if(detecting||!api.emulatorsIn)return;const p=a
     toast(!found.length?`No emulators found in ${folderName(dir)}`:set.length?`Set up ${list(set)}${had.length?` (${had.length} already had one)`:""}`:`Found emulators for ${list(had)}, which already have one set`);
     if(set.length)changed({rescan:true})}
   catch(e){toast(e&&e.message||"Couldn't look through that folder")}finally{detecting=false;bump()}}
+// ((T)rustyShelf) Export / Import everything (main/dataexport.js); each step is said as it goes
+let dataBusy="";if(api.onDataProgress)api.onDataProgress(s=>{if(s&&s.of)toast(`${s.what==="export"?"Exporting":"Importing"} ${s.i} of ${s.of}: ${s.label}`)});
+const dataSize=b=>b>=1073741824?(b/1073741824).toFixed(1)+" GB":Math.max(1,Math.round(b/1048576))+" MB";
+async function exportEverything(){if(dataBusy||!api.exportData)return;const p=await pick({kind:"folder",title:"Choose where to put the export"}),dir=typeof p==="string"?p:p&&p.path;if(!dir)return;
+  await save();dataBusy="export";bump();toast("Exporting… (a big collection takes a while)");
+  try{const r=await api.exportData(dir);toast(`Exported ${dataSize(r.bytes)} (${r.files.toLocaleString()} files) to ${folderName(r.dir)}`)}catch(e){toast(errMsg(e)||"The export didn't finish")}finally{dataBusy="";bump()}}
+function importEverything(){if(dataBusy||!api.importData)return;twice("dataimport",async()=>{const p=await pick({kind:"folder",title:"Choose the (T)rustyShelf export folder"}),dir=typeof p==="string"?p:p&&p.path;if(!dir)return;
+  dataBusy="import";bump();toast("Importing…");
+  try{const r=await api.importData(dir);toast(`Imported${r.skipped&&r.skipped.length?` (${r.skipped.length} art folder${r.skipped.length===1?"":"s"} had nowhere to go: see the log)`:""}. (T)rustyShelf starts again in a moment…`)}catch(e){toast(errMsg(e)||"The import didn't finish");dataBusy="";bump()}},"Press again: the export's settings and downloads replace these")}
 async function runDetect(){if(detecting||!api.detect)return;detecting=true;bump();const my=openId;
   try{const d0=await api.detect();
     // Settings closed (or reopened) while it searched: its config was already saved, so filling it in now would save a stale copy over newer changes
