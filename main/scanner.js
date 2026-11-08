@@ -6,6 +6,7 @@ const path = require('path');
 const x360 = require('./x360');
 const kyty = require('./kyty'); // (PS5 games' param.json)
 const nx2 = require('./nx2'); // (Switch 2 unpacked games)
+const dirsize = require('./dirsize'); // (the size of a game that's a folder: measured in the background)
 const { readDir, isFile, artBase, artDirsFor } = require('./paths');
 
 // update / DLC packages, not games: a tag ([UPD], (Update), [DLC]) or the word after a separator ("Game - Update v1.0.1",
@@ -329,6 +330,9 @@ function* scanFilesG(sysDef, sysCfg) {
     if (info.extra) continue; // Switch updates / DLC packages are not games on the shelf
     // added: when the game arrived in your folder (file creation time), for the museum's "in your collection since"
     let size = info.nusBytes || 0, added = 0; const st = yield ['stat', f]; if (st) { added = Math.round(st.birthtimeMs || st.mtimeMs) || 0; if (!fg && !size) size = st.size; }
+    // ((T)rustyShelf, the Switch 2 size issue) an unpacked Switch 2 game is a folder of files, so its size is the folder's
+    // (measured in the background like the PC games' folders: dirsize.get answers at once, from the last measure)
+    if (fg && fg.folder && !size && sysDef.id === 'sw2') size = dirsize.get(path.resolve(fg.folder));
     const key = x && x.titleId ? 'x360:' + x.titleId : info.title.toLowerCase() + '|' + (info.region || '');
     if (sysDef.id === 'x360' && !stfs) { const nt = ct(f).title; if (!/^(dvd|disc|game|image|iso|default|xbox ?360)\s*\d*$/i.test(nt)) byName.set(key, nt.toLowerCase()); } // file-name title, to pair later discs with disc 1 (never a generic "DVD1")
     const prev = byTitle.get(key); discOf.set(f, { n: info.disc || 1, size });

@@ -22,7 +22,7 @@ const core = mk('.config/retroarch/cores/snes9x_libretro.so', 'x');
 const rom = mk('Emulation/roms/snes/Test Game (USA).sfc', 'x');
 mk('TrustyShelf/data/config.json', JSON.stringify({ setupDone: true,
   // lastSeenVersion: this version's What's new already seen (beta.7: its card would take the keys this test presses)
-  ui: { bootIntro: 'off', sound: false, music: 'off', startFullscreen: true, openInto: 'last', autoCovers: false, lastSeenVersion: require('../../package.json').version },
+  ui: { bootIntro: 'off', sound: false, music: 'off', startFullscreen: true, openInto: 'last', autoCovers: false, lastSeenVersion: require('../../package.json').version.replace('+', '.') },
   steam: { enabled: false }, pc: { epic: false, quiver: false, custom: [] },
   systems: { snes: { enabled: true, emulator: ra, romDirs: [path.dirname(rom)] } } }, null, 2));
 

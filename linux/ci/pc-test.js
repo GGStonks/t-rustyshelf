@@ -41,7 +41,7 @@ mk('Games/PC/Native Game/start.sh', '#!/bin/sh\nexit 0\n', true); // (the shared
 const nativeOut = at('native-ran.txt'), ownNative = mk('Mine/Native Game/start.sh', `#!/bin/sh\necho "PWD=$PWD HOME=$HOME XDG=$XDG_CONFIG_HOME LD=$LD_LIBRARY_PATH" > "${nativeOut}"\nsleep 3\n`, true);
 const tool = mk('Tools/Tool.exe', 'MZ');
 mk('TrustyShelf/data/config.json', JSON.stringify({ setupDone: true,
-  ui: { bootIntro: 'off', sound: false, music: 'off', startFullscreen: true, openInto: 'last', autoCovers: false, lastSeenVersion: require('../../package.json').version },
+  ui: { bootIntro: 'off', sound: false, music: 'off', startFullscreen: true, openInto: 'last', autoCovers: false, lastSeenVersion: require('../../package.json').version.replace('+', '.') },
   steam: { enabled: false }, pc: { epic: true, quiver: false, gamesDir, userGamesDir: ownDir, homeDir: gameHome, programs: { 'Two Programs': 'b.exe' }, run: { 'pc-two-programs': { prefix: at('Own Prefix'), env: { OWN_VAR: 'yes' } } }, custom: [{ id: 'tool', title: 'Test Tool', exe: tool, args: '' }] }, systems: {} }, null, 2));
 const ended = () => { try { return fs.readFileSync(umuOut + '.ended', 'utf8').split('\n').filter(Boolean).length; } catch { return 0; } };
 // the n-th game has closed, and (T)rustyShelf has had a moment to see it go

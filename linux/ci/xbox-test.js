@@ -16,7 +16,7 @@ const argsFile = path.join(HOME, 'xemu-args.txt');
 const xemu = mk('.local/bin/xemu', `#!/bin/sh\nfor a in "$@"; do echo "$a"; done > "${argsFile}"\nsleep 7\nexit 0\n`, true);
 const rom = mk('Emulation/roms/xbox/Halo - Combat Evolved (USA).iso', 'x');
 mk('TrustyShelf/data/config.json', JSON.stringify({ setupDone: true,
-  ui: { bootIntro: 'off', sound: false, music: 'off', startFullscreen: true, openInto: 'last', autoCovers: false, lastSeenVersion: require('../../package.json').version },
+  ui: { bootIntro: 'off', sound: false, music: 'off', startFullscreen: true, openInto: 'last', autoCovers: false, lastSeenVersion: require('../../package.json').version.replace('+', '.') },
   steam: { enabled: false }, pc: { epic: false, quiver: false, custom: [] },
   systems: { xbox: { enabled: true, emulator: xemu, romDirs: [path.dirname(rom)] } } }, null, 2));
 
