@@ -363,10 +363,10 @@
     nes: ['nes', '"nintendo entertainment system"'], gb: ['"game boy"', 'gameboy'], gbc: ['"game boy color"'], gba: ['"game boy advance"', 'gba'], nds: ['"nintendo ds"'], n3ds: ['3ds'],
     psx: ['playstation', 'psx'], ps2: ['"playstation 2"', 'ps2'], psp: ['psp'], megadrive: ['genesis', '"mega drive"'], saturn: ['saturn'], dreamcast: ['dreamcast'],
     mastersystem: ['"master system"'], gamegear: ['"game gear"'], pcengine: ['turbografx', '"pc engine"'], neogeo: ['"neo geo"'],
-    segacd: ['"sega cd"', '"mega cd"'], sega32x: ['"32x"'], atari2600: ['"atari 2600"'], atarilynx: ['"atari lynx"'], wonderswan: ['wonderswan'], dos: ['"ms-dos"', '"pc games"'] };
+    segacd: ['"sega cd"', '"mega cd"'], sega32x: ['"32x"'], atari2600: ['"atari 2600"'], atarilynx: ['"atari lynx"'], wonderswan: ['wonderswan'], dos: ['"ms-dos"', '"pc games"'], ngp: ['"neo geo pocket"'], ngpc: ['"neo geo pocket color"'] };
   const CON_NAME = { gc: 'GameCube', wii: 'Wii', wiiu: 'Wii U', sw: 'Switch', n64: 'Nintendo 64', snes: 'Super Nintendo', nes: 'NES', gb: 'Game Boy', gbc: 'Game Boy Color', gba: 'Game Boy Advance',
     nds: 'Nintendo DS', n3ds: 'Nintendo 3DS', psx: 'PlayStation', ps2: 'PlayStation 2', psp: 'PSP', megadrive: 'Genesis / Mega Drive', saturn: 'Saturn', dreamcast: 'Dreamcast',
-    mastersystem: 'Master System', gamegear: 'Game Gear', pcengine: 'TurboGrafx-16', neogeo: 'Neo Geo', segacd: 'Sega CD', sega32x: '32X', atari2600: 'Atari 2600', atarilynx: 'Lynx', wonderswan: 'WonderSwan', dos: 'DOS' };
+    mastersystem: 'Master System', gamegear: 'Game Gear', pcengine: 'TurboGrafx-16', neogeo: 'Neo Geo', segacd: 'Sega CD', sega32x: '32X', atari2600: 'Atari 2600', atarilynx: 'Lynx', wonderswan: 'WonderSwan', dos: 'DOS', ngp: 'Neo Geo Pocket', ngpc: 'Neo Geo Pocket Color' };
   const conShelf = id => ({ id: 'c-' + id, name: CON_NAME[id] + ' guides', q: `title:(guide OR walkthrough OR strategy) AND (title:(${CON_WORDS[id].join(' OR ')}) OR subject:(${CON_WORDS[id].join(' OR ')}))`, sort: 'downloads desc', kind: 'guide', series: CON_NAME[id], group: 'Guides for your consoles' });
   function shelves() {
     const mine = (st.library || []).filter(s => s && s.kind === 'console' && (s.games || []).length && CON_WORDS[s.id]).map(s => s.id);

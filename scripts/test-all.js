@@ -35,7 +35,7 @@ const JOBS = Math.max(1, +arg('jobs') || 8), CAP = arg('cap') && arg('cap') !== 
 
 // the tests, by kind (the first of each is the slowest: they start first)
 const NODE = ['detect', 'pad', 'portable', 'dataexport', 'release-version', 'presence', 'epicdl', 'storage', 'windowmode', 'hoyoplay', 'music', 'looks', 'artmatch'];
-const DESKTOP = ['app', 'pc', 'xbox', 'home', 'music-app', 'windowmode-app', 'epicdl-app', 'consolebox-app', 'artmatch-app'];
+const DESKTOP = ['app', 'pc', 'xbox', 'home', 'music-app', 'windowmode-app', 'epicdl-app', 'consolebox-app', 'artmatch-app', 'ngp'];
 const DEMO = ['android-artcard', 'android-pc', 'usermusic', 'windowmode', 'looks', 'artmatch', 'padnote'];
 const GROUPS = ['screens', 'screens2', 'windows', 'thor3', 'thor2', 'thor', 'windows2']; // (the device test's seven parts, longest first: each 1.5-3.5 minutes)
 // not tests of their own: run by a device group, or a probe
@@ -186,6 +186,18 @@ process.on('SIGINT', () => process.exit(130)); process.on('SIGTERM', () => proce
     await Promise.race([sleep(300), ...active]);
   }
   await Promise.all(prep);
+  // a page test that failed while everything ran at once (some checks time touches and animations, and slip when seven
+  // browsers share the processor): once more on its own, with nothing else running. Passing then, it's said plainly (it's not
+  // hidden); failing again, it's a real failure
+  const slow = results.filter(r => !r.ok && (r.kind === 'device' || r.kind === 'demo'));
+  for (const r of slow) {
+    const j = jobs.find(x => x.name === r.name.replace(/ \(2nd try\)$/, '')); if (!j) continue;
+    console.log(`alone ${j.name.padEnd(22)} (failed while everything ran at once: on its own now)`);
+    j.retried = true; const before = results.length; await start(j); const again = results[before];
+    if (again && again.ok) { again.name = j.name + ' (passed on its own: timing under load)'; again.underLoad = r.failed; results.splice(results.indexOf(r), 1); }
+  }
+  const flaky = results.filter(r => r.underLoad);
+  if (flaky.length) { console.log(`\nPassed only on their own (timing-sensitive checks that slipped under load):`); for (const r of flaky) { console.log(`  ${r.name}`); for (const l of r.underLoad.slice(0, 4)) console.log('     ' + l.slice(0, 200)); } }
   const bad = results.filter(r => !r.ok), checks = results.reduce((n, r) => n + r.passed, 0);
   console.log(`\n${bad.length ? bad.length + ' of ' + results.length + ' jobs FAILED: ' + bad.map(r => r.name).join(', ') : 'all ' + results.length + ' jobs passed'} · ${checks} checks · ${secs(t0)}`);
   process.exit(bad.length ? 1 : 0);

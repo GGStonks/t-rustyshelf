@@ -250,6 +250,8 @@ body.aside *,body.aside *::before,body.aside *::after{animation-play-state:pause
 .wm-atarilynx{--wm-grad:linear-gradient(180deg,#e9fbff 10%,#1f9fc4 95%);--wm-glow:rgba(31,159,196,.4);--wm-tagc:#9fd6e7}
 .wm-wonderswan{--wm-grad:linear-gradient(180deg,#f3ecff 10%,#7c4fd6 95%);--wm-glow:rgba(124,79,214,.42);--wm-tagc:#c4adee}
 .wm-dos{--wm-grad:linear-gradient(180deg,#e9ffe9 10%,#2fbf4a 95%);--wm-glow:rgba(47,191,74,.4);--wm-tagc:#a3e3ae}
+.wm-ngp{--wm-grad:linear-gradient(180deg,#e8ecff 10%,#3a4fb8 95%);--wm-glow:rgba(58,79,184,.42);--wm-tagc:#aab6ee}
+.wm-ngpc{--wm-grad:linear-gradient(180deg,#ffffff 10%,#2f6ce0 95%);--wm-glow:rgba(47,108,224,.42);--wm-tagc:#a9c3f3}
 .wm-home .wm-main{font-family:'Lexend',var(--ui);font-weight:800;letter-spacing:.1em;font-size:clamp(22px,2.4vw,34px)}
 /* favorite heart on the box corner */
 .slot.fav .f-front::before{content:"♥";position:absolute;right:calc(8px*var(--os,1));top:calc(8px*var(--os,1));z-index:3;width:calc(26px*var(--os,1));height:calc(26px*var(--os,1));border-radius:50%;background:rgba(10,10,16,.75);color:#ff5c8a;font-size:calc(14px*var(--os,1));line-height:calc(26px*var(--os,1));text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.5)}

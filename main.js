@@ -1494,7 +1494,7 @@ handle('launch:game', async ({ systemId, file, emulator }) => {
 // (beta.6) RetroArch's cores: <its folder>\cores\<core>_libretro.dll, or the folder its own settings name
 // (retroarch.cfg's libretro_directory; ":" there means RetroArch's own folder)
 const RA_CORE_NAME = { swanstation: 'SwanStation', mesen: 'Mesen', snes9x: 'Snes9x', mupen64plus_next: 'Mupen64Plus-Next', gambatte: 'Gambatte', mgba: 'mGBA', melondsds: 'melonDS DS', genesis_plus_gx: 'Genesis Plus GX', flycast: 'Flycast',
-  mednafen_saturn: 'Beetle Saturn', mednafen_pce_fast: 'Beetle PCE Fast', fbneo: 'FinalBurn Neo', picodrive: 'PicoDrive', stella: 'Stella', handy: 'Handy', mednafen_wswan: 'Beetle Cygne', dosbox_pure: 'DOSBox Pure' };
+  mednafen_saturn: 'Beetle Saturn', mednafen_pce_fast: 'Beetle PCE Fast', fbneo: 'FinalBurn Neo', picodrive: 'PicoDrive', stella: 'Stella', handy: 'Handy', mednafen_wswan: 'Beetle Cygne', mednafen_ngp: 'Beetle NeoPop', dosbox_pure: 'DOSBox Pure' };
 function retroCore(exe, core) {
   const dir = path.dirname(exe), dirs = [path.join(dir, 'cores')];
   for (const cfgFile of [path.join(dir, 'retroarch.cfg'), path.join(process.env.APPDATA || '', 'RetroArch', 'retroarch.cfg')]) {

@@ -194,6 +194,10 @@ const CONSOLES = [
     ['atarilynx', 'Lynx', 'RetroArch', [], [], ['atarilynx', 'lynx', 'atari lynx'], ['lnx', 'zip', '7z'], '', 'handy'],
     ['wonderswan', 'WonderSwan', 'RetroArch', [], [], ['wonderswan', 'wonderswancolor', 'wonderswan color', 'wsc', 'ws'], ['ws', 'wsc', 'zip', '7z'], '', 'mednafen_wswan'],
     ['dos', 'DOS', 'RetroArch', [], [], ['dos', 'msdos', 'ms-dos', 'pc dos'], ['zip', 'dosz'], '', 'dosbox_pure'],
+    // ((T)rustyShelf, asked on Boxshelf's issue 11) the Neo Geo Pocket and the Neo Geo Pocket Color, two shelves (their box art is
+    // kept apart by libretro and LaunchBox), both in RetroArch's Beetle NeoPop core (no BIOS needed). No-Intro's .ngp / .ngc
+    ['ngp', 'Neo Geo Pocket', 'RetroArch', [], [], ['ngp', 'neogeopocket', 'neo geo pocket', 'neo-geo pocket'], ['ngp', 'zip', '7z'], '', 'mednafen_ngp'],
+    ['ngpc', 'Neo Geo Pocket Color', 'RetroArch', [], [], ['ngpc', 'neogeopocketcolor', 'neo geo pocket color', 'neo-geo pocket color'], ['ngc', 'ngpc', 'npc', 'zip', '7z'], '', 'mednafen_ngp'],
   ]),
   // (supalii's fork) a standalone shelf: Xbox One ports and recompilations that run as PC programs. No emulator and no
   // games folder: its games are the programs put on it in Settings → Custom games (→ the game → Platform)

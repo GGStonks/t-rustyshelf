@@ -102,6 +102,9 @@
     sys('atari2600', 'Atari 2600', ['retroarch'], ['stella', 'stella2014'], ['a26', 'bin', 'zip', '7z']),
     sys('atarilynx', 'Lynx', ['retroarch'], ['handy', 'mednafen_lynx'], ['lnx', 'zip', '7z']),
     sys('wonderswan', 'WonderSwan', ['retroarch'], ['mednafen_wswan'], ['ws', 'wsc', 'zip', '7z']),
+    // ((T)rustyShelf) the Neo Geo Pocket and Pocket Color, in RetroArch's Beetle NeoPop core
+    sys('ngp', 'Neo Geo Pocket', ['retroarch'], ['mednafen_ngp'], ['ngp', 'zip', '7z']),
+    sys('ngpc', 'Neo Geo Pocket Color', ['retroarch'], ['mednafen_ngp'], ['ngc', 'ngpc', 'npc', 'zip', '7z']),
     sys('dos', 'DOS', ['retroarch'], ['dosbox_pure'], ['zip', 'dosz']),
     // ((T)rustyShelf) PC: the files GameNative's Frontend sync writes for every installed game (the format ES-DE reads):
     // <title>.steam / .epic / .gog / .amazon / .pcgame, each holding the game's id. A name ending in [id] works too.

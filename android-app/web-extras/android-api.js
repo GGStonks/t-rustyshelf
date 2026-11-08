@@ -266,7 +266,7 @@
     megadrive: 'Sega - Mega Drive - Genesis', mastersystem: 'Sega - Master System - Mark III', gamegear: 'Sega - Game Gear', snes: 'Nintendo - Super Nintendo Entertainment System',
     nes: 'Nintendo - Nintendo Entertainment System', gba: 'Nintendo - Game Boy Advance', gbc: 'Nintendo - Game Boy Color', gb: 'Nintendo - Game Boy',
     pcengine: 'NEC - PC Engine - TurboGrafx 16', neogeo: 'SNK - Neo Geo',
-    segacd: 'Sega - Mega-CD - Sega CD', sega32x: 'Sega - 32X', atari2600: 'Atari - 2600', atarilynx: 'Atari - Lynx', wonderswan: 'Bandai - WonderSwan', dos: 'DOS' }; // (beta.9: the rest of wave 2) // arcade: MAME sets are named by short zip names, which libretro's titles never match
+    segacd: 'Sega - Mega-CD - Sega CD', sega32x: 'Sega - 32X', atari2600: 'Atari - 2600', atarilynx: 'Atari - Lynx', wonderswan: 'Bandai - WonderSwan', dos: 'DOS', ngp: 'SNK - Neo Geo Pocket', ngpc: 'SNK - Neo Geo Pocket Color' }; // (beta.9: the rest of wave 2) // arcade: MAME sets are named by short zip names, which libretro's titles never match
   const TDB_SYS = { gc: 'wii', wii: 'wii' }; // GameTDB keeps GameCube under its Wii art. (3DS / Switch / Wii U are named by title ids that
   // need decrypting or unpacking the game to read: not done here, ScreenScraper covers those consoles by file name instead)
   const TDB_REGIONS = { E: ['US'], N: ['US'], J: ['JA'], K: ['KO'], P: ['EN', 'FR', 'DE', 'ES', 'IT', 'NL'], D: ['DE', 'EN'], F: ['FR', 'EN'], S: ['ES', 'EN'], I: ['IT', 'EN'], H: ['NL', 'EN'], U: ['EN', 'AU'], X: ['EN', 'US'], Y: ['EN', 'US'], Z: ['EN', 'US'] };
@@ -805,7 +805,7 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
     snes: ['super nintendo', 'snes', 'super famicom'], nes: ['nintendo entertainment system', 'nes', 'famicom'], gba: ['game boy advance', 'gba'], gbc: ['game boy color', 'gbc'],
     gb: ['game boy', 'gameboy'], megadrive: ['genesis', 'mega drive', 'megadrive'], saturn: ['saturn'], dreamcast: ['dreamcast'], mastersystem: ['master system'],
     gamegear: ['game gear'], pcengine: ['turbografx', 'pc engine'], neogeo: ['neo geo'],
-    segacd: ['sega cd', 'mega cd', 'mega-cd'], sega32x: ['32x', 'sega 32x'], atari2600: ['atari 2600', '2600'], atarilynx: ['lynx', 'atari lynx'], wonderswan: ['wonderswan', 'wonderswan color'], dos: ['ms-dos', 'msdos', 'dos'] };
+    segacd: ['sega cd', 'mega cd', 'mega-cd'], sega32x: ['32x', 'sega 32x'], atari2600: ['atari 2600', '2600'], atarilynx: ['lynx', 'atari lynx'], wonderswan: ['wonderswan', 'wonderswan color'], dos: ['ms-dos', 'msdos', 'dos'], ngp: ['neo geo pocket', 'neogeo pocket'], ngpc: ['neo geo pocket color', 'neogeo pocket color'] };
   const NOISE_W = /^(manual|instruction|instructions|booklet|nintendo|sony|sega|eng|english|usa|us|eu|pal|ntsc|scan|scans|game|games)$/;
   const manWords = s => new Set(norm(s).split(' ').filter(w => w.length > 1 || /\d/.test(w)));
   function manScore(title, t) { // how much of the game's title the item covers; much else in it, or another sequel number, counts against
@@ -985,7 +985,7 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
     n64: 'Nintendo 64', snes: 'Super Nintendo Entertainment System', nes: 'Nintendo Entertainment System', gba: 'Nintendo Game Boy Advance',
     gbc: 'Nintendo Game Boy Color', gb: 'Nintendo Game Boy', megadrive: 'Sega Genesis', saturn: 'Sega Saturn', dreamcast: 'Sega Dreamcast',
     mastersystem: 'Sega Master System', gamegear: 'Sega Game Gear', pcengine: 'NEC TurboGrafx-16', neogeo: 'SNK Neo Geo AES',
-    segacd: 'Sega CD', sega32x: 'Sega 32X', atari2600: 'Atari 2600', atarilynx: 'Atari Lynx', wonderswan: 'WonderSwan', dos: 'MS-DOS', pc: 'Windows' };
+    segacd: 'Sega CD', sega32x: 'Sega 32X', atari2600: 'Atari 2600', atarilynx: 'Atari Lynx', wonderswan: 'WonderSwan', dos: 'MS-DOS', pc: 'Windows', ngp: 'SNK Neo Geo Pocket', ngpc: 'SNK Neo Geo Pocket Color' };
   const LB_IMG = 'https://images.launchbox-app.com/', LB_MB = 110, LB_DAYS = 90;
   const lb = { meta: undefined, shards: {}, dropT: 0, job: null, prog: null, L: [] };
   const lbSafe = p => String(p).replace(/[^A-Za-z0-9]+/g, '_');
@@ -1163,7 +1163,7 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
   // moment of the request (from the saved settings). Media addresses in the answers carry it in their query: they're kept
   // without it (ssClean). Nothing here logs an address or a body.
   const SS_SYS = { gc: 13, wii: 16, wiiu: 18, sw: 225, n3ds: 17, nds: 15, ps2: 58, psp: 61, psx: 57, n64: 14, dreamcast: 23, saturn: 22, megadrive: 1, mastersystem: 2,
-    gamegear: 21, snes: 4, nes: 3, gba: 12, gbc: 10, gb: 9, pcengine: 31, neogeo: 142, segacd: 20, sega32x: 19, atari2600: 26, atarilynx: 28, wonderswan: 45, dos: 135 };
+    gamegear: 21, snes: 4, nes: 3, gba: 12, gbc: 10, gb: 9, pcengine: 31, neogeo: 142, segacd: 20, sega32x: 19, atari2600: 26, atarilynx: 28, wonderswan: 45, dos: 135, ngp: 25, ngpc: 82 };
   const JEWEL = new Set(['psx', 'saturn', 'dreamcast', 'pcengine']); // CD cases: back insert with the spines on it
   const SS_MEDIA = { front: ['box-2D'], back: ['box-2D-back'], spine: ['box-2D-side'], wrap: ['box-texture'], disc: ['support-2D'] };
   const SS_REGION = r => { r = String(r || '').toLowerCase(); return r === 'us' || r === 'cus' ? 'usa' : r === 'jp' ? 'jpn' : r === 'wor' ? 'world' : /^(eu|fr|de|es|it|uk|nl|pt|se|dk|fi|no|pl|gr|ru|au|nz)$/.test(r) ? 'eur' : ''; };
@@ -1695,7 +1695,7 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
     add('gamegear', 'gamegear', 'game gear', 'gg', 'sega game gear'); add('pcengine', 'pcengine', 'pc engine', 'tg16', 'turbografx', 'turbografx 16', 'pce');
     add('neogeo', 'neogeo', 'neo geo'); add('arcade', 'arcade', 'mame', 'fbneo', 'fba', 'finalburn neo');
     add('segacd', 'segacd', 'sega cd', 'megacd', 'mega cd'); add('sega32x', 'sega32x', '32x', 'sega 32x'); add('atari2600', 'atari2600', 'atari 2600', '2600', 'a2600');
-    add('atarilynx', 'atarilynx', 'lynx', 'atari lynx'); add('wonderswan', 'wonderswan', 'wonderswancolor', 'wonderswan color', 'wsc', 'ws'); add('dos', 'dos', 'msdos', 'ms-dos', 'pc dos'); // (beta.9)
+    add('atarilynx', 'atarilynx', 'lynx', 'atari lynx'); add('wonderswan', 'wonderswan', 'wonderswancolor', 'wonderswan color', 'wsc', 'ws'); add('ngp', 'ngp', 'neogeopocket', 'neo geo pocket', 'neo-geo pocket'); add('ngpc', 'ngpc', 'neogeopocketcolor', 'neo geo pocket color', 'neo-geo pocket color'); add('dos', 'dos', 'msdos', 'ms-dos', 'pc dos'); // (beta.9)
     add('pc', 'pc', 'windows', 'steam', 'gamenative', 'pc games'); // ((T)rustyShelf)
     for (const s of SYS) add(s.id, s.id, s.name, ...(ALIASES[s.id] || []));
     return m; })());
@@ -1914,7 +1914,7 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
   const ALIASES = { gc: ['gamecube', 'ngc'], wii: [], wiiu: ['wii u'], sw: ['switch', 'nsw'], n3ds: ['3ds'], nds: ['ds'], ps2: ['playstation 2'], psp: [], psx: ['ps1', 'psx', 'playstation'],
     n64: ['nintendo 64'], dreamcast: ['dc'], saturn: [], megadrive: ['genesis', 'md'], mastersystem: ['sms', 'master system'], gamegear: ['gg', 'game gear'], snes: ['super nintendo', 'sfc'],
     nes: ['famicom', 'fc'], gba: ['game boy advance'], gbc: ['game boy color'], gb: ['game boy'], pcengine: ['tg16', 'turbografx', 'pce'], neogeo: ['neo geo'], arcade: ['mame', 'fbneo'],
-    segacd: ['megacd', 'sega cd'], sega32x: ['32x'], atari2600: ['2600', 'a2600'], atarilynx: ['lynx'], wonderswan: ['wsc', 'ws', 'wonderswancolor'], dos: ['msdos'] };
+    segacd: ['megacd', 'sega cd'], sega32x: ['32x'], atari2600: ['2600', 'a2600'], atarilynx: ['lynx'], wonderswan: ['wsc', 'ws', 'wonderswancolor'], dos: ['msdos'], ngp: ['neogeopocket'], ngpc: ['neogeopocketcolor'] };
   // Keyboards: (T)rustyShelf has its own on-screen keyboard for the controller, and Android's popping up on top of it fought
   // over the buttons (reading room search on the Thor). A text field focused by the controller keeps Android's keyboard
   // away (inputmode=none); a field you tap with a finger gets it, as you'd expect on a touchscreen.

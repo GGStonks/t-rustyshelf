@@ -132,7 +132,7 @@ server.listen(0, async () => {
           shelves: lib.map(s => ({ id: s.id, titles: s.games.map(g => g.title + ((g.discs || []).length > 1 ? ` [${g.discs.length} discs]` : '')) })) };
       });
       const shelf = id => (setup.shelves.find(s => s.id === id) || { titles: [] }).titles;
-      check('30 systems offered on Android', setup.consoles === 30, setup.consoles); // (beta.9: + Sega CD, 32X, Atari 2600, Lynx, WonderSwan, DOS; (T)rustyShelf: + PC)
+      check('32 systems offered on Android', setup.consoles === 32, setup.consoles); // (beta.9: + Sega CD, 32X, Atari 2600, Lynx, WonderSwan, DOS; (T)rustyShelf: + PC, Neo Geo Pocket, Neo Geo Pocket Color)
       check('Emulators detected (Dolphin, DuckStation, RetroArch)', /dolphin/i.test(setup.emus[0]) && /duckstation/i.test(setup.emus[1]) && /retroarch/i.test(setup.emus[2]), setup.emus.join(', '));
       check('GameCube scan: clean titles', shelf('gc').includes('The Legend of Zelda - The Wind Waker') && shelf('gc').length === 3, shelf('gc').join(' | '));
       check('PlayStation scan: .bin hidden behind .cue, 2-disc game is one box', shelf('psx').length === 2 && shelf('psx').some(t => /\[2 discs\]/.test(t)), shelf('psx').join(' | '));
@@ -435,7 +435,7 @@ server.listen(0, async () => {
         // new games arrive in the museum as a parcel first (the pretend game above counts): skip the unpacking, then wait
         // for the bottom screen's message about the wall
         await page.evaluate(async () => { const wait = ms => new Promise(r => setTimeout(r, ms)); for (let i = 0; i < 6 && window.Museum && Museum._dv && Museum._dv(); i++) { Museum.skipDelivery(); await wait(800); }
-          for (let i = 0; i < 40; i++) { const l = [...(window.__fakeBottom || [])].reverse().find(m => m.type === 'museum'); if (l && l.row.sel >= 0) break; await wait(250); } });
+          for (let i = 0; i < 80; i++) { const l = [...(window.__fakeBottom || [])].reverse().find(m => m.type === 'museum'); if (l && l.row.sel >= 0) break; await wait(250); } }); // ((T)rustyShelf: up to 20 s, the museum takes longer to choose its case while other groups run alongside)
         await page.waitForTimeout(800);
         mus = await page.evaluate(() => { const msgs = window.__fakeBottom || [], last = [...msgs].reverse().find(m => m.type === 'museum'), r = window.Museum && Museum.bottomRow && Museum.bottomRow();
           return { mode: Shelf.getMode(), types: msgs.map(m => m.type[0]).join(''), msg: !!last, games: last ? last.games.length : 0, sel: last ? last.row.sel : null, n: r ? r.boxes.length : 0, title: last && last.game ? last.game.title : '' }; });
@@ -1217,7 +1217,7 @@ server.listen(0, async () => {
       const h0 = await hub();
       await page.screenshot({ path: path.join(OUT, '6-wizard-consoles.png') });
       check('Wizard: consoles found on the device first, the rest under More',
-        h0.title === 'Your consoles' && h0.big.join() === 'gc,wii,n3ds,psx' && /More consoles \(26\)/.test(h0.more) && h0.small === 0 && h0.fits && h0.nav >= 3, // (Android: the feature questions are steps of their own before Consoles)
+        h0.title === 'Your consoles' && h0.big.join() === 'gc,wii,n3ds,psx' && /More consoles \(28\)/.test(h0.more) && h0.small === 0 && h0.fits && h0.nav >= 3, // (Android: the feature questions are steps of their own before Consoles; (T)rustyShelf: + the two Neo Geo Pockets)
         `${h0.title}: ${h0.big.join(', ')} · "${h0.more}" · ${h0.small} folded · fits ${h0.fits} · ${h0.nav} steps`);
       // controller: down onto the first card, A opens its page, B comes back; A on More shows every other console
       const pad = a => page.evaluate(a => window.Setup.pad(a), a);
@@ -1227,14 +1227,14 @@ server.listen(0, async () => {
       await pad('back'); await page.waitForTimeout(500); const h1 = await hub();
       await page.click('.con-more'); await page.waitForTimeout(600); const h2 = await hub();
       check('Wizard: controller opens a console and comes back; More shows the rest (every console reachable)',
-        f1 === 'gc' && pg === 'GameCube' && h1.title === 'Your consoles' && h2.small === 26 && h2.big.length + h2.small === 30,
+        f1 === 'gc' && pg === 'GameCube' && h1.title === 'Your consoles' && h2.small === 28 && h2.big.length + h2.small === 32,
         `focus ${f1} → ${pg} → ${h1.title}; More: ${h2.small} + ${h2.big.length} = ${h2.small + h2.big.length}`);
       // a console deep in More: B comes back to its card (focused, on screen), not to the top of the list
       const last = await page.evaluate(() => { const c = [...document.querySelectorAll('.con-grid.small .con-card')].pop(); c.scrollIntoView(); c.click(); return c.dataset.con; });
       await page.waitForTimeout(400); await pad('back'); await page.waitForTimeout(500);
       const back = await page.evaluate(() => { const a = document.activeElement, r = a.getBoundingClientRect(), b = document.getElementById('suBody').getBoundingClientRect();
         return { id: a.dataset.con, seen: r.top >= b.top - 1 && r.bottom <= b.bottom + 1, more: document.querySelectorAll('.con-grid.small .con-card').length }; });
-      check('Wizard: back from a console in More lands on its card, still in view', back.id === last && back.seen && back.more === 26, `${last} → focus ${back.id}, in view ${back.seen}, ${back.more} folded open`);
+      check('Wizard: back from a console in More lands on its card, still in view', back.id === last && back.seen && back.more === 28, `${last} → focus ${back.id}, in view ${back.seen}, ${back.more} folded open`);
       // set three consoles up (gc, psx, snes) and go to the shelf: RetroArch also gave a dozen consoles an emulator, but
       // only shelves with games get a tab
       await page.evaluate(async () => { const api = window.trustyshelf, info = await api.getConfig(), det = await api.detect(), c = info.config;
@@ -1258,8 +1258,8 @@ server.listen(0, async () => {
           clear: r1.right <= hud.left, edges: t.className, reads, strip: t.querySelector('.tab-strip').style.transform };
       });
       await page.screenshot({ path: path.join(OUT, '6-console-bar-23.png'), clip: { x: 0, y: 0, width: 853, height: 80 } });
-      check('Console bar with 30 consoles: current one centred, edges fade, bar never moves or re-measures',
-        big.n === 31 && Math.abs(big.off) <= 3 && big.same && big.clear && /more-l/.test(big.edges) && /more-r/.test(big.edges) && big.reads === 0,
+      check('Console bar with every console: current one centred, edges fade, bar never moves or re-measures',
+        big.n === 33 && Math.abs(big.off) <= 3 /* (every console's tab: (T)rustyShelf adds the two Neo Geo Pockets) */ && big.same && big.clear && /more-l/.test(big.edges) && /more-r/.test(big.edges) && big.reads === 0,
         `${big.n} tabs, ${big.off}px off centre, bar still ${big.same}, clear of the clock ${big.clear}, ${big.edges}, ${big.reads} layout reads`);
       // touch: drag the strip sideways, then a tap on a tab picks that shelf
       const cdp = await ctx.newCDPSession(page);

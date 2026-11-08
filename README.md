@@ -83,6 +83,10 @@ archives; the title ID inside the game gives the real name (via the Xenia compat
 `DVD.iso` in a folder still shows up as the game. Details show Xenia's compatibility rating. Picking `XeniaManager.exe`
 is fine: (T)rustyShelf launches the Canary build from its `Emulators` folder. Wii `.nkit.iso` dumps and Switch `[titleid][v0]` names are cleaned up automatically.
 
+*(new in (T)rustyShelf)* The **Neo Geo Pocket** and **Neo Geo Pocket Color** have a shelf each (`.ngp` games in an `ngp` or
+`Neo Geo Pocket` folder, `.ngc` games in an `ngpc` or `Neo Geo Pocket Color` folder), played in RetroArch's Beetle NeoPop
+core, with their own box art, manuals and cases; on Android too.
+
 ## Art, manuals and game info
 
 Settings → **Find artwork & manuals** searches every selected shelf and shows one list to tick through before
