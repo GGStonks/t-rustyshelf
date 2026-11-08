@@ -19,6 +19,7 @@ const linuxpad = require('./main/linuxpad'); // (beta.9) Linux: hold Select + St
 paths.setAppRoot(linux.isLinux ? linux.appRoot(app.isPackaged, __dirname) : app.isPackaged ? (process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(process.execPath)) : __dirname);
 
 const config = require('./main/config');
+const presence = require('./main/presence'); // (Discord Rich Presence while a game runs: Settings → Display)
 const i18nMain = require('./shared/i18n-main'); // ((T)rustyShelf) the system windows in Português (Brasil) when that's the language
 i18nMain.install(require('electron'));
 const { CONSOLES, APPS } = require('./main/systems');
@@ -565,7 +566,7 @@ function watchPad(opts) {
       keepUp: () => launcher.isRunning() && !quitCover }); // (beta.10: a helper that dies mid-game is started again, not during a Quit)
 }
 function onExit(info) {
-  linuxpad.end(); // (beta.9: the Linux pad watcher only runs during a game)
+  linuxpad.end(); try { presence.clear(); } catch {} // (beta.9: the Linux pad watcher only runs during a game)
   markEvent('game exited'); clearQuitCover(); wiimote.resume(); // (the Wii remote back to the shelf, after Dolphin had it)
   // (1.82) a game's emulator that closed by itself within 5 s (a missing BIOS, keys or firmware, bad launch options) wasn't a
   // play: the shelf says which emulator closed instead of quietly coming back, and the history isn't touched
@@ -878,7 +879,7 @@ handle('config:get', () => ({ config: cfg, consoles: CONSOLES, apps: APPS, appRo
 handle('app:updateCheck', ({ force } = {}) => updates.check(appVersion(), !!force).then(r => ({ ...r, links: updates.LINKS })));
 handle('config:save', next => { if (!next || typeof next !== 'object' || !next.systems || !next.ui) throw new Error('Bad settings.'); scanForget(); return applyCfg({ ...next, art: cfg.art, games: cfg.games, emuSetup: { ...(next.emuSetup || {}), pending: (cfg.emuSetup || {}).pending || [] }, ui: { ...next.ui, sw2Last: cfg.ui.sw2Last } }); }); // Art Studio styles and locks change through art:* only: a Settings save with its older copy mustn't undo them. (beta.8) The same for what main itself keeps: each game's own name and emulator (Details → Rename / Emulator), Set up for me's waiting list and Switch 2's last build: a screen's older copy saved later used to undo a rename, or bring back a setup that was already done
 // settings saved (or restored from a backup): store them and put every change into effect now
-function applyCfg(next) { const prev = cfg, hadMenu = cfg.ui.homeMenu !== false; next = rememberEmus(prev, next); const x = o => o && o.systems && o.systems.x360 && o.systems.x360.emulator; if (x(next) !== x(prev)) next = fixXenia(next); /* (the folder walk only when that path changed) */ cfg = persistCfg(config.normalize(next)); i18nMain.setActive(cfg.ui.language === 'pt'); applyArtLibrary(); applyScale(); setTimeout(watchRoms, 0); if (cfg.ui.wiimote === false) wiimote.stop(); else if (wmReady) wmStart(); /* (Settings → Controller → Wii remote, at once) */
+function applyCfg(next) { const prev = cfg, hadMenu = cfg.ui.homeMenu !== false; next = rememberEmus(prev, next); const x = o => o && o.systems && o.systems.x360 && o.systems.x360.emulator; if (x(next) !== x(prev)) next = fixXenia(next); /* (the folder walk only when that path changed) */ cfg = persistCfg(config.normalize(next)); i18nMain.setActive(cfg.ui.language === 'pt'); presence.configure({ enabled: cfg.ui.discordPresence, appId: cfg.ui.discordAppId, logger: log }); applyArtLibrary(); applyScale(); setTimeout(watchRoms, 0); if (cfg.ui.wiimote === false) wiimote.stop(); else if (wmReady) wmStart(); /* (Settings → Controller → Wii remote, at once) */
   // Home menu switched on/off: start or stop the shelf's Guide watcher now (not after the next game)
   if (!launcher.isRunning() && hadMenu !== (cfg.ui.homeMenu !== false)) { if (cfg.ui.homeMenu === false) padwatch.stop(); else watchShelf(); }
   ra.setCredentials(cfg.ra && cfg.ra.enabled !== false ? cfg.ra.user : '', cfg.ra && cfg.ra.key);
@@ -1545,6 +1546,7 @@ async function launchGameNow(systemId, file, sc) {
   lastLaunch = { systemId, at: Date.now(), exe: sc.emulator }; historyStart(systemId + ':' + file); // (exe: the build that ran, named if it closes right away)
   const def = CONSOLES.find(c => c.id === systemId);
   if (cfg.ui.homeMenu !== false) homemenu.begin({ systemId, exe: sc.emulator, systemName: def ? def.name : systemId, hotkeys: sc.hotkeys });
+  try { presence.setGame(require('./main/scanner').cleanTitle(String(file)).title, def ? def.name : systemId); } catch {} // (Discord: "Playing …")
   const base = ipl ? (sc.iplCoverSeconds ?? 2.5) : (+sc.coverSeconds || 0);
   // the loading screen now lifts the moment the game's window is up and fullscreen; the per-console seconds (plus a
   // margin for slow starts) are only the latest it waits
@@ -2669,7 +2671,7 @@ function startUp() {
   config.init(app.getPath('userData'), log);
   arcadenames.init(app.getPath('userData'), log); // (beta.7) arcade game names, main/arcadenames.js
   emusetup.init({ log, dataDir: app.getPath('userData'), appRoot: paths.appRoot() }); racores.init({ log }); previews.init({ log, dataDir: app.getPath('userData'), appRoot: paths.appRoot() }); ytclips.init({ log, dataDir: app.getPath('userData') }); addgames.init({ log });
-  cfg = unsealed(config.load()); i18nMain.setActive(cfg.ui.language === 'pt'); { const fx = fixXenia(cfg); if (fx !== cfg) { cfg = fx; try { persistCfg(cfg); } catch {} } } applyArtLibrary();
+  cfg = unsealed(config.load()); i18nMain.setActive(cfg.ui.language === 'pt'); presence.configure({ enabled: cfg.ui.discordPresence, appId: cfg.ui.discordAppId, logger: log }); { const fx = fixXenia(cfg); if (fx !== cfg) { cfg = fx; try { persistCfg(cfg); } catch {} } } applyArtLibrary();
   { const here = paths.appRoot(), L = Array.isArray(cfg.ui.installs) ? cfg.ui.installs.filter(x => typeof x === 'string') : []; if (!L.some(x => x.toLowerCase() === here.toLowerCase())) { cfg.ui.installs = [here, ...L].slice(0, 6); try { persistCfg(cfg); } catch {} } } // where (T)rustyShelf has run from: a later move can offer the magazines left here
   // consoles added in an update (PS5): found once, as setup would have (an emulator or games folder set by hand is kept)
   { const known = Array.isArray(cfg.ui.knownSystems) ? cfg.ui.knownSystems : [], add = ['ps5', 'sw2'].filter(id => !known.includes(id) && cfg.systems[id]);

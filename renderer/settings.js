@@ -178,6 +178,9 @@ function build(){
   {g:"Games",id:"apps",name:"Apps",ic:"apps",dot:()=>Object.values(cfg.apps||{}).some(a=>a&&a.enabled!==false&&a.path)?"ok":null,lead:"Stremio and Nuvio, launched from the Media shelf.",rows:appRows},
   {g:"Look & sound",id:"display",name:"Display",ic:"display",lead:"How the shelf looks from the couch.",rows:[
     C("Language","ui.language",[["en","English"],["pt","Português (Brasil)"]],"en","The language the screen and the system windows (open, save, errors) are shown in. The screen reloads to switch.",{keys:"language idioma portuguese portugues brasil translate english",live:()=>{(async()=>{try{await save()}catch{}location.reload()})()}}),
+    // ((T)rustyShelf, Discord Rich Presence: main/presence.js) "Playing …" on your Discord profile while a game runs
+    T("Show what I'm playing on Discord","ui.discordPresence",false,"While a game runs, your Discord profile says \"Playing <title>\". It needs a Discord application id (below): make one free at discord.com/developers, and paste its id.",{keys:"discord presence rich status playing activity"}),
+    X("Discord application ID","ui.discordAppId","The number from your Discord application's page (General Information). Nothing is sent anywhere else: (T)rustyShelf only talks to the Discord app on this computer.",{ph:"Paste the id here",keys:"discord application id client"}),
     C("Interface size","ui.uiScale",[[1,"Standard"],[1.15,"Large"],[1.3,"Extra large"]],1,"Bigger text and buttons for a TV across the room.",{more:"Large suits most 55\" and bigger TVs at 2–3 m. Extra large for very far seating.",live:()=>fit(),keys:"zoom text big small scale"}),
     // (1.78) no peek: the page stays put and takes on the theme's colour at once; the shelf behind switches once you stop on a
     // theme (stepping through them quickly used to fade the page out and in and cross-fade the shelf on every step)
