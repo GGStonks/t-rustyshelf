@@ -4,11 +4,17 @@ A TV-style launcher for your emulators, Steam games and streaming apps: real box
 cases you can open and inspect, disc-loading animations, manuals, RetroAchievements, and one controller
 for everything.
 
-> **This is Boxshelf's source code** (Windows: Electron; Android: Capacitor, in `android-app\`), released under the
-> [GNU GPL v3.0](LICENSE). **Just want to play?** Get the ready-made download from the
-> [Boxshelf beta page](https://github.com/sassiestrhihno/boxshelf-beta/releases). Bugs and ideas go to the beta page's
-> [issues](https://github.com/sassiestrhihno/boxshelf-beta/issues/new/choose). This repository is a snapshot of each
-> beta (it starts at 1.82.0-beta.4); the 3D PC model the museum can show isn't included here.
+**This fork** is based on Boxshelf and follows each of its betas (now 1.82.0-beta.10). It adds PC games on Linux
+without Steam: Windows games through Wine or Proton, your whole Epic Games library through legendary, and a PC games
+folder where every folder is a game, plus each game's size on the shelf and a held Exit button. It isn't the
+official Boxshelf: the additions are marked *(this fork)* below, and everything else is Boxshelf as released.
+
+> **This is Boxshelf's source code** (Windows: Electron; Linux: an Electron AppImage; Android: Capacitor, in
+> `android-app\`), released under the [GNU GPL v3.0](LICENSE). **Just want to play the official Boxshelf?** Get the
+> ready-made download from the [Boxshelf beta page](https://github.com/sassiestrhihno/boxshelf-beta/releases); its bugs
+> and ideas go to the beta page's [issues](https://github.com/sassiestrhihno/boxshelf-beta/issues/new/choose), but not
+> ones about this fork's additions. The [official source](https://github.com/sassiestrhihno/boxshelf-source) is a
+> snapshot of each beta (it starts at 1.82.0-beta.4); the 3D PC model the museum can show isn't included here.
 
 ## First run
 
@@ -18,6 +24,10 @@ for everything.
 
 Use **Start Boxshelf (window).bat** to run it in a window instead of fullscreen. `npm run dist` builds a
 portable `Boxshelf.exe` in `dist\` if you'd rather not keep Node around; keep the exe in this folder.
+
+On Linux: `npm install`, then `npm start` (`npm run windowed` for a window), or `npm run dist:linux` for
+`dist/Boxshelf-<version>-linux.AppImage`. With no `data` folder beside the AppImage, Boxshelf keeps its settings in
+`~/Boxshelf`.
 
 ## Folder layout (portable)
 
@@ -77,6 +87,7 @@ own icon.
 | Shuffle (spin to a random game) | R | Click the left stick |
 | Settings · Customize | S · T | Start · Back (short press) |
 | Quit a game, or Boxshelf from the shelf | | hold L3 + R3 (changeable in Settings → Controller) |
+| Exit Boxshelf: hold 3 s (or hold the lower bar's **Exit** button); a card fills while you hold *(this fork)* | hold X | |
 
 **Inspect**: left/right or D-pad step to the next side (front, spine, back, edge); the stick turns freely and
 settles on a side when released; triggers zoom (zoomed in, the left stick pans gently and the right stick turns); A opens the case, then takes the
@@ -144,6 +155,11 @@ which stays visible behind it.
 
 ## Settings
 
+*(this fork)* Settings → Shelf → **Show game sizes** shows how much room each game takes under its name and in Details:
+a console game's file, a Steam game's install, and the folder of a PC games folder or Epic game (measured in the
+background, so the shelf never waits). Switch 2 build choices name the emulator ("Lichii · build"), and builds that
+come as AppImages are checked for `.nup` support too.
+
 Settings is split into pages: Display (theme — Spectrum, Midnight, Aurora, Sunset, Gallery or Synthwave — fullscreen, the background behind the shelf — soft blur or the game's own artwork, sharp — visual effects, museum shadows, attract mode), Sound, Controller (prompts, quit combo, rumble), Library & art (automatic covers, art folder, shuffle scope, rescan) and Startup & system. Each emulator still has its own page above them.
 
 ## Wii U (Cemu)
@@ -171,11 +187,34 @@ bands — and the museum puts a brass divider tab on the shelf edge where each s
 
 The speaker beside the clock mutes; hover it for a volume slider. On the keyboard, - and = nudge the volume.
 
+## PC games without Steam on Linux *(this fork)*
+
+Settings → PC games puts every PC game on the PC shelf next to your Steam games, each started by Boxshelf itself,
+with the Home menu and the quit combo like any game.
+
+- **PC games folder.** Every folder in it is a game, named after the folder. Boxshelf tells a Linux game (an AppRun,
+  a start script, an AppImage or a Linux program) from a Windows one, and picks the game's own program over
+  installers, crash reporters and helpers; *Program for each game* chooses another for a folder holding several.
+  A folder of **your own copies** can stand in for shared ones (a game that keeps its saves in its own folder), and
+  **Game data folder** gives Linux games a home of their own, so their saves and settings stay apart from yours.
+- **Wine and Proton.** Windows games run through the build chosen in Settings, or the best one found (GE-Proton,
+  UMU-Proton, Steam's and Lutris' builds, the system's Wine), through `umu-run` when it's installed. Each game gets
+  a Wine prefix of its own, named after it; the Easy Anti-Cheat and BattlEye runtimes are used when they're there.
+  A game can keep its own way of running (its build, prefix and variables) under `pc.run` in `data/config.json`, and
+  its output goes to `data/logs/last-pc-game.log`.
+- **Epic Games.** *Get legendary* downloads the open-source Epic client (checked against the checksum GitHub
+  publishes); then sign in with Epic's own page. Every game you own is on the shelf: installed ones play, the others
+  are greyed out and Play offers to install them, in the background. The Epic library page installs, updates and
+  uninstalls; new games go to the PC games folder unless you choose another.
+
 ## PC (Steam) art
 
 Steam only keeps a box cover for games you've looked at in its library grid. For the rest, Boxshelf fetches the cover,
 hero image, release date, developer, genres, Metacritic score and screenshots from Steam's public store (no account or
 key) and keeps them in `data\steam-art` and `steam-info.json`. Turning off automatic covers in Settings stops it.
+
+*(this fork)* Epic games use Epic's own box art. Settings → Box art & manuals → PC games shows every PC game's cover and
+where it comes from (your pick, the store's box art, Steam's art, or a made-up case); pick a game to change it.
 
 ## Sounds
 
@@ -231,6 +270,10 @@ Boxshelf has no accounts, ads or telemetry, and everything it saves stays in its
 | Internet Archive | Retro TV commercials, magazines and guides you search for | search text |
 | Sketchfab, Poly Pizza | Only when you press **Find a model** (opens your browser) | the console name |
 | Wikimedia Commons | Only when you press **Find a logo** (Customize) | the console name |
+| GitHub *(this fork)* | Only when you press **Get legendary** | nothing (downloads legendary's release) |
+| Epic Games, through legendary *(this fork)* | Only once you sign in: your library, installs, starting a game | your Epic sign-in (kept by legendary in `data/legendary`) |
+| Epic's image CDN *(this fork)* | Box art for your Epic games | the picture addresses Epic lists |
+| umu database *(this fork)* | Starting a Windows game through Proton, once per game | the store and the game's ID, for its protonfixes |
 
 The **phone companion** is off until you switch it on. It runs a small web server on your home network only:
 it answers private-range addresses only, phones pair with a 6-digit PIN (5 wrong tries lock pairing for 10
@@ -266,7 +309,8 @@ warning the first time; choose **More info → Run anyway**.
 Box art and metadata: [libretro thumbnails](https://thumbnails.libretro.com), [LaunchBox Games Database](https://gamesdb.launchbox-app.com),
 [GameTDB](https://www.gametdb.com). Manuals: [Internet Archive](https://archive.org) collections and
 [GamesDatabase.org](https://www.gamesdatabase.org). Box art and manuals are © their publishers. Fonts are under the
-SIL Open Font License (see `renderer\fonts\LICENSES`). Bundled libraries and their licences: see
+SIL Open Font License (see `renderer\fonts\LICENSES`). This fork's PC games use
+[legendary](https://github.com/derrod/legendary) and [umu-launcher](https://github.com/Open-Wine-Components/umu-launcher). Bundled libraries and their licences: see
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 ## Licence
