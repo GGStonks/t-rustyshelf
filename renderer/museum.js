@@ -891,7 +891,15 @@ window.Museum = (() => {
   const rowView = () => { const r = rows[rowI], sel = r.boxes[colI] || null, ri = sel ? null : rackItem(); const cx = sel ? sel.userData.home.x : ri ? ri.mesh.userData.home.x + .2 : r.consoleX; if (fan && fan.it.ri === rowI) { const h0 = fan.it.mesh.userData.home; return { x: h0.x, y: r.y + .2, z: h0.z + 1.55 + 2.85 }; } if (libHeld && libHeld.ri === rowI) { const h0 = libHeld.mesh.userData.home; return { x: h0.x + hPan.x, y: r.y + .22 + hPan.y, z: h0.z + 1.7 + 2.05 / handZoom }; } if (heldCase) { const k = peek && peek.box === heldCase ? ss(peek.k) : 0, wp = heldCase.getWorldPosition(sv('rowWp')); return { x: wp.x - r.w * .5 * k / handZoom + hPan.x, y: wp.y + hPan.y, z: wp.z + (2.35 + .3 * k) / handZoom }; } /* far enough back to see the whole case (and both halves once open) */ /* open: both halves in view */ return holding ? { x: cx, y: r.y + .42, z: 3.0 } : { x: cx - .2, y: r.y + .02, z: 3.7 }; };
   // the whole wall (bookcase and reading corner), snug; with the Room menu open, framed in the space left of the menu
   const wallL = () => -.55 - (tvSide() === 'left' ? tvDims().W + .95 : 0), wallR = () => Math.max(wallW, roomObj && roomObj.rackEnd || 0) + (tvSide() === 'right' ? tvDims().W + .95 : .55);
-  const overview = () => { const l = wallL(), r = wallR(), lo = tvOn && room.tvStand !== 'wall' ? .55 : 0; return { x: (l + r) / 2, y: -(rows.length - 1) * ROW / 2 + .15 - lo, z: fitZ(r - l + .6, wallH + 1.1 + lo * 2) + .25 }; }; // with the TV: a little more floor in view
+  // (Boxshelf's issues 11 and 13) a very wide wall (a few hundred games on a row) isn't shrunk to fit: the camera stood so
+  // far back that the room's haze hid it (a black screen), and past ~1,000 games beyond what's drawn at all. It's framed
+  // at most OV_MAXW wide instead, around where you are: the case you were on, or the rack / TV / display the frame is on
+  const OV_MAXW = 26;
+  const ovFocusX = (l, r) => { try { if (wide && wideSel >= rows.length && wideSel < wideCount()) { const b = wideBox(wideSel); if (b && isFinite(b.x0 + b.x1)) return (b.x0 + b.x1) / 2; }
+      const row = rows[Math.max(0, Math.min(rows.length - 1, rowI))], sel = row && row.boxes[colI]; return sel ? sel.userData.home.x : row && isFinite(row.consoleX) ? row.consoleX : (l + r) / 2; } catch { return (l + r) / 2; } };
+  const overview = () => { const l = wallL(), r = wallR(), lo = tvOn && room.tvStand !== 'wall' ? .55 : 0, W = r - l + .6, h = wallH + 1.1 + lo * 2, cap = Math.max(OV_MAXW, h * innerWidth / Math.max(1, innerHeight));
+    const x = W > cap ? Math.max(l - .3 + cap / 2, Math.min(r + .3 - cap / 2, ovFocusX(l, r))) : (l + r) / 2;
+    return { x, y: -(rows.length - 1) * ROW / 2 + .15 - lo, z: fitZ(Math.min(W, cap), h) + .25 }; }; // with the TV: a little more floor in view
   let roomView = false, snapCam = false;
   // the wide view: the stick moves a soft gold frame between the shelves and the racks; A zooms in on the one it's on
   let wideSel = 0, wideFrame = null; // 0..rows-1: a shelf; rows + u: rack unit u
@@ -2132,6 +2140,11 @@ window.Museum = (() => {
     { let lx = camP.x + dx * .4 * (1 - holdLook), ly = (camP.y - .05) * (1 - holdLook) + camP.y * holdLook, lz = holdLook > 0.001 ? camP.z - 4 * holdLook - (1 - holdLook) * camP.z : 0;
       if (gazeK > .001) { lx += (gaze.tx - lx) * gazeK; ly += (gaze.ty - ly) * gazeK; lz += (gaze.tz - lz) * gazeK; } // leaning over to a side display: the gaze takes the look target
       camera.lookAt(lx, ly, lz);
+      // (issues 11 / 13) the haze and the farthest distance drawn follow the camera when it has to stand far back (a wide
+      // wall in the Room menu's view): the wall is never lost in the haze or past the far end. Near the wall: as before
+      { const d = Math.max(0, camera.position.z), fn = Math.max(16, d + 3), cf = Math.max(90, fn + 50);
+        if (scene.fog && Math.abs(scene.fog.near - fn) > .25) { scene.fog.near = fn; scene.fog.far = fn + 30; }
+        if (Math.abs(camera.far - cf) > 1) { camera.far = cf; camera.updateProjectionMatrix(); } }
       if ((Math.abs(look.x) > 1e-4 || Math.abs(look.y) > 1e-4) && lookF > .001) { camera.rotateY(look.x * lookF * (1 - gazeK)); camera.rotateX(look.y * lookF * (1 - gazeK)); } } // the look: turn in place, the wall straight ahead is level again
     if (delivery) stepDelivery(dt, now);
     if (tv) stepTV(dt, now);
