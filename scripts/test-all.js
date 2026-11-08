@@ -31,7 +31,7 @@ const JOBS = Math.max(1, +arg('jobs') || 8), CAP = arg('cap') && arg('cap') !== 
 
 // the tests, by kind (the first of each is the slowest: they start first)
 const NODE = ['detect', 'pad', 'portable', 'dataexport', 'release-version', 'presence', 'epicdl', 'storage', 'windowmode', 'hoyoplay', 'music', 'looks'];
-const DESKTOP = ['app', 'pc', 'xbox', 'home', 'music-app', 'windowmode-app', 'epicdl-app'];
+const DESKTOP = ['app', 'pc', 'xbox', 'home', 'music-app', 'windowmode-app', 'epicdl-app', 'consolebox-app'];
 const DEMO = ['android-artcard', 'android-pc', 'usermusic', 'windowmode', 'looks'];
 const GROUPS = ['screens', 'thor', 'windows'];
 // not tests of their own: run by a device group, or a probe

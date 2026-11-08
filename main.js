@@ -249,6 +249,10 @@ function computeRoots() {
   if (manualstudio.cacheDir()) roots.push(manualstudio.cacheDir()); // Manual Studio's first-page previews and PDFs (also read by the PDF helper by address)
   if (cfg.steam.path) roots.push(path.join(steamMain || steamRoot(cfg.steam.path) || cfg.steam.path, 'appcache', 'librarycache'), path.join(app.getPath('userData'), 'steam-art')); // Steam's art cache only, not its config files
   roots.push(path.join(app.getPath('userData'), 'steam-art'), path.join(app.getPath('userData'), 'pc-covers'), path.join(app.getPath('userData'), 'pc-cover-cache')); // (beta.5) Epic games' Steam art (even without Steam), chosen PC covers and the cover picker's thumbnails
+  // ((T)rustyShelf issue #1) the covers the app makes itself: PC games' console boxes (Settings → PC games → Console box art) and the
+  // automatic posters (SteamGridDB, the stores' box art). They weren't here, so every one was refused and the shelf fell back to
+  // the made-up cases
+  roots.push(path.join(app.getPath('userData'), 'pc-console-covers'), path.join(app.getPath('userData'), 'pc-covers-auto'));
   return roots.filter(Boolean).map(r => { r = path.resolve(r).toLowerCase(); return r.endsWith(path.sep) ? r : r + path.sep; });
 }
 
