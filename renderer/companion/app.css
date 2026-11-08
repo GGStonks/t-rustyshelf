@@ -137,3 +137,4 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 .ask-card h3{margin:0 0 6px;font-size:18px}
 .toast{position:fixed;left:50%;bottom:calc(84px + var(--safe-b));z-index:50;transform:translate(-50%,20px);max-width:calc(100% - 32px);padding:10px 16px;border-radius:14px;background:#242240;border:1px solid var(--line);box-shadow:0 10px 30px rgba(0,0,0,.5);font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
 .toast.on{opacity:1;transform:translate(-50%,0)}
+.brand .rust{color:#d4522c} /* (the logo: RUSTY in rust) */

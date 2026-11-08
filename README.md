@@ -1,6 +1,11 @@
 <!-- Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): most of this file is Boxshelf's
      README.md; modified for (T)rustyShelf (see the git history). -->
-# (T)rustyShelf
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="renderer/brand/trustyshelf-logo-dark.svg">
+    <img src="renderer/brand/trustyshelf-logo-light.svg" alt="(T)RUSTYSHELF" width="560">
+  </picture>
+</h1>
 
 A TV-style launcher for your emulators, Steam games and streaming apps: real box art on a 3D shelf,
 cases you can open and inspect, disc-loading animations, manuals, RetroAchievements, and one controller

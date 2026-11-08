@@ -128,7 +128,7 @@ const ICON={consoles:'<path d="M6 11h4M8 9v4M15 12h.01M18 10h.01"/><rect x="2" y
 const NAV_GROUPS=[["Systems",["consoles"]],["Library",["art","library","reading"]]];
 const ico=k=>{const sp=document.createElement("span");sp.className="su-ico";sp.innerHTML=`<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${ICON[k]||""}</svg>`;return sp};
 function renderNav(){
-  const nav=$("suNav");nav.innerHTML="";nav.append(el("div",{class:"su-brand",text:wizard?"(T)rustyShelf setup":"Settings"}));
+  const nav=$("suNav");nav.innerHTML="";nav.append(wizard?el("div",{class:"su-brand su-logo","aria-label":"(T)rustyShelf setup"},el("img",{src:"brand/trustyshelf-wordmark-dark.svg",alt:""}),el("span",{text:"setup"})):el("div",{class:"su-brand",text:"Settings"}));
   const ver=el("div",{class:"su-ver",text:info.version?"(T)rustyShelf "+info.version:"(T)rustyShelf"});
   if(wizard){const curId=(steps[step]||{}).parent||(steps[step]||{}).id; // a console page opened from the Consoles page lights up Consoles
     steps.forEach((s,i)=>{if(s.parent)return;const d=dotFor(s);nav.append(el("button",{type:"button",class:"su-step"+(s.id===curId?" on":""),onclick:()=>{step=i;render()}},el("span",{class:"su-label",text:s.label}),s.id==="consoles"?hubCount():el("span",{class:"dot "+d})))});nav.append(ver);return}

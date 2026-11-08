@@ -681,7 +681,8 @@ html.no-splash #splash{display:none}
 @keyframes hudIn{from{opacity:0}to{opacity:1}}
 #splash.cv .sp-word,#splash.cv .sp-line{display:none} /* drawn by its own thread instead (splash-worker.js) */
 #splash .sp-canvas{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)} /* over the page copy, exactly where it is */
-.sp-word{color:rgba(214,220,255,.84)}
+.sp-word{color:rgba(221,228,234,.92)}
+.sp-rust{color:#d4522c} /* (the logo: RUSTY in rust) */
 .sp-canvas{display:block;will-change:transform}
 /* the page copy sits exactly where the logo thread draws it (centre of a 260 px tall canvas, word at 46%), so the hand-over is invisible */
 #splash{--spfs:clamp(34px,4.2vw,70px)}
