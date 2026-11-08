@@ -1,5 +1,5 @@
-// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
-// renderer/whatsnew.js apart from the app's name ((T)rustyShelf).
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): most of this file is Boxshelf's
+// renderer/whatsnew.js; modified for (T)rustyShelf (its own versions' notes).
 // What's new: each version's notes, shipped with the app (so the card after an update works offline, and on the Thor).
 // The shelf shows a version's highlights once, the first time it starts; Settings → System → What's new lists the
 // items (a short headline per row; the side card says more). scripts/release-notes.js prints the same notes as Markdown
@@ -7,6 +7,39 @@
 // { version (Windows / Linux), android (the Android build with the same changes, if any), date, title, highlights[],
 //   sections: [{ h, items: [[headline, more]] }] }; newest first.
 window.BS_WHATSNEW = [
+  {
+    version: '1.0.1.0', android: '1.0.1.0', date: '2026-11-08', title: 'Custom games on any shelf, and fixes from Boxshelf\'s reports',
+    highlights: [
+      'Custom games: each gets its own page, with launch arguments and a Platform: Custom, PC or any console\'s shelf',
+      'An Xbox One shelf for PC ports, and automatic SteamGridDB posters for PC games with no cover',
+      'The museum no longer opens on a black screen with a big library',
+      'Android: PC games through GameNative or DroidDeck, and Pause / Cancel for box art downloads',
+      'Retro TV: live progress for the commercial search and ad downloads'
+    ],
+    platforms: [
+      'Windows and Linux: everything above but the Android parts.',
+      'Android (AYN Thor): the PC console, box art Pause / Cancel, the museum and Retro TV fixes.'
+    ],
+    sections: [
+      { h: 'Custom games and shelves', items: [
+        ['A page for each custom game', 'Settings → Custom games → a game: its name, launch arguments (for example -dx12), its Platform and Remove. Details shows its program and arguments. By supalii, from their Boxshelf fork.'],
+        ['Put a program on any shelf', 'Platform puts it on Custom, PC or a console\'s shelf, beside that console\'s games. (T)rustyShelf still starts the program itself, never through the emulator. By supalii.'],
+        ['Xbox One shelf', 'A shelf for Xbox One ports and recompilations that run as PC programs: no emulator or games folder. It shows up once a program is put on it. By supalii.'],
+        ['Automatic PC posters', 'With a SteamGridDB key and automatic box art on, PC games with no cover get a SteamGridDB poster. A cover you chose, the store\'s or Steam\'s always comes first. By supalii.'],
+        ['Hide more tiles', 'Hide from shelf works on the Open emulator and Surprise me tiles too; Settings → Hidden games & tiles brings them back. By supalii.']
+      ] },
+      { h: 'Museum and Retro TV', items: [
+        ['No more black museum', 'With a few hundred games on a console, the museum opened all black until you zoomed in. A wide wall is now framed around where you are, and it\'s never lost in the room\'s haze.'],
+        ['Look around', 'The right stick, a mouse drag or , and . look left and right along the wall; the side displays can be picked from the wide view. By TrapEmAll.'],
+        ['Retro TV progress', 'The TV guide shows the commercial search as it goes (42 of 300, 6 found), and the TV says how far an ad\'s download is. By TrapEmAll.']
+      ] },
+      { h: 'Android', items: [
+        ['PC games', 'A PC console: GameNative\'s Frontend sync files are its games, started in GameNative (every store) or DroidDeck (Steam), or any other app you pick.'],
+        ['Pause or cancel box art', 'The box art card has Pause, Resume and Cancel, as on Windows. Its Resume button now resumes on every platform.'],
+        ['ARMSX2', 'ARMSX2\'s GitHub, nightly and debug builds are found by their ids too.']
+      ] }
+    ]
+  },
   {
     version: '1.82.0-beta.9', android: '1.82.0-beta.9', date: '2026-11-06', title: 'Smoother, better manuals, and covers for every custom game',
     highlights: [
