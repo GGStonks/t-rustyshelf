@@ -196,24 +196,42 @@ function cart(bmp, job) {
 // band across the top is found (its own colour, measured from the scan, until the artwork starts) and painted over with a
 // Steam band of the same height. job.plat: ps5 / xsx / ps4 / xone / sw (the usual band heights, when it can't be measured).
 const BAND_H = { ps5: 0.105, xsx: 0.1, ps4: 0.095, xone: 0.1, sw: 0.1 };
-function bandEnd(ctx, w, h, plat) {
-  const H = Math.round(h * 0.2), d = ctx.getImageData(0, 0, w, H).data, step = Math.max(1, Math.floor(w / 300));
+// where the band ends: { y, sure } or null (no band: the top row isn't one colour). part: '' (front), 'back' or 'spine'
+function bandEnd(ctx, w, h, plat, part) {
+  const spine = part === 'spine', H = Math.round(h * (spine ? 0.34 : 0.2)), d = ctx.getImageData(0, 0, w, H).data, step = Math.max(1, Math.floor(w / 300));
   const at = (x, y) => { const i = (y * w + x) * 4; return [d[i], d[i + 1], d[i + 2]]; };
-  const y0 = Math.max(2, Math.round(h * 0.02)); let ref = [0, 0, 0], n = 0; // (the band's colour: the row just inside its top edge)
+  const y0 = Math.max(2, Math.round(h * (spine ? 0.01 : 0.02))); let ref = [0, 0, 0], n = 0; // (the band's colour: the row just inside its top edge)
   for (let x = 0; x < w; x += step) { const c = at(x, y0); ref[0] += c[0]; ref[1] += c[1]; ref[2] += c[2]; n++; } ref = ref.map(v => v / n);
   const same = y => { let k = 0, m = 0; for (let x = 0; x < w; x += step) { const c = at(x, y); if (Math.abs(c[0] - ref[0]) + Math.abs(c[1] - ref[1]) + Math.abs(c[2] - ref[2]) < 70) k++; m++; } return k / m; };
+  if (same(y0) < 0.85) return part ? null : { y: Math.round(h * (BAND_H[plat] || 0.1)), sure: false }; // (artwork right at the top: no band)
+  const lo = Math.round(h * (spine ? 0.03 : 0.05)), hi = Math.min(H, Math.round(h * (spine ? 0.32 : 0.17)));
+  if (spine) {
+    // a spine's logo fills most of its width, so a few rows unlike the band are no edge: the band colour has to be gone for
+    // good (6% of the height); a spine that's one colour all the way down (a white PS5 one) ends at the widest blank gap
+    // between the console's logo and the game's name
+    const need = Math.round(h * 0.06), v = []; for (let y = 0; y < H; y++) v[y] = same(y);
+    for (let y = lo; y < hi; y++) { let k = 0; while (y + k < H && v[y + k] < 0.45 && k < need) k++; if (k >= need) return { y: Math.max(lo, y - 1), sure: true }; }
+    let best = null; for (let y = Math.round(h * 0.1); y < hi; y++) { if (v[y] < 0.99) continue; let k = 0; while (y + k < hi && v[y + k] >= 0.99) k++; if (k >= Math.round(h * 0.015) && (!best || k > best.k)) best = { y, k }; y += k; }
+    return best ? { y: Math.min(hi, best.y + Math.round(Math.min(best.k * 0.4, h * 0.012))), sure: true } : null;
+  }
   let run = 0;
-  for (let y = Math.round(h * 0.05); y < Math.min(H, Math.round(h * 0.17)); y++) { if (same(y) < 0.45) { if (++run >= 3) return y - 2; } else run = 0; }
-  return Math.round(h * (BAND_H[plat] || 0.1)); // (no clear edge: the usual height for that console's boxes)
+  for (let y = lo; y < hi; y++) { if (same(y) < 0.45) { if (++run >= 3) return { y: y - 2, sure: true }; } else run = 0; } // the artwork starts: a clear edge
+  return part ? null : { y: Math.round(h * (BAND_H[plat] || 0.1)), sure: false }; // (a front with no clear edge: that console's usual height)
 }
 function rebrand(bmp, job) {
-  const w = bmp.width, h = bmp.height; if (w < 64 || h < 64) return null;
+  const w = bmp.width, h = bmp.height; if (w < 16 || h < 64) return null; // (a spine can be a narrow strip)
   const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d', { willReadFrequently: true });
   x.drawImage(bmp, 0, 0);
-  const bh = Math.max(Math.round(h * 0.06), Math.min(Math.round(h * 0.17), bandEnd(x, w, h, job.plat)));
+  const part = job.part || '', end = bandEnd(x, w, h, job.plat, part);
+  if (!end) { const u = c.toDataURL('image/jpeg', 0.92); c.width = c.height = 0; return u; } // (a back or spine with no band of its own: kept as it is)
+  const bh = part === 'spine' ? Math.max(Math.round(h * 0.03), end.y) : Math.max(Math.round(h * 0.06), Math.min(Math.round(h * 0.17), end.y));
   const g = x.createLinearGradient(0, 0, w, 0); g.addColorStop(0, '#171a21'); g.addColorStop(1, '#1b2838'); x.fillStyle = g; x.fillRect(0, 0, w, bh);
   x.fillStyle = '#66c0f4'; x.fillRect(0, bh - Math.max(2, Math.round(bh * 0.05)), w, Math.max(2, Math.round(bh * 0.05))); // (a thin light-blue edge where the artwork starts)
-  const fs = Math.round(bh * 0.46); x.font = `800 ${fs}px "Segoe UI", "Helvetica Neue", Arial, sans-serif`; x.textBaseline = 'middle'; x.fillStyle = '#e5eef5';
-  let tx = Math.round(bh * 0.42); for (const ch of 'STEAM') { x.fillText(ch, tx, bh / 2); tx += x.measureText(ch).width + fs * 0.12; } // (spaced capitals, where the console's logo was)
+  x.textBaseline = 'middle'; x.fillStyle = '#e5eef5';
+  const word = (size, at) => { x.font = `800 ${size}px "Segoe UI", "Helvetica Neue", Arial, sans-serif`; let tx = at; for (const ch of 'STEAM') { x.fillText(ch, tx, 0); tx += x.measureText(ch).width + size * 0.12; } return tx - at; };
+  if (w < bh * 2.2) { // a spine: the band is taller than wide, so the word runs down it, as the console's logo did
+    const size = Math.round(Math.min(w * 0.5, bh * 0.2)); x.save(); x.translate(w / 2, bh * 0.08); x.rotate(Math.PI / 2); x.globalAlpha = 0; const len = word(size, 0); x.globalAlpha = 1;
+    x.translate(Math.max(0, (bh * 0.84 - len) / 2), 0); word(size, 0); x.restore();
+  } else { const size = Math.round(bh * 0.46); x.save(); x.translate(0, bh / 2); word(size, Math.round(bh * 0.42)); x.restore(); } // (spaced capitals, where the console's logo was)
   const u = c.toDataURL('image/jpeg', 0.92); c.width = c.height = 0; return u;
 }

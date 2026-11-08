@@ -494,7 +494,7 @@ function matchTitle(list, title, art = () => 1, exactOnly = false) {
 // Backs: North American boxes print English/French/Spanish side by side, so English-only regions come first for the back.
 const BACK_PREF = ['United Kingdom', 'Australia', 'North America', 'United States', 'World', '', 'Canada', 'Europe', 'Japan'];
 // ((T)rustyShelf) a PC game's physical console box: the front scan of the newest release LaunchBox has of that title, from
-// the index already built (never a download of the index for it): { plat, platform, name, url } or null
+// the index already built (never a download of the index for it): { plat, platform, name, url, back, spine } or null
 function consoleBox(title, region) {
   const idx = readyIndex(); if (!idx || !title) return null;
   for (const [plat, platform] of PC_BOX_PLATS) {
@@ -502,7 +502,8 @@ function consoleBox(title, region) {
     const fronts = g => ((idx.images && idx.images[g.id]) || []).filter(i => i.type === 'Box - Front');
     const hit = matchName(list, title, g => fronts(g).length); if (!hit) continue;
     const f = pickImages(fronts(hit), 'Box - Front', region)[0]; if (!f) continue;
-    return { plat, platform, name: hit.name, url: LB_IMG + encodeURI(f.file) };
+    const all = (idx.images && idx.images[hit.id]) || [], one = type => { const x = pickImages(all, type, region)[0]; return x ? LB_IMG + encodeURI(x.file) : ''; };
+    return { plat, platform, name: hit.name, url: LB_IMG + encodeURI(f.file), back: one('Box - Back'), spine: one('Box - Spine') }; // (its back and spine too, when scanned)
   }
   return null;
 }

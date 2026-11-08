@@ -634,6 +634,7 @@ async function buildLibrary() {
   }
   let pcShelf = [];
   const boxOn = !!(cfg.pc && cfg.pc.consoleBox); // ((T)rustyShelf) Settings → PC games → Console box art: a PC game in its console box (pcConsoleBoxes)
+  const boxParts = id => { if (!id) return {}; const b = pccovers.consoleCover(id, 'back'), sp = pccovers.consoleCover(id, 'spine'); return { ...(b ? { back: fileUrl(b) } : {}), ...(sp ? { spine: fileUrl(sp) } : {}) }; }; // (its console box's back and spine)
   // (beta.10) Steam was only looked for in the first-run setup: one installed later, moved, or not found then never showed.
   // While Steam is on and its folder is unset or wrong, look again (once per session) and keep what's found
   if (cfg.steam.enabled && !steamRoot(cfg.steam.path) && !steamLooked) { steamLooked = true;
@@ -644,7 +645,7 @@ async function buildLibrary() {
   if (steamGiven && !isMainSteam(steamGiven) && steamMain === undefined) { steamMain = null; try { const p = await findSteam(); if (p && steamRoot(p) && isMainSteam(steamRoot(p))) { steamMain = p; log('Steam: the folder set is a library; using Steam\'s own folder for the list of libraries'); } } catch {} }
   if (cfg.steam.enabled && cfg.steam.path) {
     // Steam's own cached art first, then anything (T)rustyShelf fetched from the Steam store for games Steam has no cover for
-    pcShelf = scanSteam(cfg.steam.path, { hideTools: cfg.steam.hideTools !== false, log, mainPath: steamMain || '' }).map(g => { const l = steamart.local(g.appid); return { ...g, ...(ownTitle(g.id) ? { title: ownTitle(g.id), fileTitle: g.title } : {}), info: steamart.gameInfo(g.appid), art: { front: fileUrl(pccovers.cover(g.id) || (boxOn && pccovers.consoleCover(g.id)) || g.art.front || l.front), hero: fileUrl(g.art.hero || l.hero) } }; }); // (beta.5: a cover chosen in the picker wins)
+    pcShelf = scanSteam(cfg.steam.path, { hideTools: cfg.steam.hideTools !== false, log, mainPath: steamMain || '' }).map(g => { const l = steamart.local(g.appid); return { ...g, ...(ownTitle(g.id) ? { title: ownTitle(g.id), fileTitle: g.title } : {}), info: steamart.gameInfo(g.appid), art: { front: fileUrl(pccovers.cover(g.id) || (boxOn && pccovers.consoleCover(g.id)) || g.art.front || l.front), hero: fileUrl(g.art.hero || l.hero), ...boxParts(boxOn && !pccovers.cover(g.id) && pccovers.consoleCover(g.id) && g.id) } }; }); // (beta.5: a cover chosen in the picker wins)
   }
   // (beta.4) Epic's installs join the PC shelf; Quiver Launcher's apps and games added by hand get the Custom shelf. They
   // are PC games with a source (kind 'steam' keeps every shelf feature); covers come from the Steam app their title
@@ -672,7 +673,7 @@ async function buildLibrary() {
     // (its size: its folder as measured in the background, until then what Epic says it installed (a game can download
     // more itself, MTG Arena does); Steam's games bring their own)
     const sizeBytes = g.installed === false ? 0 : (SIZED_SRC.has(g.source) && g.dir ? dirsize.get(g.dir) : 0) || g.installSize || 0;
-    return { kind: 'steam', source: g.source, id: g.id, title: g.title, ...(MINE_SRC.has(g.source) && g.exe ? { exe: g.exe, ...(g.args ? { args: g.args } : {}) } : {}), ...(g.shelf ? { platform: g.shelf } : {}), ...(g.installed === false ? { installed: false } : {}), ...(sizeBytes ? { sizeBytes } : {}), ...(sid ? { info: steamart.gameInfo(sid) } : {}), artFrom: chosen ? 'yours' : box ? 'console' : auto ? 'store' : l.front ? 'steam' : '', art: { front: fileUrl(front), hero: fileUrl(l.hero), icon: g.icon || undefined } }; };
+    return { kind: 'steam', source: g.source, id: g.id, title: g.title, ...(MINE_SRC.has(g.source) && g.exe ? { exe: g.exe, ...(g.args ? { args: g.args } : {}) } : {}), ...(g.shelf ? { platform: g.shelf } : {}), ...(g.installed === false ? { installed: false } : {}), ...(sizeBytes ? { sizeBytes } : {}), ...(sid ? { info: steamart.gameInfo(sid) } : {}), artFrom: chosen ? 'yours' : box ? 'console' : auto ? 'store' : l.front ? 'steam' : '', art: { front: fileUrl(front), hero: fileUrl(l.hero), icon: g.icon || undefined, ...boxParts(box && g.id) } }; };
   pcAutoCovers([...epic, ...mine]);
   // (beta.10) a game added by hand can be moved to the PC shelf (Settings → Custom games → the game → Shelf); (supalii's
   // fork) or to a console's shelf, beside its ROMs: it's still started as its own program, not through the emulator. A
@@ -1615,10 +1616,13 @@ async function pcConsoleBoxes(games) {
     for (const g of want) {
       if (launcher.isRunning() || launching || !(cfg.pc && cfg.pc.consoleBox)) break;
       const box = covers.consoleBox(g.title, cfg.ui.artRegion); if (!box) { pcBoxNone.add(g.id); continue; }
-      const buf = await fetchImage(box.url); if (!buf) continue;
-      const r = await helperJob('img-tools.html', async () => ({ mode: 'rebrand', plat: box.plat, data: new Uint8Array(buf.buffer, buf.byteOffset, buf.length) }), 30000, true);
-      const m = /^data:image\/jpeg;base64,(.+)$/.exec(String((r && r.pages || [])[0] || '')); if (!m) { log('PC console box', g.title, r && r.err || 'not made'); continue; }
-      try { await pccovers.saveConsole(g.id, Buffer.from(m[1], 'base64'), `${box.platform} ${box.url}`); made++; } catch (e) { log('PC console box', g.title, e.message); }
+      // the back and spine first (when that release's are scanned), the front last: the front is what says the game is done
+      for (const [part, url] of [['back', box.back], ['spine', box.spine], ['', box.url]]) {
+        if (!url) continue; const buf = await fetchImage(url); if (!buf) continue;
+        const r = await helperJob('img-tools.html', async () => ({ mode: 'rebrand', plat: box.plat, part, data: new Uint8Array(buf.buffer, buf.byteOffset, buf.length) }), 30000, true);
+        const m = /^data:image\/jpeg;base64,(.+)$/.exec(String((r && r.pages || [])[0] || '')); if (!m) { log('PC console box', g.title, part || 'front', r && r.err || 'not made'); continue; }
+        try { await pccovers.saveConsole(g.id, Buffer.from(m[1], 'base64'), `${box.platform} ${box.url}`, part); if (!part) made++; } catch (e) { log('PC console box', g.title, e.message); }
+      }
       await new Promise(res => setTimeout(res, 250));
     }
   } finally { pcBoxBusy = false; if (made) { log('PC console boxes made:', made); pcCoverChanged(); } }

@@ -119,10 +119,11 @@ async function fillMissing(games) {
 // data\pc-console-covers\<game id>.jpg, with where it came from beside it. Used only while Settings → PC games → Console box
 // art is on; a cover you chose comes first
 const boxDir = () => path.join(o.dataDir, 'pc-console-covers');
-function consoleCover(id) { const f = path.join(boxDir(), safeId(id) + '.jpg'); return isFile(f) ? f : null; }
-async function saveConsole(id, buf, from) {
-  fs.mkdirSync(boxDir(), { recursive: true }); const b = path.join(boxDir(), safeId(id));
-  await fs.promises.writeFile(b + '.jpg.tmp', buf); await fs.promises.rename(b + '.jpg.tmp', b + '.jpg'); await fs.promises.writeFile(b + '.from', String(from || '')); return b + '.jpg';
+// part: '' (the front), 'back' or 'spine' (<game id>-back.jpg / -spine.jpg, when that release's are scanned)
+function consoleCover(id, part = '') { const f = path.join(boxDir(), safeId(id) + (part ? '-' + part : '') + '.jpg'); return isFile(f) ? f : null; }
+async function saveConsole(id, buf, from, part = '') {
+  fs.mkdirSync(boxDir(), { recursive: true }); const b = path.join(boxDir(), safeId(id)), f = b + (part ? '-' + part : '') + '.jpg';
+  await fs.promises.writeFile(f + '.tmp', buf); await fs.promises.rename(f + '.tmp', f); if (!part) await fs.promises.writeFile(b + '.from', String(from || '')); return f;
 }
 
 module.exports = { init, cover, autoCover, fetchAuto, fillMissing, consoleCover, saveConsole, options, use, own, reset: id => clear(String(id)) };
