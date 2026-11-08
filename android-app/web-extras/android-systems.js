@@ -30,7 +30,7 @@
       launch: { activity: ['xyz.aethersx2.android.EmulationActivity', '*EmulationActivity'], action: MAIN, extras: { bootPath: '$DOC' }, flags: ['clearTask', 'clearTop'] } },
     // (beta.10) ARMSX2 (armsx2.org, PCSX2 for ARM): its main screen takes the game as a VIEW content:// document (its manifest's
     // .Main and the .MainActivity alias); an older build with neither gets its own start screen, still with the game
-    armsx2: { name: 'ARMSX2', packages: ['come.nanodata.armsx2'], match: /armsx2/i, launch: { activity: ['*.MainActivity', '*.Main'], action: VIEW, data: 'doc', flags: ['clearTop'] } },
+    armsx2: { name: 'ARMSX2', packages: ['come.nanodata.armsx2', 'com.armsx2', 'com.armsx2.nightly', 'come.nanodata.armsx2.debug'], match: /armsx2/i, launch: { activity: ['*.MainActivity', '*.Main'], action: VIEW, data: 'doc', flags: ['clearTop'] } },
     play: { name: 'Play!', packages: ['com.virtualapplications.play'], launch: { activity: ['com.virtualapplications.play.MainActivity'], action: VIEW, data: 'doc' } },
     azahar: { name: 'Azahar', packages: ['org.azahar_emu.azahar', 'io.github.lime3ds.android', 'org.citra.citra_emu', 'io.github.mandarine3ds.mandarine', 'org.cytrus.cytrus_emu'], match: /azahar|lime3ds|citra|mandarine|cytrus|borked3ds/i,
       launch: { activity: ['*activities.EmulationActivity', '*EmulationActivity'], data: 'doc', flags: ['clearTask', 'clearTop'] } },
