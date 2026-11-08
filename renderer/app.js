@@ -3359,7 +3359,12 @@ function sendShelfInfo(){try{if(!api.shelfInfo)return;const n=allShelves.filter(
 let preMenuMode="browse";
 // Guide on the shelf: main asks first, and only these screens may open the menu (never over Inspect, the museum,
 // Settings, Sort or while a game is starting)
-api.onShelfMenuRequest&&api.onShelfMenuRequest(()=>{if(mode==="browse"||mode==="details"){qmClose(true);api.openShelfMenu()}});
+// ((T)rustyShelf, the KDE Home issue) the shelf's Home / Guide: on Linux it opens the quick menu in this window (its Museum,
+// Settings, Sort and Power are all there); the Home menu window stays for Windows and Android. Keys and pad reach the
+// menu because it's the window in front.
+const shelfHomeInPage=()=>!ANDROID&&!!(window.bsPlatform&&bsPlatform.os==="linux");
+function shelfHome(){if(shelfHomeInPage()){if(qm.open)qmClose();else if(mode==="browse"||mode==="details")qmOpen();return}if((mode==="browse"||mode==="details")&&api.openShelfMenu){qmClose(true);api.openShelfMenu()}}
+api.onShelfMenuRequest&&api.onShelfMenuRequest(()=>shelfHome());
 api.onShelfMenu&&api.onShelfMenu(d=>{
   if(d&&d.open){if(mode==="homemenu")return;uiCrumb("Home menu opened (from "+mode+")");qmClose(true);closeDetails(true);preMenuMode=mode;mode="homemenu";play_("open");return}
   if(mode==="homemenu")mode=preMenuMode==="details"?"browse":preMenuMode;
@@ -3418,7 +3423,7 @@ addEventListener("keydown",e=>{
   else if(k==="m"||k==="M"){if(!e.repeat)openMuseum()}
   else if(k==="o"||k==="O"){if(!e.repeat&&(mode==="browse"||mode==="details"))openEmulator()}
   else if(k==="g"||k==="G"){if(!e.repeat)openSort()}
-  else if(k==="Home"||k==="p"||k==="P"){if(e.repeat){}else if((mode==="browse"||mode==="details")&&api.openShelfMenu&&cfgInfo&&cfgInfo.config.ui.homeMenu!==false)api.openShelfMenu();else if(k==="Home"&&(mode==="browse"||mode==="details"))go(0)}
+  else if(k==="Home"||k==="p"||k==="P"){if(e.repeat){}else if((mode==="browse"||mode==="details")&&api.openShelfMenu&&cfgInfo&&cfgInfo.config.ui.homeMenu!==false)shelfHome();else if(k==="Home"&&(mode==="browse"||mode==="details"))go(0)}
   else if(k==="s"||k==="S"){if(!e.repeat&&(mode==="browse"||mode==="details"))Setup.open()}
   else if(k==="t"||k==="T"){if(!e.repeat)toggleCustomize()}
   else if(k==="F11"){api.toggleFullscreen()}
@@ -3664,7 +3669,7 @@ function pollBody(t){
     }else if(quitHoldAt){quitHoldAt=0;comboCool=t;$("quitHold").classList.remove("on");$("quitBar").style.width="0%"}
     // the PS button (DualSense / DualShock; Chromium's button 16) opens the Home menu, as the Home key does (Xbox's Guide
     // never reaches Chromium: the controller helper reports that one). Not on Android: the Thor's Home is the system's
-    if(!ANDROID)edge(gp,16,()=>{if((mode==="browse"||mode==="details")&&api.openShelfMenu&&cfgInfo&&cfgInfo.config.ui.homeMenu!==false){qmClose(true);api.openShelfMenu()}});
+    if(!ANDROID)edge(gp,16,()=>{if((mode==="browse"||mode==="details")&&api.openShelfMenu&&cfgInfo&&cfgInfo.config.ui.homeMenu!==false)shelfHome()});
     if(mode==="cover"){
       if(h&&!prevBtn.h){setInput("pad");cpMove(h,0)}if(v&&!prevBtn.v){setInput("pad");cpMove(0,v)}prevBtn.v=!!v;prevBtn.h=!!h;
       edge(gp,0,()=>cpChoose());edge(gp,1,()=>{cpDone();sfx.back()});return;
