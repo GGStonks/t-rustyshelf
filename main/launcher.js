@@ -3,6 +3,7 @@
 // Starts emulators, Steam games and media apps, and reports when they close.
 const { spawn } = require('child_process');
 const path = require('path');
+const fs = require('fs');
 const { shell } = require('electron');
 const { isFile, expand } = require('./paths');
 
@@ -17,7 +18,16 @@ function buildArgs(template, rom) {
   return out.filter(a => a !== '');
 }
 
-function start(exe, args, onExit, env, cwd, logFile) { // env: the emulator's own environment (PS5: the KytyJets preset); else (T)rustyShelf's. cwd: else the program's folder
+// ((T)rustyShelf) a program whose manifest asks for administrator rights (requireAdministrator) can't be started by a normal
+// process: Windows refuses it (spawn says UNKNOWN or EACCES). Only looked for after such a refusal: the program is then
+// started through PowerShell's Start-Process -Verb RunAs, which shows Windows' own prompt (HoYoPlay's games need it).
+function needsAdmin(exe) { try { if (fs.statSync(exe).size > 600e6) return false; return fs.readFileSync(exe).includes('requireAdministrator'); } catch { return false; } }
+const psq = s => "'" + String(s).replace(/'/g, "''") + "'"; // (one PowerShell string: a quote inside is doubled)
+function elevatedScript(exe, args) {
+  return `$p = Start-Process -FilePath ${psq(exe)} -WorkingDirectory ${psq(path.win32.dirname(exe))} -Verb RunAs ${args && args.length ? '-ArgumentList @(' + args.map(psq).join(',') + ') ' : ''}-PassThru; $p.WaitForExit()`;
+}
+
+function start(exe, args, onExit, env, cwd, logFile, elevate) { // elevate: a PC game or app, which may need administrator rights (the emulators never do) // env: the emulator's own environment (PS5: the KytyJets preset); else (T)rustyShelf's. cwd: else the program's folder
   exe = exe && expand(String(exe).trim().replace(/^"(.*)"$/, '$1')); // same rules as the Settings check: %VAR%, {app}, pasted "quotes"
   if (!exe || !isFile(exe)) throw new Error(`Can't find ${exe || 'the program'}. Check its path in Settings.`);
   if (running) throw new Error(busyMessage());
@@ -32,7 +42,18 @@ function start(exe, args, onExit, env, cwd, logFile) { // env: the emulator's ow
   const finish = info => { if (done) return; done = true; running = null; onExit({ ...info, ms: Date.now() - started }); };
   child.on('spawn', () => { spawned = true; });
   // failedToStart: the program never ran (EACCES, a bad exe, blocked by antivirus), so it wasn't a play
-  child.on('error', err => finish({ code: -1, error: err.message, failedToStart: !spawned }));
+  child.on('error', err => {
+    if (elevate && !spawned && process.platform === 'win32' && ['UNKNOWN', 'EACCES'].includes(err.code) && needsAdmin(exe)) {
+      try { // (it stays "running" as long as the elevated program does: PowerShell waits for it; Quit can only close PowerShell's side)
+        const el = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-EncodedCommand', Buffer.from(elevatedScript(exe, args), 'utf16le').toString('base64')], { windowsHide: true, stdio: 'ignore' });
+        running = el; spawned = true; el.bsName = child.bsName;
+        el.on('error', e => finish({ code: -1, error: e.message, failedToStart: true }));
+        el.on('exit', code => finish({ code, failedToStart: code !== 0 && Date.now() - started < 4000 })); // (the prompt refused: it wasn't a play)
+        return;
+      } catch { /* PowerShell itself couldn't start: the refusal below */ }
+    }
+    finish({ code: -1, error: err.message, failedToStart: !spawned });
+  });
   child.on('exit', code => finish({ code }));
   return { pid: child.pid, args };
 }
@@ -45,7 +66,7 @@ function launchEmulator(sysCfg, onExit) {
   return start(sysCfg.emulator, buildArgs(sysCfg.emulatorArgs, ''), onExit);
 }
 
-function launchApp(exe, onExit, args) { return start(exe, Array.isArray(args) ? args : [], onExit); }
+function launchApp(exe, onExit, args) { return start(exe, Array.isArray(args) ? args : [], onExit, null, undefined, undefined, true); }
 // (Linux) a Windows game through Wine / Proton: the runner (umu-run, proton, wine) with the game's own folder and environment
 function launchCommand(cmd, args, onExit, { env, cwd, log } = {}) { return start(cmd, Array.isArray(args) ? args : [], onExit, env || null, cwd, log); }
 
@@ -88,4 +109,4 @@ function closeRunning(forceAfterMs = 8000, onForce) {
   return true;
 }
 
-module.exports = { buildArgs, launchGame, launchEmulator, launchApp, launchCommand, launchSteam, isRunning, runningName, setRunningName, busyMessage, stopRunning, closeRunning };
+module.exports = { buildArgs, launchGame, launchEmulator, launchApp, launchCommand, launchSteam, needsAdmin, elevatedScript, isRunning, runningName, setRunningName, busyMessage, stopRunning, closeRunning };

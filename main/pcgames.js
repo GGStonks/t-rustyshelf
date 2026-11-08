@@ -62,7 +62,10 @@ function parseReg(out) {
   const m = new Map(); let cur = null;
   for (const line of String(out).split(/\r?\n/)) {
     if (/^HKEY_/.test(line)) { cur = {}; m.set(line.trim(), cur); continue; }
-    const v = /^ {4}(.+?) {4}(REG_\w+)(?: {4}(.*))?$/.exec(line); if (v && cur) cur[v[1].toLowerCase()] = (v[3] || '').trim();
+    const v = /^ {4}(.+?) {4}(REG_\w+)(?: {4}(.*))?$/.exec(line);
+    if (v && cur) { const k = v[1].toLowerCase(); cur[k] = (v[3] || '').trim();
+      // (a REG_BINARY value is printed as hex: its text, for the stores that keep a string that way (HoYoPlay), under "<name>#text")
+      if (v[2] === 'REG_BINARY' && /^([0-9a-f]{2})+$/i.test(cur[k])) cur[k + '#text'] = Buffer.from(cur[k], 'hex').toString('utf8').replace(/\0+$/, ''); }
   }
   return m;
 }
@@ -84,6 +87,38 @@ async function gogGames() {
   }
   return out;
 }
+// ---------- HoYoPlay (Genshin Impact, Honkai: Star Rail, Zenless Zone Zero, Honkai Impact 3rd) ((T)rustyShelf) ----------
+// HoYoPlay writes each installed game into HKCU\Software\Cognosphere\HYP\<version>\<game>: GameBiz (the game's code, such as
+// hk4e_global) and GameInstallPath (its folder). The game's own program starts it: HoYoPlay's launcher doesn't have to run.
+// (Where HoYoPlay keeps its install list is also what the Playnite add-on "HoYoPlay Library" by darklinkpower reads; this is
+// written for (T)rustyShelf's own code.)
+const HOYO = [
+  { re: /^hk4e/i, title: 'Genshin Impact', exes: ['GenshinImpact.exe', 'YuanShen.exe'] },
+  { re: /^hkrpg/i, title: 'Honkai: Star Rail', exes: ['StarRail.exe'] },
+  { re: /^nap/i, title: 'Zenless Zone Zero', exes: ['ZenlessZoneZero.exe'] },
+  { re: /^bh3/i, title: 'Honkai Impact 3rd', exes: ['BH3.exe'] },
+];
+const regStr = (v, k) => String(v[k + '#text'] != null ? v[k + '#text'] : v[k] || '').trim();
+// the game's program: in its folder, else in a folder just inside it (a game folder inside the install folder)
+function findExe(dir, names) {
+  for (const n of names) { const f = path.join(dir, n); if (isFile(f)) return f; }
+  let ents = []; try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch {}
+  for (const e of ents) if (e.isDirectory()) for (const n of names) { const f = path.join(dir, e.name, n); if (isFile(f)) return f; }
+  return '';
+}
+function hoyoFromTree(tree) { // tree: regTree's answer
+  const out = [], seen = new Set();
+  for (const v of tree.values()) {
+    const biz = regStr(v, 'gamebiz'), dir = regStr(v, 'gameinstallpath').replace(/[\\/]+$/, '');
+    if (!biz || !dir) continue;
+    const def = HOYO.find(d => d.re.test(biz)); if (!def || !isDir(dir)) continue;
+    const exe = findExe(dir, def.exes); if (!exe) continue;
+    const id = 'hoyo-' + slug(biz); if (seen.has(id)) continue; seen.add(id);
+    out.push({ id, source: 'hoyoplay', title: def.title + (/_cn$/i.test(biz) ? ' (China)' : ''), exe, args: '', dir });
+  }
+  return out;
+}
+async function hoyoGames() { return hoyoFromTree(await regTree('HKCU\\Software\\Cognosphere\\HYP')); }
 async function ubisoftGames() {
   const out = [];
   for (const [k, v] of await regTree('HKLM\\SOFTWARE\\WOW6432Node\\Ubisoft\\Launcher\\Installs')) {
@@ -159,8 +194,8 @@ function xboxScan(roots) {
 }
 // all four at once; each one that fails is only logged (one store's oddity must not empty the shelf)
 async function storeGames(pc = {}) {
-  const want = { gog: pc.gog !== false, ubisoft: pc.ubisoft !== false, ea: pc.ea !== false, xbox: pc.xbox !== false };
-  const jobs = { gog: gogGames, ubisoft: ubisoftGames, ea: eaGames, xbox: xboxGames }, out = [];
+  const want = { gog: pc.gog !== false, ubisoft: pc.ubisoft !== false, ea: pc.ea !== false, xbox: pc.xbox !== false, hoyoplay: pc.hoyoplay !== false };
+  const jobs = { gog: gogGames, ubisoft: ubisoftGames, ea: eaGames, xbox: xboxGames, hoyoplay: hoyoGames }, out = [];
   await Promise.all(Object.keys(jobs).filter(k => want[k]).map(k => jobs[k]().then(l => out.push(...l), e => log('PC library', k, e && e.message))));
   return out.sort((a, b) => a.title.localeCompare(b.title));
 }
@@ -318,4 +353,4 @@ async function steamSearch(term, exact) {
 }
 
 module.exports = { init, epicGames, quiverGames, quiverFind, quiverRoots, customGames, titleFromExe, mainExe, remember, byId, all, steamIdOf, matchSteam, steamSearch, EPIC_DIR,
-  storeGames, gogGames, ubisoftGames, eaGames, xboxGames, parseReg, xboxRoots, eaFromDirs, xboxScan };
+  storeGames, gogGames, ubisoftGames, eaGames, xboxGames, hoyoGames, hoyoFromTree, HOYO, parseReg, xboxRoots, eaFromDirs, xboxScan };

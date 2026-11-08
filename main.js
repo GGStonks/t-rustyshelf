@@ -617,7 +617,7 @@ function iconQuick(exe) {
 // (beta.7) store games: real store titles, so their covers come from the Steam app with the same name (not Quiver's or
 // hand-added programs: those often share a name with an unrelated game)
 // the PC games whose own folder is the game (its size is the folder's): not a program added by hand, which may sit in a shared folder
-const SIZED_SRC = new Set(['folder', 'epic']);
+const SIZED_SRC = new Set(['folder', 'epic', 'hoyoplay']);
 const STORE_SRC = new Set(['epic', 'gog', 'ubisoft', 'ea', 'xbox', 'folder']); // (folder: a game in the PC games folder, named by its folder)
 async function buildLibrary() {
   const shelves = [];
@@ -1603,7 +1603,7 @@ handle('launch:pc', async ({ id }) => {
   // (beta.7) an Xbox / Game Pass game is a Windows app: started as one (its package family and app id, from pcgames.xboxGames)
   if (g.shellApp) { if (!/^[\w.-]+_[a-z0-9]+![\w.-]+$/i.test(g.shellApp)) throw new Error("Couldn't start that Xbox game."); busyCheck(); log('PC launch: Xbox,', g.title);
     const p = spawn('explorer.exe', ['shell:AppsFolder\\' + g.shellApp], { detached: true, stdio: 'ignore' }); p.on('error', e => log('Xbox launch', e.message)); p.unref(); return { external: true }; }
-  if (!paths.isFile(g.exe)) throw new Error(`${g.title} isn't at ${g.exe} any more. ${g.source === 'quiver' ? 'Check it in Quiver Launcher.' : g.source === 'gog' ? 'Check it in GOG Galaxy.' : g.source === 'folder' ? 'Check its folder in the PC games folder.' : 'Remove it in Settings → Custom games and add it again.'}`);
+  if (!paths.isFile(g.exe)) throw new Error(`${g.title} isn't at ${g.exe} any more. ${g.source === 'quiver' ? 'Check it in Quiver Launcher.' : g.source === 'gog' ? 'Check it in GOG Galaxy.' : g.source === 'hoyoplay' ? 'Check it in HoYoPlay.' : g.source === 'folder' ? 'Check its folder in the PC games folder.' : 'Remove it in Settings → Custom games and add it again.'}`);
   busyCheck();
   launching = true; try { await taskbarHide(); } finally { launching = false; } // (beta.6)
   let r; try { r = launcher.launchApp(g.exe, onExit, launcher.buildArgs(g.args || '', '')); } catch (e) { taskbarShow('the game did not start'); throw e; } runKind = 'app'; pendingPower = null; launcher.setRunningName(g.title); log('PC launch:', g.source, g.title);
@@ -1613,7 +1613,7 @@ handle('launch:pc', async ({ id }) => {
   return { ...r, cover: coverWhileStarting(10) };
 });
 // the name the Home menu gives a PC game's source
-const PC_SYSTEM = { epic: 'Epic Games', folder: 'PC', quiver: 'Quiver', gog: 'GOG' };
+const PC_SYSTEM = { epic: 'Epic Games', folder: 'PC', quiver: 'Quiver', gog: 'GOG', hoyoplay: 'HoYoPlay' };
 // ((T)rustyShelf, asked for in Boxshelf's discussions) Settings → PC games → Console box art: each PC game shows the box of its
 // newest console release LaunchBox has (PS5, Xbox Series X|S, PS4, Xbox One, Switch), its console's band at the top painted
 // over with a Steam band (renderer/img-tools.js rebrand). Made once per game, in the background, one at a time, never while a
@@ -1767,8 +1767,8 @@ handle('game:rename', ({ systemId, file, id, title }) => {
 handle('pc:status', async () => { const pc = cfg.pc || {}; let epic = null; try { epic = (linux.isLinux ? linuxpc.epicInstalled() : pcgames.epicGames()).length; } catch {}
   // (beta.7) each store's installed games, counted whether its switch is on or not (Settings says what it would add)
   const n = async f => { try { return (await f()).length; } catch { return null; } };
-  const [gog, ubisoft, ea, xbox] = await Promise.all([n(pcgames.gogGames), n(pcgames.ubisoftGames), n(pcgames.eaGames), n(pcgames.xboxGames)]);
-  return { quiver: pcgames.quiverRoots(pc.quiverPath)[0] || '', epic, gog, ubisoft, ea, xbox }; });
+  const [gog, ubisoft, ea, xbox, hoyoplay] = await Promise.all([n(pcgames.gogGames), n(pcgames.ubisoftGames), n(pcgames.eaGames), n(pcgames.xboxGames), n(pcgames.hoyoGames)]);
+  return { quiver: pcgames.quiverRoots(pc.quiverPath)[0] || '', epic, gog, ubisoft, ea, xbox, hoyoplay }; });
 handle('pc:findQuiver', () => { const t0 = Date.now(), d = pcgames.quiverFind(); log('Find Quiver:', d ? 'found' : 'not found', Date.now() - t0, 'ms'); return d || ''; });
 // the reading corner: your Magazines\ and Guides\ folders (the screen only ever names items by id)
 handle('library:list', () => { try { library.setCacheRoot(path.join(app.getPath('userData'), 'library')); return library.list().map(i => ({ id: i.id, kind: i.kind, type: i.type, title: i.title, series: i.series || '', pages: i.pages || 0 })); } catch (e) { log('library', e.message); return []; } });
