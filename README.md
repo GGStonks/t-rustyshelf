@@ -347,6 +347,16 @@ publishes them as one release, version `A.B.C.DDDD` (`DDDD` is the build of vers
 
 "For build" counts only as a phrase of its own (followed by a version, punctuation or the end of the line). Builds are published as pre-releases (to try out); a new version as the latest release.
 
+## Community report
+
+`node scripts/community-report.js` gathers what people around Boxshelf ask for, report and build on GitHub: the issues,
+pull requests and discussions of boxshelf-beta and boxshelf-source (with every comment), each fork's commits that aren't in
+the original, projects made from Boxshelf that aren't GitHub forks, and other mentions. It sorts them into bugs, features,
+changes, removals and questions by keyword rules (no AI), pulls out the sentences where people ask for something, and
+marks what's new since the last run and what (T)rustyShelf's commits already name. It writes `community-report/report.md`
+(and `data.json`); `community-report/done.json` is yours to mark items done, skipped or for later. It uses your `gh`
+sign-in (or `GITHUB_TOKEN`); `--since 2026-11-01`, `--no-forks` and `--no-search` narrow it down.
+
 ## Licence
 
 (T)rustyShelf is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
