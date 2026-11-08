@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// (T)rustyShelf's release builds (.github/workflows/release.yml): whether a push is built, and as which version A.B.C.DDDD
+// (T)rustyShelf's release builds (.github/workflows/build-release-check.yml): whether a push is built, and as which version A.B.C.DDDD
 // (A.B.C the version, DDDD the build of it), from the pushed commit's message and the release tags already there (vA.B.C.DDDD).
 //
 //   "For version 2.4.15"           → 2.4.15.0, a new version (stops if v2.4.15.0 is already there)
@@ -10,7 +10,8 @@
 // version, punctuation or the end of a line), so a sentence like "for build systems" doesn't start one.
 //
 //   node scripts/release-version.js "<commit message>" <file listing the tags, one per line> [package.json version]
-// Prints GitHub Actions outputs: build=true|false, version, tag, semver, code (Android), reason. Exits 1 when the version asked
+// Prints GitHub Actions outputs: build=true|false, kind=release|build|none (a "For version" commit is a release, a "For build"
+// one a build), version, tag, semver, code (Android), reason. Exits 1 when the version asked
 // for can't be built.
 'use strict';
 const fs = require('fs');
@@ -32,7 +33,7 @@ function decide(message, tagLines, pkgVersion) {
   if (m) {
     const v = [+m[1], +m[2], +m[3]];
     if (tags.some(t => same(t.v, v) && t.d === 0)) return { build: false, error: `v${v.join('.')}.0 is already released: use "For build" for the next build of it, or a new version` };
-    return { build: true, version: [...v, 0].join('.'), reason: `new version ${v.join('.')}` };
+    return { build: true, kind: 'release', version: [...v, 0].join('.'), reason: `new version ${v.join('.')}` };
   }
   m = BUILD_RE.exec(msg);
   if (m) {
@@ -41,9 +42,9 @@ function decide(message, tagLines, pkgVersion) {
     else if (tags.length) v = tags.slice().sort((a, b) => cmpV(b.v, a.v))[0].v; // (the newest version released)
     else { const p = /^(\d+)\.(\d+)\.(\d+)/.exec(String(pkgVersion || '')); if (!p) return { build: false, error: 'no release yet and no version in package.json: start with "For version A.B.C"' }; v = [+p[1], +p[2], +p[3]]; }
     const d = nextBuild(tags, v);
-    return { build: true, version: [...v, d].join('.'), reason: d ? `build ${d} of ${v.join('.')}` : `first build of ${v.join('.')}` };
+    return { build: true, version: [...v, d].join('.'), kind: 'build', reason: d ? `build ${d} of ${v.join('.')}` : `first build of ${v.join('.')}` };
   }
-  return { build: false, reason: 'no "For version" / "For build" in the commit message' };
+  return { build: false, kind: 'none', reason: 'no "For version" / "For build" in the commit message' };
 }
 
 module.exports = { decide, parseTags };
@@ -57,7 +58,7 @@ if (require.main === module) {
   // (A ≤ 20, B and C ≤ 99, DDDD ≤ 9999 keep it under Google Play's 2100000000)
   const code = n && n[0] <= 20 && n[1] <= 99 && n[2] <= 99 && n[3] <= 9999 ? ((n[0] * 100 + n[1]) * 100 + n[2]) * 10000 + n[3] : '';
   if (n && !code) { console.error(`${r.version} is too big for an Android version code`); process.exit(1); }
-  const out = [`build=${r.build}`, `version=${r.version || ''}`, `tag=${r.version ? 'v' + r.version : ''}`, `semver=${n ? n.slice(0, 3).join('.') + '+' + n[3] : ''}`,
+  const out = [`build=${r.build}`, `kind=${r.kind || 'none'}`, `version=${r.version || ''}`, `tag=${r.version ? 'v' + r.version : ''}`, `semver=${n ? n.slice(0, 3).join('.') + '+' + n[3] : ''}`,
     `code=${code}`, `reason=${(r.error || r.reason || '').replace(/\n/g, ' ')}`];
   console.log(out.join('\n'));
   if (r.error) { console.error(r.error); process.exit(1); }

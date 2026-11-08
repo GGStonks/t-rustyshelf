@@ -350,17 +350,19 @@ ports, automatic SteamGridDB posters for PC games with no cover, hiding the Open
 
 ## Release builds
 
-Pushes to the `t-rustyshelf` branch build nothing unless the commit message asks for it
-(`.github/workflows/release.yml`); then GitHub builds the Windows exe, the Linux AppImage and the Android APK and
-publishes them as one release, version `A.B.C.DDDD` (`DDDD` is the build of version `A.B.C`):
+Every push to `t-rustyshelf` starts **Build/release check** (`.github/workflows/build-release-check.yml`), which reads the
+commit message and does one of three things:
 
-| In the commit message | Release |
+| In the commit message | What happens |
 |---|---|
-| `For version 2.4.15` | `2.4.15.0`, a new version (stops if it's already released) |
-| `For build` | the next build of the newest version released (`2.12.4.283` → `2.12.4.284`) |
-| `For build 2.12.4` (or `2.12.4.283`) | the next build of that version |
+| nothing special | the check finishes there: nothing is built |
+| `For build` (or `For build 2.12.4`) | the Windows, Linux and Android builds run (`build.yml`) and are kept as the run's downloads, for 14 days. No release. |
+| `For version 2.4.15` | the same builds, then a GitHub release `2.4.15.0` (`release-publish.yml`), as the latest release |
 
-"For build" counts only as a phrase of its own (followed by a version, punctuation or the end of the line). Builds are published as pre-releases (to try out); a new version as the latest release.
+Versions are `A.B.C.DDDD` (`DDDD` is the build of version `A.B.C`). `For build` on its own builds the next number of the
+newest version released (`2.12.4.283` → `2.12.4.284`); `For build 2.12.4` the next one of that version. A "For version"
+commit stops with an error if that version is already released. "For build" counts only as a phrase of its own
+(followed by a version, punctuation or the end of the line).
 
 ## Community report
 

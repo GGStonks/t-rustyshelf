@@ -19,5 +19,9 @@ check('"For builds" doesn\'t count', t('Docs for builds').build === false, t('Do
 check('"For version" wins over "For build"', t('For build\nFor version 5.0.0').version === '5.0.0.0', t('For build\nFor version 5.0.0'));
 check('"For version 2.5.0.3" (four numbers) isn\'t a version', t('For version 2.5.0.3').build === false, t('For version 2.5.0.3'));
 check('A trailing period after the version works', t('Ready. For version 2.5.0.').version === '2.5.0.0', t('Ready. For version 2.5.0.'));
+check('kind: "For version" is a release', t('For version 2.4.16').kind === 'release', t('For version 2.4.16'));
+check('kind: "For build" is a build', t('For build').kind === 'build', t('For build'));
+check('kind: "For build 9.9.9" (its first build, .0) is still a build, not a release', t('For build 9.9.9').kind === 'build' && t('For build 9.9.9').version === '9.9.9.0', t('For build 9.9.9'));
+check('kind: no phrase is none', t('Fix the museum').kind === 'none', t('Fix the museum'));
 console.log(fails ? `${fails} check(s) failed` : 'all passed');
 process.exit(fails ? 1 : 0);
