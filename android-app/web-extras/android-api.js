@@ -426,19 +426,31 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
   // first libretro cover of each console doesn't wait for its own list
   function prefetchLists() { const ids = new Set(); for (const j of art.q) if (j.part === 'front' && !j.noNet && LR[j.sysId]) ids.add(j.sysId); for (const id of ids) lrList(id); }
   const WORKERS = 4;
+  // (Boxshelf's issue 9) the shelf's art card (renderer/app.js artCardOn), as on Windows: the run's progress a few times a
+  // second and its end. Pause holds the workers before their next game; Cancel drops what's still queued (the pictures
+  // already on their way finish)
+  const autoFns = []; let autoT = 0, autoAt = 0;
+  function autoSay(now) { if (!autoFns.length || !art.running) return; const t = Date.now();
+    if (!now && t - autoAt < 400) { if (!autoT) autoT = setTimeout(() => { autoT = 0; autoSay(true); }, 420); return; }
+    autoAt = t; art.cardRun = true; const i = { allDone: art.done, allTotal: Math.max(art.total, art.done), paused: !!art.held }; autoFns.forEach(f => { try { f(i); } catch {} }); }
+  function autoEnd(x) { clearTimeout(autoT); autoT = 0; if (!art.cardRun) return; const i = { end: true, ...x }; autoFns.forEach(f => { try { f(i); } catch {} }); }
   async function runArt() {
     art.running = true; art.now = new Map(); art.prefetched = false; orderQueue(); card.start();
     // the "fetching" toast waits for the first picture (or comes at once when asked for): offline, an automatic run
     // would otherwise say "Fetching…" at every start and then never finish the sentence
     art.toastAt = new Set(art.q.map(j => j.g.id)).size; if (art.reason === 'now') startToast();
-    const worker = async () => { while (art.q.length) { await idleTurn(); reorderIfMoved(); const j = art.q.shift(); if (!j) break;
+    art.held = false; art.stopping = false; art.cardRun = false; autoSay(); // (Boxshelf's issue 9) the shelf's art card: Pause / Resume / Cancel
+    const worker = async () => { while (art.q.length) { await idleTurn(); while (art.held && !art.stopping) await sleep(300); reorderIfMoved(); const j = art.q.shift(); if (!j) break;
       art.now.set(j, j.g.title || baseOf(j.g.file)); card.paint();
       try { await (j.part === 'wrap' ? wrapJob(j) : artJob(j)); } catch (e) { log('box art', j.g.title, e && e.message); }
-      art.now.delete(j); art.keys.delete(j.k); art.done++; paintArt(); card.paint(); } };
+      art.now.delete(j); art.keys.delete(j.k); art.done++; paintArt(); card.paint(); autoSay(); } };
     try { await Promise.all(Array.from({ length: WORKERS }, worker)); } finally { card.finish();
       art.running = false; if (quiet()) flushArrived(true); else flushArrived(); saveArt(true); ssSave(); idleTurn().then(() => store('library.json', st.library)); paintArt(true); // the writes wait for a still shelf
-      log('box art: done', art.added, 'of', art.total);
-      if (art.added) { if (art.reason === 'now' || !cardOn() || !card.shown()) shelfToast(`Added box art for ${art.added} game${art.added === 1 ? '' : 's'}`); } // (else the card says it)
+      log('box art: done', art.added, 'of', art.total, art.stopping ? '(cancelled)' : '');
+      // the art card says how it went when it was up ("Box art: N added"); otherwise the toasts below, as before
+      const said = art.cardRun && art.added > 0; autoEnd(said ? { got: art.added } : {}); art.held = false; art.stopping = false;
+      if (said) {}
+      else if (art.added) { if (art.reason === 'now' || !cardOn() || !card.shown()) shelfToast(`Added box art for ${art.added} game${art.added === 1 ? '' : 's'}`); } // (else the card says it)
       else if (art.reason === 'now') shelfToast(art.found ? `Added ${art.found} more picture${art.found === 1 ? '' : 's'} (backs, spines, discs)` : 'No new box art found');
       // something queued in the moment between the last job and here would wait for the next start otherwise
       if (art.q.length) setTimeout(() => { if (!art.running && art.q.length) { art.total = art.q.length; art.done = 0; art.added = 0; art.found = 0; art.reason = 'more'; runArt(); } }, 0);
@@ -644,7 +656,7 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
     function vis(v) { if (v === shown) return; shown = v; el.classList.toggle('show', v); }
     function draw() {
       clearTimeout(drawT); drawT = 0; if (!el) return;
-      const want = (live || hideT) && allowed() && onShelf() && !document.hidden;
+      const want = (live || hideT) && allowed() && onShelf() && !document.hidden && !(src === art && document.querySelector('.art-card.on')); // (the shelf's art card, with Pause / Cancel, says it then)
       if (!want) { vis(false); return; }
       if (sliding()) { drawT = setTimeout(draw, 300); return; } // mid-slide: nothing changes until the shelf is still
       lastAt = performance.now();
@@ -1851,6 +1863,11 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
     // not on Android yet: return nothing instead of the demo's pretend data
     themes: async () => ({}), raEnabled: async () => ({ enabled: false, systems: [] }), raProfile: async () => null, raShelf: async () => ({}), raProgress: async () => null,
     library: async () => [], tvList: async () => [], songs: async () => [], stremioLibrary: async () => [],
+    // (Boxshelf's issue 9) the background box art: progress for the shelf's art card, and its Pause / Resume / Cancel
+    onCoversAuto: fn => { if (typeof fn === 'function') autoFns.push(fn); },
+    pauseCovers: async () => { if (!art.running || art.stopping) return { ok: false }; art.held = true; autoSay(true); return { ok: true }; },
+    resumeCovers: async () => { if (!art.running || art.stopping) return { ok: false }; art.held = false; autoSay(true); return { ok: true }; },
+    cancelCovers: async () => { if (!art.running) return { ok: false }; art.stopping = true; art.held = false; for (const j of art.q) art.keys.delete(j.k); art.q.length = 0; return { ok: true }; },
     downloadCovers: async () => ({ systems: [] }), findManuals: async () => [], manualCoverage: async () => [], artCoverage: async () => [], recentManuals: async () => [],
     listDisplays: async () => [{ id: '1', label: 'This screen', primary: true, current: true }],
     apiStatus: async () => JSON.parse(JSON.stringify(apiSt)),

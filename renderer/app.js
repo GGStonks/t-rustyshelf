@@ -3813,12 +3813,12 @@ function toastWork(msg){msg=String(msg);const c=toastCur;if(c&&c.kind==="work"&&
 function toastDone(msg){toastAdd({msg:String(msg),kind:"done"})}
 // (beta.10) Background box art (main.js autoCovers): a small card in the shelf's bottom-left corner, "Box art 312 of 2,000",
 // with Pause / Resume and Cancel for the mouse and touch. A controller gets the same in the quick menu ("Box art download"
-// row), so the card never takes the D-pad from the shelf. Only where main can pause or cancel the run (the Android build's
-// API can't: it never shows there); it goes when the run ends. Its updates wait while the shelf slides
+// row), so the card never takes the D-pad from the shelf. Only where the run can be paused or cancelled (Windows and Linux;
+// Android too since (T)rustyShelf 1.0.1, Boxshelf's issue 9); it goes when the run ends. Its updates wait while the shelf slides
 function artCardText(){const n=x=>Number(x||0).toLocaleString();return ARTC.stopping?"Stopping…":ARTC.total?`${n(Math.min(ARTC.done,ARTC.total))} of ${n(ARTC.total)}${ARTC.paused?" · paused":""}`:"Getting ready…"}
 function artCardEl(){if(ARTC.el)return ARTC.el;const el=document.createElement("div");el.className="art-card";el.setAttribute("role","status");
   el.innerHTML='<div class="ac-top"><span class="ac-t">Box art</span><span class="ac-n"></span></div><div class="ac-bar"><i></i></div><div class="ac-btns"><button type="button" class="ac-b" data-k="pause" tabindex="-1"></button><button type="button" class="ac-b" data-k="cancel" tabindex="-1">Cancel</button></div><div class="ac-hint"></div>';
-  el.addEventListener("click",e=>{const b=e.target.closest(".ac-b");if(!b)return;e.stopPropagation();b.blur();setInput("pointer");artCmd(b.dataset.k)});app.append(el);ARTC.el=el;return el}
+  el.addEventListener("click",e=>{const b=e.target.closest(".ac-b");if(!b)return;e.stopPropagation();b.blur();setInput("pointer");artCmd(b.dataset.k==="pause"&&ARTC.paused?"resume":b.dataset.k)});app.append(el);ARTC.el=el;return el} // (the Pause button reads Resume while paused: it resumes then; it used to pause again)
 function artCardPaint(){clearTimeout(ARTC.t);ARTC.t=0;if(!ARTC.on)return;if(window.BS_BUSY&&BS_BUSY()){ARTC.t=setTimeout(artCardPaint,500);return}
   const el=artCardEl(),p=el.querySelector('[data-k="pause"]');el.querySelector(".ac-n").textContent=artCardText();el.querySelector(".ac-bar i").style.transform=`scaleX(${ARTC.total?Math.min(1,ARTC.done/ARTC.total).toFixed(3):0})`;
   p.hidden=!api.pauseCovers||ARTC.stopping;p.textContent=ARTC.paused?"Resume":"Pause";el.querySelector('[data-k="cancel"]').hidden=!api.cancelCovers||ARTC.stopping;
