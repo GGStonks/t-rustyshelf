@@ -1,10 +1,12 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/updates.js apart from the app's name ((T)rustyShelf).
 // Beta update notice. Once per start (a little after the window is up), when Settings → About → "Check for new betas"
 // is on, asks the public beta page's Releases which version is newest and tells the shelf when it's newer than this
 // one. Nothing is downloaded or installed: the notice opens the download page. Offline, or with GitHub busy, it stays
 // quiet and the next start tries again.
 const https = require('https');
 
-const REPO = 'sassiestrhihno/boxshelf-beta';
+const REPO = 'GGStonks/t-rustyshelf'; // (this fork's own releases: the official Boxshelf's would offer to replace it)
 const PAGE = `https://github.com/${REPO}`;
 const LINKS = { page: PAGE, releases: `${PAGE}/releases`, issues: `${PAGE}/issues/new/choose` };
 
@@ -38,7 +40,7 @@ function compare(a, b) {
 
 function getJson(url, version) {
   return new Promise((resolve, reject) => {
-    const req = https.get(url, { headers: { 'User-Agent': `Boxshelf/${version}`, Accept: 'application/vnd.github+json' } }, res => {
+    const req = https.get(url, { headers: { 'User-Agent': `TrustyShelf/${version}`, Accept: 'application/vnd.github+json' } }, res => {
       if (res.statusCode !== 200) { res.resume(); return reject(new Error(`GitHub answered ${res.statusCode}`)); }
       let b = ''; res.setEncoding('utf8');
       res.on('data', c => { b += c; if (b.length > 2e6) req.destroy(new Error('answer too big')); });

@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// shared/titles.js apart from the app's name ((T)rustyShelf).
 // Turns a game's file name into a clean shelf title, shared by every platform (Windows main process and the Android
 // build's renderer). Pure string logic: give it the file NAME (no folders), get { title, region, disc, rev, … }.
 (function (root, factory) {

@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// android-app/web-extras/perf-meter.js apart from the app's name ((T)rustyShelf).
 // Android build only (copy-web.js puts it right after android-early.js; bottom.html loads it first too).
 // A cheap work meter for the heat / efficiency checks: how often the page wakes up to draw, how long that takes on the
 // main thread, how many WebGL draw calls it sends, and how much of it happens while nobody is touching anything.

@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+     android-app/android/app/src/main/AndroidManifest.xml apart from the app's name ((T)rustyShelf). -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <application
@@ -29,7 +31,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Boxshelf can be the Home app (Android Settings → Default apps → Home app). Nothing changes until you pick it. -->
+            <!-- (T)rustyShelf can be the Home app (Android Settings → Default apps → Home app). Nothing changes until you pick it. -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.HOME" />
@@ -49,7 +51,7 @@
         </provider>
     </application>
 
-    <!-- Android 11+: lets Boxshelf see which emulator apps are installed (apps with a launcher icon only) -->
+    <!-- Android 11+: lets (T)rustyShelf see which emulator apps are installed (apps with a launcher icon only) -->
     <queries>
         <intent>
             <action android:name="android.intent.action.MAIN" />

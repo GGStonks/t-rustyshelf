@@ -1,11 +1,13 @@
-# Boxshelf for Linux / Steam Deck: plan (phases 1-2 in progress)
+<!-- Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): most of this file is Boxshelf's
+     docs/LINUX-PLAN.md; modified for (T)rustyShelf (see the git history). -->
+# (T)rustyShelf for Linux / Steam Deck: plan (phases 1-2 in progress)
 
 Status (2026-11-05): phases 1 and 2 are built and tested on GitHub's Ubuntu machines (workflow "Linux build":
 linux/ci/detect-test.js, linux/ci/app-test.js on a virtual screen). Not tried on a real Steam Deck yet. Done:
-AppImage target; data folder ~/Boxshelf (or beside the AppImage when a data folder is there); the platform report
+AppImage target; data folder ~/TrustyShelf (or beside the AppImage when a data folder is there); the platform report
 (main/linux.js, preload.js); Linux emulator tables (installed, Flatpak launchers, AppImage patterns); EmuDeck /
 RetroDECK / SD card ROM folders; Steam's Linux folders; RetroArch .so cores; zip unpacking without PowerShell;
-process-group quit; Boxshelf hides during a game; Azahar's Linux folders for .cia installs. Not yet: phase 3 (Home menu /
+process-group quit; (T)rustyShelf hides during a game; Azahar's Linux folders for .cia installs. Not yet: phase 3 (Home menu /
 quit combo during a game), phase 4, and the emulators' settings tweaks (Windows only for now).
 
 Goal: the same Electron app as an AppImage that runs on desktop Linux and on the Steam Deck, both in Desktop Mode
@@ -25,7 +27,7 @@ piece is a new module or a `process.platform === 'linux'` branch.
 - package.json: `build.linux` AppImage target (+ icon, category Game). A "Linux build" GitHub workflow that builds the
   AppImage on ubuntu-latest and uploads it as an artifact (no Windows changes).
 - Data folder: inside an AppImage the app folder is read-only, so use `$APPIMAGE`'s folder when writable (portable,
-  like Windows), else `~/.local/share/Boxshelf`.
+  like Windows), else `~/.local/share/TrustyShelf`.
 - preload.js: a real Linux platform report (`os: 'linux'`, capabilities off for autostart, power, Wii remote, Kyty).
 - Steam on Linux: `~/.steam/steam`, `~/.local/share/Steam`, Flatpak `~/.var/app/com.valvesoftware.Steam/...`; launch with
   `steam://rungameid` (already works through xdg-open).
@@ -53,8 +55,8 @@ piece is a new module or a `process.platform === 'linux'` branch.
 - Done: PC games without Steam (`main/linuxpc.js`, `main/pcfolder.js`). The PC games folder (Settings → PC games): every
   folder in it is a game; a Linux program in it (AppRun, start script, AppImage, ELF) runs natively with the game data
   folder as its home, otherwise its Windows program runs through Wine or Proton (the builds Steam, Lutris, the distro or
-  Boxshelf's `tools/proton` hold; Proton through `umu-run` when it's there), each in a Wine prefix named after the game.
-  A folder of the player's own copies overrides the shared one. Epic Games through Boxshelf's own legendary (Get
+  (T)rustyShelf's `tools/proton` hold; Proton through `umu-run` when it's there), each in a Wine prefix named after the game.
+  A folder of the player's own copies overrides the shared one. Epic Games through (T)rustyShelf's own legendary (Get
   legendary downloads the checked release): sign in with Epic's page; every owned game is on the shelf, the uninstalled
   ones greyed (Play offers to install them); install / update / uninstall. Test:
   `xvfb-run -a node linux/ci/pc-test.js <AppImage>`.

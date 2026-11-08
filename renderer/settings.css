@@ -1,3 +1,5 @@
+/* Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+   renderer/settings.css apart from the app's name ((T)rustyShelf). */
 /* Full-screen Settings (settings.js). Laid out on a 1920-wide design canvas that is scaled to the window (and by the
    Interface size and Fit to TV settings). Every class is prefixed bss- so nothing collides with the shelf's styles.
    One look throughout: a dark surface tinted by the theme, a clean list with hairlines, and a single gliding highlight

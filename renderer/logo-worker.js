@@ -1,4 +1,6 @@
-/* Boxshelf logo clean-up, in a worker so it never holds up the shelf (it took a quarter to half a second per logo on the
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// renderer/logo-worker.js apart from the app's name ((T)rustyShelf).
+/* (T)rustyShelf logo clean-up, in a worker so it never holds up the shelf (it took a quarter to half a second per logo on the
    screen's own thread at startup). Same steps as before: knock out a flat background from the edges, clear the holes
    inside letters, crisp anti-aliased edges, light lettering for dark logos, trim the margins. */
 const png=c=>c.convertToBlob({type:"image/png"}).then(b=>new FileReaderSync().readAsDataURL(b));
@@ -43,7 +45,7 @@ function processLogo(url,im,resolve){try{
         for(let k=0;k<W*Hh;k++){if(!band[k])continue;const i=k*4,c=[px[i]-r,px[i+1]-g,px[i+2]-b],t=(c[0]*v[0]+c[1]*v[1]+c[2]*v[2])/vv;
           const e0=c[0]-t*v[0],e1=c[1]-t*v[1],e2=c[2]-t*v[2];if(e0*e0+e1*e1+e2*e2>40*40)continue;
           const al=Math.max(0,Math.min(1,t));px[i]=ink[0];px[i+1]=ink[1];px[i+2]=ink[2];px[i+3]=Math.round((A[k]?255:px[i+3])*al)}}} /* cut pixels on the rim get their share back too, so the edge is smooth, not stepped */
-    // Black or dark-grey lettering would vanish on Boxshelf's dark screens, and the white glow it used to get round it
+    // Black or dark-grey lettering would vanish on (T)rustyShelf's dark screens, and the white glow it used to get round it
     // looked fuzzy. Use the logo's reversed (light) version instead, the way consoles print it on dark packaging: the
     // dark lettering turns near-white, coloured parts (the GameCube cube) stay as they are.
     if(INK){const [ir,ig,ib]=INK.ink,lum=ir*.3+ig*.59+ib*.11,sat=Math.max(ir,ig,ib)-Math.min(ir,ig,ib);

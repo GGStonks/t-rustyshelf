@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// android-app/ci/steam-test.js apart from the app's name ((T)rustyShelf).
 // Plain Node test (beta.10): Steam games are found however the Steam folder was given, and games with an update waiting
 // still show. Run: node android-app/ci/steam-test.js   (also run by ci/issues-test.js)
 'use strict';

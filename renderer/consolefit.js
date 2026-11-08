@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// renderer/consolefit.js apart from the app's name ((T)rustyShelf).
 /* Fitting your own 3D console (themes\<system>\console.glb) — shared by the museum shelf and the insert animation.
    A downloaded model often brings extras: a controller, a cable, a disc, a stand. analyze() splits the model into parts:
      - the console: the biggest group of meshes that touch each other;

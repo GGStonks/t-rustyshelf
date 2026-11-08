@@ -1,7 +1,9 @@
+<!-- Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+     docs/NEW-CONSOLES-PLAN.md apart from the app's name ((T)rustyShelf). -->
 # New consoles on Windows: research and plan (2026-11)
 
 Beta feedback's biggest ask: "not enough emulator options" (PS1, GBA, Dreamcast…). This collects what three research
-passes found and what Boxshelf already has, so building it is wiring rather than starting over.
+passes found and what (T)rustyShelf already has, so building it is wiring rather than starting over.
 
 **Status marks:** ✔ confirmed from a source · ? not confirmed (memory or a single weak source): check before shipping
 (an emulator's `--help`, a measured case or cartridge).
@@ -45,7 +47,7 @@ RetroArch's Online Updater: check `cores\` and say so. Quit cleanly (WM_CLOSE / 
   System`, `Nintendo - Nintendo 64`, `Nintendo - Game Boy`, `Nintendo - Game Boy Color`, `Nintendo - Game Boy Advance`,
   `Nintendo - Nintendo DS` ✔ · `Sony - PlayStation`, `Sega - Dreamcast` ✔ · `Sega - Saturn`, `Sega - Mega Drive -
   Genesis`, `Sega - Master System - Mark III`, `Sega - Game Gear` ?. Fronts only: backs, spines and discs are
-  Boxshelf-made (as for PC games today).
+  TrustyShelf-made (as for PC games today).
 
 ## Physical sizes (for refining the cases and cartridges)
 

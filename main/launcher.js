@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): most of this file is Boxshelf's
+// main/launcher.js; modified for (T)rustyShelf (see the git history).
 // Starts emulators, Steam games and media apps, and reports when they close.
 const { spawn } = require('child_process');
 const path = require('path');
@@ -15,11 +17,11 @@ function buildArgs(template, rom) {
   return out.filter(a => a !== '');
 }
 
-function start(exe, args, onExit, env, cwd, logFile) { // env: the emulator's own environment (PS5: the KytyJets preset); else Boxshelf's. cwd: else the program's folder
+function start(exe, args, onExit, env, cwd, logFile) { // env: the emulator's own environment (PS5: the KytyJets preset); else (T)rustyShelf's. cwd: else the program's folder
   exe = exe && expand(String(exe).trim().replace(/^"(.*)"$/, '$1')); // same rules as the Settings check: %VAR%, {app}, pasted "quotes"
   if (!exe || !isFile(exe)) throw new Error(`Can't find ${exe || 'the program'}. Check its path in Settings.`);
   if (running) throw new Error(busyMessage());
-  // detached: on Windows a normal child sits in Node's kill-on-close job object, so a Boxshelf crash or update restart
+  // detached: on Windows a normal child sits in Node's kill-on-close job object, so a (T)rustyShelf crash or update restart
   // would take the emulator (and its unsaved game) with it. Not unref'd: the 'exit' event must still reach us.
   // logFile: the program's output goes there (Linux PC games), else nowhere
   let fd = null; if (logFile) { try { fd = require('fs').openSync(logFile, 'w'); } catch { fd = null; } }

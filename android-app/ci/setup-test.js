@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// android-app/ci/setup-test.js apart from the app's name ((T)rustyShelf).
 // Device test pass "setup" (beta.7), run by web-device-test.js: the demo page as Windows on a 1920x1080 TV.
 //   The consoles added in beta.7 (Saturn … DOS) are in every table they need; the arcade list names "sf2.zip" and hides
 //   BIOS zips; Set up for me (ci/emusetup-test.js, run here too) writes, keeps and undoes what it should.
@@ -82,7 +84,7 @@ module.exports = async function setupPass({ browser, base, check, OUT }) {
     check('First run (beta.9): an optional Accounts page between Box art and Done, a card each for RetroAchievements, SteamGridDB, ScreenScraper (and fanart.tv under More), skippable',
       /Connect your accounts/.test(ac.title) && ac.nav.join('|') === 'Welcome|Your consoles|Finish setting up|Box art|Accounts|Done' && ac.cards.join() === 'ra,steamgriddb,screenscraper,fanart' && ac.next === 'Skip for now', JSON.stringify(ac));
     await page.getByRole('button', { name: 'Skip for now' }).click(); await pause(2500);
-    const skipped = await page.evaluate(async () => { const c = (await window.boxshelf.getConfig()).config; return { title: (document.getElementById('suTitle') || {}).textContent || '', ra: (c.ra && c.ra.user) || '', sg: (c.keys && c.keys.steamgriddb) || '' }; });
+    const skipped = await page.evaluate(async () => { const c = (await window.trustyshelf.getConfig()).config; return { title: (document.getElementById('suTitle') || {}).textContent || '', ra: (c.ra && c.ra.user) || '', sg: (c.keys && c.keys.steamgriddb) || '' }; });
     check('First run (beta.9): Skip for now goes on to Done and leaves every account empty', /library/i.test(skipped.title) && !skipped.ra && !skipped.sg, JSON.stringify(skipped));
     const done = await page.evaluate(() => (document.querySelector('.wz2-emudone') || {}).textContent || '');
     check('First run: Done says what was set up and what was left as you had it', /Set up: .*RetroArch/.test(done) && /Left as you had them: Dolphin/.test(done), done.slice(0, 160));
@@ -108,7 +110,7 @@ module.exports = async function setupPass({ browser, base, check, OUT }) {
       // Paste (most keys are copied from the browser): one line, trimmed
       window.__bsClip = '  sgkey123  \nsecond line'; q('[data-paste="keys.steamgriddb"]').click(); await w(300);
       o.pasted = q('input[data-osk="keys.steamgriddb"]').value;
-      await w(600); const c = (await window.boxshelf.getConfig()).config; o.ra = c.ra; o.sg = c.keys && c.keys.steamgriddb; return o; });
+      await w(600); const c = (await window.trustyshelf.getConfig()).config; o.ra = c.ra; o.sg = c.keys && c.keys.steamgriddb; return o; });
     await page.screenshot({ path: path.join(OUT, 'setup-accounts.png') });
     check('First run (beta.9): Accounts typed in turns Skip into Next; a controller types the key on the on-screen keyboard (capitals too), B / Esc puts it away and stays on the page; Test says Connected; both are saved',
       fill.next === 'Next' && fill.typeBtn && !fill.typeBtnMouse && fill.osk && fill.onKey && fill.typed === '12wQ' && fill.oskGone && fill.stillHere && fill.focusBack === 'ra.key' && /Connected/.test(fill.badge) &&

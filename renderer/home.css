@@ -1,3 +1,5 @@
+/* Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+   renderer/home.css apart from the app's name ((T)rustyShelf). */
 /* In-game Home menu (renderer/home.html). Two layouts: a guide panel on the left (default) or a centred card. */
 :root{--ink:#f3f5fb;--dim:rgba(243,245,251,.6);--line:rgba(255,255,255,.12);--accent:#9d8cff;--ui:'Lexend',system-ui,'Segoe UI',sans-serif}
 html,body{margin:0;height:100%;background:transparent;overflow:hidden;font-family:var(--ui);color:var(--ink);user-select:none;-webkit-user-select:none;cursor:none}

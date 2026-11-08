@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/companion.js apart from the app's name ((T)rustyShelf).
 // Phone companion: a small web server on this PC's home network so a phone on the same Wi-Fi can browse the library,
 // start a game on the TV, read its manual, and work as a remote (d-pad, face buttons) and keyboard.
 // Off until switched on in Settings → Phone companion. Plain Node http, no frameworks; the pairing QR code is drawn here
@@ -163,7 +165,7 @@ async function handle(req, res) {
   if (!allow(ip, p.startsWith('/img/') ? 0.5 : 1)) return json(res, 429, { error: 'Slow down a little.' }, { 'Retry-After': '2' });
   // an address typed as numbers only (what the QR code and Settings show): a web page under some other name can't reach here by renaming itself to this PC (DNS rebinding)
   const host = String(req.headers.host || '');
-  if (!/^(\d{1,3}(\.\d{1,3}){3}|\[[0-9a-f:.%]+\])(:\d+)?$/i.test(host)) return json(res, 421, { error: 'Use the address shown in Boxshelf.' });
+  if (!/^(\d{1,3}(\.\d{1,3}){3}|\[[0-9a-f:.%]+\])(:\d+)?$/i.test(host)) return json(res, 421, { error: 'Use the address shown in (T)rustyShelf.' });
   if (req.method === 'POST') { const o = req.headers.origin; if (o && o !== 'http://' + host) return json(res, 403, { error: 'Wrong origin.' }); }
   if (req.method === 'GET' && (STATIC[p] || FONTS[p])) return serveStatic(res, p);
   if (req.method === 'POST' && p === '/api/pair') return pair(req, res, ip);
@@ -200,7 +202,7 @@ async function play(res, o, phone) {
   if (r && !o.quit) return json(res, 409, { running: r }); // the phone asks "Quit <game>?" and comes back with quit: true
   if (r) { D.log('Phone companion: a phone quit', r.title || 'the game', 'to play', e.g.title); await D.quit(); for (let i = 0; i < 60 && titleOfRunning(); i++) await wait(250); if (titleOfRunning()) return json(res, 409, { running: titleOfRunning(), stuck: true }); }
   D.log('Phone companion: a phone started', e.g.title);
-  const ok = await D.play({ shelf: e.s.id, id: e.g.id, title: e.g.title }); return json(res, ok === false ? 503 : 200, ok === false ? { error: 'Boxshelf is busy. Try again in a moment.' } : { ok: true });
+  const ok = await D.play({ shelf: e.s.id, id: e.g.id, title: e.g.title }); return json(res, ok === false ? 503 : 200, ok === false ? { error: '(T)rustyShelf is busy. Try again in a moment.' } : { ok: true });
 }
 function serveStatic(res, p) {
   const font = FONTS[p], key = font ? 'f:' + font : p; let c = staticCache.get(key);

@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// android-app/web-extras/android-touch.js apart from the app's name ((T)rustyShelf).
 /* Android touch gestures (AYN Thor and other touch handhelds; added to the Android build only by copy-web.js).
    1. Swipe to go back. A finger that starts at the left or right screen edge and slides inward means Back on every
       screen (the same as Android's own edge swipe). On screens that don't use sideways drags themselves (Details,

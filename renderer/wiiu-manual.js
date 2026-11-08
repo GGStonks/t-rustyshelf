@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// renderer/wiiu-manual.js apart from the app's name ((T)rustyShelf).
 // Draws a Wii U e-manual (page model from main/wiiumanual.js) into book pages: a Contents page, then every manual
 // page split at the given cut lines, each with a running header (chapter + title) and a page number.
 // Runs in a hidden window; pages go back to the main process as JPEG data URLs.

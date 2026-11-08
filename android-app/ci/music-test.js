@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// android-app/ci/music-test.js apart from the app's name ((T)rustyShelf).
 // Device test pass "menu music" (1.75, sound.js), run by web-device-test.js. Checks results, never speed or how it sounds.
 //   Windows (the demo page as Windows): the shelf plays the Drift track by default (1.77: Drift / Night / Glow, ambient); each track renders offline (seeded) with
 //   sound in it, no clipping and quieter than the limiter; the quick menu's Customize has Menu music and Music volume chips
@@ -19,7 +21,7 @@ const QM = async ({ row, act }) => { const w = ms => new Promise(r => setTimeout
     for (let i = 0; i < 3; i++) { const b = document.querySelector(`#quickMenu .qm-opt[data-k="${k}"][data-v="${v}"]`); if (!b) break; b.click(); await w(350);
       const m = Sound.music(); if (k === 'music' ? (v === 'off' ? !m : m && m.track === v) : m && Math.abs(m.level - +v) < .01) break; }
     await w(900); // (the quick menu saves half a second after a change)
-    const ui = (await window.boxshelf.getConfig()).config.ui;
+    const ui = (await window.trustyshelf.getConfig()).config.ui;
     out.steps.push({ k, v, now: Sound.music(), saved: k === 'music' ? ui.music : ui.musicLevel, mvolShown: chips('mvol').length });
   }
   for (let i = 0; i < 4 && Shelf._qs().open; i++) { esc(); await w(500); }
@@ -70,7 +72,7 @@ module.exports = async function musicPass({ browser, base, check, newPage, OUT }
     try {
       const url = base + '?fakeNative=1';
       await page.goto(url); await page.waitForTimeout(4000);
-      await page.evaluate(async () => { const api = window.boxshelf, c = (await api.getConfig()).config, det = await api.detect();
+      await page.evaluate(async () => { const api = window.trustyshelf, c = (await api.getConfig()).config, det = await api.detect();
         const d = await api.pick({ kind: 'folder' }); c.systems.gc.romDirs = [d]; c.systems.gc.emulator = det.systems.gc.emulator;
         c.setupDone = true; await api.saveConfig(c); await api.scan(); });
       await page.goto(url);

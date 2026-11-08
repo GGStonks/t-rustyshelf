@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// android-app/ci/addgames-pass.js apart from the app's name ((T)rustyShelf).
 // Device test pass "addgames" (beta.7), run by web-device-test.js: the demo page as Windows on a 1920x1080 TV.
 //   ci/addgames-test.js (plain Node: folder scan, names, the Playnite mapping) run here too; then Settings → Custom games →
 //   Add games: several programs at once and a scanned folder are listed with a tick each before anything is added (an
@@ -19,7 +21,7 @@ module.exports = async function addGamesPass({ browser, base, check, OUT }) {
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text().slice(0, 200)); });
   const pause = ms => page.waitForTimeout(ms);
-  const cfg = () => page.evaluate(async () => { const c = (await window.boxshelf.getConfig()).config; c.pc = c.pc || {}; c.pc.custom = c.pc.custom || []; c.ui = c.ui || {}; return c; });
+  const cfg = () => page.evaluate(async () => { const c = (await window.trustyshelf.getConfig()).config; c.pc = c.pc || {}; c.pc.custom = c.pc.custom || []; c.ui = c.ui || {}; return c; });
   // (beta.8) one click acts on a row; the Enter this used to add only did nothing because focus was left on a row that had
   // gone (now fixed: focus moves to the row now last, so a second press would act on it)
   const press = async label => { await page.getByText(label, { exact: true }).first().click(); await pause(900); };

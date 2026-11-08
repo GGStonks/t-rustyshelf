@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// renderer/perf.js apart from the app's name ((T)rustyShelf).
 // Input gate: this file is the first script on the page, so these capture listeners run before any other screen's own
 // (the shelf, Settings, the quick menu…). app.js sets window.BS_INPUT_GATE; when it returns true the input is used up
 // (the key / click that wakes a dimmed screen, the Undo key after hiding a game) and nothing else sees it.
@@ -36,7 +38,7 @@ window.Perf = (() => {
   function detect() {
     if (guess) return guess; // once per run: a WebGL context is costly to make and to throw away (Perf.get() is called every frame)
     // Android: Handheld on any real GPU (the desktop tiers assume a PC driving a TV); software rendering still means Low
-    const os = (window.bsPlatform && window.bsPlatform.os) || (window.boxshelf && window.boxshelf.platform && window.boxshelf.platform.os) || '';
+    const os = (window.bsPlatform && window.bsPlatform.os) || (window.trustyshelf && window.trustyshelf.platform && window.trustyshelf.platform.os) || '';
     let tier = 'high', why = [];
     try {
       const c = document.createElement('canvas'), gl = c.getContext('webgl', { powerPreference: 'high-performance' }) || c.getContext('experimental-webgl'); // the same chip the museum asks for (laptops with two)

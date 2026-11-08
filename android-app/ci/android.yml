@@ -1,8 +1,10 @@
-# Boxshelf Android (AYN Thor) build: ~15 minutes.
+# Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+# android-app/ci/android.yml apart from the app's name ((T)rustyShelf).
+# (T)rustyShelf Android (AYN Thor) build: ~15 minutes.
 #   apk: builds the debug APK. test: the fast device test (android-app/ci/web-device-test.js: the APK's own files in
 #   Chromium with Capacitor's real Android bridge, plus the full Thor flow on a pretend device), split in three groups
 #   that run at the same time (thor, screens, windows; beta.7: one after another it took ~38 min). publish: the APK
-#   (Boxshelf-thor-debug) only when all three groups passed. Results: each test job's Summary; screenshots in the
+#   (TrustyShelf-thor-debug) only when all three groups passed. Results: each test job's Summary; screenshots in the
 #   "device-test-<group>" artifacts.
 # Optional full test on a real Android emulator: Actions → Android build → Run workflow → tick "Also run the emulator test".
 # Source of truth: android-app/ci/android.yml (copied here by android-app/ci/Install GitHub build.bat).
@@ -123,10 +125,10 @@ jobs:
         run: |
           mkdir -p out
           V=$(node -p "require('./android-app/package.json').version")
-          cp unchecked/app-debug.apk "out/Boxshelf-thor-${V}-${GITHUB_SHA::7}-debug.apk"
+          cp unchecked/app-debug.apk "out/TrustyShelf-thor-${V}-${GITHUB_SHA::7}-debug.apk"
       - uses: actions/upload-artifact@v4
         with:
-          name: Boxshelf-thor-debug
+          name: TrustyShelf-thor-debug
           path: out/*.apk
           retention-days: 14
 
@@ -140,7 +142,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v4
         with:
-          name: Boxshelf-thor-debug
+          name: TrustyShelf-thor-debug
           path: out
       - name: Enable the emulator's hardware acceleration
         run: |

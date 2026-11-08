@@ -1,4 +1,6 @@
-// Boxshelf phone companion (served by main/companion.js to phones on the home Wi-Fi).
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// renderer/companion/app.js apart from the app's name ((T)rustyShelf).
+// (T)rustyShelf phone companion (served by main/companion.js to phones on the home Wi-Fi).
 // Library and game pages, Play on the TV, the game's manual, a remote (d-pad, face buttons) and a keyboard for the TV's
 // search boxes. Everything is plain DOM: it has to feel instant on a mid-range phone.
 (function(){
@@ -7,10 +9,10 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let lib=null,shelfId=null,query="",glyph={style:"xbox",swap:false},running=null,curGame=null,statusT=0,toastT=0,tab="Library";
 
-/* ---------- talking to Boxshelf ---------- */
+/* ---------- talking to (T)rustyShelf ---------- */
 async function api(path,body){
   const o=body===undefined?{credentials:"same-origin",cache:"no-store"}:{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)};
-  let r;try{r=await fetch(path,o)}catch(e){throw Object.assign(new Error("Can't reach Boxshelf. Is the PC on and this phone on the same Wi-Fi?"),{net:true})}
+  let r;try{r=await fetch(path,o)}catch(e){throw Object.assign(new Error("Can't reach (T)rustyShelf. Is the PC on and this phone on the same Wi-Fi?"),{net:true})}
   let j=null;try{j=await r.json()}catch{}
   if(r.status===401){showPair();throw Object.assign(new Error("Pair this phone first."),{status:401})}
   if(!r.ok){const e=new Error(j&&j.error||`Error ${r.status}`);e.status=r.status;e.data=j;throw e}
@@ -51,7 +53,7 @@ const IO={};
 function lazy(img,k,root){let o=IO[k];if(!o)o=IO[k]=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){const i=e.target;o.unobserve(i);i.src=i.dataset.src}}),{root:root||null,rootMargin:"800px 0px"});o.observe(img)}
 const unlazy=k=>{if(IO[k]){IO[k].disconnect();IO[k]=null}};
 function renderGrid(){const grid=$("grid"),empty=$("libEmpty");grid.innerHTML="";unlazy("g");
-  if(!lib||!lib.shelves.length){empty.hidden=false;empty.textContent="No games yet. Set up your consoles in Boxshelf's Settings on the TV.";return}
+  if(!lib||!lib.shelves.length){empty.hidden=false;empty.textContent="No games yet. Set up your consoles in (T)rustyShelf's Settings on the TV.";return}
   let list;const q=norm(query);
   if(q){const words=q.split(" ");list=[];lib.shelves.forEach(s=>s.games.forEach(g=>{const t=g._n||(g._n=norm(g.t));if(words.every(w=>t.includes(w)))list.push([s,g])}))}
   else{const s=lib.shelves.find(x=>x.id===shelfId)||lib.shelves[0];list=s.games.map(g=>[s,g])}
@@ -114,7 +116,7 @@ $("nowQuit").onclick=()=>{const t=running&&running.title||"the game";$("askTitle
   $("askYes").onclick=async()=>{$("ask").hidden=true;$("askYes").textContent="Quit and play";try{await api("/api/quit",{});toast("Closing the game…");setTimeout(pollStatus,2500)}catch(e){if(e.status!==401)toast(e.message)}};
   $("askNo").onclick=()=>{$("ask").hidden=true;$("askYes").textContent="Quit and play"}};
 
-/* ---------- prompts in the pad style chosen in Boxshelf (Settings → Controller → Button prompts) ---------- */
+/* ---------- prompts in the pad style chosen in (T)rustyShelf (Settings → Controller → Button prompts) ---------- */
 const PS={bottom:'<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',right:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/></svg>',left:'<svg viewBox="0 0 24 24"><rect x="5.5" y="5.5" width="13" height="13" rx="1"/></svg>',top:'<svg viewBox="0 0 24 24"><path d="M12 4.5l8 14H4z"/></svg>'};
 function setGlyphs(g){if(!g)return;const st=g.style==="ps"||g.style==="nintendo"?g.style:"xbox";if(st===glyph.style&&!!g.swap===glyph.swap&&$("fTop").dataset.st)return;glyph={style:st,swap:!!g.swap};
   const faces=document.querySelector(".faces");faces.className="faces "+st;

@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// android-app/ci/heat-probe.js apart from the app's name ((T)rustyShelf).
 ﻿// Heat / efficiency probe (a developer tool, not part of the GitHub build): how much work each screen does while
 // nobody touches anything. Opens the pretend Thor (?fakeNative=1, with the bottom page in its preview frame and a
 // controller plugged in, like the built-in pad), leaves each place idle, then reads perf-meter.js on both screens.
@@ -25,7 +27,7 @@ server.listen(0, async () => {
     ctx.setDefaultTimeout(120000); await ctx.addInitScript({ content: PAD });
     const page = await ctx.newPage(), errors = []; page.on('pageerror', e => errors.push(e.message));
     await page.goto(base); await page.waitForTimeout(4000);
-    await page.evaluate(async () => { const api = window.boxshelf, c = (await api.getConfig()).config, det = await api.detect();
+    await page.evaluate(async () => { const api = window.trustyshelf, c = (await api.getConfig()).config, det = await api.detect();
       const d = [await api.pick({ kind: 'folder' }), await api.pick({ kind: 'folder' })];
       c.systems.gc.romDirs = [d[0]]; c.systems.gc.emulator = det.systems.gc.emulator; c.systems.psx.romDirs = [d[1]]; c.systems.psx.emulator = det.systems.psx.emulator;
       c.setupDone = true; await api.saveConfig(c); await api.scan(); });

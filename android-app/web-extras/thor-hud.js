@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// android-app/web-extras/thor-hud.js apart from the app's name ((T)rustyShelf).
 // Thor checkpoint meter (Android build only; copy-web.js adds it to www/, the shared renderer never loads it).
 // Shows: time until the shelf is on screen, FPS, slow frames, worst frame, memory, controller, the app's own work (from
 // perf-meter.js: wake-ups, main-thread time and draw calls a second, frames drawn while idle) and the results of
@@ -30,8 +32,8 @@
     if (!looping) { looping = true; prev = 0; frames = 0; lastSec = performance.now(); raf(loop); }
     draw();
   }
-  // catch the smoothness test's result lines (they go through boxshelf.log)
-  const api = window.boxshelf;
+  // catch the smoothness test's result lines (they go through trustyshelf.log)
+  const api = window.trustyshelf;
   if (api && api.log) { const orig = api.log.bind(api); try { api.log = m => { const s = String(m); if (/smoothness/i.test(s)) { smooth.push(s.replace(/^.*?smoothness/i, 'smoothness')); if (smooth.length > 6) smooth.shift(); if (view === 'off') setView('big'); else draw(); } return orig(m); }; } catch {} }
   // Settings → System → Test meter (on Android only: this file is the Android build's), beside the Smoothness test
   const prevPatch = window.BS_SETTINGS_PATCH;
@@ -41,7 +43,7 @@
       const sys = (S || []).find(s => s && (s.id === 'sys' || (s.alias || []).includes('sys'))); if (!sys || !Array.isArray(sys.rows)) return S;
       if (sys.rows.some(r => r && r.label === 'Test meter')) return S;
       const row = { t: 'toggle', label: 'Test meter', d: false, keys: 'fps meter hud performance test frames memory',
-        info: 'A small panel in the corner with the frame rate, slow frames, memory and the controller in use, for checking how smoothly Boxshelf runs. Tap it to make it smaller, then to tuck it away.',
+        info: 'A small panel in the corner with the frame rate, slow frames, memory and the controller in use, for checking how smoothly (T)rustyShelf runs. Tap it to make it smaller, then to tuck it away.',
         get: () => view !== 'off', set: v => setView(v ? 'big' : 'off') };
       const i = sys.rows.findIndex(r => r && r.label === 'Smoothness test'); sys.rows.splice(i >= 0 ? i + 1 : sys.rows.length, 0, row);
     } catch (e) { console.error('test meter row', e); }
@@ -79,7 +81,7 @@
     const mem = performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) + ' MB JS' : 'n/a';
     if (view === 'small') { box.textContent = `${fps} fps`; return; }
     box.textContent =
-      `BOXSHELF THOR TEST  (tap: small → hidden)   build ${window.BS_BUILD || '?'}\n` +
+      `(T)RUSTYSHELF THOR TEST  (tap: small → hidden)   build ${window.BS_BUILD || '?'}\n` +
       `android: ${window.__bsAndroid || 'not loaded'}\n` +
       `shelf on screen: ${shelfAt ? Math.round(shelfAt) + ' ms after page start' : 'loading…'}\n` +
       `fps: ${fps}   worst frame (5 s): ${Math.round(worst5)} ms\n` +

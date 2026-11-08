@@ -1,10 +1,12 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// android-app/android/app/build.gradle apart from the app's name ((T)rustyShelf).
 apply plugin: 'com.android.application'
 
 android {
-    namespace = "io.github.boxshelf"
+    namespace = "io.github.trustyshelf"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "io.github.boxshelf"
+        applicationId "io.github.trustyshelf"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode((System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInteger()) // every GitHub build is newer than the last

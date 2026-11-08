@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// scripts/release-notes.js apart from the app's name ((T)rustyShelf).
 // Prints a version's notes (renderer/whatsnew.js, the same ones the app shows) as Markdown for its GitHub release, so the
 // release page, the update card's highlights and Settings → What's new always say the same thing.
 //   node scripts/release-notes.js            the newest version

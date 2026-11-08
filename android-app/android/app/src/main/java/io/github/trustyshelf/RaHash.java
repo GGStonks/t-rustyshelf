@@ -1,4 +1,6 @@
-package io.github.boxshelf;
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// android-app/android/app/src/main/java/io/github/boxshelf/RaHash.java apart from the app's name ((T)rustyShelf).
+package io.github.trustyshelf;
 
 import android.content.ContentResolver;
 import android.net.Uri;

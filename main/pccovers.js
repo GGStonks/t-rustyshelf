@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): most of this file is Boxshelf's
+// main/pccovers.js; modified for (T)rustyShelf (see the git history).
 // (beta.5) Choosing a PC game's cover: Steam, Epic, Quiver and games added by hand (console games have the Art Studio).
 // The options: SteamGridDB's posters (with the player's own SteamGridDB key, Settings → Accounts & services), Steam's own
 // cover for a Steam game, and a picture of your own. The chosen one is kept as data\pc-covers\<game id>.<ext> and wins over

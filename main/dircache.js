@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/dircache.js apart from the app's name ((T)rustyShelf).
 // Folder listings shared for one pass over the library: a manual or spreads pass over a few thousand games used to
 // list the same big ROM / art folder once per game. Each run makes its own lister (nothing is kept between runs);
 // forget(dir) after writing into a folder so the next look sees the new files.

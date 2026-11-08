@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// android-app/ci/themes-test.js apart from the app's name ((T)rustyShelf).
 // Device test pass "shelf themes" (0.3.5; themes-extra.js since 1.75), run by web-device-test.js. Checks results, never speed:
 // every wait polls with a generous timeout (the build machine draws in software).
 //   Android (the pretend Thor): the ten extra themes are offered in the quick menu (Customize → Theme) and in Settings'
@@ -38,7 +40,7 @@ module.exports = async function themesPass({ browser, base, check, newPage, OUT 
     try {
       const url = base + '?fakeNative=1';
       await page.goto(url); await page.waitForTimeout(4000);
-      await page.evaluate(async () => { const api = window.boxshelf, c = (await api.getConfig()).config, det = await api.detect();
+      await page.evaluate(async () => { const api = window.trustyshelf, c = (await api.getConfig()).config, det = await api.detect();
         const d = [await api.pick({ kind: 'folder' }), await api.pick({ kind: 'folder' })];
         c.systems.gc.romDirs = [d[0]]; c.systems.gc.emulator = det.systems.gc.emulator; c.systems.psx.romDirs = [d[1]]; c.systems.psx.emulator = det.systems.psx.emulator;
         c.setupDone = true; await api.saveConfig(c); await api.scan(); });
@@ -176,7 +178,7 @@ module.exports = async function themesPass({ browser, base, check, newPage, OUT 
         await clickTile('Walnut'); out.click = { on: on(), shelf: shelfTheme() };
         await clickTile('Walnut'); out.again = on(); // (clicking the chosen one again keeps it)
         if (window.Settings && Settings.isOpen && Settings.isOpen()) { await Settings.close(); await w(800); }
-        const c = (await window.boxshelf.getConfig()).config; c.ui.theme = 'spectrum'; await window.boxshelf.saveConfig(c); Shelf.setTheme(null); await w(300);
+        const c = (await window.trustyshelf.getConfig()).config; c.ui.theme = 'spectrum'; await window.trustyshelf.saveConfig(c); Shelf.setTheme(null); await w(300);
         return out; });
       check('Themes (Windows): changing theme in Settings never fades the page; the shelf takes it once you stop (not on every step); down moves a tile line; a click picks a tile (again: keeps it)',
         feel.row === 'Theme' && !feel.peeked && feel.during === feel.before && feel.after !== feel.before && feel.down.row === 'Theme' && feel.down.to !== feel.down.from
@@ -187,12 +189,12 @@ module.exports = async function themesPass({ browser, base, check, newPage, OUT 
         const sub = rows().find(r => r.textContent.trim().startsWith('Custom themes')); if (sub) sub.click(); await w(600);
         const has = ['Make a theme from a picture', 'Open custom themes folder', 'Find themes again'].map(l => rows().some(r => r.textContent.trim().startsWith(l)));
         const row = rows().find(r => r.textContent.trim().startsWith('Make a theme from a picture'));
-        if (row) row.click(); await w(300); if (row) row.click(); let saved = ''; for (let i = 0; i < 30; i++) { await w(200); saved = (await window.boxshelf.getConfig()).config.ui.theme; if (/^custom-picked/.test(saved)) break; }
+        if (row) row.click(); await w(300); if (row) row.click(); let saved = ''; for (let i = 0; i < 30; i++) { await w(200); saved = (await window.trustyshelf.getConfig()).config.ui.theme; if (/^custom-picked/.test(saved)) break; }
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); for (let i = 0; i < 20 && !document.querySelector('#bss .bss-tiles'); i++) await w(150);
         const tiles = [...document.querySelectorAll('#bss .bss-tiles .bss-tile span')].map(s => s.textContent);
         if (window.Settings && Settings.isOpen && Settings.isOpen()) { await Settings.close(); await w(800); }
         const body = [...document.body.classList].some(c => /^theme-custom-picked/.test(c));
-        const c = (await window.boxshelf.getConfig()).config; c.ui.theme = 'spectrum'; await window.boxshelf.saveConfig(c); Shelf.setTheme(null);
+        const c = (await window.trustyshelf.getConfig()).config; c.ui.theme = 'spectrum'; await window.trustyshelf.saveConfig(c); Shelf.setTheme(null);
         return { has, saved, newTile: tiles.some(n => /^Picked/.test(n)), body }; });
       check('Themes (Windows): Settings → Display → Custom themes has the three actions; Make a theme from a picture adds a tile and selects it',
         mk.has.every(Boolean) && /^custom-picked/.test(mk.saved) && mk.newTile && mk.body, JSON.stringify(mk));

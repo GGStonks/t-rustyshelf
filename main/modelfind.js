@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/modelfind.js apart from the app's name ((T)rustyShelf).
 // "Find a model": opens a search for free, downloadable 3D models of a console in the browser, then watches the
 // Downloads folder; the first .glb/.gltf (or a .zip holding one) that lands there is installed as that system's
 // console model. We don't host or bundle console models ourselves; you pick one you're allowed to use.

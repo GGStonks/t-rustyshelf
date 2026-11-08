@@ -1,7 +1,9 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): most of this file is Boxshelf's
+// renderer/setup.js; modified for (T)rustyShelf (see the git history).
 // First-run wizard and Settings: emulators, game folders, Steam, media apps.
 (function(){
 "use strict";
-const api=window.boxshelf;
+const api=window.trustyshelf;
 const $=id=>document.getElementById(id);
 const el=(tag,attrs,...kids)=>{const e=document.createElement(tag);for(const[k,v]of Object.entries(attrs||{})){if(k==="class")e.className=v;else if(k==="text")e.textContent=v;else if(k.startsWith("on"))e.addEventListener(k.slice(2),v);else if(v===true)e.setAttribute(k,"");else if(v!==false&&v!=null)e.setAttribute(k,v)}for(const c of kids.flat())if(c!=null)e.append(c);return e};
 
@@ -11,7 +13,7 @@ const dirsGone=new Set(); // (beta.10) Android: games folders removed this sessi
 
 const CONSOLE_HELP={
   // (beta.7) wave 2: RetroArch runs these; only the ones with something to know get a note
-  arcade:"RetroArch's FinalBurn Neo core runs arcade games. Games are zips named by their ROM set (sf2.zip): keep them zipped and named as they are, and Boxshelf shows each game's real name. BIOS zips (like neogeo.zip, pgm.zip) go in the same folder and stay off the shelf.",
+  arcade:"RetroArch's FinalBurn Neo core runs arcade games. Games are zips named by their ROM set (sf2.zip): keep them zipped and named as they are, and (T)rustyShelf shows each game's real name. BIOS zips (like neogeo.zip, pgm.zip) go in the same folder and stay off the shelf.",
   neogeo:"RetroArch's FinalBurn Neo core runs Neo Geo games. Games are zips named by their ROM set (mslug.zip); keep neogeo.zip (the BIOS) in the same folder. It stays off the shelf.",
   saturn:"RetroArch's Beetle Saturn core runs Saturn games (.cue, .chd, .m3u for several discs). It needs the Saturn BIOS files in RetroArch's system folder.",
   segacd:"RetroArch's Genesis Plus GX core runs Sega CD games (.cue, .chd). It needs the Sega CD BIOS files (bios_CD_U.bin and friends) in RetroArch's system folder.",
@@ -23,11 +25,11 @@ const CONSOLE_HELP={
   psp:"PPSSPP runs PSP games. Point to PPSSPPWindows64.exe.",
   wiiu:"Cemu runs Wii U games. Point to Cemu.exe. Games can be .wua files (Cemu's one-file format, best), .wud / .wux disc images, or extracted game folders (the shelf finds code\\*.rpx and reads the title from meta\\meta.xml). Disc images need your keys.txt set up in Cemu. Install updates and DLC inside Cemu (File → Install game title).",
   ps2:"PCSX2 runs PS2 games. Point to pcsx2-qt.exe. Games are .iso, .chd, .cso or .zso images. PCSX2 needs a PS2 BIOS of its own (set it up in PCSX2 once). RetroAchievements works here too: log in inside PCSX2 (Settings → Achievements).",
-  x360:"Xenia runs Xbox 360 games. Point to xenia_canary.exe (or xenia.exe; if you pick Xenia Manager, Boxshelf finds the Canary build inside its Emulators folder). Titles, art and info come from the title ID inside each game, so file names don't have to be exact. Games can be .iso discs, extracted folders with a default.xex inside (the folder name is the title), XBLA .xex files or .zar archives.",
+  x360:"Xenia runs Xbox 360 games. Point to xenia_canary.exe (or xenia.exe; if you pick Xenia Manager, (T)rustyShelf finds the Canary build inside its Emulators folder). Titles, art and info come from the title ID inside each game, so file names don't have to be exact. Games can be .iso discs, extracted folders with a default.xex inside (the folder name is the title), XBLA .xex files or .zar archives.",
   ps3:"RPCS3 runs PS3 games. Point to rpcs3.exe (install the PS3 system software in RPCS3 first: File → Install Firmware). Disc games are folders (Game\\PS3_GAME\\USRDIR\\EBOOT.BIN); digital games live in RPCS3's dev_hdd0\\game folder — add that as a games folder too. Titles come from each game's PARAM.SFO; installed patches are left off the shelf.",
-  n3ds:"Azahar runs 3DS games. Point to azahar.exe. Games are decrypted .3ds / .cci / .cxi images, Azahar's compressed .zcci, or decrypted .cia files (Boxshelf installs a .cia into Azahar the first time you play it). Encrypted copies won't start.",
+  n3ds:"Azahar runs 3DS games. Point to azahar.exe. Games are decrypted .3ds / .cci / .cxi images, Azahar's compressed .zcci, or decrypted .cia files ((T)rustyShelf installs a .cia into Azahar the first time you play it). Encrypted copies won't start.",
   ps4:"shadPS4 runs PS4 games. Point to shadPS4.exe. Games are folders with an eboot.bin inside (CUSAxxxxx\\eboot.bin); the shelf reads each game's title from its param.sfo.",
-  ps5:"Kyty runs PS5 games. Point to kyty_emulator.exe (the KytyJets build is the one Boxshelf looks for first). Games are folders with an eboot.bin inside; the shelf reads each game's title from sce_sys\\param.json, and starts it with your Kyty launcher's settings."
+  ps5:"Kyty runs PS5 games. Point to kyty_emulator.exe (the KytyJets build is the one (T)rustyShelf looks for first). Games are folders with an eboot.bin inside; the shelf reads each game's title from sce_sys\\param.json, and starts it with your Kyty launcher's settings."
 };
 
 // Android's wizard (the Thor's small screen, 23 consoles): one Consoles page instead of a step per console. It shows the
@@ -64,7 +66,7 @@ function dotFor(sec){
   return "";
 }
 
-function openLink(url){if(!url||!/^https?:\/\//i.test(url))return;if(api.openExternal)Promise.resolve(api.openExternal(url)).catch(e=>Shelf.toast(e.message||String(e)));else Shelf.toast("Opening links needs a newer Boxshelf")}
+function openLink(url){if(!url||!/^https?:\/\//i.test(url))return;if(api.openExternal)Promise.resolve(api.openExternal(url)).catch(e=>Shelf.toast(e.message||String(e)));else Shelf.toast("Opening links needs a newer (T)rustyShelf")}
 
 /* ---------- open / close ---------- */
 async function open(opts){
@@ -126,8 +128,8 @@ const ICON={consoles:'<path d="M6 11h4M8 9v4M15 12h.01M18 10h.01"/><rect x="2" y
 const NAV_GROUPS=[["Systems",["consoles"]],["Library",["art","library","reading"]]];
 const ico=k=>{const sp=document.createElement("span");sp.className="su-ico";sp.innerHTML=`<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${ICON[k]||""}</svg>`;return sp};
 function renderNav(){
-  const nav=$("suNav");nav.innerHTML="";nav.append(el("div",{class:"su-brand",text:wizard?"Boxshelf setup":"Settings"}));
-  const ver=el("div",{class:"su-ver",text:info.version?"Boxshelf "+info.version:"Boxshelf"});
+  const nav=$("suNav");nav.innerHTML="";nav.append(el("div",{class:"su-brand",text:wizard?"(T)rustyShelf setup":"Settings"}));
+  const ver=el("div",{class:"su-ver",text:info.version?"(T)rustyShelf "+info.version:"(T)rustyShelf"});
   if(wizard){const curId=(steps[step]||{}).parent||(steps[step]||{}).id; // a console page opened from the Consoles page lights up Consoles
     steps.forEach((s,i)=>{if(s.parent)return;const d=dotFor(s);nav.append(el("button",{type:"button",class:"su-step"+(s.id===curId?" on":""),onclick:()=>{step=i;render()}},el("span",{class:"su-label",text:s.label}),s.id==="consoles"?hubCount():el("span",{class:"dot "+d})))});nav.append(ver);return}
   const cur=steps[step]||{},curId=cur.parent||cur.id,idx=id=>steps.findIndex(x=>x.id===id);
@@ -141,7 +143,7 @@ function consolesReady(){const on=info.consoles.filter(c=>cfg.systems[c.id]&&cfg
 /* ---------- the Consoles page: a card per console; pick one to open its page ---------- */
 function consolesSection(b){
   if(hubWizard())return consolesHub(b);
-  head(b,"Systems","Consoles","Every console Boxshelf can run. Pick one to set its emulator and game folders.");
+  head(b,"Systems","Consoles","Every console (T)rustyShelf can run. Pick one to set its emulator and game folders.");
   const grid=el("div",{class:"con-grid"});
   info.consoles.forEach(c=>{const sc=cfg.systems[c.id]||{},d=dotFor({console:c,id:c.id}),i=steps.findIndex(x=>x.id===c.id);
     const st=d==="off"?"Shelf hidden":d==="ok"?`${(sc.romDirs||[]).length} folder${(sc.romDirs||[]).length===1?"":"s"} · ready`:d==="warn"?(sc.emulator?"Add a games folder":"Point to the emulator"):"Not set up";
@@ -182,7 +184,7 @@ function renderFoot(){
   if(wizard){
     // run again from Settings (setup already done): the first step's Back leaves, so the wizard can't trap you
     const out=step===0&&!!(cfg&&cfg.setupDone);f.append(el("button",{type:"button",class:"btn",disabled:step===0&&!out,onclick:()=>{if(out)close();else stepBy(-1)}},out?"Cancel":"Back"),el("div",{class:"grow"}));
-    if(sec.id==="done")f.append(el("button",{type:"button",class:"btn primary",onclick:finish},"Open Boxshelf"));
+    if(sec.id==="done")f.append(el("button",{type:"button",class:"btn primary",onclick:finish},"Open (T)rustyShelf"));
     else if(sec.parent)f.append(el("button",{type:"button",class:"btn primary",onclick:()=>{persist();stepBy(-1)}},"Done")); // a console page from the Consoles page: back to it
     else if(sec.id!=="welcome"){if(sec.id==="consoles"||sec.id==="pick")f.append(el("button",{type:"button",class:"btn",onclick:()=>runDetect(true)},detecting?"Searching…":"Search again"));
       // (beta.9) Accounts: "Skip for now" until something is filled in
@@ -215,7 +217,7 @@ function renderBody(){
   if(sec.id==="library")return librarySection(b);if(sec.id==="art")return artSection(b);if(sec.id==="reading")return readingSection(b);
   if(sec.id==="done")return doneSection(b);
 }
-// Official download pages, one press away while setting up (opened in your browser; nothing is downloaded by Boxshelf)
+// Official download pages, one press away while setting up (opened in your browser; nothing is downloaded by (T)rustyShelf)
 // (beta.4) download pages rather than home pages, checked against each project's own GitHub; Switch 2 added. Eden lives
 // only at eden-emu.dev (look-alike sites serve fakes)
 const OFFICIAL={gc:[["Dolphin","https://dolphin-emu.org/download/"]],wii:[["Dolphin","https://dolphin-emu.org/download/"]],wiiu:[["Cemu","https://cemu.info/"]],sw:[["Eden","https://eden-emu.dev/downloads"]],sw2:[["Eglantine","https://github.com/Djihads80/Eglantine/releases"]],
@@ -258,9 +260,9 @@ function toggle(label,checked,onchange,id){
 }
 
 function welcome(b){
-  if(onAndroid())head(b,"Welcome","Let's connect your emulators and games","Boxshelf looks for the emulator apps on this device and the game folders you've already let it see. Next you'll see the consoles it found first; every other console is one tap away under More consoles.");
-  else head(b,"Welcome to Boxshelf","Let's find your games","Boxshelf looks for your emulators, games, Steam library and streaming apps. Next you pick which consoles you play, and it's ready in a minute.");
-  if(onAndroid()){const root=info.appRoot;b.append(el("div",{class:"field"},el("div",{class:"lbl"},"Boxshelf folder"),el("div",{class:"d-cmd",text:root})))}
+  if(onAndroid())head(b,"Welcome","Let's connect your emulators and games","(T)rustyShelf looks for the emulator apps on this device and the game folders you've already let it see. Next you'll see the consoles it found first; every other console is one tap away under More consoles.");
+  else head(b,"Welcome to (T)rustyShelf","Let's find your games","(T)rustyShelf looks for your emulators, games, Steam library and streaming apps. Next you pick which consoles you play, and it's ready in a minute.");
+  if(onAndroid()){const root=info.appRoot;b.append(el("div",{class:"field"},el("div",{class:"lbl"},"(T)rustyShelf folder"),el("div",{class:"d-cmd",text:root})))}
   b.append(el("div",{class:"d-actions"},
     el("button",{type:"button",class:"btn primary",onclick:async()=>{if(detecting)return;await runDetect(true);searched=true;pickInit();if(step===0)step=1;render()}} /* (beta.10) only moves on if you're still on Welcome */,detecting?el("span",{class:"scanning"}):null,detecting?" Looking…":winWizard()?"Find my emulators and games":"Find automatically"),
     el("button",{type:"button",class:"btn",onclick:()=>{pickInit();step=1;render()}},winWizard()?"I'll pick them myself":"Set up by hand")));
@@ -305,7 +307,7 @@ function pickSection(b){
   pickInit();
   const L=pickItems();if(!pickMain)pickMain=new Set(L.filter(x=>x.found()||x.on()).map(x=>x.id));
   const main=L.filter(x=>pickMain.has(x.id)),rest=L.filter(x=>!pickMain.has(x.id)),n=L.filter(x=>x.on()).length;
-  head(b,"Step 1 of 3","Which consoles do you play?",main.length?"Ticked ones get a shelf. Boxshelf found these on your PC; tick any others you play. You can change this any time in Settings.":searched?"Boxshelf didn't find any emulators yet. Tick the consoles you play and you'll point to their emulator and games next.":"Tick the consoles you play. Next you'll point to each one's emulator and games.");
+  head(b,"Step 1 of 3","Which consoles do you play?",main.length?"Ticked ones get a shelf. (T)rustyShelf found these on your PC; tick any others you play. You can change this any time in Settings.":searched?"(T)rustyShelf didn't find any emulators yet. Tick the consoles you play and you'll point to their emulator and games next.":"Tick the consoles you play. Next you'll point to each one's emulator and games.");
   if(main.length)b.append(el("div",{class:"wz2-grid"},main.map(x=>pickCard(x,true))));
   if(rest.length){const open=pickMore||!main.length;
     b.append(el("button",{type:"button",class:"con-more","aria-expanded":String(open),onclick:()=>{pickMore=!open;render()}},el("span",{text:`More consoles and apps (${rest.length})`}),el("span",{class:"con-more-ch","aria-hidden":"true"})));
@@ -358,7 +360,7 @@ function fixSection(b){
     }
     b.append(box);
   }
-  // (beta.7) Set up for me: one switch for every emulator Boxshelf knows how to set up (main/emusetup.js)
+  // (beta.7) Set up for me: one switch for every emulator (T)rustyShelf knows how to set up (main/emusetup.js)
   if(winWizard()&&api.emuSetupAuto&&setupKinds().length){if(!cfg.emuSetup)cfg.emuSetup={auto:true,graphics:"auto",resume:false,pending:[]};
     b.append(el("section",{class:"wz2-fix wz2-auto"},
       el("div",{class:"wz2-fh"},el("span",{class:"wz2-fname",text:"Set up my emulators for me"}),el("span",{class:"wz2-rec",text:"Recommended"})),
@@ -380,7 +382,7 @@ function setLook(v){wizLook=v;if(v==="region"){if(!["usa","eur","jpn"].includes(
 let artChosen=null;
 function artLookSection(b){
   if(artChosen===null&&!(info.config&&info.config.setupDone)&&cfg.ui.autoCovers!==true){
-    head(b,"Step 3 of 3","Download box art?","Boxshelf can find the covers, backs, spines, discs and manuals for your games online. To find them it sends your game titles (and GameCube / Wii disc IDs) to LaunchBox, libretro, GameTDB and the Super Mario Wiki. Nothing else about you or your PC is sent.");
+    head(b,"Step 3 of 3","Download box art?","(T)rustyShelf can find the covers, backs, spines, discs and manuals for your games online. To find them it sends your game titles (and GameCube / Wii disc IDs) to LaunchBox, libretro, GameTDB and the Super Mario Wiki. Nothing else about you or your PC is sent.");
     b.append(el("div",{class:"d-actions"},
       el("button",{type:"button",class:"btn primary","data-art":"yes",onclick:()=>{artChosen=true;cfg.ui.autoCovers=true;if(cfg.ui.autoManuals==null)cfg.ui.autoManuals=true;if(!pvTouched&&api.previewFind&&!(window.bsPlatform&&bsPlatform.os==="android"))cfg.ui.previews="shelf"; /* (beta.9: Android previews stay off until chosen) */changed();render()}},"Yes, download box art"),
       el("button",{type:"button",class:"btn","data-art":"no",onclick:()=>{artChosen=false;cfg.ui.autoCovers=false;cfg.ui.autoManuals=false;changed();stepBy(1)}},"Not now")));
@@ -388,7 +390,7 @@ function artLookSection(b){
     return;
   }
   const on=cfg.ui.autoCovers===true,look=lookNow();
-  head(b,"Step 3 of 3","How should your boxes look?","Boxshelf finds the covers, backs, spines and discs for your games online.");
+  head(b,"Step 3 of 3","How should your boxes look?","(T)rustyShelf finds the covers, backs, spines and discs for your games online.");
   b.append(card("","",toggle("Download box art automatically",on,v=>{cfg.ui.autoCovers=v;render()},"wz2-ac"),
     el("div",{class:"hint-text",text:"Sends your game titles (and GameCube / Wii disc IDs) to LaunchBox, libretro, GameTDB and the Super Mario Wiki to find pictures (SteamGridDB too, if you add a key later). Nothing else about you or your PC is sent."})));
   const g=el("div",{class:"wz2-looks"+(on?"":" off")});
@@ -396,7 +398,7 @@ function artLookSection(b){
     el("span",{class:"wz2-art "+id,"aria-hidden":"true"}),el("span",{class:"wz2-name",text:t}),el("span",{class:"wz2-st",text:d}),tag?el("span",{class:"wz2-tag",text:tag}):null)));
   b.append(g);
   if(on&&look==="region"){const r=el("div",{class:"wz2-regions"});[["usa","USA"],["eur","Europe"],["jpn","Japan"]].forEach(([k,n])=>r.append(el("button",{type:"button",class:"btn small"+(cfg.ui.artRegion===k?" primary":""),onclick:()=>{cfg.ui.artRegion=k;changed();render()}},n)));b.append(r)}
-  b.append(card("","",toggle("Complete the cases",cfg.ui.makeBacks!==false,v=>{cfg.ui.makeBacks=v},"wz2-mb"),el("div",{class:"hint-text",text:"Backs, spines and discs too. Boxshelf makes any that no source has, and swaps in a real scan when one turns up."}),
+  b.append(card("","",toggle("Complete the cases",cfg.ui.makeBacks!==false,v=>{cfg.ui.makeBacks=v},"wz2-mb"),el("div",{class:"hint-text",text:"Backs, spines and discs too. (T)rustyShelf makes any that no source has, and swaps in a real scan when one turns up."}),
     toggle("Download manuals",cfg.ui.autoManuals===true,v=>{cfg.ui.autoManuals=v},"wz2-am"),el("div",{class:"hint-text",text:"Game manuals, where they're available, to read from the game's case."})));
   if(api.previewFind)b.append(pvCard());
   const more=el("details",{class:"adv"},el("summary",{},"More options"));more.append(artLibCard("Where to keep box art & manuals"));b.append(more);
@@ -424,7 +426,7 @@ const onAcct=()=>!!(steps[step]&&steps[step].id==="accounts");
 function acctOkText(s,st){if(s.id==="ra")return st.points?`Connected · ${Number(st.points).toLocaleString()} pts`:"Connected";
   if(s.id==="screenscraper")return st.left!=null?`Working · ${st.left} look-ups left today`:"Working";return "Key works"}
 function acctSection(b){
-  head(b,"Optional","Connect your accounts","Free sign-ins that add more to Boxshelf. Fill in any you like, or skip this page: they're all in Settings → Accounts & services later.");
+  head(b,"Optional","Connect your accounts","Free sign-ins that add more to (T)rustyShelf. Fill in any you like, or skip this page: they're all in Settings → Accounts & services later.");
   // run again from Settings: what was tested before shows on its card
   if(!acctAsked&&api.apiStatus){acctAsked=true;Promise.resolve(api.apiStatus()).then(st=>{if(!st)return;let any=false;
     for(const s of ACCTS){const x=st[s.id];if(x&&(x.state==="ok"||x.state==="fail")&&!acctSt[s.id]){acctSt[s.id]=x;any=true}}if(any&&onAcct())render()}).catch(()=>{})}
@@ -545,7 +547,7 @@ function consoleSection(b,def){
   adv.append(
     el("div",{class:"field"},el("div",{class:"lbl"},"Game launch options"),el("div",{class:"row"},ga,el("button",{type:"button",class:"btn small",onclick:()=>{ga.value=c.gameArgs=def.gameArgs;changed()}},"Reset")),el("div",{class:"hint-text",text:`{rom} is replaced with the game file. Default: ${def.gameArgs}`})),
     el("div",{class:"field"},el("div",{class:"lbl"},"Options when opening the emulator on its own"),el("div",{class:"row"},ea)),
-    el("div",{class:"field"},el("div",{class:"lbl"},"Hide the emulator while it starts"),el("div",{class:"row"},cs,el("span",{class:"hint-text",text:"seconds"})),el("div",{class:"hint-text",text:`Boxshelf's loading screen stays in front this long so you don't see ${def.emulatorName}'s window before the game goes fullscreen. Raise it if you still see a flash, 0 turns it off. Default: ${def.coverSeconds}.`})),
+    el("div",{class:"field"},el("div",{class:"lbl"},"Hide the emulator while it starts"),el("div",{class:"row"},cs,el("span",{class:"hint-text",text:"seconds"})),el("div",{class:"hint-text",text:`(T)rustyShelf's loading screen stays in front this long so you don't see ${def.emulatorName}'s window before the game goes fullscreen. Raise it if you still see a flash, 0 turns it off. Default: ${def.coverSeconds}.`})),
     el("div",{class:"d-actions"},el("button",{type:"button",class:"btn small",disabled:!c.emulator,onclick:()=>api.launchEmulator(def.id).catch(e=>Shelf.toast(e.message))},`Test: open ${def.emulatorName}`)));
   b.append(card("Advanced","",adv));
 }
@@ -613,7 +615,7 @@ function librarySection(b){
   manPaint();
   // which manuals were added or swapped for sharper English copies lately (from the manual collections)
   if(api.recentManuals){const box=el("details",{class:"field man-recent-box"},el("summary",{class:"lbl",text:"Recent manual updates"}),el("div",{class:"hint-text",text:"Loading…"}));b.append(box);
-    api.recentManuals().then(list=>{box.lastChild.remove();if(!list||!list.length){box.append(el("div",{class:"hint-text",text:"None yet. Manuals are checked in the background a minute after Boxshelf starts; older or non-English ones are swapped for sharp English copies when one is found (the old pages are kept in covers\\.manual-originals)."}));return}
+    api.recentManuals().then(list=>{box.lastChild.remove();if(!list||!list.length){box.append(el("div",{class:"hint-text",text:"None yet. Manuals are checked in the background a minute after (T)rustyShelf starts; older or non-English ones are swapped for sharp English copies when one is found (the old pages are kept in covers\\.manual-originals)."}));return}
       const ul=el("div",{class:"man-recent"});list.forEach(x=>{const d=new Date(x.at);ul.append(el("div",{class:"man-recent-row"},el("b",{text:x.title}),` ${x.system?"· "+x.system+" ":""}· ${x.upgraded?(x.w>=x.oldW?`sharper copy (${x.oldW} → ${x.w} px wide)`:`English edition (was ${x.oldW} px, now ${x.w} px)`):"added"} · ${x.pages} pages · ${d.toLocaleDateString()}`))});box.append(ul)}).catch(()=>{box.lastChild.textContent="Couldn't read the list."})}
 }
 // repainting a panel (after a tick, a toggle…) replaced the button you were on, so the controller fell back to the
@@ -651,7 +653,7 @@ async function manStart(){
   dlRuns++;Object.assign(manState,{screen:"run",prog:{},stage:"Starting…",rep:null,err:null,started:Date.now(),ids,phase:"search"});coverBusy=true;manPaint();
   try{
     const found=await api.findManuals(ids)||[];if(manState.screen!=="run")return;
-    const min=window.BoxshelfManMin||7,pick=[],unsure=[],none=[];
+    const min=window.TrustyShelfManMin||7,pick=[],unsure=[],none=[];
     found.forEach(r=>{if(r.have)return;const c=(r.candidates||[])[0];if(!c){none.push(r);return}if(cfg.ui.manualSure!==false&&!(c.score>=min&&/^(eng|en|english|)$/i.test(c.language||""))){unsure.push(r);return}pick.push({r,c})});
     manState.phase="download";manState.stage=pick.length?`Downloading ${pick.length} manual${pick.length===1?"":"s"}…`:"Nothing to download";manPaint();
     const rep=pick.length?await api.downloadManuals(pick.map(({r,c})=>({systemId:r.systemId,file:r.file,id:c.id}))):[];
@@ -678,7 +680,7 @@ function manPaintDone(){
     manBox.append(el("div",{class:"art-finish"},el("div",{class:"art-finish-icon",text:"✓"}),el("div",{},el("div",{class:"art-finish-title",text:"All done"}),el("div",{class:"hint-text",text:`${added} manual${added===1?"":"s"} added${miss?`, ${miss} game${miss===1?"":"s"} still without one`:""} · took ${fmtSecs((Date.now()-S.started)/1000)}. They show up when you close Settings.`}))));
     const lst=(row,arr,label,cls)=>{if(!arr.length)return;row.append(el("details",{class:"art-miss "+cls},el("summary",{text:label}),el("div",{class:"art-glist"},...arr.map(x=>Array.isArray(x)?el("div",{class:"art-gl"},el("span",{text:x[0]}),el("small",{text:x[1]})):el("div",{class:"art-gl"},el("span",{text:x}))))))};
     r.systems.forEach(x=>{const row=el("div",{class:"art-res"},el("div",{class:"art-res-top"},el("b",{text:x.name}),el("span",{text:(x.added.length?`${x.added.length} added`:"nothing new")+(x.had?` · ${x.had} already had one`:"")})));
-      lst(row,x.added,`${x.added.length} manual${x.added.length===1?"":"s"} added`,"new");lst(row,x.unsure,`${x.unsure.length} unsure match${x.unsure.length===1?"":"es"} skipped`,"up");if(["sw","ps4","ps5"].includes(x.id))lst(row,x.none,`${x.none.length} with no printed manual (the guide is inside the game; Boxshelf makes a booklet instead)`,"");else lst(row,x.none,`${x.none.length} not found`,"");lst(row,x.failed,`${x.failed.length} failed to download`,"");manBox.append(row)});}
+      lst(row,x.added,`${x.added.length} manual${x.added.length===1?"":"s"} added`,"new");lst(row,x.unsure,`${x.unsure.length} unsure match${x.unsure.length===1?"":"es"} skipped`,"up");if(["sw","ps4","ps5"].includes(x.id))lst(row,x.none,`${x.none.length} with no printed manual (the guide is inside the game; (T)rustyShelf makes a booklet instead)`,"");else lst(row,x.none,`${x.none.length} not found`,"");lst(row,x.failed,`${x.failed.length} failed to download`,"");manBox.append(row)});}
   manBox.append(el("div",{class:"row"},el("button",{type:"button",class:"btn primary",onclick:()=>{manState.screen="plan";manState.rep=null;manState.err=null;manState.cov=null;api.manualCoverage&&api.manualCoverage().then(l=>{manState.cov=l||[];manPaint()}).catch(()=>{manState.cov=[];manPaint()});manPaint()}},"Back to the manuals list")));
 }
 /* ---------- Settings → Box art: pick per console which pictures to fetch, then three clear screens (start, progress, finish) ---------- */
@@ -826,7 +828,7 @@ function readingSection(b){
 const iaReset=(S,kind)=>{S.gen++;clearTimeout(S.recheckT);S.busy=false;S.checking=0;if(kind)S.kind=kind;S.items=[];S.backlog=[];S.pending=[];S.seen=new Set();S.total=0;S.page=0;S.next=1;S.plain=false;S.skipped=0;S.rechecks=0;S.err=""};
 // the same finder inside the museum (X in the reading corner): mounted into its panel. back() closes its on-screen keyboard
 // first (true when it did); osk() opens it (A on the search box with a controller)
-window.BoxshelfIA={mount(el,kind){iaBox=el;iaState.osk=false;if(kind&&kind!==iaState.kind)iaReset(iaState,kind);iaPaint()},unmount(el){if(iaBox===el){iaBox=null;iaState.osk=false}},
+window.TrustyShelfIA={mount(el,kind){iaBox=el;iaState.osk=false;if(kind&&kind!==iaState.kind)iaReset(iaState,kind);iaPaint()},unmount(el){if(iaBox===el){iaBox=null;iaState.osk=false}},
   back(){if(!iaState.osk)return false;iaState.osk=false;iaPaint();const t=iaBox&&iaBox.querySelector(".ia-type");if(t)t.focus({preventScroll:true});return true},
   osk(){if(!iaBox)return false;iaState.osk=true;iaPaint();const k=iaBox.querySelector(".ia-key");if(k)k.focus({preventScroll:true});return true},
   typing:()=>!!iaState.osk,running:()=>[...iaState.jobs.values()].filter(j=>j.state==="run"||j.state==="queued").length};
@@ -937,7 +939,7 @@ async function doneSection(b){
   // Windows: the art was chosen on the Box art page; here its first download shows its progress (covers:auto from
   // main.js autoCovers, which the scan below starts), then points to the Art Studio
   if(winWizard()&&cfg.ui.autoCovers===true){const line=el("div",{class:"wz2-prog"},el("span",{class:"scanning"}),el("span",{class:"wz2-pt",text:" Getting box art starts in a moment…"}));
-    const box=el("section",{class:"card grp wz2-artdone"},line,el("div",{class:"hint-text",text:"You can open Boxshelf now; covers fill in as they arrive."}));b.append(box);watchArt(line,box)}
+    const box=el("section",{class:"card grp wz2-artdone"},line,el("div",{class:"hint-text",text:"You can open (T)rustyShelf now; covers fill in as they arrive."}));b.append(box);watchArt(line,box)}
   // online look-ups are off until you say yes here (or later in Settings → Art & manuals); Android asked already
   if(!window.BS_WIZARD_EXTRA&&!winWizard())b.append(card("Box art & manuals from the internet","Looking art and manuals up sends your game titles (and GameCube/Wii disc IDs) to the libretro thumbnails, the LaunchBox Games Database, GameTDB, GamesDatabase.org and the Internet Archive. Nothing else about you or your PC is sent.",
     toggle("Fetch box art for new games automatically",cfg.ui.autoCovers===true,v=>{cfg.ui.autoCovers=v;persist()},"done-ac"),
@@ -977,8 +979,8 @@ function watchArt(line,box){artLine=line;artDoneBox=box;artToast=true;artHeard=f
     t.textContent=" "+(i.total?`Getting box art · ${i.system||"games"}: ${i.done} of ${i.total}`:(i.stage||"Getting box art…"))});
 }
 function artDone(failed){const artBox=artDoneBox;if(!artBox)return;artBox.innerHTML="";
-  artBox.append(el("div",{class:"wz2-prog"},el("span",{class:"wz2-ok","aria-hidden":"true",text:failed?"!":"✓"}),el("span",{text:failed?" Couldn't reach the art databases just now. Boxshelf tries again next time it starts.":" Box art is ready."})),
-    el("div",{class:"hint-text",text:"Want a different look for a console, or a single game? The Art Studio has every version Boxshelf found."}),
+  artBox.append(el("div",{class:"wz2-prog"},el("span",{class:"wz2-ok","aria-hidden":"true",text:failed?"!":"✓"}),el("span",{text:failed?" Couldn't reach the art databases just now. (T)rustyShelf tries again next time it starts.":" Box art is ready."})),
+    el("div",{class:"hint-text",text:"Want a different look for a console, or a single game? The Art Studio has every version (T)rustyShelf found."}),
     el("div",{class:"d-actions"},el("button",{type:"button",class:"btn",onclick:async()=>{await finish();open({page:"artstudio"})}},"Open the Art Studio")))}
 
 /* ---------- keyboard & controller ---------- */

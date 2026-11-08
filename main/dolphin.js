@@ -1,7 +1,9 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/dolphin.js apart from the app's name ((T)rustyShelf).
 // Finds Dolphin's user folder and any GameCube startup files (IPL.bin) in it.
 // Dolphin plays the GameCube startup sequence when it finds
 //   <Dolphin user folder>\GC\<USA|EUR|JAP>\IPL.bin
-// and "Skip Main Menu" is off (Boxshelf turns that off per launch).
+// and "Skip Main Menu" is off ((T)rustyShelf turns that off per launch).
 const path = require('path');
 const fs = require('fs');
 const { isFile, isDir } = require('./paths');

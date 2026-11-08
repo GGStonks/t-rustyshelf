@@ -1,3 +1,5 @@
+/* Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+   android-app/web-extras/android-studio.css apart from the app's name ((T)rustyShelf). */
 /* The handheld Art Studio (android-studio.js; Android build only). Laid out for the 1440 x 810 Android page: text never
    under 14 px, every touch target at least 48 px. Moving around only changes transforms, opacity and a few classes. */
 #bsStudio{--acc:#9d8cff;--ink:#f3f5fb;--dim:rgba(243,245,251,.66);--faint:rgba(243,245,251,.42);--line:rgba(255,255,255,.1);--ok:#5fe0a0;

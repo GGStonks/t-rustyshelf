@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// android-app/ci/retro-test.js apart from the app's name ((T)rustyShelf).
 // Device test pass "retro" (beta.6), run by web-device-test.js. Checks results, never speed.
 //   Node: the 12 retro shelves are in main/systems.js with a RetroArch core each, RetroArch's usual folders searched, the
 //   standalone first where it's the better emulator (DuckStation, melonDS); every table main keys by console has them (box

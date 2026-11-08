@@ -1,3 +1,5 @@
+/* Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+   renderer/inspect.css apart from the app's name ((T)rustyShelf). */
 /* Inspect: turn the case in your hands, open it, take the disc out. */
 .inspect{position:absolute;inset:0;z-index:21;opacity:0;pointer-events:none;transition:opacity .3s;background:#04050a;overflow:hidden;cursor:grab;
   --cw:300px;--ch:420px;--t:20px;--disc:200px;--case:#16161b;--case-in:#0f0f13;--case-side:#0b0b0e;--accent:#9d8cff}

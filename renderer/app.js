@@ -1,7 +1,9 @@
-// Boxshelf shelf screen: 3D box carousel, controller input, details, boot and launch.
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): most of this file is Boxshelf's
+// renderer/app.js; modified for (T)rustyShelf (see the git history).
+// (T)rustyShelf shelf screen: 3D box carousel, controller input, details, boot and launch.
 (function(){
 "use strict";
-const api=window.boxshelf;
+const api=window.trustyshelf;
 const {hash,hsl}=window.Covers;
 const $=id=>document.getElementById(id);
 const safe=fn=>{try{return fn()}catch(e){return null}};
@@ -61,8 +63,8 @@ const emptyShelf=()=>{const s=cur();return s&&(s.kind==="console"||s.kind==="ste
 const curGame=()=>{const g=rawItem();return g&&g.kind==="random"&&g.pick&&g.revealed?g.pick.game:g};
 const pickShelf=()=>{const g=rawItem();return g&&g.kind==="random"&&g.pick&&g.revealed?(g.pick.sh||shelves[g.pick.shelf]):shelfFor(g)};
 
-const saved=safe(()=>JSON.parse(localStorage.getItem("boxshelf-ui")||"{}"))||{};
-const save=()=>safe(()=>localStorage.setItem("boxshelf-ui",JSON.stringify({sys:cur()&&cur().id,sel})));
+const saved=safe(()=>JSON.parse(localStorage.getItem("trustyshelf-ui")||localStorage.getItem("boxshelf-ui")||"{}"))||{};
+const save=()=>safe(()=>localStorage.setItem("trustyshelf-ui",JSON.stringify({sys:cur()&&cur().id,sel})));
 
 /* ---------- helpers ---------- */
 // Settings → Shelf → Show game sizes (on unless turned off)
@@ -106,7 +108,7 @@ function orderShelves(list){
   const pos=s=>{const i=ord.indexOf(s.id);return i<0?1000+list.indexOf(s):i};
   return list.slice().sort((a,b)=>pos(a)-pos(b));
 }
-// Home shelf: the games you played most recently (Boxshelf's own history), then your favorites — across every shelf.
+// Home shelf: the games you played most recently ((T)rustyShelf's own history), then your favorites — across every shelf.
 // Items are the real game objects borrowed from their shelves, so Details, Inspect and art all just work.
 const HOME={id:"home",kind:"home",name:"Home",games:[],items:[],hasEmulator:false};
 const COLS=new Map(); // (beta.7) the collection shelves, kept by id so a rebuild doesn't lose your place on one
@@ -279,7 +281,7 @@ function backUrl(g){
 // Sample a real cover's average color so the glow matches it.
 const hueCache=new Map();
 // Local covers are requested at the size they're drawn (the main process scales and caches them); h in CSS px
-// (Android: the adapter may offer smaller copies of its 1024 px display pictures, boxshelf.thumbFor(url, device px) → URL
+// (Android: the adapter may offer smaller copies of its 1024 px display pictures, trustyshelf.thumbFor(url, device px) → URL
 // or nothing; a case on the shelf is drawn ~500 px tall, and a 1024 px cover is ~4x the decoding and upload for it)
 function thumb(url,h){if(ANDROID&&url&&api&&api.thumbFor){try{const t=api.thumbFor(url,h*(devicePixelRatio||1));if(t)return t}catch{}}if(!url||!/^bsfile:/.test(url))return url;const px=h*(devicePixelRatio||1),b=[256,512,768,1024,1536,2048].find(v=>v>=px)||2048;return url+(url.includes("?")?"&":"?")+"t="+b}
 // small caches that would otherwise grow with every game you scroll past
@@ -692,7 +694,7 @@ function cleanLogoHere(url){ // the same clean-up on this thread: only if the wo
         for(let k=0;k<W*Hh;k++){if(!band[k])continue;const i=k*4,c=[px[i]-r,px[i+1]-g,px[i+2]-b],t=(c[0]*v[0]+c[1]*v[1]+c[2]*v[2])/vv;
           const e0=c[0]-t*v[0],e1=c[1]-t*v[1],e2=c[2]-t*v[2];if(e0*e0+e1*e1+e2*e2>40*40)continue;
           const al=Math.max(0,Math.min(1,t));px[i]=ink[0];px[i+1]=ink[1];px[i+2]=ink[2];px[i+3]=Math.round((A[k]?255:px[i+3])*al)}}} /* cut pixels on the rim get their share back too, so the edge is smooth, not stepped */
-    // Black or dark-grey lettering would vanish on Boxshelf's dark screens, and the white glow it used to get round it
+    // Black or dark-grey lettering would vanish on (T)rustyShelf's dark screens, and the white glow it used to get round it
     // looked fuzzy. Use the logo's reversed (light) version instead, the way consoles print it on dark packaging: the
     // dark lettering turns near-white, coloured parts (the GameCube cube) stay as they are.
     if(INK){const [ir,ig,ib]=INK.ink,lum=ir*.3+ig*.59+ib*.11,sat=Math.max(ir,ig,ib)-Math.min(ir,ig,ib);
@@ -758,7 +760,7 @@ function renderTabs(){
 // backdrop's cross-fade ends ~.9 s after the last move) and you've paused a moment
 let shelfMovedAt=-1e9;window.BS_BUSY=()=>performance.now()-shelfMovedAt<1500;
 function go(i){const n=slots.length;i=Math.max(0,Math.min(n-1,i));if(i===sel)return false;shelfMovedAt=performance.now();const dir=i>sel?1:-1;const prev=slots[sel];if(prev)prev.box.classList.remove("free");sel=i;flipped=false;spin=0;spinT=0;cancelAnimationFrame(spinRaf);spinRaf=0;layout();sfx.tick(dir);if(ANDROID){clearTimeout(go.saveT);go.saveT=setTimeout(save,700)}else save();return true} /* Android: the place is written once you stop, not on every step of a held stick */
-if(ANDROID)addEventListener("visibilitychange",()=>{if(document.hidden&&go.saveT){clearTimeout(go.saveT);go.saveT=0;save()}}); // a game launched straight after a step: written as Boxshelf goes to the back
+if(ANDROID)addEventListener("visibilitychange",()=>{if(document.hidden&&go.saveT){clearTimeout(go.saveT);go.saveT=0;save()}}); // a game launched straight after a step: written as (T)rustyShelf goes to the back
 const move=d=>{if(mode!=="browse"&&mode!=="details")return;if(!go(sel+d)&&d)bump(d)};
 function bump(d){const s=slots[sel];if(!s)return;s.box.style.transform=`translateX(${d*10}px) rotateY(${(flipped?180:0)+spin}deg)`;setTimeout(applyRotation,120)} /* +spin: a box turned to its spine stays turned during the nudge */
 const skip=d=>{if(mode==="browse")go(sel+d*5)};
@@ -900,7 +902,7 @@ function fillDetails(){
   if(g.kind==="rom"){chip(i.release?String(i.release).slice(0,4):i.year);chip(i.genres&&i.genres.split(";")[0].trim());chip(i.players?(i.players==="1"?"1 player":`${i.players} players`):null);chip(i.esrb?i.esrb.replace(/ - .*$/,""):null,"esrb");chip(i.rating?`★ ${(+i.rating).toFixed(1)}`:null,"score");chip(i.metacritic?`Metacritic ${i.metacritic}`:null,"score");if(g.compat)chip(`Xenia: ${g.compat}`,/playable|gameplay/i.test(g.compat)?"score":"esrb")}
   else if(g.kind==="steam"){chip(PC_SRC[g.source]||"Steam");chip(yearOf(g));chip(genreOf(g));chip(i.metacritic?`Metacritic ${i.metacritic}`:null,"score");chip(g.minutes?`${(g.minutes/60).toFixed(1)} h played`:"Not played yet")}
   else if(g.kind==="app")chip("Streaming app");else if(g.kind==="emulator")chip("Emulator");else if(g.kind==="random")chip("Shuffle");
-  // your history with this game (launches / time / last played), kept by Boxshelf
+  // your history with this game (launches / time / last played), kept by (T)rustyShelf
   // (beta.7) as tiles under the header: time played, last played, launches (Steam's own hours for a Steam game)
   {const hs=HIST[g.id],st=$("dStats");st.innerHTML="";const show=g.kind==="rom"||g.kind==="steam";st.hidden=!show;
     if(show){const mins=g.kind==="steam"&&g.minutes?g.minutes:0;const tiles=[["Played",hs&&hs.ms?fmtPlay(hs.ms):mins?`${(mins/60).toFixed(1)} h`:"Not yet"],["Last played",hs&&hs.last?fmtDay(hs.last/1000):"Never"],["Launches",String(hs&&hs.count||0)]];
@@ -937,7 +939,7 @@ function fillDetails(){
   $("dEmu").hidden=!(g.kind==="rom"&&s.hasEmulator);$("dEmu").textContent=`Open ${s.emulatorName||"emulator"}`;
   {const pc=g.kind==="steam"&&!!api.pcCoverOptions,b=$("dBoxArt"),p=$("dBoxArtPc");if(b)b.hidden=!(g.kind==="rom"&&api.artStudio&&g.file);if(p)p.hidden=!pc;} /* (beta.9) a PC game's Box art sits beside Play (it has no manual or Inspect), not in More */{const b=$("dRename");if(b)b.hidden=!(api.renameGame&&((g.kind==="rom"&&g.file)||g.kind==="steam"));} /* (beta.5: PC games too, through the cover picker) */
   {const b=$("dCols");if(b)b.hidden=!isGame(g)||g.kind==="app";}
-  {const b=$("dChooseManual");if(b){b.hidden=!(g.kind==="rom"&&api.manualStudio&&g.file);b.textContent=hasManual(g)?"Choose manual…":"Find a manual…";b.title=!hasManual(g)&&g.manualMiss?`Boxshelf looked online on ${new Date(g.manualMiss).toLocaleDateString()} and found no manual for this game. Search or add one here.`:""}}
+  {const b=$("dChooseManual");if(b){b.hidden=!(g.kind==="rom"&&api.manualStudio&&g.file);b.textContent=hasManual(g)?"Choose manual…":"Find a manual…";b.title=!hasManual(g)&&g.manualMiss?`(T)rustyShelf looked online on ${new Date(g.manualMiss).toLocaleDateString()} and found no manual for this game. Search or add one here.`:""}}
   {const b=$("dGameEmu");if(b){const own=g.kind==="rom"?gameEmu(g):"";b.hidden=!(g.kind==="rom"&&api.gameEmulator);b.textContent=own?(emuLabel(own).length>16?emuLabel(own).slice(0,15)+"…":emuLabel(own)):"Emulator";b.title=own?`Runs in ${own} (just this game). Press to change.`:`Runs in the shelf's ${s.emulatorName||"emulator"}. Press to pick a different build for just this game.`;b.classList.toggle("own",!!own)}}
   renderHints(); // Y's prompt follows this game's trailer / achievements row (updateInfo drew the bar before this fill)
   pvSchedule(); // (beta.7) its video preview, after a rest
@@ -1052,7 +1054,7 @@ async function pvBackStart(g,k){
   pvBackPlay(k,r.url)}
 function pvBackPlay(k,url){if(PV.bkey!==k||mode!=="browse")return;if(window.BS_BUSY&&BS_BUSY()){PV.bt=setTimeout(()=>pvBackPlay(k,url),300);return}
   uiCrumb("Shelf video: "+String(url).split(/[\\/]/).pop().slice(0,60));const v=$("pvBack");v.muted=true;v.onplaying=()=>{if(PV.bkey===k)app.classList.add("pv-on")};v.src=url;v.play().catch(()=>{})}
-// people who set Boxshelf up before previews existed: told once, on the shelf, where to turn them on
+// people who set (T)rustyShelf up before previews existed: told once, on the shelf, where to turn them on
 // one UI setting saved on top of the settings as they are now (the shelf's own copy may be older than what Settings or a
 // test saved since: saving that whole copy would undo them)
 async function uiSet(k,v){if(cfgInfo&&cfgInfo.config)cfgInfo.config.ui[k]=v;try{const c=(await api.getConfig()).config;c.ui[k]=v;await api.saveConfig(c)}catch{}}
@@ -1067,23 +1069,23 @@ async function clipHint(){const ui=cfgInfo&&cfgInfo.config&&cfgInfo.config.ui;if
   let s=null;try{s=await api.clipStatus()}catch{}if(!s||!s.supported||s.helper||s.getting)return;
   uiSet("clipHint",true);
   noteShow({kick:"Video previews",title:"Console games can play their trailers too",
-    sub:"Boxshelf needs a free helper (yt-dlp, about 25 MB) to save a short clip of each console game's trailer, so it plays on the shelf and in Details like Steam games do. It's fetched once.",
+    sub:"(T)rustyShelf needs a free helper (yt-dlp, about 25 MB) to save a short clip of each console game's trailer, so it plays on the shelf and in Details like Steam games do. It's fetched once.",
     primary:["Get the helper",()=>{toast("Getting the trailer helper…");api.clipHelper().then(ok=>toast(ok?"Console trailers are ready: rest on a console game to see its trailer":"Couldn't get the trailer helper. Try again in Settings → Video previews.")).catch(()=>{})}],
     secondary:["Not now",()=>toast("You can get it any time in Settings → Video previews.")]})}
 setTimeout(()=>clipHint(),14000);
-// (beta.8) Steam Deck in Desktop Mode, Boxshelf not started by Steam: the Deck's controller is a keyboard and mouse there,
-// so B is Esc and most emulators quit their game on it. Said once, with the way out: start Boxshelf from Steam (Game Mode)
-async function deckAdd(){toast("Adding Boxshelf to Steam (Steam closes and opens again)…");let r=null;try{r=await api.addToSteam(true)}catch{}
-  const why={"no-steam":"Steam hasn't been set up on this Deck yet","not-appimage":"Boxshelf isn't running from its AppImage","steam-would-not-close":"Steam didn't close: close it and try again in Settings → System","game-mode":"it's already in Steam"};
-  toast(r&&r.ok?(r.updated?"Boxshelf's Steam entry is up to date. Start it from Steam (Game Mode)":"Boxshelf is in Steam now: start it from your Library in Game Mode (Non-Steam)"):"Couldn't add Boxshelf to Steam"+(r&&why[r.why]?": "+why[r.why]:"")+".");return r}
+// (beta.8) Steam Deck in Desktop Mode, (T)rustyShelf not started by Steam: the Deck's controller is a keyboard and mouse there,
+// so B is Esc and most emulators quit their game on it. Said once, with the way out: start (T)rustyShelf from Steam (Game Mode)
+async function deckAdd(){toast("Adding (T)rustyShelf to Steam (Steam closes and opens again)…");let r=null;try{r=await api.addToSteam(true)}catch{}
+  const why={"no-steam":"Steam hasn't been set up on this Deck yet","not-appimage":"(T)rustyShelf isn't running from its AppImage","steam-would-not-close":"Steam didn't close: close it and try again in Settings → System","game-mode":"it's already in Steam"};
+  toast(r&&r.ok?(r.updated?"(T)rustyShelf's Steam entry is up to date. Start it from Steam (Game Mode)":"(T)rustyShelf is in Steam now: start it from your Library in Game Mode (Non-Steam)"):"Couldn't add (T)rustyShelf to Steam"+(r&&why[r.why]?": "+why[r.why]:"")+".");return r}
 async function deckHint(){const ui=cfgInfo&&cfgInfo.config&&cfgInfo.config.ui;if(!ui||ANDROID||!api.deckInfo||!cfgInfo.config.setupDone||ui.deckHint)return;
   let d=null;try{d=await api.deckInfo()}catch{}if(!d||!d.deck||d.steam||d.gameMode)return;
   uiSet("deckHint",true);
-  const steps=d.inSteam?["Switch to Game Mode and start Boxshelf from your Library (Non-Steam)","To leave a game, hold Select + Start for a moment"]
-    :["Add Boxshelf to Steam (the button below does it for you)","Switch to Game Mode and start it from your Library (Non-Steam)","To leave a game, hold Select + Start for a moment"];
-  noteShow({wide:true,kick:"Steam Deck",title:"Start Boxshelf from Steam for your games' controls",
+  const steps=d.inSteam?["Switch to Game Mode and start (T)rustyShelf from your Library (Non-Steam)","To leave a game, hold Select + Start for a moment"]
+    :["Add (T)rustyShelf to Steam (the button below does it for you)","Switch to Game Mode and start it from your Library (Non-Steam)","To leave a game, hold Select + Start for a moment"];
+  noteShow({wide:true,kick:"Steam Deck",title:"Start (T)rustyShelf from Steam for your games' controls",
     sub:"Started outside Steam, the Deck's controller works as a keyboard and mouse here, so B is the Esc key and most emulators quit their game on it. Started from Steam, B is just B.",items:steps,
-    primary:d.inSteam||!d.canAdd?["Got it",null]:["Add Boxshelf to Steam",()=>deckAdd()],secondary:d.inSteam||!d.canAdd?null:["Not now",()=>toast("You can add it any time in Settings → System.")]})}
+    primary:d.inSteam||!d.canAdd?["Got it",null]:["Add (T)rustyShelf to Steam",()=>deckAdd()],secondary:d.inSteam||!d.canAdd?null:["Not now",()=>toast("You can add it any time in Settings → System.")]})}
 setTimeout(()=>deckHint(),11000);
 // ---------- (beta.7) notes on the shelf: "a new version is out" (with its highlights) and "What's new" after updating ----------
 // One card in Settings' look over the shelf, its own mode ("note"): A picks the lit button, B / Esc closes, left / right
@@ -1114,7 +1116,7 @@ function noteClose(run){const el=NOTE.el;if(!el)return;NOTE.el=null;NOTE.btns=[]
 // a newer version on GitHub (main/updates.js): its highlights and the way to its notes, once per version
 function noteUpdate(r){if(!r||!r.newer||!r.latest)return;let seen="";try{seen=localStorage.getItem("updateSeen")||""}catch{}if(seen===r.latest)return;
   try{localStorage.setItem("updateSeen",r.latest)}catch{}const hl=mdBullets(r.notes).slice(0,3);
-  noteShow({kick:"Update available",title:`Boxshelf ${r.latest} is out`,sub:hl.length?"":"A new version is ready to download.",items:hl,
+  noteShow({kick:"Update available",title:`(T)rustyShelf ${r.latest} is out`,sub:hl.length?"":"A new version is ready to download.",items:hl,
     primary:["See what's new",()=>{if(window.Setup)Setup.open({page:"whatsnew"})}],secondary:["Later",null]})}
 // the first start of a new version: its highlights, once (a fresh install just remembers the version)
 function wnCheck(n=0){if(!cfgInfo||!cfgInfo.config){if(n<20)setTimeout(()=>wnCheck(n+1),1500);return}const v=appVer(),ui=cfgInfo.config.ui;if(!v||ui.lastSeenVersion===v)return;
@@ -1248,12 +1250,12 @@ function pcGallery(){
     b.addEventListener("click",()=>{if(cp){cp.i=j;cpRender();cpChoose()}});b.addEventListener("pointerenter",()=>{if(cp&&inputMode==="pointer"){cp.i=j;cpRender()}});grid.append(b);return b});
   requestAnimationFrame(()=>el.classList.add("on"));sfx.flip();cpRender();
 }
-/* The lower bar's Exit: held for 3 s (mouse, touch, or the X key) it closes Boxshelf. A card in the middle of the screen, over
-   a blurred shelf, fills a ring while it's held; letting go before the end keeps Boxshelf open */
+/* The lower bar's Exit: held for 3 s (mouse, touch, or the X key) it closes (T)rustyShelf. A card in the middle of the screen, over
+   a blurred shelf, fills a ring while it's held; letting go before the end keeps (T)rustyShelf open */
 const EXIT_MS=3000;let hx=null;
 function holdExitStart(){if(hx||(mode!=="browse"&&mode!=="details"))return;
   const el=document.createElement("div");el.className="buildpick holdexit";
-  el.innerHTML=`<div class="bp-card" role="dialog" aria-label="Exit Boxshelf"><div class="bp-title">Exit Boxshelf</div><svg class="he-ring" viewBox="0 0 120 120" aria-hidden="true"><circle class="bg" cx="60" cy="60" r="52"/><circle class="fg" cx="60" cy="60" r="52"/><path class="he-pow" d="M60 38v22M47 46a20 20 0 1 0 26 0"/></svg><div class="bp-game">Hold for 3 seconds to exit…</div><div class="bp-foot">Let go to stay</div></div>`;
+  el.innerHTML=`<div class="bp-card" role="dialog" aria-label="Exit (T)rustyShelf"><div class="bp-title">Exit (T)rustyShelf</div><svg class="he-ring" viewBox="0 0 120 120" aria-hidden="true"><circle class="bg" cx="60" cy="60" r="52"/><circle class="fg" cx="60" cy="60" r="52"/><path class="he-pow" d="M60 38v22M47 46a20 20 0 1 0 26 0"/></svg><div class="bp-game">Hold for 3 seconds to exit…</div><div class="bp-foot">Let go to stay</div></div>`;
   document.body.append(el);hx={el,t:setTimeout(holdExitDone,EXIT_MS)};sfx.flip();
   requestAnimationFrame(()=>{el.classList.add("on");requestAnimationFrame(()=>el.classList.add("go"))})}
 function holdExitCancel(){if(!hx||hx.done)return;const h=hx;hx=null;clearTimeout(h.t);h.el.classList.remove("go","on");setTimeout(()=>h.el.remove(),260);sfx.back()}
@@ -1419,8 +1421,8 @@ function ispPan(dx,dy){if(isp.tz<=1)return;const lim=innerWidth*.35*(isp.tz-1);i
 /* manual reader (inside inspect) */
 const rd={pages:[],i:0,open:false};
 function hasManual(g){return !!(g&&g.art&&g.art.manual&&g.art.manual.length)}
-// Games with no manual (most Switch and PS4 games never had a printed one) get a small booklet made from what Boxshelf
-// knows: the cover, the description, the details, the back cover. Clearly marked as made by Boxshelf. Made on demand,
+// Games with no manual (most Switch and PS4 games never had a printed one) get a small booklet made from what (T)rustyShelf
+// knows: the cover, the description, the details, the back cover. Clearly marked as made by (T)rustyShelf. Made on demand,
 // kept for the session.
 const NO_PRINTED=new Set(["sw","sw2","ps4","ps5"]);
 const bookletCache=new Map();
@@ -1447,14 +1449,14 @@ function makeBooklet(g){
     const sh=shelfFor(g)||cur(),st=STYLE[sh&&sh.id]||STYLE.media,i=g.info||{},W=900,H=1200,urls=[];
     const load=u=>new Promise(r=>{if(!u||typeof u!=="string")return r(null);const im=new Image();im.crossOrigin="anonymous";const t=setTimeout(()=>r(null),4000);im.onload=()=>{clearTimeout(t);r(im)};im.onerror=()=>{clearTimeout(t);r(null)};im.src=u});
     const page=async(draw,cover)=>{const c=document.createElement("canvas");c.width=W;c.height=H;const x=c.getContext("2d");x.fillStyle="#f4efe4";x.fillRect(0,0,W,H);await draw(x);
-      if(!cover){x.fillStyle="rgba(60,50,30,.55)";x.font="500 20px Lexend, sans-serif";x.textAlign="center";x.fillText("Booklet made by Boxshelf · not an original manual",W/2,H-34);x.textAlign="left"}
+      if(!cover){x.fillStyle="rgba(60,50,30,.55)";x.font="500 20px Lexend, sans-serif";x.textAlign="center";x.fillText("Booklet made by (T)rustyShelf · not an original manual",W/2,H-34);x.textAlign="left"}
       const b=await bookletJpeg(c);c.width=c.height=0;urls.push(URL.createObjectURL(b))};
     const wrap=(x,text,X,Y,maxW,lh,maxLines)=>{const words=String(text||"").split(/\s+/);let line="",y=Y,n=0;for(const w of words){const t=line?line+" "+w:w;if(x.measureText(t).width>maxW&&line){x.fillText(line,X,y);y+=lh;line=w;if(++n>=maxLines-1)break}else line=t}if(line&&n<maxLines){x.fillText(n>=maxLines-1&&words.length>0?line+"…":line,X,y);y+=lh}return y};
     const band=x=>{x.fillStyle=st.caseColor||"#222";x.fillRect(0,0,W,90);x.fillStyle=(st.band&&st.band.fg)||"#fff";x.font="700 34px Lexend, sans-serif";x.fillText((sh&&sh.name||"").toUpperCase(),48,58)};
     const front=await load((g.art&&g.art.front)||await Covers.frontAsync(stOf(g),g)),back=await load(g.art&&g.art.back); /* a generated cover: the worker-encoded one (the synchronous one finished its encode here, on the main thread) */
     // the front, laid out like an original instruction booklet: the box art full-bleed under a thin console band,
     // and a footer strip with "INSTRUCTION BOOKLET" and the console's name, the way the real ones are printed. A small
-    // Boxshelf mark in the strip says it's ours, not a scan.
+    // (T)rustyShelf mark in the strip says it's ours, not a scan.
     await page(async x=>{const bg=st.caseColor||"#222",fg=(st.band&&st.band.fg)||"#fff",bb=(st.band&&st.band.bg)||bg,lab=(st.band&&st.band.label)||(sh&&sh.name||"").toUpperCase();
       x.fillStyle=bg;x.fillRect(0,0,W,H);
       const top=70,bot=H-120;
@@ -1464,10 +1466,10 @@ function makeBooklet(g){
       x.font="500 18px Lexend, sans-serif";x.textAlign="right";x.globalAlpha=.75;x.fillText((g.region||"").toUpperCase(),W-40,top/2+7);x.globalAlpha=1;
       x.fillStyle=bb;x.fillRect(0,bot,W,H-bot);x.fillStyle="rgba(255,255,255,.12)";x.fillRect(0,bot,W,2);
       x.fillStyle=fg;x.textAlign="left";x.font="700 26px Lexend, sans-serif";x.fillText("INSTRUCTION BOOKLET",40,bot+50);
-      x.font="500 18px Lexend, sans-serif";x.globalAlpha=.7;x.fillText("Boxshelf edition · not an original manual",40,bot+82);x.globalAlpha=1;
-      // the Boxshelf mark: a little stack of cases in a rounded badge, where the console's logo would sit
+      x.font="500 18px Lexend, sans-serif";x.globalAlpha=.7;x.fillText("(T)rustyShelf edition · not an original manual",40,bot+82);x.globalAlpha=1;
+      // the (T)rustyShelf mark: a little stack of cases in a rounded badge, where the console's logo would sit
       {const bx=W-40-64,by=bot+22;x.strokeStyle=fg;x.lineWidth=3;x.beginPath();x.roundRect(bx,by,64,64,12);x.stroke();x.fillStyle=fg;[0,1,2].forEach(k=>{x.fillRect(bx+14+k*13,by+16,9,32)});x.fillRect(bx+12,by+50,40,3);
-        x.font="600 14px Lexend, sans-serif";x.textAlign="right";x.fillText("BOXSHELF",bx-12,by+38)}
+        x.font="600 14px Lexend, sans-serif";x.textAlign="right";x.fillText("(T)RUSTYSHELF",bx-12,by+38)}
       x.textAlign="left"},true);
     await page(async x=>{band(x);x.fillStyle="#1d1810";x.font="700 40px Lexend, sans-serif";x.fillText("About this game",60,170);x.font="400 27px Lexend, sans-serif";x.fillStyle="#2b2418";
       wrap(x,i.overview||"No description yet. Download box art and info in Settings to fill this page.",60,230,W-120,40,22)});
@@ -1529,7 +1531,7 @@ const insertCache=new Map();
 function movieInsert(d){if(insertCache.has(d.id))return pagesTouch(insertCache,d.id);const p=(async()=>{
   const m=await movieDetails(d)||{},W=900,H=1200,urls=[],bg=await imgLoad(m.files&&m.files.background),logo=await imgLoad(m.files&&m.files.logo),post=await libCover(d).then(imgLoad);
   const page=async draw=>{const c=document.createElement("canvas");c.width=W;c.height=H;const x=c.getContext("2d");x.fillStyle="#f4f1ea";x.fillRect(0,0,W,H);await draw(x);
-    x.fillStyle="rgba(40,50,70,.5)";x.font="500 18px Lexend, sans-serif";x.textAlign="center";x.fillText("Insert made by Boxshelf from the title's catalogue details",W/2,H-30);x.textAlign="left";
+    x.fillStyle="rgba(40,50,70,.5)";x.font="500 18px Lexend, sans-serif";x.textAlign="center";x.fillText("Insert made by (T)rustyShelf from the title's catalogue details",W/2,H-30);x.textAlign="left";
     const b=await bookletJpeg(c);c.width=c.height=0;urls.push(URL.createObjectURL(b))};
   const head=(x,t)=>{const g=x.createLinearGradient(0,0,0,110);g.addColorStop(0,"#2f7fe0");g.addColorStop(1,"#1a4fa8");x.fillStyle=g;x.fillRect(0,0,W,110);x.fillStyle="#fff";x.font="800 40px Lexend, sans-serif";x.fillText(t,56,70);x.font="600 18px Lexend, sans-serif";x.textAlign="right";x.globalAlpha=.8;let n=(m.name||d.title).toUpperCase();while(x.measureText(n).width>W*.42&&n.length>3)n=n.slice(0,-2);x.fillText(n,W-56,68);x.globalAlpha=1;x.textAlign="left"};
   const label=(x,k,y)=>{x.font="700 20px Lexend, sans-serif";x.fillStyle="#2a62c0";x.fillText(k.toUpperCase(),56,y)};
@@ -1718,7 +1720,7 @@ function runSlide(s,g,done,hideAfter){
   lastGoAt=performance.now();play_("go");setTimeout(()=>play_("boot"),700);rumble(.4,.25,90);
   slideEndAt=performance.now()+(reduced()?600:4000); // the line is full here: the boot sound fades out with it
   clearTimeout(insertT);insertT=setTimeout(()=>{if(hideAfter)hideInsert();if(done)done()},reduced()?300:2200);
-  insertSeatAt=performance.now()+(reduced()?250:500); // the emulator starts right away under the slide; Boxshelf keeps the slide up a fixed ~4 s so the line fills
+  insertSeatAt=performance.now()+(reduced()?250:500); // the emulator starts right away under the slide; (T)rustyShelf keeps the slide up a fixed ~4 s so the line fills
 }
 function runInsert(s,g,done,hideAfter){
   if(!INSERT_3D){runSlide(s,g,done,hideAfter);return}
@@ -1833,7 +1835,7 @@ let lastGoAt=-1e9,soundOffT=0;
 function soundOff(){clearTimeout(soundOffT);if(mode!=="launch"||!window.Sound)return;if(Sound.fadeOut)Sound.fadeOut(900);else if(Sound.suspend)Sound.suspend()}
 // parts: plain strings (inserted as text, never HTML: they carry error messages from the emulator / OS), {b:"…"} for a bold key, {br:1}
 function note(parts,err){const n=$("lNote");n.textContent="";(Array.isArray(parts)?parts:[parts]).forEach(p=>{if(p&&p.b!=null){const b=document.createElement("b");b.textContent=p.b;n.append(b)}else if(p&&p.br)n.append(document.createElement("br"));else n.append(String(p))});n.classList.toggle("l-err",!!err);n.classList.add("on");if(err)$("launch").classList.add("err")}
-// the game's window is up: the loading screen fades to black just before Boxshelf steps aside
+// the game's window is up: the loading screen fades to black just before (T)rustyShelf steps aside
 api.onRunReady&&api.onRunReady(()=>{if(mode==="launch"){$("launch").classList.add("ready");hideInsert()}});
 function insProgress(sec){const el0=$("insert");if(el0.classList.contains("slide")||!el0.classList.contains("on"))return; /* the slide's line runs on its own fixed time */const el=$("insert");let b=el.querySelector(".ins-bar");if(!b){b=document.createElement("div");b.className="l-bar ins-bar";b.innerHTML="<i></i>";el.querySelector(".ins-text").appendChild(b)}const i=b.querySelector("i");i.style.animation="none";void i.offsetWidth;i.style.animation=`load ${Math.max(2,+sec||6)}s cubic-bezier(.3,0,.2,1) forwards`;b.classList.add("on")}
 // Play on an Epic game that isn't installed: offer to install it (in the background; it un-greys on the shelf when done)
@@ -1850,7 +1852,7 @@ async function launchNow(g,underInsert){if(g&&g.installed===false){offerInstall(
   const s=g._sh||shelfFor(g);launchCtx={g,s};mode="launch";runningKind=g.kind;ambient(false);rumble(.6,.3,140);clearTimeout(soundOffT);soundOffT=setTimeout(soundOff,underInsert?Math.max(2500,slideEndAt-performance.now()):2500); // the boot sound plays out with the slide, then fades as the line completes
   try{
     // (beta.4) PC games that aren't Steam's: Epic's are handed to its launcher (like Steam's: Back returns to the shelf);
-    // Quiver's and the ones added by hand are started by Boxshelf (like an app: the Home menu, and Back waits for them)
+    // Quiver's and the ones added by hand are started by (T)rustyShelf (like an app: the Home menu, and Back waits for them)
     // (beta.7) Ubisoft Connect, the EA app and the Xbox app too (PC_EXT): handed over the same way
     if(g.kind==="steam"&&PC_EXT[g.source]){const L=PC_EXT[g.source];showLaunch("Starting through "+L,g.title,L);await wait(650);if(mode!=="launch"||!launchCtx||launchCtx.g!==g)return;await api.launchPc(g.id);if(api.historyTouch)api.historyTouch(g.id).catch(()=>{});
       clearTimeout(launchTimer);launchTimer=setTimeout(()=>note(["Running through the "+L+". Press ",{b:btnWord("back")}," or ",{b:"Esc"}," to return to the shelf."]),1800);return}
@@ -2064,7 +2066,7 @@ function libGames(){return allShelves.reduce((a,sh)=>a+((sh.games||[]).filter(g=
 function libAfter(n0,watch){if(qm.open)qsSoft();const n=libGames()-n0;if(watch&&n>0)toast(`${n} new game${n===1?"":"s"} found`+(musStyle().mail!==false?(n===1?" · it's":" · they're")+" waiting for you in the museum mail":""))}
 // console.json options with per-system defaults: front-slot consoles load the disc upright through the front; GameCube is top-loading
 const FRONT_SLOT=new Set(["wii","wiiu","ps2","ps3","ps4","ps5","x360"]);
-// 3D models that come with Boxshelf: the PC shelf's gaming PC (an original model, made for Boxshelf), turned so its glass side shows
+// 3D models that come with (T)rustyShelf: the PC shelf's gaming PC (an original model, made for (T)rustyShelf), turned so its glass side shows
 const BUILTIN_MODEL={pc:"models/pc.glb"},BUILTIN_OPTS={pc:{museumYaw:30}};
 function modelOpts(id){const t=themes[id]||{};return Object.assign({slot:FRONT_SLOT.has(id)?"front":"top"},!t.model&&BUILTIN_OPTS[id]||{},t.modelOpts||{})}
 // The shelf's 3D console (for the insert animation when a game starts) sets up its own 3D view and reads the model:
@@ -2144,7 +2146,7 @@ function renderCustomize(){
         else if(act==="restorelogo"){await api.restoreLogo(id);play_("open");toast(`Earlier logo back for ${name}`);await reloadThemes();czPickFocus('[data-a="restorelogo"],[data-a="logo"]')}
         else if(act==="ctl"){const f=await api.pick({kind:"file",title:`Choose a ${name} controller model (.glb)`,filters:[{name:"3D models",extensions:["glb","gltf"]}]});if(f){await api.setTheme(id,"controller",f);await api.saveConsoleFit(id,{controller:"file"}).catch(()=>{});toast(`Controller set for ${name}. It lies on the museum shelf in front of the name plate`);reloadThemes()}}
         else if(act==="testmodel"){testModel(id)}
-        else if(act==="findmodel"){const r=await api.findModel(id,name,"sketchfab");toast(r&&r.ok?`Pick a free, downloadable ${name} model in your browser — check its licence — and save the .glb (or .zip) to Downloads. Boxshelf installs it as soon as it lands.`:(r&&r.error)||"Couldn't start")}
+        else if(act==="findmodel"){const r=await api.findModel(id,name,"sketchfab");toast(r&&r.ok?`Pick a free, downloadable ${name} model in your browser — check its licence — and save the .glb (or .zip) to Downloads. (T)rustyShelf installs it as soon as it lands.`:(r&&r.error)||"Couldn't start")}
         else if(act==="media"){const f=await api.pick({kind:"file",title:`Choose a ${name} ${id==="sw"||id==="sw2"?"cartridge":"disc"} model (.glb)`,filters:[{name:"3D models",extensions:["glb","gltf"]}]});if(f){await api.setTheme(id,"media",f);toast(`Model set for ${name}. Inspect a game to see it.`);reloadThemes()}}
         else if(act==="rmlogo"||act==="rmboot"||act==="rmconsole"||act==="rmmodel"||act==="rmmedia"||act==="rmcontroller"){await api.removeTheme(id,act.slice(2));if(act==="rmcontroller"&&themes[id]&&themes[id].modelOpts&&themes[id].modelOpts.controller==="file")await api.saveConsoleFit(id,{controller:null}).catch(()=>{});reloadThemes()}
         else if(act==="preview"){closeCustomize();runBoot({id,name},null)}
@@ -2154,7 +2156,7 @@ function renderCustomize(){
     box.appendChild(row);
   });
   custSwitchText();
-  $("themePathNote").textContent=`Files are saved in ${cfgInfo?cfgInfo.appRoot:"Boxshelf"}\\themes\\<system>\\ as logo.png, boot.mp4, console.png, console.glb or controller.glb (console.json keeps how the console sits on the museum shelf and its lid)`;
+  $("themePathNote").textContent=`Files are saved in ${cfgInfo?cfgInfo.appRoot:"TrustyShelf"}\\themes\\<system>\\ as logo.png, boot.mp4, console.png, console.glb or controller.glb (console.json keeps how the console sits on the museum shelf and its lid)`;
 }
 /* ---------- The quick menu (☰ / Start) ----------
    A glass panel from the right, the same one Details uses, with the shelf stepping aside the same way. On top, the game
@@ -2219,7 +2221,7 @@ function qsRows(){const ui=qsUi(),r=qsAch(),g=qsGame(),out=[];
   out.push({id:"cz3d",icon:QS_I.cube,lbl:"3D & logos",val:qsCzVal,go:1});
   out.push({id:"sort",icon:QS_I.sort,lbl:"Sort & filter",val:()=>qsName(SORTS,sortBy)+(filterBy!=="all"?" · "+filterName(filterBy):""),lines:()=>[{k:"sort",l:"Sort by",opts:SORTS,cur:sortBy},{k:"filter",l:"Show",opts:filterList(),cur:filterBy}]});
   out.push({id:"ach",icon:QS_I.trophy,lbl:"Trophies",val:()=>!RA.on?"Not connected":r&&r.total?`${r.earned} / ${r.total}`+(RA.profile?` · ${RA.profile.points.toLocaleString()} pts`:""):RA.profile?`${RA.profile.points.toLocaleString()} points`:"",
-    lines:()=>!RA.on?[{k:"note",note:"Sign in once and Boxshelf tracks every unlock."},{k:"go",opts:[["rasetup","Connect RetroAchievements ›"]],big:1}]:[{k:"achinfo",info:1},...(r&&r.total?[{k:"go",opts:[["achg","See this game's achievements ›"]],big:1}]:[])]});
+    lines:()=>!RA.on?[{k:"note",note:"Sign in once and (T)rustyShelf tracks every unlock."},{k:"go",opts:[["rasetup","Connect RetroAchievements ›"]],big:1}]:[{k:"achinfo",info:1},...(r&&r.total?[{k:"go",opts:[["achg","See this game's achievements ›"]],big:1}]:[])]});
   out.push({id:"mus",icon:QS_I.museum,lbl:"Museum",val:()=>"Walk your collection",go:1});
   if(ANDROID)qsAndroidOrder(out,ui); // (0.3.2) the Thor's order: Museum, Art Studio, Trophies first; then the looks, sounds and sorting
   // (beta.10) while box art downloads in the background: the controller's way to its Pause / Resume and Cancel (the card in
@@ -2228,7 +2230,7 @@ function qsRows(){const ui=qsUi(),r=qsAch(),g=qsGame(),out=[];
   out.push({sep:1});
   if(api.updateCheck&&!ANDROID)out.push({id:"upd",icon:QS_I.info,lbl:"Updates",val:qsUpdVal}); // (beta.4) check for a newer beta from here
   out.push({id:"set",icon:QS_I.gear,lbl:"Settings",val:()=>"",go:1});
-  out.push({id:"pow",icon:QS_I.power,lbl:"Power",val:()=>"",lines:()=>[{k:"pow",opts:(api.powerOptions&&api.powerOptions())||[["quit","Exit Boxshelf"],["sleep","Sleep"],["restart","Restart PC",1],["shutdown","Shut down",1]],big:1}]});
+  out.push({id:"pow",icon:QS_I.power,lbl:"Power",val:()=>"",lines:()=>[{k:"pow",opts:(api.powerOptions&&api.powerOptions())||[["quit","Exit (T)rustyShelf"],["sleep","Sleep"],["restart","Restart PC",1],["shutdown","Shut down",1]],big:1}]});
   return out}
 // Android (0.3.2): Museum, Art Studio and Trophies as the top three, a divider, then Customize (theme, background,
 // startup), Assets (the shelf's logo, 3D console, boot video), Sounds (with the volume) and Sort & filter. Same rows and
@@ -2386,7 +2388,7 @@ function qsChoose(){const f=qsFocusEl();if(!f)return;const k=f.dataset.k,v=f.dat
   else if(k==="music"){ui.music=v;mmTrack=null;ambient(mmWant);play_(v==="off"?"back":"open")}
   else if(k==="mvol"){ui.musicLevel=+v;mmLevel=null;ambient(mmWant);play_("tick",{dir:1})}
   else if(k==="boot"){ui.bootSound=v;if(window.Sound){Sound.set({boot:v});Sound.play("boot")}}
-  else if(k==="intro"){ui.bootIntro=v;try{localStorage.setItem("bootIntro",v)}catch{}play_("tick",{dir:1});toast(v==="off"?"Boxshelf will start without the logo":"Shows the next time Boxshelf starts")}
+  else if(k==="intro"){ui.bootIntro=v;try{localStorage.setItem("bootIntro",v)}catch{}play_("tick",{dir:1});toast(v==="off"?"(T)rustyShelf will start without the logo":"Shows the next time (T)rustyShelf starts")}
   else if(k==="sort"||k==="filter"){pickSort(k==="sort"?0:1,v);qsSoft();return}
   if(k!=="sort"&&k!=="filter")qmSave();qsSoft()}
 function qsAct(k){const g=qsGame();if(!g)return;
@@ -2404,7 +2406,7 @@ function qsHoldStart(b){if(qsHr)return;const t0=performance.now(),bar=b.querySel
   const step=t=>{const k=Math.min(1,Math.max(0,(t-t0)/1000));if(bar)bar.style.width=k*100+"%";if(k>=1){qsHr=0;const kind=b.dataset.v;qmClose(true);toast(kind==="shutdown"?"Shutting down…":"Restarting…");if(api.power)api.power(kind);return}qsHr=requestAnimationFrame(step)};qsHr=requestAnimationFrame(step)}
 function qsHoldStop(){if(qsHr){cancelAnimationFrame(qsHr);qsHr=0}if(qsEl)qsEl.querySelectorAll(".qm-hb").forEach(b=>b.style.width="0%")}
 // (beta.8) every hold (A on the disc in Inspect, a held Restart / Shut down, the museum's hold) ends, unfinished, when the
-// touch is cancelled (a system gesture, the notification shade) or Boxshelf loses focus or is hidden: the release never
+// touch is cancelled (a system gesture, the notification shade) or (T)rustyShelf loses focus or is hidden: the release never
 // arrives then, and the hold used to finish on its own (a game started, the PC restarted)
 function holdsCancel(){try{holdEnd(false)}catch{}try{if(qsHr)qsHoldStop()}catch{}try{if(musHoldT)musHoldEnd()}catch{}}
 addEventListener("pointercancel",holdsCancel,true);addEventListener("blur",holdsCancel);document.addEventListener("visibilitychange",()=>{if(document.hidden)holdsCancel()});
@@ -2451,12 +2453,12 @@ let shuffling=false;
 const shuffleAll=()=>!(cfgInfo&&cfgInfo.config.ui.shuffleAll===false);
 const isGame=g=>g.kind==="rom"||g.kind==="steam";
 // (beta.4) PC games carry their source: Steam, Epic, Quiver or added by hand (main/pcgames.js)
-const PC_SRC={epic:"Epic Games",folder:"PC games folder",quiver:"Quiver",custom:"Custom",gog:"GOG",ubisoft:"Ubisoft",ea:"EA",xbox:"Xbox"},PC_HOW={epic:"Starts through the Epic Games Launcher, so its sign-in, cloud saves and overlay work as usual.",quiver:"Installed with Quiver Launcher. Boxshelf starts it from its own folder; updates stay in Quiver.",custom:"Added by you in Settings → Custom games. Boxshelf starts it from its own folder.",folder:"A folder in your PC games folder (Settings → PC games). Boxshelf starts it from there.",
-  gog:"Installed with GOG Galaxy. GOG games have no copy protection: Boxshelf starts it itself; updates stay in GOG Galaxy.",ubisoft:"Starts through Ubisoft Connect, so its sign-in and cloud saves work as usual.",ea:"Starts through the EA app, so its sign-in and cloud saves work as usual.",xbox:"An Xbox app game (Game Pass included). It starts like any Xbox app game, signed in with your Microsoft account."};
+const PC_SRC={epic:"Epic Games",folder:"PC games folder",quiver:"Quiver",custom:"Custom",gog:"GOG",ubisoft:"Ubisoft",ea:"EA",xbox:"Xbox"},PC_HOW={epic:"Starts through the Epic Games Launcher, so its sign-in, cloud saves and overlay work as usual.",quiver:"Installed with Quiver Launcher. (T)rustyShelf starts it from its own folder; updates stay in Quiver.",custom:"Added by you in Settings → Custom games. (T)rustyShelf starts it from its own folder.",folder:"A folder in your PC games folder (Settings → PC games). (T)rustyShelf starts it from there.",
+  gog:"Installed with GOG Galaxy. GOG games have no copy protection: (T)rustyShelf starts it itself; updates stay in GOG Galaxy.",ubisoft:"Starts through Ubisoft Connect, so its sign-in and cloud saves work as usual.",ea:"Starts through the EA app, so its sign-in and cloud saves work as usual.",xbox:"An Xbox app game (Game Pass included). It starts like any Xbox app game, signed in with your Microsoft account."};
 // (beta.7) the stores whose games are handed to their own launcher (Back returns to the shelf while they run)
 const PC_EXT={epic:"Epic Games Launcher",ubisoft:"Ubisoft Connect",ea:"EA app",xbox:"Xbox app"};
-// (Linux) Epic's games are started by Boxshelf itself, through Wine / Proton (main/linuxpc.js): like any game, not handed over
-if(window.bsPlatform&&bsPlatform.os==="linux"){delete PC_EXT.epic;PC_HOW.epic="On your Epic account (signed in through legendary). Boxshelf starts it through Wine / Proton, with the quit combo like any game; a greyed one isn't installed: Play installs it.";
+// (Linux) Epic's games are started by (T)rustyShelf itself, through Wine / Proton (main/linuxpc.js): like any game, not handed over
+if(window.bsPlatform&&bsPlatform.os==="linux"){delete PC_EXT.epic;PC_HOW.epic="On your Epic account (signed in through legendary). (T)rustyShelf starts it through Wine / Proton, with the quit combo like any game; a greyed one isn't installed: Play installs it.";
   PC_HOW.folder="A folder in your PC games folder (Settings → PC games). A Linux game runs as it is; a Windows one through Wine / Proton, in a Wine prefix of its own.";PC_HOW.custom="Added by you in Settings → Custom games. Windows programs run through Wine / Proton, each in a Wine prefix of its own."}
 // a quick rainbow lick over the tile as each cover flips past
 function flick(el){if(!el)return;el.classList.remove("flick");void el.offsetWidth;el.classList.add("flick");setTimeout(()=>el.classList.remove("flick"),520)}
@@ -2537,7 +2539,7 @@ async function playPick(tileG){
 // the museum, Inspect…); a game that is still closing (the phone's "Quit and play") is waited for.
 let compPlay=null;
 function companionPlay(p){if(!p||typeof p!=="object")return;compPlay={p,until:performance.now()+20000};companionStep()}
-function companionStep(){const c=compPlay;if(!c)return;if(performance.now()>c.until){compPlay=null;toast("Couldn't start the game from the phone: Boxshelf was busy");return}
+function companionStep(){const c=compPlay;if(!c)return;if(performance.now()>c.until){compPlay=null;toast("Couldn't start the game from the phone: (T)rustyShelf was busy");return}
   const again=ms=>setTimeout(()=>{if(compPlay===c)companionStep()},ms);
   if(mode==="launch"&&(runningKind==="steam"||runningKind==="error")&&!returnPrep){endLaunch();return again(300)} // "Running through Steam" / an error note: nothing to wait for
   if(mode==="launch"||mode==="boot"||mode==="homemenu"||sysBusy()||returnPrep||app.classList.contains("returning"))return again(300);
@@ -2570,7 +2572,7 @@ const MUS_ROOM=[
   {key:"tvSize",label:"Size",type:"choice",opts:[["s","Small"],["m","Medium"],["l","Large"]],tv:true},
   {key:"tvPos",label:"Position",type:"choice",opts:[["left","Left"],["centre","Centre"],["right","Right"]],tv:true,note:"Centre: between the shelves and the reading corner, which moves along to make room"},
   {key:"tvCh",label:"Channel",type:"choice",opts:[["ads","Vintage commercials"],["trailers","Game trailers"],["recent","Recently played"],["mix","Shuffle all"]],tv:true,note:"At the TV, up and down change the channel too. Shuffle all mixes the other three"},
-  {key:"tvVol",label:"Volume",type:"range",min:0,max:1,step:.1,fmt:v=>v<=0?"Off":Math.round(v*100)+"%",tv:true,note:"On top of Boxshelf's own volume"},
+  {key:"tvVol",label:"Volume",type:"range",min:0,max:1,step:.1,fmt:v=>v<=0?"Off":Math.round(v*100)+"%",tv:true,note:"On top of (T)rustyShelf's own volume"},
   {key:"tvMute",label:"Mute",type:"bool",tv:true},
   {key:"tvNear",label:"Sound only when I'm looking at it",type:"bool",tv:true,note:"Fades in as you face the TV or walk up to it, and away as you leave"},
   {key:"tvCrt",label:"CRT effect",type:"range",min:0,max:1,step:.1,fmt:v=>v<=0?"Off":Math.round(v*100)+"%",tv:true,note:"Scanlines, curved glass and glow"},
@@ -2596,7 +2598,7 @@ function musSetOpt(key,val){if(!cfgInfo)return;const ui=cfgInfo.config.ui,was=mu
   if(key==="tvCh"&&val!==was.tvCh&&mode==="museum"&&Museum.tvPowered&&Museum.tvPowered())tvTune();
   if(mode==="museum"&&Museum.showTv&&/^tv(Crt|Anim|Vol|Mute|Near|Ch)$/.test(key))Museum.showTv();
   clearTimeout(musStyleSaveT);musStyleSaveT=setTimeout(()=>{musStyleSaveT=0;api.saveConfig(cfgInfo.config).catch(()=>{})},700)}
-window.BoxshelfMuseumRoom={opts:MUS_ROOM,defaults:MUS_ROOM_DEF};
+window.TrustyShelfMuseumRoom={opts:MUS_ROOM,defaults:MUS_ROOM_DEF};
 // the Room menu: a panel over the museum. Up/down picks a line, left/right changes it (A flips a switch), B or Start closes
 let musRoom={open:false,i:0,fine:false},musResealAsk=0;
 function musRoomEl(){let el=document.getElementById("musRoom");if(!el){el=document.createElement("aside");el.id="musRoom";el.className="mus-room";el.setAttribute("aria-label","Room");$("museum").appendChild(el)}return el}
@@ -2677,7 +2679,7 @@ function musFitKey(k){const f=Museum.consoleFit&&Museum.consoleFit();if(!f){musF
 function musFitAt(id){if(mode==="customize")closeCustomize();openMuseum(id);if(mode!=="museum")return;setTimeout(()=>{if(mode!=="museum")return;if(Museum.skipFill)Museum.skipFill();if(Museum.skipDelivery)Museum.skipDelivery(true);Museum.toConsole();if(!musFitOpen())toast("No 3D model on that shelf yet")},700)}
 /* ---------- the reading corner: your Magazines\ and Guides\ (main/library.js) and a full-screen reader ---------- */
 let libItems=[],libSig="",libCovers=new Map();
-// the museum's movie shelves: your Stremio library (Boxshelf reads it from Stremio's own storage on this PC)
+// the museum's movie shelves: your Stremio library ((T)rustyShelf reads it from Stremio's own storage on this PC)
 let movieItems=[],movieSig="";
 const musLib=()=>libItems.concat(movieItems);
 function movieRefresh(){if(!api.stremioLibrary)return Promise.resolve(movieItems);return api.stremioLibrary().then(l=>{const items=(Array.isArray(l)?l:[]).map(m=>({id:"stremio:"+m.id,sid:m.id,kind:"movie",type:m.type==="series"?"series":"movie",title:m.name,poster:m.poster||""})),sig=items.map(i=>i.id).join(",");if(sig!==movieSig){movieSig=sig;movieItems=items;if(mode==="museum"&&Museum.setLibrary)Museum.setLibrary(musLib())}return movieItems}).catch(()=>movieItems)}
@@ -2793,12 +2795,12 @@ setTimeout(()=>{libRefresh()},2500); /* the reading corner is ready before you f
    the D-pad / stick walks the panel's buttons (left/up back, right/down on), A presses, B closes. Downloads land on the rack. */
 let musFind={open:false,el:null};
 addEventListener("bs-library-changed",()=>{if(mode==="museum")libRefresh()});
-function museumFind(kind){if(mode!=="museum"||!window.BoxshelfIA)return;if(musRoom.open)musRoomClose();
+function museumFind(kind){if(mode!=="museum"||!window.TrustyShelfIA)return;if(musRoom.open)musRoomClose();
   let el=document.getElementById("musFind");if(!el){el=document.createElement("aside");el.id="musFind";el.className="mus-find";el.innerHTML='<div class="mf-head"><div class="mf-title">Find magazines &amp; guides</div><button type="button" class="btn small mf-close">Close</button></div><div class="mf-body"></div>';el.querySelector(".mf-close").onclick=()=>musFindClose();$("museum").appendChild(el)}
-  musFind.open=true;musFind.el=el;el.classList.add("on");BoxshelfIA.mount(el.querySelector(".mf-body"),kind);play_("panel");
+  musFind.open=true;musFind.el=el;el.classList.add("on");TrustyShelfIA.mount(el.querySelector(".mf-body"),kind);play_("panel");
   setTimeout(()=>{const f=el.querySelector(".ia-chips .chip")||el.querySelector("button");if(f)f.focus()},60);renderMusHints()}
-function musFindClose(){if(!musFind.open)return;musFind.open=false;const el=musFind.el;if(el){el.classList.remove("on");BoxshelfIA.unmount(el.querySelector(".mf-body"))}play_("back");
-  {const n=window.BoxshelfIA&&BoxshelfIA.running?BoxshelfIA.running():0;if(n)toast(`${n} download${n>1?"s":""} carry on: ${n>1?"they turn":"it turns"} up on the rack when done`)}libRefresh();renderMusHints()}
+function musFindClose(){if(!musFind.open)return;musFind.open=false;const el=musFind.el;if(el){el.classList.remove("on");TrustyShelfIA.unmount(el.querySelector(".mf-body"))}play_("back");
+  {const n=window.TrustyShelfIA&&TrustyShelfIA.running?TrustyShelfIA.running():0;if(n)toast(`${n} download${n>1?"s":""} carry on: ${n>1?"they turn":"it turns"} up on the rack when done`)}libRefresh();renderMusHints()}
 // Moving round the panel with a controller: up/down/left/right goes to the nearest thing in that direction (so down
 // really goes down a row, not along it), holding repeats, the right stick scrolls, L1/R1 jump between sections.
 function musFindFocusables(){const el=musFind.el;return el?[...el.querySelectorAll("button:not([disabled]),input")].filter(x=>x.offsetParent&&!x.closest(".mf-head")):[]}
@@ -2819,7 +2821,7 @@ function musFindSection(d){const secs=musFindSections();if(!secs.length)return;c
   const j=i<0?0:Math.max(0,Math.min(secs.length-1,i+d));if(j===i){play_("error");return}musFindFocus(secs[j][0],d)}
 function musFindScroll(dy){const b=musFind.el&&musFind.el.querySelector(".mf-body");if(b)b.scrollTop+=dy}
 // B closes the finder's on-screen keyboard first; A on its search box (with a controller) opens that keyboard
-function musFindKey(k){const IA=window.BoxshelfIA;if(k==="back"){if(IA&&IA.back&&IA.back()){play_("back");renderMusHints();return}return musFindClose()}
+function musFindKey(k){const IA=window.TrustyShelfIA;if(k==="back"){if(IA&&IA.back&&IA.back()){play_("back");renderMusHints();return}return musFindClose()}
   if(k==="ok"){const a=document.activeElement;if(a&&musFind.el.contains(a)){if(a.tagName==="INPUT"){if(inputMode==="pad"&&IA&&IA.osk){IA.osk();play_("panel");renderMusHints();return}a.blur();return}a.click();if(IA&&IA.typing)setTimeout(renderMusHints,0)}return}musFindStep(k)}
 let Shelf_setMusLight=null;
 function museumData(){
@@ -2879,7 +2881,7 @@ function museumSelect(c){
   else if(c.lib){const d=c.lib;$("musRow").textContent=d.kind==="guide"?"Strategy guide":"Magazine";$("musTitle").textContent=d.title;$("musMeta").textContent=[d.series,d.type==="pdf"?"PDF":d.pages?d.pages+" pages":""].filter(Boolean).join(" · ")}
   else if(c.tv){const m=c.tv.meta,ch=TV_BANDS.includes(c.tv.ch)?c.tv.ch:"ads",card=m?!!(m.trailer||m.recent):(ch==="trailers"||ch==="recent");$("musRow").textContent="Retro TV · "+TV_NAMES[ch];
     if(card){const tr=m?!!m.trailer:ch==="trailers";$("musTitle").textContent=m?m.game:tr?"No trailers yet":"Nothing played yet";$("musMeta").textContent=m?[c.tv.card&&c.tv.card.sub,tr?`${okWord()} to watch the trailer`:`${okWord()} to play it`].filter(Boolean).join(" · "):tr?"Trailers come with your games' LaunchBox details":"The games you play turn up here"}
-    else{const none=tvS.loaded&&!tvS.list.length,m=none?null:c.tv.meta; /* (an ad that failed leaves its name behind) */$("musTitle").textContent=m?(m.game||m.title):(none?"Nothing on yet":"Tuning in…");$("musMeta").textContent=m?[m.game&&m.title!==m.game?m.title:"",m.year,"from the Internet Archive"].filter(Boolean).join(" · "):(none?"No ads found yet: Boxshelf is still looking in the background (the first time takes a while)":"")}
+    else{const none=tvS.loaded&&!tvS.list.length,m=none?null:c.tv.meta; /* (an ad that failed leaves its name behind) */$("musTitle").textContent=m?(m.game||m.title):(none?"Nothing on yet":"Tuning in…");$("musMeta").textContent=m?[m.game&&m.title!==m.game?m.title:"",m.year,"from the Internet Archive"].filter(Boolean).join(" · "):(none?"No ads found yet: (T)rustyShelf is still looking in the background (the first time takes a while)":"")}
     museumSelect.first=false;renderMusHints();return}
   else if(c.delivery){if(musRoom.open)musRoomClose();const v=c.delivery,many=v.n>1,where=/ shelves$/.test(v.shelf)?`across ${v.shelf}`:`for your ${v.shelf} shelf`;$("musRow").textContent=many?"New arrivals":"New arrival";
     if(v.waiting){$("musTitle").textContent="Mail call";$("musMeta").textContent="Something has arrived for the collection…"}
@@ -2903,7 +2905,7 @@ function renderMusHints(){
   const h=$("musHints");const pad=inputMode==="pad";const held=Museum.isHolding(),c=Museum.current();
   tvRefreshHeld();
   if(tvS.guide)tvGuideChrome();
-  const items=tvS.guide?[]/* the guide has its own prompts */:musHand().tv?(()=>{const ch=tvCh(),m=Museum.tvMeta();return [[pad?["↔"]:["←","→"],ch==="ads"?"Next ad":"Next"],[pad?["↕"]:["↑","↓"],"Channel"],...(m&&m.trailer?[[pad?["x"]:["Enter"],"Watch trailer"]]:tvOwned(m)?[[pad?["x"]:["Enter"],"Play this game"]]:[]),[pad?["tri"]:["T"],"TV guide"],[pad?["sq"]:["X"],"Turn off"],[pad?["o"]:["Esc"],"Back"]]})():musHand().opening?[[pad?["x","o"]:["Enter","Esc"],"Skip"]]:c&&c.delivery?(c.delivery.waiting?[[pad?["x"]:["Enter"],"Skip"]]:[[pad?["L"]:["←","→","↑","↓"],"Turn"],[pad?["x"]:["Enter"],"Hold to open"],[pad?["o"]:["Esc"],"Skip"]]):musFind.open?[[pad?["L"]:["←","→","↑","↓"],"Move"],[pad?["R"]:["PgUp","PgDn"],"Scroll"],[pad?["L1","R1"]:["Tab"],"Section"],[pad?["x"]:["Enter"],"Select"],[pad?["o"]:["Esc"],window.BoxshelfIA&&BoxshelfIA.typing&&BoxshelfIA.typing()?"Hide keyboard":"Close"]]:Museum.isWide&&Museum.isWide()?[[pad?["L"]:["←","→","↑","↓"],"Choose a section"],[pad?["x"]:["Enter"],c&&c.wide&&c.wide.empty?"Find some":"Zoom in"],...(c&&c.wide&&c.wide.rack&&c.wide.kind!=="movie"?[[pad?["sq"]:["X"],c.wide.empty?"Find some":"Find more"]]:[]),...(c&&c.wide&&c.wide.tv?[[pad?["tri"]:["T"],"TV guide"]]:[[pad?["tri"]:["L"],pad?"Room":"Lighting"]]),[pad?["o"]:["Esc"],"Back to shelf"]]:musHand().fan?[[pad?["L"]:["←","→"],"Flip"],[pad?["L1","R1"]:["Q","E"],musHand().fanYears?"Year":"Skip 10"],[pad?["x"]:["Enter"],musHand().libWrapped?"Hold to unwrap":"Read"],[pad?["o"]:["Esc"],"Put back"]]:musHand().libHeld?[[pad?["R"]:["←","→"],"Turn"],[pad?["L2","R2"]:["↑","↓"],"Zoom"],[pad?["x"]:["Enter"],musHand().libWrapped?"Hold to unwrap":musHand().libMovie?(musHand().movieDisc?"Watch in Stremio":musHand().movieOpen?"Take out the disc":"Open case"):"Read"],...(musHand().libMovie?[[pad?["sq"]:["X"],"Read insert"]]:[]),[pad?["o"]:["Esc"],musHand().movieDisc?"Put the disc back":musHand().movieOpen?"Close case":"Put back"]]:held&&Museum.isHoldingCase()?musHandHints(pad):held?[[pad?["R"]:["←","→"],"Turn"],[pad?["o"]:["Esc"],"Put down"]]:[[pad?["L"]:["←","→"],pad?"Move":"Case"],...(pad?[]:[[["↑","↓"],"Shelf"]]),[pad?["L1","R1"]:["Q","E"],"Skip 10"],...(pad?[]:[[["L"],"Lighting"]]),...(c&&c.lib&&c.lib.kind!=="movie"?[[pad?["sq"]:["X"],"Find more"]]:[]),[pad?["x"]:["Enter"],c&&c.stack?"Flip through":c&&c.parcel?"Hold to open":"Pick up"],...(c&&c.console&&Museum.consoleFit&&Museum.consoleFit()?[[pad?["sq"]:["X"],"Fit console"]]:[]),[pad?["tri"]:["Tab"],"Room"],[pad?["o"]:["Esc"],"Back to shelf"]];
+  const items=tvS.guide?[]/* the guide has its own prompts */:musHand().tv?(()=>{const ch=tvCh(),m=Museum.tvMeta();return [[pad?["↔"]:["←","→"],ch==="ads"?"Next ad":"Next"],[pad?["↕"]:["↑","↓"],"Channel"],...(m&&m.trailer?[[pad?["x"]:["Enter"],"Watch trailer"]]:tvOwned(m)?[[pad?["x"]:["Enter"],"Play this game"]]:[]),[pad?["tri"]:["T"],"TV guide"],[pad?["sq"]:["X"],"Turn off"],[pad?["o"]:["Esc"],"Back"]]})():musHand().opening?[[pad?["x","o"]:["Enter","Esc"],"Skip"]]:c&&c.delivery?(c.delivery.waiting?[[pad?["x"]:["Enter"],"Skip"]]:[[pad?["L"]:["←","→","↑","↓"],"Turn"],[pad?["x"]:["Enter"],"Hold to open"],[pad?["o"]:["Esc"],"Skip"]]):musFind.open?[[pad?["L"]:["←","→","↑","↓"],"Move"],[pad?["R"]:["PgUp","PgDn"],"Scroll"],[pad?["L1","R1"]:["Tab"],"Section"],[pad?["x"]:["Enter"],"Select"],[pad?["o"]:["Esc"],window.TrustyShelfIA&&TrustyShelfIA.typing&&TrustyShelfIA.typing()?"Hide keyboard":"Close"]]:Museum.isWide&&Museum.isWide()?[[pad?["L"]:["←","→","↑","↓"],"Choose a section"],[pad?["x"]:["Enter"],c&&c.wide&&c.wide.empty?"Find some":"Zoom in"],...(c&&c.wide&&c.wide.rack&&c.wide.kind!=="movie"?[[pad?["sq"]:["X"],c.wide.empty?"Find some":"Find more"]]:[]),...(c&&c.wide&&c.wide.tv?[[pad?["tri"]:["T"],"TV guide"]]:[[pad?["tri"]:["L"],pad?"Room":"Lighting"]]),[pad?["o"]:["Esc"],"Back to shelf"]]:musHand().fan?[[pad?["L"]:["←","→"],"Flip"],[pad?["L1","R1"]:["Q","E"],musHand().fanYears?"Year":"Skip 10"],[pad?["x"]:["Enter"],musHand().libWrapped?"Hold to unwrap":"Read"],[pad?["o"]:["Esc"],"Put back"]]:musHand().libHeld?[[pad?["R"]:["←","→"],"Turn"],[pad?["L2","R2"]:["↑","↓"],"Zoom"],[pad?["x"]:["Enter"],musHand().libWrapped?"Hold to unwrap":musHand().libMovie?(musHand().movieDisc?"Watch in Stremio":musHand().movieOpen?"Take out the disc":"Open case"):"Read"],...(musHand().libMovie?[[pad?["sq"]:["X"],"Read insert"]]:[]),[pad?["o"]:["Esc"],musHand().movieDisc?"Put the disc back":musHand().movieOpen?"Close case":"Put back"]]:held&&Museum.isHoldingCase()?musHandHints(pad):held?[[pad?["R"]:["←","→"],"Turn"],[pad?["o"]:["Esc"],"Put down"]]:[[pad?["L"]:["←","→"],pad?"Move":"Case"],...(pad?[]:[[["↑","↓"],"Shelf"]]),[pad?["L1","R1"]:["Q","E"],"Skip 10"],...(pad?[]:[[["L"],"Lighting"]]),...(c&&c.lib&&c.lib.kind!=="movie"?[[pad?["sq"]:["X"],"Find more"]]:[]),[pad?["x"]:["Enter"],c&&c.stack?"Flip through":c&&c.parcel?"Hold to open":"Pick up"],...(c&&c.console&&Museum.consoleFit&&Museum.consoleFit()?[[pad?["sq"]:["X"],"Fit console"]]:[]),[pad?["tri"]:["Tab"],"Room"],[pad?["o"]:["Esc"],"Back to shelf"]];
   // the same prompts as last time (every case along a shelf has the same ones): left as they are. Rebuilding them on
   // each step of a fast scroll was a few ms of DOM and layout work per case.
   const sig=(pad?"p"+glyph("x"):"k")+JSON.stringify(items);/* (the glyph: a different pad's buttons draw differently) */if(sig===renderMusHints.sig&&h.childElementCount===items.length)return;renderMusHints.sig=sig;h.innerHTML="";
@@ -2936,7 +2938,7 @@ function museumX(){const s=musHand();if(s.delivery)return;if(s.tv){tvS.tok++;cle
 // tvS.list is the playlist of the channel that's on: ads (a video each, from the Internet Archive) and title cards (a
 // game's trailer, or a game you played lately, shown for a few seconds). Shuffle all deals the three out in turn.
 const tvS={list:[],i:0,tok:0,ch:"ads",heldAd:null,heldFor:null,guide:null,gi:0,loaded:false,ads:[],bad:new Set(),want:null,dirty:false,saveT:0};
-// the TV's sound: Boxshelf's volume (shelf, quick menu, Settings) × the Room menu's TV volume, nothing when muted
+// the TV's sound: (T)rustyShelf's volume (shelf, quick menu, Settings) × the Room menu's TV volume, nothing when muted
 const tvVol=()=>{const st=musStyle();return soundOn&&!st.tvMute?Math.max(0,Math.min(1,((cfgInfo&&cfgInfo.config.ui.volume)!=null?cfgInfo.config.ui.volume:.7)*.9*Math.max(0,Math.min(1,st.tvVol==null?1:+st.tvVol)))):0};
 const tvOwned=a=>{if(!a||a.console||!a.rom)return null;const sh=allShelves.find(x=>x.id===a.sysId);const g=sh&&(sh.items||[]).find(x=>x.kind==="rom"&&String(x.file||"").toLowerCase()===a.rom);return g?{sh,g}:null};
 async function tvLoad(){let l=[];try{l=await api.tvList()||[]}catch{}tvS.loaded=true;tvS.ads=Array.isArray(l)?l:[];return tvS.ads}
@@ -3028,7 +3030,7 @@ function tvGuideRender(toNow){const G=tvS.guide;if(!G)return;const el=G.el,keep=
       r.querySelector("b").textContent=it.title||"";r.querySelector("i").textContent=it.sub||"";if(it.key==="__mix")r.querySelector(".tg-star").remove();
       r.addEventListener("click",ev=>{setInput("pointer");tvS.gi=k;G.moved=true;if(ev.target.closest(".tg-star")){tvGuidePaint();tvGuideFav();return}tvGuidePick()});
       L.appendChild(r);G.items.push(it)})});
-  if(!G.items.length){const e=document.createElement("div");e.className="tg-empty";e.textContent=G.tab==="ads"?(tvS.loaded?"No commercials found yet. Boxshelf is still looking for them in the background (the first time takes a while).":"Looking for commercials…"):G.tab==="trailers"?"No trailers yet. They come with your games' LaunchBox details.":"Nothing played yet. The games you play turn up here.";L.appendChild(e)}
+  if(!G.items.length){const e=document.createElement("div");e.className="tg-empty";e.textContent=G.tab==="ads"?(tvS.loaded?"No commercials found yet. (T)rustyShelf is still looking for them in the background (the first time takes a while).":"Looking for commercials…"):G.tab==="trailers"?"No trailers yet. They come with your games' LaunchBox details.":"Nothing played yet. The games you play turn up here.";L.appendChild(e)}
   // where the guide opens: on what's on now (when it's in this tab), else the top; a refresh keeps your place
   const now=(Museum.tvMeta()||{}).key;let i=keep?G.items.findIndex(x=>x.key===keep):-1;if(i<0&&now)i=G.items.findIndex(x=>x.key===now);tvS.gi=Math.max(0,i);
   if(toNow)L.scrollTop=0;tvGuideMarks();tvGuidePaint()}
@@ -3150,7 +3152,7 @@ setInterval(attractCheck,5000);
 const warmStart=performance.now();
 (function warmLater(){setTimeout(()=>{if(!(window.Museum&&Museum.available()))return;if(mode!=="browse")return warmLater();if(app.classList.contains("covers-wait")||performance.now()-warmStart<6000)return warmLater(); /* never while the shelf is still filling in */if(performance.now()-lastInputAt<2500&&performance.now()-warmStart<30000)return warmLater(); /* while you're browsing it waits for a pause (up to 30 s), so any small hitch lands when nothing is moving */const go=()=>{if(mode!=="browse")return warmLater();bootMark("warm");let w=null;try{w=Museum.warm()}catch{}Promise.resolve(w).catch(()=>{}).then(()=>{bootMark("warm-done");return preloadModels()})};window.requestIdleCallback?requestIdleCallback(go,{timeout:3000}):go()},2500)})(); // the first quiet moment after startup (a controller that never rests used to hold this back for good) // sooner than before (was 6 s): a first visit right after startup used to pay for setting up the 3D room
 // Heavy 3D models (a 50 MB console, say) are made into a light copy once, in a background worker, so the museum never
-// has to chew through millions of triangles. Your file stays as it is; Boxshelf keeps the copy in themes\<system>\.optimized.
+// has to chew through millions of triangles. Your file stays as it is; (T)rustyShelf keeps the copy in themes\<system>\.optimized.
 const idleNow=()=>mode==="browse"&&performance.now()-lastInputAt>1200&&!document.hidden;
 const notInGame=()=>mode!=="launch"&&mode!=="boot"&&!document.hidden; // the optimizer runs in its own thread: anywhere but in a game
 let modelOptBusy=false;const modelOptTried=new Set(); /* each model at most once per run, so a copy that doesn't take can't loop */
@@ -3279,7 +3281,7 @@ function renderHints(){pvGuard();
     b.innerHTML=`<span class="keys">${keys}</span>`+(lab?`<span class="lab"></span>`:"")+(usePad&&hold?`<span class="hold"><i>hold</i> </span>`:"");
     if(lab)b.querySelector(".lab").textContent=lab;if(usePad&&hold)b.querySelector(".hold").append(hold);
     b.addEventListener("click",hn.act);h.appendChild(b)});
-  if(mode!=="details"&&api.quit){const b=document.createElement("button");b.type="button";b.className="hint hint-exit";b.title="Hold for 3 seconds to exit Boxshelf";
+  if(mode!=="details"&&api.quit){const b=document.createElement("button");b.type="button";b.className="hint hint-exit";b.title="Hold for 3 seconds to exit (T)rustyShelf";
     b.innerHTML=`<span class="keys">${usePad?'<span class="g">⏻</span>':'<span class="g">X</span>'}</span><span class="lab">Exit</span>`+(usePad?'<span class="hold"><i>hold</i></span>':"");
     b.addEventListener("pointerdown",e=>{e.preventDefault();try{b.setPointerCapture(e.pointerId)}catch{}holdExitStart()});
     for(const ev of ["pointerup","pointercancel","lostpointercapture"])b.addEventListener(ev,()=>holdExitCancel());
@@ -3355,7 +3357,7 @@ addEventListener("keydown",e=>{
   if((e.key==="x"||e.key==="X")&&mode==="browse"&&!e.repeat&&!e.ctrlKey&&!e.altKey&&!e.metaKey){setInput("kbd");holdExitStart();e.preventDefault();return}
   if((e.key==="-"||e.key==="_"||e.key==="="||e.key==="+")&&mode!=="inspect"&&mode!=="museum"){setVol(curVol()+(e.key==="-"||e.key==="_"?-.05:.05),true);play_("tick",{dir:1});e.preventDefault();return}
   if(mode==="inspect"){inspectKey(e);return}
-  if(mode==="museum"&&musFind.open){const a=document.activeElement,typing=a&&a.tagName==="INPUT"&&musFind.el.contains(a);if(e.key==="Escape"){e.preventDefault();if(typing)a.blur();else if(!(window.BoxshelfIA&&BoxshelfIA.back&&BoxshelfIA.back()))musFindClose();return}if(typing)return;if(e.key==="PageDown"||e.key==="PageUp"){e.preventDefault();musFindScroll((e.key==="PageDown"?1:-1)*innerHeight*.5);return}if(e.key==="Tab"){e.preventDefault();musFindSection(e.shiftKey?-1:1);return}const m={ArrowUp:"up",ArrowDown:"down",ArrowLeft:"left",ArrowRight:"right",Backspace:"back"}[e.key];if(m){e.preventDefault();musFindKey(m)}return}
+  if(mode==="museum"&&musFind.open){const a=document.activeElement,typing=a&&a.tagName==="INPUT"&&musFind.el.contains(a);if(e.key==="Escape"){e.preventDefault();if(typing)a.blur();else if(!(window.TrustyShelfIA&&TrustyShelfIA.back&&TrustyShelfIA.back()))musFindClose();return}if(typing)return;if(e.key==="PageDown"||e.key==="PageUp"){e.preventDefault();musFindScroll((e.key==="PageDown"?1:-1)*innerHeight*.5);return}if(e.key==="Tab"){e.preventDefault();musFindSection(e.shiftKey?-1:1);return}const m={ArrowUp:"up",ArrowDown:"down",ArrowLeft:"left",ArrowRight:"right",Backspace:"back"}[e.key];if(m){e.preventDefault();musFindKey(m)}return}
   if(mode==="museum"&&rdr.open){setInput("kbd");if(rdrKey(e))e.preventDefault();return}
   if(mode==="museum"&&musFit.open){e.preventDefault();setInput("kbd");const m={ArrowUp:"up",ArrowDown:"down",ArrowLeft:"left",ArrowRight:"right",Enter:"ok"," ":"ok",Escape:"back",Backspace:"back",Tab:"back",x:"back",X:"back",f:"back",F:"back"}[e.key];if(m&&!e.repeat||m&&/Arrow/.test(e.key))musFitKey(m);return}
   // the TV guide: ↑↓ (PgUp / PgDn a page) choose, ←→ / Q E / Tab change tab, Enter puts it on, F (or X) favourites, Esc / T close
@@ -3482,7 +3484,7 @@ function trig(gp){let lt=0,rt=0;const b6=gp.buttons[6],b7=gp.buttons[7];
   if(!lt&&!rt&&gp.mapping!=="standard"&&gp.axes.length>=6){const ax=gp.axes;for(let i=2;i<ax.length;i++){const k=gp.index+":"+i;if(trigRest[k]==null)trigRest[k]=ax[i];if(trigRest[k]<-.9){const v=(ax[i]+1)/2;if(v>.05){if(i%2===0&&!lt)lt=v;else if(!rt)rt=v}}}}
   return{lt,rt}}
 function edge(gp,i,fn){const p=!!(gp.buttons[i]&&gp.buttons[i].pressed);if(p&&!prevBtn[i]){setInput("pad");fn()}prevBtn[i]=p}
-// Input polling: every frame while Boxshelf is in front; ~30 Hz when it isn't (a game is running, or another window
+// Input polling: every frame while (T)rustyShelf is in front; ~30 Hz when it isn't (a game is running, or another window
 // has focus), where a full-rate loop would only burn CPU next to the emulator.
 // While a game runs and has the focus (or the window is stepped aside), polling stops entirely: the in-game combo and
 // Home menu come from the main process, and focus / endLaunch / un-aside start it again.
@@ -3621,7 +3623,7 @@ function pollBody(t){
     const B=i=>!!(gp.buttons[i]&&gp.buttons[i].pressed),ax=gp.axes||[];
     const h=(B(15)||ax[0]>.55)?1:(B(14)||ax[0]<-.55)?-1:0;
     const v=(B(13)||ax[1]>.7)?1:(B(12)||ax[1]<-.7)?-1:0;
-    // Hold the quit combo (Settings → Controller; off there = off here too) on the shelf for a moment to quit Boxshelf (a bar shows the progress)
+    // Hold the quit combo (Settings → Controller; off there = off here too) on the shelf for a moment to quit (T)rustyShelf (a bar shows the progress)
     const combo0=COMBO_BTNS[(cfgInfo&&cfgInfo.config.ui.quitComboKeys)||"l3+r3"]||COMBO_BTNS["l3+r3"];
     // the combo names physical buttons ("back+b"): the same buttons whichever one confirms (worked out once, not per frame)
     if(comboMemo.src!==combo0||comboMemo.sw!==PADMAP.swap){comboMemo.src=combo0;comboMemo.sw=PADMAP.swap;comboMemo.out=PADMAP.swap?combo0.map(i=>i===0?1:i===1?0:i):combo0}
@@ -3844,7 +3846,7 @@ let rz;addEventListener("resize",()=>{clearTimeout(rz);rz=setTimeout(()=>{if(!cu
 // First start: the shelf stays hidden for a moment (at most ~0.9 s) until the covers around the selected game are
 // loaded and decoded, then fades in, instead of showing a row of blank cases that fill in one by one.
 let coversShownOnce=false;
-// The start-up reveal: the Boxshelf logo (shown from the very first paint, see splash.js) stays at least ~1 s so it never
+// The start-up reveal: the (T)rustyShelf logo (shown from the very first paint, see splash.js) stays at least ~1 s so it never
 // just flashes, then fades as the shelf comes in: the chosen case first and the rest rippling outward ("ripple"), or
 // the whole shelf fading up ("fade"), or straight in with no logo ("off").
 const SPLASH_T0=performance.now();let revealedAt=0;
@@ -3903,8 +3905,8 @@ async function flushSaves(){
 async function refresh(keepPlace,lib){
   let fresh=null;
   try{await flushSaves();const was=cfgInfo;cfgInfo=await api.getConfig();if(was&&was.config&&cfgInfo&&cfgInfo.config&&(spSaveT||volSaveT||qmSaveT||musStyleSaveT))cfgInfo.config.ui=Object.assign({},cfgInfo.config.ui,was.config.ui);
-  // (1.82) the settings file was locked when Boxshelf started (antivirus, a sync tool): running on defaults, nothing saved
-  if(cfgInfo&&cfgInfo.settingsBlocked&&!refresh.blockedSaid){refresh.blockedSaid=1;pendingNote="Boxshelf couldn't read your settings (another program had the file open). Restart Boxshelf to load them; changes made now aren't saved."}
+  // (1.82) the settings file was locked when (T)rustyShelf started (antivirus, a sync tool): running on defaults, nothing saved
+  if(cfgInfo&&cfgInfo.settingsBlocked&&!refresh.blockedSaid){refresh.blockedSaid=1;pendingNote="(T)rustyShelf couldn't read your settings (another program had the file open). Restart (T)rustyShelf to load them; changes made now aren't saved."}
   // (1.76) the old Background → Game artwork choice is now the Artwork theme (Windows' config.js does the same on load)
   if(cfgInfo&&cfgInfo.config&&cfgInfo.config.ui&&cfgInfo.config.ui.background==="art"){cfgInfo.config.ui.theme="artwork";cfgInfo.config.ui.background="blur";api.saveConfig(cfgInfo.config).catch(()=>{})} /* a setting changed while the config was being re-read: keep it (its save is still on the way) */soundOn=cfgInfo.config.ui.sound!==false;if(window.Sound)Sound.set({enabled:soundOn,boot:cfgInfo.config.ui.bootSound||"chime",theme:cfgInfo.config.ui.soundTheme||"aero",volume:cfgInfo.config.ui.volume==null?.7:cfgInfo.config.ui.volume});if(window.Sound&&Sound.loadSongs&&!songsLoaded){songsLoaded=true;Sound.loadSongs(api,cfgInfo.config.ui.builtInSongs)}(window.Perf&&Perf.set(cfgInfo.config.ui.performance||"auto"),applyEffects());paintVol();themeOverride=null;themeCls();if(api.customThemes&&!loadCustomThemes.done){loadCustomThemes.done=1;loadCustomThemes()}buttonsPref=cfgInfo.config.ui.buttons||"auto";applyUiAll();updateSkipText();fresh=lib||await api.scan()}catch(err){toast(err.message);fresh=[]}
   if(Array.isArray(fresh))lastLib=fresh;
@@ -3963,7 +3965,7 @@ function applyConfirm(v){confirmPref=v||"auto";const sw=confirmPref==="b"||(conf
 const padView={buttons:[],axes:[],id:"",index:0,mapping:"",connected:true,vibrationActuator:null}; // reused every frame: no allocation
 function viewOf(gp){if(!PADMAP.swap||!gp)return gp;const b=padView.buttons,src=gp.buttons,n=src.length;b.length=n;for(let i=0;i<n;i++)b[i]=src[i];if(n>1){b[0]=src[1];b[1]=src[0]}
   padView.axes=gp.axes;padView.id=gp.id;padView.index=gp.index;padView.mapping=gp.mapping;padView.connected=gp.connected;padView.vibrationActuator=gp.vibrationActuator;return padView}
-// Audio output: the cue/music context and every <video> Boxshelf plays (boot videos, the museum's retro TV). A device
+// Audio output: the cue/music context and every <video> (T)rustyShelf plays (boot videos, the museum's retro TV). A device
 // that has gone (unplugged) falls back to the default output. Trailers open in their own window and use the default.
 let sinkId="";
 function sinkFor(){return sinkId==="default"?"":sinkId}
@@ -3972,7 +3974,7 @@ function applyAudioOut(id){id=typeof id==="string"?id:"";if(id===sinkId)return;s
 async function audioOutputs(){let list=[];try{list=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==="audiooutput"&&d.deviceId&&d.deviceId!=="communications")}catch{}
   let n=0;const out=[{id:"default",label:"Default"}];list.forEach(d=>{if(d.deviceId==="default"||out.some(o=>o.id===d.deviceId))return;out.push({id:d.deviceId,label:d.label||("Audio output "+(++n))})});return out}
 /* Dim the screen after a quiet spell (ui.dimMinutes; 0 = never): a black veil fades over everything. Not while a game,
-   a boot video or the museum's TV plays, nor while Boxshelf isn't the window in front (a trailer, another app). Any
+   a boot video or the museum's TV plays, nor while (T)rustyShelf isn't the window in front (a trailer, another app). Any
    input lifts it, and that input is used up by the waking (it doesn't also move or press anything). */
 let keySwallow=false,dimOn=false,dimAt=performance.now(),dimEl=null,dimSwallowPad=false,dimClickUntil=0,dimPausedMuseum=false;
 function dimTouch(){dimAt=performance.now()}
@@ -4081,7 +4083,7 @@ window.Shelf={
     // (beta.10) the shelf you were on is gone (buildHome keeps the index, so another shelf slid into it): show that shelf's own cases, from its first game
     if(cur()!==was){closeDetails(true);sel=cur()?Math.max(0,cur().items.findIndex(isGame)):0;flipped=false;spin=0;spinT=0;cancelAnimationFrame(spinRaf);spinRaf=0;build();if(cur()){updateInfo();raShelfLoad();preloadModel()}tuneTo(cur());save();return}
     renderTabs();if(cur()&&cur().col)build()},
-  homeButton:()=>{if(qm.open){qmClose();return "closed"}qmOpen();return qm.open?"opened":"busy"},quickMenuOpen:()=>!!qm.open, // the Thor's Home key while Boxshelf is the Home app
+  homeButton:()=>{if(qm.open){qmClose();return "closed"}qmOpen();return qm.open?"opened":"busy"},quickMenuOpen:()=>!!qm.open, // the Thor's Home key while (T)rustyShelf is the Home app
   _mus:{set:(k,v)=>musSetOpt(k,v),style:()=>musStyle(),hist:h=>{HIST=Object.assign({},HIST,h||{})},tv:()=>({ch:tvS.ch,n:tvS.list.length,list:tvS.list.slice(0,4).map(e=>String(e.key).slice(0,12)),i:tvS.i,ads:tvS.ads.length,bad:[...tvS.bad],guide:!!tvS.guide}),games:()=>allShelves.filter(sh=>sh.kind==="console").flatMap(sh=>sh.items.filter(isGame).map(g=>({id:g.id,title:g.title,sys:sh.id})))}, // museum test hooks (the harness can't see these names)
   refresh,flushSaves,toast,shuffle,cleanLogo,attractNow:()=>{lastInputAt=-1e9;attractCheck()},sound:(o)=>{if(o&&o.enabled!=null){soundOn=!!o.enabled;musTvVol()}if(o&&o.volume!=null&&cfgInfo){cfgInfo.config.ui.volume=+o.volume;paintVol()}if(window.Sound){Sound.set(o);if(o.preview)Sound.play(o.preview);if(o.music!=null||o.musicLevel!=null){if(o.music!=null)mmTrack=String(o.music);if(o.musicLevel!=null)mmLevel=+o.musicLevel;ambient(mmWant)}else if(o.enabled===true)ambient(mmWant)}},raReload:()=>{RA.shelf={};RA.game.clear();raInit()},
   // Settings closed without a rescan: pick up what refresh() used to re-read (sound on/off, the volume icon, prompts)
@@ -4231,7 +4233,7 @@ window.Shelf._booklet=()=>makeBooklet(curGame());window.Shelf._rd=()=>({open:rd.
 
 addEventListener("blur",()=>document.body.classList.add("idle-bg"));addEventListener("focus",()=>document.body.classList.remove("idle-bg"));
 // Startup trace: the moments that matter (shelf built, covers shown, scan back, background jobs) and every frame that
-// came in late during the first 20 s, written as one line to the Boxshelf log so a stutter can be pinned down on any PC
+// came in late during the first 20 s, written as one line to the (T)rustyShelf log so a stutter can be pinned down on any PC
 const BOOT={t0:performance.now(),marks:[],gaps:[],last:"start"};
 function bootMark(n){if(!BOOT.done){const t=Math.round(performance.now()-BOOT.t0);BOOT.marks.push(n+"@"+t);BOOT.last=n}}
 (function bootWatch(){let prev=performance.now();const f=now=>{const gap=now-prev;prev=now;if(gap>40&&!document.hidden)BOOT.gaps.push(Math.round(now-BOOT.t0)+":"+Math.round(gap)+"("+BOOT.last+")");if(now-BOOT.t0<20000)requestAnimationFrame(f);else{BOOT.done=true;api.log&&api.log(`startup: ${BOOT.marks.join(" ")} | late frames (at:ms(after)): ${BOOT.gaps.slice(0,40).join(" ")||"none"}`)}};requestAnimationFrame(f)})();

@@ -1,4 +1,6 @@
-// Boxshelf — TV-style launcher for emulators, Steam and media apps.
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): most of this file is Boxshelf's
+// main.js; modified for (T)rustyShelf (see the git history).
+// (T)rustyShelf — TV-style launcher for emulators, Steam and media apps.
 const { app, BrowserWindow, ipcMain, dialog, protocol, shell, net, nativeImage, session, safeStorage, screen } = require('electron');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
@@ -10,9 +12,9 @@ const paths = require('./main/paths');
 const stremio = require('./main/stremio');
 const commercials = require('./main/commercials');
 // Portable: the app's own folder holds Dolphin\, Eden\, PPSPP\, ROMS\ and themes\.
-// A portable exe unpacks itself into TEMP; PORTABLE_EXECUTABLE_DIR is where the real Boxshelf.exe sits
+// A portable exe unpacks itself into TEMP; PORTABLE_EXECUTABLE_DIR is where the real TrustyShelf.exe sits
 const linux = require('./main/linux'); // (Linux / Steam Deck only)
-const steamdeck = require('./main/steamdeck'); // (beta.8) Steam Deck: where Boxshelf runs, Add Boxshelf to Steam
+const steamdeck = require('./main/steamdeck'); // (beta.8) Steam Deck: where (T)rustyShelf runs, Add (T)rustyShelf to Steam
 const linuxpad = require('./main/linuxpad'); // (beta.9) Linux: hold Select + Start to close the game
 paths.setAppRoot(linux.isLinux ? linux.appRoot(app.isPackaged, __dirname) : app.isPackaged ? (process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(process.execPath)) : __dirname);
 
@@ -98,7 +100,7 @@ function openTrailer(url) {
   if (!id || !/^[\w-]{6,20}$/.test(id)) { shell.openExternal(url).catch(e => log('trailer open', e.message)); return { external: true }; }
   if (trailerWin) { try { trailerWin.close(); } catch {} }
   const b = win ? win.getBounds() : { x: 0, y: 0, width: 1280, height: 720 };
-  trailerWin = new BrowserWindow({ parent: win || undefined, modal: false, fullscreen: !!(win && win.isFullScreen()), x: b.x, y: b.y, width: b.width, height: b.height, backgroundColor: '#000000', autoHideMenuBar: true, title: 'Trailer', webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, partition: 'trailer' } }); // its own session: YouTube's page can't reach Boxshelf's bsfile:// files
+  trailerWin = new BrowserWindow({ parent: win || undefined, modal: false, fullscreen: !!(win && win.isFullScreen()), x: b.x, y: b.y, width: b.width, height: b.height, backgroundColor: '#000000', autoHideMenuBar: true, title: 'Trailer', webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, partition: 'trailer' } }); // its own session: YouTube's page can't reach (T)rustyShelf's bsfile:// files
   trailerWin.setMenuBarVisibility(false);
   ytLoad(trailerWin.webContents, id, { muted: false }).catch(e => log('trailer load', e.message)); // (beta.7: inside a page of its own; a bare embed no longer plays)
   trailerWin.webContents.on('before-input-event', (e, input) => { if (input.type === 'keyDown' && (input.key === 'Escape' || input.key === 'Backspace')) { e.preventDefault(); try { trailerWin.close(); } catch {} } });
@@ -107,7 +109,7 @@ function openTrailer(url) {
   const tw = trailerWin; tw.on('closed', () => { if (trailerWin === tw) trailerWin = null; if (alive() && trailerWin === null) win.focus(); if (trailerWin === null && cfg && cfg.ui.homeMenu === false && !launcher.isRunning()) padwatch.stop(); });
   // the trailer has the focus, so the shelf's own pad reading can't see the controller: the XInput helper closes it on B,
   // Back or Guide (with the Home menu off no helper runs on the shelf, so start one just for the trailer)
-  if (!padwatch.isRunning()) { if (cfg && cfg.ui.homeMenu !== false) watchShelf(); else padwatch.start('none', 900, () => {}, { home: true, backHome: false, cmdFile: path.join(app.getPath('temp'), `boxshelf-pad-${process.pid}.txt`), onHome: () => closeTrailer(), onButton: (n, d) => { if (d && (n === 'b' || n === 'back')) closeTrailer(); } }); }
+  if (!padwatch.isRunning()) { if (cfg && cfg.ui.homeMenu !== false) watchShelf(); else padwatch.start('none', 900, () => {}, { home: true, backHome: false, cmdFile: path.join(app.getPath('temp'), `trustyshelf-pad-${process.pid}.txt`), onHome: () => closeTrailer(), onButton: (n, d) => { if (d && (n === 'b' || n === 'back')) closeTrailer(); } }); }
   return { external: false };
 }
 // (beta.7) YouTube only plays an embed that sits in a web page (a bare embed shows "Video player configuration error"):
@@ -123,7 +125,7 @@ function onYouTubeIframeAPIReady(){new YT.Player('p',{videoId:${JSON.stringify(i
 events:{onStateChange:function(e){if(e.data===1){document.getElementById('p').className='on';document.title='yt-playing'}},onError:function(){document.title='yt-error'}}})}
 setTimeout(function(){if(document.title==='yt')document.title='yt-error'},15000);</script>`;
 }
-const ytLoad = (wc, id, o) => wc.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(ytPage(id, o)), { baseURLForDataURL: 'https://player.boxshelf.localhost/' });
+const ytLoad = (wc, id, o) => wc.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(ytPage(id, o)), { baseURLForDataURL: 'https://player.trustyshelf.localhost/' });
 // the Details preview: YouTube's player in a view of its own laid over the panel's video box (the renderer sends where);
 // its own session like the trailer window, never keeps the keyboard, hidden whenever Details isn't showing it
 let ytView = null, ytWant = null;
@@ -153,8 +155,8 @@ app.setPath('userData', path.join(paths.appRoot(), 'data'));
 // data\Crashpad (the newest 10 are kept), so a crash can be looked into afterwards
 try { app.setPath('crashDumps', path.join(paths.appRoot(), 'data', 'Crashpad')); require('electron').crashReporter.start({ uploadToServer: false, compress: true }); } catch {}
 
-// Write problems to data\\boxshelf.log so they can be looked at later.
-const LOG = path.join(paths.appRoot(), 'data', 'boxshelf.log');
+// Write problems to data\\trustyshelf.log so they can be looked at later.
+const LOG = path.join(paths.appRoot(), 'data', 'trustyshelf.log');
 // the user's home folder is written as ~ (logs get shared for help); the log is rotated at 2 MB (one older copy kept)
 const HOME_RE = (() => { const h = require('os').homedir(); return h ? new RegExp(h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi') : null; })();
 // (beta.10) everything that could name the person, in every form a path takes: the home folder with \ / \\ (JSON) %5C %2F
@@ -188,10 +190,10 @@ function log(...a) {
 }
 process.on('uncaughtException', e => log('ERROR', e && e.stack || e));
 process.on('unhandledRejection', e => log('ERROR', e && e.stack || e));
-log('Starting Boxshelf', app.getVersion());
+log('Starting (T)rustyShelf', app.getVersion());
 if (linux.isLinux) { steamdeck.init({ log }); linuxpad.init({ log }); const d = steamdeck.info(); log('Linux start:', d.deck ? 'Steam Deck' : 'PC', '| started by Steam:', d.steam, '| Game Mode:', d.gameMode, '| options:', d.flags.join(' ') || 'none'); }
 
-// Only one Boxshelf at a time: a second launch brings the first one forward.
+// Only one (T)rustyShelf at a time: a second launch brings the first one forward.
 const firstInstance = app.requestSingleInstanceLock();
 if (!firstInstance) { log('Already running, focusing the open window'); app.quit(); }
 // (beta.9) which page crashed (the shelf, the Home menu overlay, a helper page), the shelf's last steps (app.js uiCrumb: what
@@ -214,11 +216,11 @@ process.on('exit', code => log('Exiting with code', code));
 app.on('second-instance', () => { if (alive() && launcher.isRunning()) { padwatch.front(runKind === 'app'); return; } /* (a media app: leave the pad-driven pointer where it is) */ /* a game is on: keep it in front, don't half-show the shelf */ if (alive()) { if (win.isMinimized()) win.restore(); stepIn(); try { win.setOpacity(1); } catch {} win.show(); win.focus(); } });
 
 // bsfile:// serves local images and videos (covers, Steam art, logos, boot videos).
-// Chromium's web cache: downloads are saved by Boxshelf itself, so a small cache is plenty (it had grown to 360 MB)
+// Chromium's web cache: downloads are saved by (T)rustyShelf itself, so a small cache is plenty (it had grown to 360 MB)
 app.commandLine.appendSwitch('disk-cache-size', String(64 * 1024 * 1024));
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
 app.commandLine.appendSwitch('enable-gpu-rasterization');
-// Windows: Chromium stops drawing a window it believes is covered ("native window occlusion"). Boxshelf sits invisible
+// Windows: Chromium stops drawing a window it believes is covered ("native window occlusion"). (T)rustyShelf sits invisible
 // under the fullscreen game while one runs, and after quick open/close runs Chromium sometimes missed it being uncovered
 // again: the screen stayed black until a key was pressed. The shelf pauses its own loops while a game runs (run:aside:
 // controller polling, the theme layer, music), so it doesn't need Chromium's guess.
@@ -320,7 +322,7 @@ function createWindow() {
     backgroundColor: '#07070c',
     show: false, // shown once its first frame (the logo) is painted: no empty or half-drawn window while it starts
     autoHideMenuBar: true,
-    title: 'Boxshelf',
+    title: '(T)rustyShelf',
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true }
   });
   win.once('ready-to-show', () => { if (alive() && !win.isVisible()) win.show(); });
@@ -347,12 +349,12 @@ function createWindow() {
     const w0 = win, again = () => { if (win !== w0 || !alive()) return; if (launcher.isRunning()) { setTimeout(again, 2000); return; } log('Reloading the screen after a crash'); win.reload(); };
     setTimeout(again, 600);
   });
-  win.on('closed', () => { log('Quit: the Boxshelf window was closed'); win = null; app.quit(); }); // hidden helper windows (Home overlay, manual renderer) must not keep Boxshelf alive
+  win.on('closed', () => { log('Quit: the (T)rustyShelf window was closed'); win = null; app.quit(); }); // hidden helper windows (Home overlay, manual renderer) must not keep (T)rustyShelf alive
   // (beta.6) the taskbar hidden for a game comes back the moment you leave the fullscreen shelf: another app, the Start
   // menu, minimized, windowed (see taskbarBack)
   for (const ev of ['blur', 'leave-full-screen', 'minimize', 'hide']) win.on(ev, () => taskbarLeave(ev));
 }
-// (a blur that only went to one of Boxshelf's own windows, a trailer, isn't leaving: that window is watched instead)
+// (a blur that only went to one of (T)rustyShelf's own windows, a trailer, isn't leaving: that window is watched instead)
 function taskbarLeave(ev) {
   if (!tbHidden || launcher.isRunning() || launching) return;
   if (ev !== 'blur') { taskbarShow('left the shelf: ' + ev); return; }
@@ -364,18 +366,18 @@ function taskbarLeave(ev) {
   }, 60);
 }
 
-const alive = () => win && !win.isDestroyed(); // the window can be gone already when Boxshelf quits while a game still runs
-// Quitting a game: put Boxshelf's (black) screen in front *before* the emulator closes, so the Windows desktop never
+const alive = () => win && !win.isDestroyed(); // the window can be gone already when (T)rustyShelf quits while a game still runs
+// Quitting a game: put (T)rustyShelf's (black) screen in front *before* the emulator closes, so the Windows desktop never
 // shows in between; the shelf then fades in as usual once the emulator has exited (onExit → bringBack).
 function coverForQuit() {
   markEvent('coverForQuit'); quitAt = Date.now(); quitSeq++;
   if (!alive()) return;
-  // quit while the loading screen was still up: its pending lift must not step Boxshelf aside in the middle of the quit
+  // quit while the loading screen was still up: its pending lift must not step (T)rustyShelf aside in the middle of the quit
   if (coverTimer) { clearInterval(coverTimer.keep); clearTimeout(coverTimer); coverTimer = null; }
   try { win.webContents.send('run:quitting'); } catch {} // the shelf gets ready under a black cover while the game closes
   try {
     if (win.isMinimized()) win.restore();
-    // Boxshelf never left the screen (see lift): it only turns opaque and comes to the front. No show() — Windows
+    // (T)rustyShelf never left the screen (see lift): it only turns opaque and comes to the front. No show() — Windows
     // animates a window that is shown, and the closing game's windows showed through that animation
     try { win.setOpacity(1); } catch {}
     win.setAlwaysOnTop(true, 'screen-saver'); if (!win.isVisible()) win.showInactive(); win.moveTop();
@@ -387,7 +389,7 @@ function coverForQuit() {
     quitCover = setInterval(() => {
       try {
         // (1.82) a Quit that came after the game had already exited: nothing will call onExit now, so let go of
-        // always-on-top here too, or file pickers and browser windows open behind Boxshelf until the next launch
+        // always-on-top here too, or file pickers and browser windows open behind (T)rustyShelf until the next launch
         if (!alive() || !launcher.isRunning()) { clearQuitCover(); if (alive() && !launcher.isRunning()) { try { win.setAlwaysOnTop(false); } catch {} } return; }
         if (Date.now() - started > 11000) { // still running well past the force-close: give the game the screen back, controller included
           clearQuitCover(); log('Quit: the game is still running, returning to it'); pendingPower = null; quitAt = 0; /* its exit later isn't "N ms after Quit" */
@@ -398,7 +400,7 @@ function coverForQuit() {
     }, 100);
   } catch {}
 }
-let quitCover = null, quitAt = 0, quitSeq = 0; // quitSeq: a timer set before a Quit must not step Boxshelf aside during it
+let quitCover = null, quitAt = 0, quitSeq = 0; // quitSeq: a timer set before a Quit must not step (T)rustyShelf aside during it
 // (beta.6) Chromium shrinks a fullscreen window that isn't the active one by a pixel (2560x1439 on a 1440p screen, while
 // the emulator has the focus): the game showed through that row as a sliver at the bottom of the black cover, starting
 // and quitting. While the cover is up it's stretched back (only that 1-2 px shrink; the helper does it too, every pass).
@@ -407,22 +409,22 @@ function coverFullSize() {
     if ((b.width !== d.width || b.height !== d.height || b.x !== d.x || b.y !== d.y) && Math.abs(b.width - d.width) <= 2 && Math.abs(b.height - d.height) <= 2) win.setBounds(d); } catch {}
 }
 function clearQuitCover() { if (quitCover) { clearInterval(quitCover); quitCover = null; } goneCover = false; }
-// (beta.6) Nothing but Boxshelf and the game on screen: the taskbar is hidden from just before an emulator starts until
+// (beta.6) Nothing but (T)rustyShelf and the game on screen: the taskbar is hidden from just before an emulator starts until
 // the shelf is back (an emulator's window that wasn't fullscreen yet, or any more, made Windows raise it over the black
 // cover for a moment, starting and closing). A file marks it hidden: a watchdog process (padwatch.taskbarGuard) puts it
-// back if Boxshelf crashes or is ended, and the next start does too. Settings → Display → Screen & motion turns it off.
+// back if (T)rustyShelf crashes or is ended, and the next start does too. Settings → Display → Screen & motion turns it off.
 let tbHidden = false;
 const tbMark = () => path.join(app.getPath('userData'), 'taskbar-hidden');
 const tbWanted = () => process.platform === 'win32' && cfg.ui.hideTaskbar !== false;
 async function taskbarHide() {
   if (!tbWanted() || tbHidden) return;
-  tbHidden = true; try { fs.writeFileSync(tbMark(), String(Date.now())); padwatch.taskbarGuard(process.pid, tbMark()); } catch {} // (the guard: back even if Boxshelf crashes)
+  tbHidden = true; try { fs.writeFileSync(tbMark(), String(Date.now())); padwatch.taskbarGuard(process.pid, tbMark()); } catch {} // (the guard: back even if (T)rustyShelf crashes)
   const t0 = Date.now(); const ok = await padwatch.taskbar(false); log('Taskbar hidden for the game', ok ? `(${Date.now() - t0} ms)` : '(no answer)');
 }
-// Back on the shelf after a game. Fullscreen and in front, Boxshelf would have the taskbar hidden by Windows anyway, so
+// Back on the shelf after a game. Fullscreen and in front, (T)rustyShelf would have the taskbar hidden by Windows anyway, so
 // it stays hidden until you leave the shelf (the window's blur / leave-full-screen / minimize / hide, set up with the
 // window). Showing it here instead left it over the fullscreen shelf until a mouse click: Windows only re-checks for a
-// fullscreen app when the active window changes, and Boxshelf already was the active one. A windowed or unfocused shelf
+// fullscreen app when the active window changes, and (T)rustyShelf already was the active one. A windowed or unfocused shelf
 // gets it back at once.
 function taskbarBack(focused) {
   if (!tbHidden || launcher.isRunning() || launching) return;
@@ -448,11 +450,11 @@ function onGameWindow(back) {
   log('Game window back: stepping aside again'); clearQuitCover(); quitAt = 0;
   try { win.setAlwaysOnTop(false); } catch {} padwatch.cover(false); stepAside(); padwatch.front();
 }
-// While a game runs Boxshelf stays on screen, behind it, fully transparent: it can't be clicked or activated (so it
+// While a game runs (T)rustyShelf stays on screen, behind it, fully transparent: it can't be clicked or activated (so it
 // never takes the focus from the game) and the page is told to stop drawing. Hiding the window instead meant Windows
 // played its show animation when we came back, and the closing game's windows were visible through it.
 function stepAside() {
-  // (Linux: a see-through window isn't possible there, so Boxshelf hides while the game runs; bringBack shows it again)
+  // (Linux: a see-through window isn't possible there, so (T)rustyShelf hides while the game runs; bringBack shows it again)
   if (linux.isLinux) { try { win.webContents.send('run:aside', true); } catch {} try { win.hide(); } catch {} return; }
   try { win.setOpacity(0); } catch {}
   try { win.setIgnoreMouseEvents(true); } catch {}
@@ -482,7 +484,7 @@ function bringBack() {
   win.focus();
   // Windows often won't let a background app take the focus back: ask the controller helper to hand it over
   try { const b = win.getNativeWindowHandle(); padwatch.focusWindow(b.length >= 8 ? b.readBigUInt64LE(0).toString() : String(b.readUInt32LE(0))); } catch (e) { log('focus handoff', e.message); }
-  // (beta.6) Stay on top until Windows has really given Boxshelf the focus (the helper's handoff comes when the shelf's
+  // (beta.6) Stay on top until Windows has really given (T)rustyShelf the focus (the helper's handoff comes when the shelf's
   // helper starts, ~1.5 s), at most 5 s. Letting go after 0.4 s left a gap: the closing game's focus went to the next
   // window in line (Discord, Explorer…), which then came up over the whole shelf. The taskbar returns after that.
   clearInterval(backKeep); const t0 = Date.now();
@@ -501,7 +503,7 @@ function bringBack() {
   paint(); setTimeout(paint, 300); setTimeout(paint, 1200);
 }
 
-// While an emulator boots, keep Boxshelf's black loading screen above it so its
+// While an emulator boots, keep (T)rustyShelf's black loading screen above it so its
 // windowed start-up never shows. Then step aside so the game is in front.
 let coverTimer = null;
 function coverWhileStarting(seconds) {
@@ -521,10 +523,10 @@ function coverWhileStarting(seconds) {
     if (!coverTimer) return; clearTimeout(coverTimer);
     coverTimer = null; clearInterval(keep);
     if (!alive()) return;
-    // (a windowed Boxshelf stays fullscreen while hidden: switching back to a window here showed it popping up as a
+    // (a windowed (T)rustyShelf stays fullscreen while hidden: switching back to a window here showed it popping up as a
     //  window for a moment before it hid. It goes back to a window when the game ends: see onExit)
     if (!launcher.isRunning()) { if (wasWindowed) { try { win.setFullScreen(false); } catch {} coverWindowed = false; } return; }
-    win.webContents.send('run:ready'); // the loading screen fades to black (.28 s), then Boxshelf steps aside
+    win.webContents.send('run:ready'); // the loading screen fades to black (.28 s), then (T)rustyShelf steps aside
     const qs = quitSeq; // Quit pressed in these 300 ms: the quit cover must stay opaque (stepAside made it see-through)
     setTimeout(() => {
     if (!alive() || !launcher.isRunning() || qs !== quitSeq) return;
@@ -548,14 +550,14 @@ function coverWhileStarting(seconds) {
 
 function watchPad(opts) {
   opts = opts || {}; lastPadOpts = opts;
-  // (the helper keeps Boxshelf's see-through window below the running game: above it, the taskbar showed over the game)
+  // (the helper keeps (T)rustyShelf's see-through window below the running game: above it, the taskbar showed over the game)
   try { if (alive()) { const b = win.getNativeWindowHandle(); padwatch.setSelf(b.length >= 8 ? b.readBigUInt64LE(0).toString() : String(b.readUInt32LE(0))); } } catch {}
   const home = cfg.ui.homeMenu !== false && !!opts.home;
   if (cfg.ui.quitCombo === false && !(opts.mouse || opts.fullscreenKey || home)) return;
   // with the quit combo turned off, use a mask no pad can press so only the other duties remain
   const combo = cfg.ui.quitCombo === false ? null : (cfg.ui.quitComboKeys || 'l3+r3');
   padwatch.start(combo || 'none', 900, () => { log('Quit combo: closing', launcher.isRunning() ? 'emulator' : 'nothing'); if (launcher.isRunning()) coverForQuit(); closeGame(); },
-    { ...opts, home, nin: true, taskbarHidden: tbHidden, onWindow: opts.appPid ? onGameWindow : undefined, cmdFile: path.join(app.getPath('temp'), `boxshelf-pad-${process.pid}.txt`), onHome: kind => { homemenu.setMeta({ glyphs: kind || shelfGlyphs }); /* the menu shows the buttons of the pad that opened it (an XInput pad: the shelf's last prompts) */ Promise.resolve(homemenu.open()).catch(e => log('home menu', e && e.message)); }, onButton: (b, d) => homemenu.button(b, d), isMenuOpen: () => homemenu.isOpen(), onFullscreen: opts.appPid ? liftCover : undefined,
+    { ...opts, home, nin: true, taskbarHidden: tbHidden, onWindow: opts.appPid ? onGameWindow : undefined, cmdFile: path.join(app.getPath('temp'), `trustyshelf-pad-${process.pid}.txt`), onHome: kind => { homemenu.setMeta({ glyphs: kind || shelfGlyphs }); /* the menu shows the buttons of the pad that opened it (an XInput pad: the shelf's last prompts) */ Promise.resolve(homemenu.open()).catch(e => log('home menu', e && e.message)); }, onButton: (b, d) => homemenu.button(b, d), isMenuOpen: () => homemenu.isOpen(), onFullscreen: opts.appPid ? liftCover : undefined,
       keepUp: () => launcher.isRunning() && !quitCover }); // (beta.10: a helper that dies mid-game is started again, not during a Quit)
 }
 function onExit(info) {
@@ -638,7 +640,7 @@ async function buildLibrary() {
   const steamGiven = cfg.steam.enabled && steamRoot(cfg.steam.path);
   if (steamGiven && !isMainSteam(steamGiven) && steamMain === undefined) { steamMain = null; try { const p = await findSteam(); if (p && steamRoot(p) && isMainSteam(steamRoot(p))) { steamMain = p; log('Steam: the folder set is a library; using Steam\'s own folder for the list of libraries'); } } catch {} }
   if (cfg.steam.enabled && cfg.steam.path) {
-    // Steam's own cached art first, then anything Boxshelf fetched from the Steam store for games Steam has no cover for
+    // Steam's own cached art first, then anything (T)rustyShelf fetched from the Steam store for games Steam has no cover for
     pcShelf = scanSteam(cfg.steam.path, { hideTools: cfg.steam.hideTools !== false, log, mainPath: steamMain || '' }).map(g => { const l = steamart.local(g.appid); return { ...g, ...(ownTitle(g.id) ? { title: ownTitle(g.id), fileTitle: g.title } : {}), info: steamart.gameInfo(g.appid), art: { front: fileUrl(pccovers.cover(g.id) || g.art.front || l.front), hero: fileUrl(g.art.hero || l.hero) } }; }); // (beta.5: a cover chosen in the picker wins)
   }
   // (beta.4) Epic's installs join the PC shelf; Quiver Launcher's apps and games added by hand get the Custom shelf. They
@@ -703,7 +705,7 @@ function emuShown(def, exe) { const k = exe ? emuName.knownName(emuPath(exe)) : 
 // ---------- IPC ----------
 ipcMain.on('renderer:log', (e, msg) => log('[ui]', msg));
 padwatch.init(log, app.getPath('userData'));
-// (beta.6) the last Boxshelf ended with the taskbar hidden (a crash, a power cut, ended from Task Manager): put it back
+// (beta.6) the last (T)rustyShelf ended with the taskbar hidden (a crash, a power cut, ended from Task Manager): put it back
 try { if (fs.existsSync(tbMark())) { fs.unlinkSync(tbMark()); padwatch.taskbar(true).then(() => log('Taskbar back (left hidden by the last session)')); } } catch {}
 customThemes.init({ root: path.join(paths.appRoot(), 'Custom themes'), cache: path.join(app.getPath('userData'), 'custom-theme-cache'), nativeImage, systems: CONSOLES.map(c => c.id).concat('home', 'media'), log });
 homemenu.init({ padwatch, log, getWin: () => (alive() ? win : null), getUi: () => cfg.ui, getSound: () => ({ enabled: cfg.ui.sound !== false, theme: cfg.ui.soundTheme || 'aero', volume: cfg.ui.volume == null ? .7 : cfg.ui.volume, boot: cfg.ui.bootSound || 'chime' }),
@@ -713,7 +715,7 @@ homemenu.init({ padwatch, log, getWin: () => (alive() ? win : null), getUi: () =
   onShelf: action => {
     // power actions: hand the shelf back first, so after waking (or a cancelled shutdown) it takes input again
     if (['sleep', 'restart', 'shutdown'].includes(action)) { if (alive()) win.webContents.send('shelf:menu', { open: false, action: 'resume' }); return powerAction(action); }
-    if (action === 'quitapp') { log('Quit: Exit Boxshelf chosen in the Home menu'); return app.quit(); }
+    if (action === 'quitapp') { log('Quit: Exit (T)rustyShelf chosen in the Home menu'); return app.quit(); }
     if (alive()) { win.webContents.send('shelf:menu', { open: false, action }); bringBack(); }
   } });
 // Sleep / Restart / Shut down the PC from the couch
@@ -746,24 +748,24 @@ function powerAction(kind) {
 // On the shelf the XInput helper still runs (lightly) so Guide can open the Home menu even though Chromium never sees it
 function watchShelf() {
   if (cfg.ui.homeMenu === false || launcher.isRunning()) return;
-  padwatch.start('none', 900, () => {}, { home: true, backHome: false, taskbarHidden: tbHidden /* (beta.6: kept hidden until you leave the shelf) */, cmdFile: path.join(app.getPath('temp'), `boxshelf-pad-${process.pid}.txt`),
+  padwatch.start('none', 900, () => {}, { home: true, backHome: false, taskbarHidden: tbHidden /* (beta.6: kept hidden until you leave the shelf) */, cmdFile: path.join(app.getPath('temp'), `trustyshelf-pad-${process.pid}.txt`),
     onHome: () => { if (!closeTrailer()) openShelfMenu(); }, onButton: (b, d) => { if (d && (b === 'b' || b === 'back') && !homemenu.isOpen() && closeTrailer()) return; homemenu.button(b, d); }, isMenuOpen: () => homemenu.isOpen() });
 }
-// With the Home menu off no shelf helper follows the game's, and Windows won't let Boxshelf take the focus back by
+// With the Home menu off no shelf helper follows the game's, and Windows won't let (T)rustyShelf take the focus back by
 // itself: run a short-lived helper just to hand it over (bringBack's request is repeated by a new helper)
 let focusOnlyT = null;
 function focusOnlyHelper() {
   if (launcher.isRunning() || !padwatch.focusPending()) return;
-  padwatch.start('none', 900, () => {}, { cmdFile: path.join(app.getPath('temp'), `boxshelf-pad-${process.pid}.txt`) });
+  padwatch.start('none', 900, () => {}, { cmdFile: path.join(app.getPath('temp'), `trustyshelf-pad-${process.pid}.txt`) });
   clearTimeout(focusOnlyT); focusOnlyT = setTimeout(() => { if (!launcher.isRunning() && cfg.ui.homeMenu === false) padwatch.stop(); }, 10000);
 }
-// from Guide: only when Boxshelf itself is what you're looking at; from the shelf's Home key: always
+// from Guide: only when (T)rustyShelf itself is what you're looking at; from the shelf's Home key: always
 function openShelfMenu(fromKey) {
   if (!alive() || homemenu.isOpen() || launcher.isRunning() || (!fromKey && (!win.isFocused() || cfg.ui.homeMenu === false))) return;
   // Guide: ask the shelf first — it only accepts on the shelf or the details panel (not Inspect, museum, Settings, starting a game)
   if (!fromKey) { win.webContents.send('shelf:menuRequest'); return; }
   if (!padwatch.isRunning()) watchShelf(); // buttons inside the menu come from the helper
-  if (homemenu.openShelf({ title: 'Home', system: 'Boxshelf', subtitle: shelfSummary, accent: '#9d8cff', glyphs: shelfGlyphs, layout: cfg.ui.homeLayout === 'center' ? 'center' : 'side', confirmButton: shelfSwap ? 'b' : 'a', audioOut: typeof cfg.ui.audioOut === 'string' ? cfg.ui.audioOut : '' }))
+  if (homemenu.openShelf({ title: 'Home', system: '(T)rustyShelf', subtitle: shelfSummary, accent: '#9d8cff', glyphs: shelfGlyphs, layout: cfg.ui.homeLayout === 'center' ? 'center' : 'side', confirmButton: shelfSwap ? 'b' : 'a', audioOut: typeof cfg.ui.audioOut === 'string' ? cfg.ui.audioOut : '' }))
     win.webContents.send('shelf:menu', { open: true });
 }
 // ---------- the Wii remote on the shelf (Windows) ----------
@@ -777,7 +779,7 @@ function wmState(s) {
   if (!alive()) return;
   const B = wiimote.BTN, prevB = wm.b, now = Date.now(); wm.b = s.buttons;
   const press = k => (s.buttons & k) && !(prevB & k), lift = k => !(s.buttons & k) && (prevB & k);
-  // a game owns the screen: Home opens Boxshelf's Home menu over it (the remote then drives the menu: Resume, Quit…).
+  // a game owns the screen: Home opens (T)rustyShelf's Home menu over it (the remote then drives the menu: Resume, Quit…).
   // (Dolphin's games have the remote themselves: there it's a held Home, from wmWatch)
   if (launcher.isRunning() || launching) { wm.aMouse = false; if (homemenu.isOpen()) wmMenu(press, lift); else if (press(B.home) && !launching) Promise.resolve((homemenu.setMeta({ glyphs: 'nintendo' }), homemenu.open())).catch(e => log('home menu', e && e.message)); return; }
   // the pointer: a central part of the camera's view covers the screen (wmSpeed), smoothed, a little still zone
@@ -807,8 +809,8 @@ function wmMenu(press, lift) {
     if (press(B[k])) homemenu.button(name, true); else if (lift(B[k])) homemenu.button(name, false);
   }
 }
-// During a Dolphin game the remote is Dolphin's: Boxshelf only listens (never sends it anything) for Home held about a
-// second, which opens Boxshelf's Home menu (a tap stays the game's own Wii HOME menu); while that menu is open the
+// During a Dolphin game the remote is Dolphin's: (T)rustyShelf only listens (never sends it anything) for Home held about a
+// second, which opens (T)rustyShelf's Home menu (a tap stays the game's own Wii HOME menu); while that menu is open the
 // remote drives it. buttons: the remote's bits as the game's own reports carry them
 const wmW = { b: 0, homeAt: 0, fired: false };
 function wmWatch(buttons) {
@@ -842,7 +844,7 @@ ipcMain.on('home:meta', (e, m) => { if (!m || typeof m !== 'object') return; con
 emucfg.init(log);
 modelfind.init(log);
 app.on('will-quit', () => { try { config.flush(); } catch {} }); // (beta.9: settings still waiting to be written go to disk now)
-app.on('before-quit', () => { if (tbHidden) { tbHidden = false; padwatch.stop(); padwatch.taskbarSync(true); try { fs.unlinkSync(tbMark()); } catch {} log('Taskbar back (Boxshelf quitting)'); } /* (beta.6) */ clearTimeout(scaleT); historyEnd(); companion.stop().catch(() => {}); /* the phone companion's server and its connections */ padwatch.stop(); wiimote.stop(); homemenu.end(); modelfind.stop(); clearQuitCover(); clearTimeout(focusOnlyT); if (coverTimer) { clearInterval(coverTimer.keep); clearTimeout(coverTimer); coverTimer = null; }
+app.on('before-quit', () => { if (tbHidden) { tbHidden = false; padwatch.stop(); padwatch.taskbarSync(true); try { fs.unlinkSync(tbMark()); } catch {} log('Taskbar back ((T)rustyShelf quitting)'); } /* (beta.6) */ clearTimeout(scaleT); historyEnd(); companion.stop().catch(() => {}); /* the phone companion's server and its connections */ padwatch.stop(); wiimote.stop(); homemenu.end(); modelfind.stop(); clearQuitCover(); clearTimeout(focusOnlyT); if (coverTimer) { clearInterval(coverTimer.keep); clearTimeout(coverTimer); coverTimer = null; }
   romWatchers.forEach(w => { try { w.close(); } catch {} }); romWatchers = []; clearTimeout(romWatchT); clearTimeout(iconLateT); Object.values(retestT).forEach(clearTimeout); if (moving) clearTimeout(moving.t); });
 function handle(name, fn) {
   ipcMain.handle(name, async (e, ...args) => {
@@ -879,7 +881,7 @@ function manualMiss(sysId, g) {
 function withCover(sysId, g, pages) { return sysId === 'wiiu' && pages.length && g.art.front && (wiiumanual.generated(g.title) || emanualPages(g)) && !manualstudio.chosen(sysId, g.file) /* a scanned manual picked in Manual Studio opens on its own cover */ ? [fileUrl(g.art.front), ...pages] : pages; }
 // (beta.9) pages made from a Wii U e-manual, known by their shape: exactly 688 px wide (or twice / three times that) and
 // tall. The marker generated() looks for lives in the data folder that made them, so the same games folder used from
-// another copy of Boxshelf (the exe in another folder) opened on the e-manual's contents page instead of the box front.
+// another copy of (T)rustyShelf (the exe in another folder) opened on the e-manual's contents page instead of the box front.
 function emanualPages(g) { try { const f = (g.art.manual || [])[0]; if (!f) return false; const z = require('./main/spreads').sizeOf(f); return !!z && z[0] % 688 === 0 && z[0] <= 2064 && z[1] > z[0] * 1.2; } catch { return false; } }
 // (beta.10) the same for the library scan, with fs.promises (a games folder on a NAS held the scan up, a read per Wii U
 // game), the answer kept by file + date + size
@@ -1059,7 +1061,7 @@ const EPUB_MEASURE = `(() => { const H = Math.max(document.documentElement.scrol
   return { H, keep }; })()`;
 function renderEpubManual(root, pages) {
   return new Promise(resolve => {
-    const ses = session.fromPartition('boxshelf-emanual'); // one shared, in-memory session (a new one per run was never freed)
+    const ses = session.fromPartition('trustyshelf-emanual'); // one shared, in-memory session (a new one per run was never freed)
     ses.webRequest.onBeforeRequest(null);
     const allowed = path.resolve(root).toLowerCase();
     ses.webRequest.onBeforeRequest((d, cb) => {
@@ -1122,7 +1124,7 @@ async function steamFill(lib) {
 }
 let autoManualsDone = false, autoManualJob = null, manualSeen = null, manualAgain = false;
 /* After covers: look up manuals for games that have none and take only confident English matches. Once per session,
-   and again whenever games turn up that weren't there last time (added while Boxshelf is open), just for those:
+   and again whenever games turn up that weren't there last time (added while (T)rustyShelf is open), just for those:
    games already looked at are remembered by the collections / search memos, so a re-run only costs the new ones */
 const libGameIds = lib => { const ids = new Set(); (lib || []).forEach(s => (s.games || []).forEach(g => { if (g && (g.kind === 'rom' || !g.kind)) ids.add(s.id + '|' + (g.file || g.id)); })); return ids; };
 // ---- the art library (Settings → Box art, or at setup): one folder holding every console's box art and manuals ----
@@ -1408,7 +1410,7 @@ const sw2Added = k => { const v = (cfg.systems.sw2 || {})[k]; return Array.isArr
 function sw2Roots() {
   const r = [path.join(paths.appRoot(), 'Switch 2 emu'), ...sw2Added('buildDirs')], e = emuPath((cfg.systems.sw2 || {}).emulator || '');
   // (beta.3) from the shelf's build up to the TOP folder that looks like a builds folder ("Switch 2 emu" above
-  // "Selvet Forks\…\eglantine.exe"), six levels at most: three levels stopped one short, so a copy of Boxshelf kept away from
+  // "Selvet Forks\…\eglantine.exe"), six levels at most: three levels stopped one short, so a copy of (T)rustyShelf kept away from
   // its builds found only the shelf's own fork. The widest folders come first, so builds are named from the top.
   if (e) { let d = path.dirname(e), top = null; for (let i = 0; i < 6 && path.dirname(d) !== d; i++) { if (/switch ?2|eglantine|forks?/i.test(path.basename(d))) top = d; d = path.dirname(d); } if (top) r.push(top); }
   const u = [...new Set(r.map(p => path.resolve(p).toLowerCase()))].map(k => r.find(p => path.resolve(p).toLowerCase() === k));
@@ -1508,7 +1510,7 @@ async function launchGameNow(systemId, file, sc) {
   if (systemId === 'gc' || systemId === 'wii' || /dolphin/i.test(path.basename(sc.emulator || ''))) await wiimote.pause();
   await taskbarHide(); // (beta.6) gone before the emulator's first window can show
   let r; try { r = launcher.launchGame(sc, rom, onExit, extra, env); } catch (e) { wiimote.resume(); taskbarShow('the game did not start'); throw e; } runKind = 'game'; pendingPower = null; launcher.setRunningName(gameTitleOf(systemId, file)); if (linux.isLinux) linuxpad.begin(() => closeGame()); // (beta.9: hold Select + Start to close it)
-  // (Dolphin: once it has the remote, Boxshelf listens alongside for a held Home; listening only, nothing is sent)
+  // (Dolphin: once it has the remote, (T)rustyShelf listens alongside for a held Home; listening only, nothing is sent)
   if (systemId === 'gc' || systemId === 'wii' || /dolphin/i.test(path.basename(sc.emulator || ''))) setTimeout(() => { if (launcher.isRunning()) wiimote.watch(); }, 4000);
   lastLaunch = { systemId, at: Date.now(), exe: sc.emulator }; historyStart(systemId + ':' + file); // (exe: the build that ran, named if it closes right away)
   const def = CONSOLES.find(c => c.id === systemId);
@@ -1560,7 +1562,7 @@ handle('launch:steam', ({ appid }) => launcher.launchSteam(appid));
 handle('launch:pc', async ({ id }) => {
   const g = pcgames.byId(id); if (!g) throw new Error("That game isn't on the shelf any more. The shelf is refreshing; try again in a moment.");
   if (g.installed === false) throw new Error(`${g.title} isn't installed. Install it first.`); // (the shelf offers that before asking)
-  // (Linux) Epic's games, the PC games folder's and Windows programs are started by Boxshelf itself (Wine / Proton for Windows ones)
+  // (Linux) Epic's games, the PC games folder's and Windows programs are started by (T)rustyShelf itself (Wine / Proton for Windows ones)
   if (linux.isLinux && (g.source === 'epic' || g.source === 'folder' || linuxpc.isWindowsProgram(g.exe))) return launchLinuxPc(g);
   // through its store's launcher (Epic, and from beta.7 Ubisoft Connect and the EA app: their sign-in, cloud saves, overlay)
   if (g.uri && /^(com\.epicgames\.launcher|uplay|origin2):\/\//i.test(g.uri)) { busyCheck(); log('PC launch:', g.source, g.title); return shell.openExternal(g.uri).then(() => ({ external: true })); }
@@ -1590,7 +1592,7 @@ async function pcAutoCovers(games) {
 // (Linux) a game's own output (umu-run, Proton, the game) goes to data/logs/last-pc-game.log, the last one only: a game that
 // shows nothing can then be looked into
 const pcGameLog = () => { try { const d = path.join(app.getPath('userData'), 'logs'); fs.mkdirSync(d, { recursive: true }); return path.join(d, 'last-pc-game.log'); } catch { return ''; } };
-// (Linux) a PC game Boxshelf starts itself: an Epic game (legendary gives its program and Epic's sign-in arguments), one in
+// (Linux) a PC game (T)rustyShelf starts itself: an Epic game (legendary gives its program and Epic's sign-in arguments), one in
 // the PC games folder, or a Windows program added by hand. A Linux program runs as it is, with the game data folder
 // (Settings → PC games) as its home; a Windows one through the Wine / Proton chosen in Settings, in a prefix of its own
 // named after the game
@@ -1646,7 +1648,7 @@ function epicLoginCode() {
   return new Promise(resolve => {
     const w = new BrowserWindow({ parent: alive() ? win : undefined, modal: alive(), width: 1000, height: 780, autoHideMenuBar: true, title: 'Sign in to Epic Games', backgroundColor: '#121212',
       webPreferences: { partition: 'epic-login', contextIsolation: true, nodeIntegration: false, sandbox: true } });
-    w.webContents.setUserAgent(w.webContents.getUserAgent().replace(/ (Boxshelf|Electron)\/\S+/g, '')); // (Epic turns away a browser it doesn't know)
+    w.webContents.setUserAgent(w.webContents.getUserAgent().replace(/ (TrustyShelf|Electron)\/\S+/g, '')); // (Epic turns away a browser it doesn't know)
     let done = false; const finish = code => { if (done) return; done = true; resolve(code); try { if (!w.isDestroyed()) w.close(); } catch {} };
     const check = async () => { if (done || w.isDestroyed()) return; const u = w.webContents.getURL(); if (!/^https:\/\/www\.epicgames\.com\/id\/api\/redirect/.test(u)) return;
       try { const j = JSON.parse(await w.webContents.executeJavaScript('document.body.innerText', true)); if (j && typeof j.authorizationCode === 'string' && j.authorizationCode) finish(j.authorizationCode); } catch {} };
@@ -1729,7 +1731,7 @@ handle('tv:scan', async () => { if (tvScanning) return false; tvScanning = true;
   catch (e) { log('TV ads scan', e.message); return false; } finally { tvScanning = false; } });
 handle('tv:list', () => commercials.list());
 handle('tv:adFor', ({ systemId, file }) => commercials.adFor(String(systemId || ''), String(file || '')));
-// only an ad Boxshelf itself found (matched by its key), never an id / file the page made up
+// only an ad (T)rustyShelf itself found (matched by its key), never an id / file the page made up
 handle('tv:local', async ({ ad }) => { const k = ad && typeof ad.key === 'string' ? ad.key : ''; const real = k && commercials.list().find(a => a.key === k); const f = real ? await commercials.local(real) : null; return f ? fileUrl(f) : null; });
 handle('library:pages', async ({ id }) => { const p = await library.pages(id); return p.type === 'pdf' ? { type: 'pdf', url: fileUrl(p.file) } : { type: 'images', urls: p.files.map(fileUrl) }; });
 handle('archive:search', ({ text, kind, page, plain }) => archive.search(text, kind === 'guide' ? 'guide' : 'magazine', page, !!plain));
@@ -1740,13 +1742,13 @@ handle('archive:download', async ({ id, kind, title, series }) => {
   return { existed: r.existed, name: path.basename(r.file), count: r.count || 0 };
 });
 handle('archive:cancel', ({ id }) => archive.cancel(String(id || ''))); // the download rejects with "Cancelled." and removes its half file
-// Settings → Magazines & guides: the full paths, and magazines left in an earlier Boxshelf folder (copied, never moved)
+// Settings → Magazines & guides: the full paths, and magazines left in an earlier (T)rustyShelf folder (copied, never moved)
 handle('reading:where', () => ({ root: paths.readingRoot(), custom: !!cfg.ui.readingLibrary, magazines: library.folder('magazine'), guides: library.folder('guide') }));
 const oldReading = () => paths.findOldReading({ current: paths.readingRoot(), logFile: LOG, known: (cfg.ui.installs || []).filter(x => typeof x === 'string'), home: require('os').homedir() });
 handle('reading:old', () => oldReading());
 let readingCopy = null;
 handle('reading:import', async ({ root }) => {
-  const offer = oldReading().find(o => o.root.toLowerCase() === String(root || '').toLowerCase()); // only a folder Boxshelf itself offered
+  const offer = oldReading().find(o => o.root.toLowerCase() === String(root || '').toLowerCase()); // only a folder (T)rustyShelf itself offered
   if (!offer) throw new Error('That folder has no magazines or guides to bring over.');
   if (readingCopy) throw new Error('Already copying.');
   readingCopy = { stop: false }; log('Reading: copying', offer.files, 'files from', offer.root, 'to', paths.readingRoot());
@@ -1767,7 +1769,7 @@ handle('themes:list', () => {
   const vurl = p => { const u = fileUrl(p); if (!u) return null; try { return u + '?v=' + Math.floor(fs.statSync(p).mtimeMs); } catch { return u; } };
   for (const [id, t] of Object.entries(raw)) {
     out[id] = { logoPrev: !!themes.prevLogo(id), logo: vurl(t.logo), boot: vurl(t.boot), console: vurl(t.console), model: vurl(t.model), modelOpts: t.modelOpts || null, controller: vurl(t.controller), media: vurl(t.media), mediaOpts: t.mediaOpts || null };
-    // a heavy 3D model is shown from its light copy once Boxshelf has made one (see models:saveOptimized); until then the
+    // a heavy 3D model is shown from its light copy once (T)rustyShelf has made one (see models:saveOptimized); until then the
     // original is used and the screen is told it's worth optimizing
     for (const k of ['model', 'controller', 'media']) { const p = t[k]; if (!p || !/\.glb$/i.test(p)) continue; let st; try { st = fs.statSync(p); } catch { continue; } if (st.size < MODEL_HEAVY) continue;
       const op = optimizedPath(p, st); if (fs.existsSync(op)) out[id][k] = vurl(op); else (out[id].heavy = out[id].heavy || []).push(k); }
@@ -1799,7 +1801,7 @@ handle('themes:set', ({ systemId, kind, file }) => { if (['model', 'controller',
 handle('themes:fit', ({ systemId, patch }) => themes.saveFit(systemId, patch));
 handle('themes:remove', ({ systemId, kind }) => { if (['model', 'controller', 'media'].includes(kind)) dropOptimized(systemId, kind); themes.remove(systemId, kind); return true; });
 // Customize → Logo → Find a logo (main/logofind.js: a hand-picked list of official logos on Wikimedia Commons, no account). The
-// console id must be one of Boxshelf's own, the key one this console's own cached list offered (logofind.file looks it up); the
+// console id must be one of (T)rustyShelf's own, the key one this console's own cached list offered (logofind.file looks it up); the
 // picture goes in through the same theme path and extension check as a logo you pick yourself, and the one it replaces is moved
 // aside (Restore brings it back). Errors come back as words for the screen: never a credential, never an address.
 const logoDir = () => path.join(app.getPath('userData'), 'logo-find');
@@ -1843,7 +1845,7 @@ handle('covers:download', async ({ systemIds, types, hd }) => {
       .map(def => ({ def, cfg: cfg.systems[def.id] }));
     if (!list.length) throw new Error('Add a games folder first.');
     log('Download covers for', list.map(x => x.def.id).join(','));
-    await artstudio.ready(); // the record of which pictures Boxshelf wrote (first start of 1.68): an HD upgrade asks it
+    await artstudio.ready(); // the record of which pictures (T)rustyShelf wrote (first start of 1.68): an HD upgrade asks it
     const rep = await covers.downloadCovers(list, info => { if (alive()) win.webContents.send('covers:progress', info); }, types, { hd: !!hd, region: cfg.ui.artRegion, ...artOpts(true) });
     const got = (rep.systems || []).reduce((a, r) => a + r.front + r.back + r.spine + r.disc + (r.upgraded || 0), 0);
     if (got && alive()) win.webContents.send('library:changed', { covers: 0 }); // the shelf picks the new pictures up
@@ -1855,7 +1857,7 @@ let coversUserCancel = false;
 handle('covers:cancel', (a) => { if (a && a.auto) { const st = autoState; if (st) { st.stopped = true; st.paused = false; clearInterval(st.t); } covers.cancel('auto'); return true; } // (beta.10) the art card: only the background run
   coversUserCancel = true; covers.cancel(); return true; });
 handle('covers:coverage', async () => { const out = []; for (const s of sysList(CONSOLES.map(c => c.id))) { await yieldNow(); out.push(...(await covers.coverage([s]))); } return out; }); // (beta.9: a console at a time, with a breath between: every console's pictures in one go froze Settings' Box art page; beta.10: coverage is async)
-// New games while Boxshelf is open: watch the game folders, and once nothing has changed in them for 8 s (a big copy is
+// New games while (T)rustyShelf is open: watch the game folders, and once nothing has changed in them for 8 s (a big copy is
 // finished) tell the shelf to look again. A new game then shows up on the shelf, and in the museum it arrives as a parcel.
 // Never during a game (it waits), and at most one rescan per quiet spell.
 let romWatchers = [], romWatchT = 0, romWatchKey = null, romMissing = new Set(), romRetryT = 0; // (beta.9: romMissing: games folders not there yet, a USB or network drive)
@@ -1934,7 +1936,7 @@ handle('history:get', () => loadHistory());
 handle('history:touch', ({ id }) => { const open = histOpen; historyStart(String(id)); histOpen = open; return true; }); // Steam / app launches: count the launch, no duration
 handle('trailer:open', ({ url }) => openTrailer(String(url || '')));
 // ---------- start with Windows ----------
-const STARTUP_LNK = () => path.join(process.env.APPDATA || '', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'Boxshelf.lnk');
+const STARTUP_LNK = () => path.join(process.env.APPDATA || '', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'TrustyShelf.lnk');
 function psRun(script) {
   return new Promise((resolve, reject) => {
     const enc = Buffer.from("$ProgressPreference = 'SilentlyContinue'\n" + script, 'utf16le').toString('base64');
@@ -1949,14 +1951,14 @@ handle('autostart:get', () => {
 });
 handle('autostart:set', async ({ enabled }) => {
   if (process.platform !== 'win32') throw new Error('Only on Windows.');
-  // the exe: Windows' own start-up entry; a shortcut left by the folder version is removed so only one Boxshelf starts
+  // the exe: Windows' own start-up entry; a shortcut left by the folder version is removed so only one (T)rustyShelf starts
   if (app.isPackaged) { try { fs.unlinkSync(STARTUP_LNK()); } catch {} app.setLoginItemSettings({ openAtLogin: !!enabled, ...loginItem() }); return { enabled: !!enabled, how: 'exe' }; }
   const lnk = STARTUP_LNK();
   if (!enabled) { try { fs.unlinkSync(lnk); } catch {} return { enabled: false, how: 'shortcut' }; }
-  const bat = path.join(paths.appRoot(), 'Start Boxshelf.bat');
-  if (!fs.existsSync(bat)) throw new Error('Start Boxshelf.bat was not found next to the app.');
+  const bat = path.join(paths.appRoot(), 'Start TrustyShelf.bat');
+  if (!fs.existsSync(bat)) throw new Error('Start TrustyShelf.bat was not found next to the app.');
   const q = v => `'${String(v).replace(/['‘’‚‛]/g, m => m + m)}'`; // (beta.8: PowerShell also ends a quoted string at curly quotes, as in a folder named with one; doubling makes any of them literal)
-  await psRun(`$s = (New-Object -ComObject WScript.Shell).CreateShortcut(${q(lnk)}); $s.TargetPath = ${q(bat)}; $s.WorkingDirectory = ${q(paths.appRoot())}; $s.WindowStyle = 7; $s.Description = 'Boxshelf'; $s.Save()`);
+  await psRun(`$s = (New-Object -ComObject WScript.Shell).CreateShortcut(${q(lnk)}); $s.TargetPath = ${q(bat)}; $s.WorkingDirectory = ${q(paths.appRoot())}; $s.WindowStyle = 7; $s.Description = 'TrustyShelf'; $s.Save()`);
   log('Autostart shortcut created', lnk);
   return { enabled: true, how: 'shortcut' };
 });
@@ -1967,7 +1969,7 @@ handle('songs:read', ({ file }) => new Uint8Array(songs.read(file)));
 handle('songs:open', () => { fs.mkdirSync(songs.folder(), { recursive: true }); return shell.openPath(songs.folder()); });
 // links from the page (e.g. a cover's source page) open in the default browser: https only
 handle('app:openExternal', ({ url: u }) => { let x; try { x = new URL(String(u)); } catch { throw new Error('Bad link.'); } if (x.protocol !== 'https:') throw new Error('Only https links open.'); return shell.openExternal(x.toString()); });
-// put back the emulator settings files Boxshelf changed (each was backed up once as <file>.boxshelf-bak)
+// put back the emulator settings files (T)rustyShelf changed (each was backed up once as <file>.trustyshelf-bak)
 // ---------- (beta.7) Video previews (main/previews.js) ----------
 // what a game's preview is: a video file you have, Steam's trailer (joined into a small clip, kept), or YouTube's
 // trailer (the LaunchBox link). Files found are let through bsfile one by one (previewOk), never whole folders.
@@ -1997,7 +1999,7 @@ handle('preview:find', async ({ systemId, file, title, id, youtube }) => {
 handle('ytclip:status', () => ytclips.status());
 handle('ytclip:helper', async () => { const ok = await ytclips.getHelper(p => { if (alive()) win.webContents.send('ytclip:progress', { pct: p }); }); if (alive()) win.webContents.send('ytclip:progress', { done: true, ok }); return ok; });
 handle('ytclip:clear', () => { ytclips.clear(); return true; });
-// (beta.8) Steam Deck: where Boxshelf runs (the shelf's Desktop Mode card, Settings), and Add Boxshelf to Steam
+// (beta.8) Steam Deck: where (T)rustyShelf runs (the shelf's Desktop Mode card, Settings), and Add (T)rustyShelf to Steam
 handle('deck:info', () => ({ ...steamdeck.info(), inSteam: linux.isLinux && process.env.APPIMAGE ? steamdeck.inSteam(process.env.APPIMAGE) : false }));
 handle('deck:addToSteam', ({ closeSteam } = {}) => steamdeck.addToSteam({ exe: process.env.APPIMAGE || '', iconSrc: path.join(__dirname, 'renderer', 'app-icon.png'), dataDir: app.getPath('userData'), closeSteam: !!closeSteam }));
 handle('preview:yt', ({ id, rect, muted }) => {
@@ -2068,7 +2070,7 @@ handle('bios:open', async ({ systemId }) => {
 });
 handle('emusetup:plan', async ({ systemId }) => {
   if (!setupOn()) return { ok: false, why: 'Windows only for now', changes: [] };
-  const exe = setupExe(systemId), k = emusetup.kindOf(exe); if (!k) return { ok: false, why: 'not one Boxshelf can set up yet', changes: [] };
+  const exe = setupExe(systemId), k = emusetup.kindOf(exe); if (!k) return { ok: false, why: 'not one (T)rustyShelf can set up yet', changes: [] };
   const p = emusetup.plan(k, exe, await setupOpts());
   return { ...p, changes: (p.changes || []).map(c => ({ group: c.group, file: c.file, key: (c.section ? `[${c.section}] ` : '') + c.key, value: c.value })) };
 });
@@ -2226,7 +2228,7 @@ function saveArt(art) { cfg = persistCfg(config.normalize({ ...cfg, art })); }
 // what every cover download hands covers.js: the console's style, and the parts locked per game
 // A console nobody has given a style keeps the old auto-fetch exactly (styleFor → null: the old Box art region / Prefer HD
 // order); its derived default style is only what the Studio shows and what its own Shelf-style picks use.
-// mayReplace: an HD upgrade replaces only a picture Boxshelf wrote (explicit = "Download box art now", which may also upgrade
+// mayReplace: an HD upgrade replaces only a picture (T)rustyShelf wrote (explicit = "Download box art now", which may also upgrade
 // pictures from before 1.68); a locked game or part is never touched (lockedFor)
 const artOpts = explicit => ({ styleFor: id => (cfg.art && cfg.art.styles && cfg.art.styles[id] ? artstudio.styleFor(cfg, id) : null), lockedFor: (id, file) => artstudio.lockedFor(id, file), serial: (id, file, fn) => artstudio.serial(id, file, fn), mayReplace: f => artstudio.mayReplace(f, !!explicit), isPoster: f => artstudio.isPoster(f) });
 let artChangedT = null;
@@ -2294,7 +2296,7 @@ handle('app:winMode', async ({ mode } = {}) => {
 handle('app:fullscreen', () => { if (alive()) win.setFullScreen(!win.isFullScreen()); return alive() && win.isFullScreen(); });
 
 // The RetroAchievements key is kept encrypted for this Windows user (DPAPI via safeStorage), not as plain text in
-// config.json: a copied or shared Boxshelf folder doesn't carry a usable key
+// config.json: a copied or shared (T)rustyShelf folder doesn't carry a usable key
 // personal API keys (Settings → Connections) are kept encrypted too, the same way
 let sealWarned = false; // (beta.10: once a session, when keys can only be kept unencrypted (Linux with no keyring); the file is then owner-only)
 function sealKeys(c) { if (!c || !c.keys || !Object.values(c.keys).some(Boolean)) return c; try { if (!safeStorage.isEncryptionAvailable()) { if (!sealWarned) { sealWarned = true; log('API keys: no system keyring, so they are kept unencrypted in the settings file (readable by this user only)'); } return c; } const enc = {}; for (const [k, v] of Object.entries(c.keys)) enc[k] = v ? safeStorage.encryptString(String(v)).toString('base64') : ''; return { ...c, keys: Object.fromEntries(Object.keys(c.keys).map(k => [k, ''])), keysEnc: enc }; } catch (e) { log('API keys: encryption failed, kept as before', e.message); return c; } }
@@ -2399,18 +2401,18 @@ function freeName(dir, name, ext) { for (let i = 1; i < 100; i++) { const f = pa
 const BACKUP_V = 1;
 handle('settings:backup', async () => {
   let dir; try { dir = app.getPath('documents'); } catch { dir = require('os').homedir(); }
-  const r = await dialog.showSaveDialog(alive() ? win : undefined, { title: 'Back up Boxshelf settings', defaultPath: freeName(dir, `Boxshelf settings ${stamp()}`, '.json'), filters: [{ name: 'Boxshelf settings', extensions: ['json'] }] });
+  const r = await dialog.showSaveDialog(alive() ? win : undefined, { title: 'Back up (T)rustyShelf settings', defaultPath: freeName(dir, `(T)rustyShelf settings ${stamp()}`, '.json'), filters: [{ name: '(T)rustyShelf settings', extensions: ['json'] }] });
   if (!r || r.canceled || !r.filePath) return { ok: false, canceled: true };
   const h = loadHistory(), hist = {}; for (const [k, v] of Object.entries(h)) hist[k] = { count: v.count, ms: v.ms, last: v.last };
-  const data = { app: 'Boxshelf', version: app.getVersion(), backup: BACKUP_V, at: new Date().toISOString(), config: stripSecrets(cfg), history: hist };
+  const data = { app: 'TrustyShelf', version: app.getVersion(), backup: BACKUP_V, at: new Date().toISOString(), config: stripSecrets(cfg), history: hist };
   try { await fs.promises.writeFile(r.filePath + '.tmp', JSON.stringify(data, null, 1)); await fs.promises.rename(r.filePath + '.tmp', r.filePath); }
   catch (e) { try { await fs.promises.unlink(r.filePath + '.tmp'); } catch {} log('settings backup failed', e.message); return { ok: false, error: e.message }; }
   log('Settings backed up'); return { ok: true, file: r.filePath };
 });
 // checks a parsed backup; returns the reason it can't be used, or ''
 function badBackup(b) {
-  if (!isPlain(b) || b.app !== 'Boxshelf') return 'That isn\'t a Boxshelf settings backup.';
-  if (typeof b.version !== 'string' || !/^\d+(\.\d+)*/.test(b.version)) return 'That backup has no Boxshelf version.';
+  if (!isPlain(b) || (b.app !== 'TrustyShelf' && b.app !== 'Boxshelf')) return 'That isn\'t a (T)rustyShelf settings backup.';
+  if (typeof b.version !== 'string' || !/^\d+(\.\d+)*/.test(b.version)) return 'That backup has no (T)rustyShelf version.';
   if (!isPlain(b.config) || !isPlain(b.config.ui) || !isPlain(b.config.systems)) return 'That backup has no settings in it.';
   if (b.history != null && !isPlain(b.history)) return 'The play history in that backup is damaged.';
   return '';
@@ -2430,7 +2432,7 @@ function mergeHistory(h, add) {
   return n;
 }
 handle('settings:restore', async () => {
-  const r = await dialog.showOpenDialog(alive() ? win : undefined, { title: 'Restore Boxshelf settings', properties: ['openFile'], filters: [{ name: 'Boxshelf settings', extensions: ['json'] }] });
+  const r = await dialog.showOpenDialog(alive() ? win : undefined, { title: 'Restore (T)rustyShelf settings', properties: ['openFile'], filters: [{ name: '(T)rustyShelf settings', extensions: ['json'] }] });
   if (!r || r.canceled || !r.filePaths || !r.filePaths[0]) return { ok: false, canceled: true };
   let b; try { const st = await fs.promises.stat(r.filePaths[0]); if (st.size > 32 * 1024 * 1024) return { ok: false, error: 'That file is too big to be a settings backup.' }; b = JSON.parse(await fs.promises.readFile(r.filePaths[0], 'utf8')); }
   catch (e) { return { ok: false, error: 'That file couldn\'t be read as a settings backup.' }; }
@@ -2458,15 +2460,15 @@ function zipFolder(src, dest) {
 function execFileQ(cmd, args, opts, cb) { try { require('child_process').execFile(cmd, args, { windowsHide: true, timeout: 60000, ...opts }, err => cb(!err)); } catch { cb(false); } }
 async function reportInfo() {
   const os = require('os'), L = [];
-  L.push(`Boxshelf ${app.getVersion()}`, `Electron ${process.versions.electron}  Chrome ${process.versions.chrome}  Node ${process.versions.node}`);
+  L.push(`(T)rustyShelf ${app.getVersion()}`, `Electron ${process.versions.electron}  Chrome ${process.versions.chrome}  Node ${process.versions.node}`);
   L.push(`OS: ${os.type()} ${os.release()} ${os.arch()}${typeof os.version === 'function' ? ' (' + os.version() + ')' : ''}`, `CPU: ${(os.cpus()[0] || {}).model || '?'} × ${os.cpus().length}`, `Memory: ${Math.round(os.totalmem() / 1073741824)} GB (${Math.round(os.freemem() / 1073741824)} GB free)`);
   L.push(`Packaged: ${app.isPackaged ? 'yes' : 'no'}  Windowed: ${WINDOWED ? 'yes' : 'no'}  Fullscreen now: ${alive() && win.isFullScreen() ? 'yes' : 'no'}`);
-  // (1.82) how much memory Boxshelf itself uses, per process (the shelf, the GPU, helpers), to tell from a report whether
-  // Boxshelf is what fills a PC's RAM
-  L.push('', 'Boxshelf memory (working set):');
+  // (1.82) how much memory (T)rustyShelf itself uses, per process (the shelf, the GPU, helpers), to tell from a report whether
+  // (T)rustyShelf is what fills a PC's RAM
+  L.push('', '(T)rustyShelf memory (working set):');
   try { let total = 0; for (const m of app.getAppMetrics()) { const mb = Math.round(((m.memory && m.memory.workingSetSize) || 0) / 1024); total += mb; L.push(`  ${m.type}${m.serviceName ? ' ' + m.serviceName : ''}: ${mb} MB`); }
     L.push(`  total: ${total} MB${launcher.isRunning() ? ' (a game is running)' : ''}`); } catch (e) { L.push('  ' + e.message); }
-  L.push('', 'Displays:'); try { for (const d of displaysList()) L.push(`  ${d.label}${d.current ? ' ← Boxshelf' : ''}`); } catch {}
+  L.push('', 'Displays:'); try { for (const d of displaysList()) L.push(`  ${d.label}${d.current ? ' ← (T)rustyShelf' : ''}`); } catch {}
   L.push('', 'Graphics:');
   try { let t; const gpu = await Promise.race([app.getGPUInfo('basic'), new Promise(r => { t = setTimeout(() => r(null), 5000); })]); clearTimeout(t);
     if (gpu) { for (const g of (gpu.gpuDevice || [])) L.push(`  ${g.active ? '* ' : '  '}vendor ${g.vendorId} device ${g.deviceId}${g.driverVersion ? ' driver ' + g.driverVersion : ''}${g.description ? ' ' + g.description : ''}`); if (gpu.auxAttributes) L.push('  ' + JSON.stringify(gpu.auxAttributes).slice(0, 2000)); } else L.push('  (no answer)'); } catch (e) { L.push('  ' + e.message); }
@@ -2477,9 +2479,9 @@ let reporting = null;
 handle('app:reportProblem', () => reporting || (reporting = makeReport().finally(() => { reporting = null; })));
 async function makeReport() {
   let desk; try { desk = app.getPath('desktop'); } catch {} if (!desk || !fs.existsSync(desk)) desk = require('os').homedir();
-  const name = `Boxshelf problem report ${stamp()}`, tmp = await fs.promises.mkdtemp(path.join(require('os').tmpdir(), 'boxshelf-report-'));
+  const name = `TrustyShelf problem report ${stamp()}`, tmp = await fs.promises.mkdtemp(path.join(require('os').tmpdir(), 'trustyshelf-report-'));
   try {
-    for (const [f, n] of [[LOG, 'boxshelf.log'], [LOG + '.old', 'boxshelf.log.old']]) { try { await fs.promises.writeFile(path.join(tmp, n), scrubText(await fs.promises.readFile(f, 'utf8'))); } catch {} }
+    for (const [f, n] of [[LOG, 'trustyshelf.log'], [LOG + '.old', 'trustyshelf.log.old']]) { try { await fs.promises.writeFile(path.join(tmp, n), scrubText(await fs.promises.readFile(f, 'utf8'))); } catch {} }
     const c = stripSecrets(cfg); if (c.ra) delete c.ra.user; // the account name isn't needed to help
     await fs.promises.writeFile(path.join(tmp, 'config.json'), scrubText(JSON.stringify(c, null, 2)));
     await fs.promises.writeFile(path.join(tmp, 'info.txt'), scrubText(await reportInfo()));
@@ -2537,7 +2539,7 @@ handle('api:test', async ({ service } = {}) => { const s = String(service || '')
 // temp folders a crash or power cut left behind (manual downloads, e-book unpacking)
 function sweepTemp() {
   const tmp = require('os').tmpdir(), old = Date.now() - 864e5;
-  fs.promises.readdir(tmp).then(names => { for (const n of names) if (/^boxshelf-(manual|emanual)/i.test(n)) { const f = path.join(tmp, n); fs.promises.stat(f).then(st => { if (st.mtimeMs < old) return fs.promises.rm(f, { recursive: true, force: true }); }).catch(() => {}); } }).catch(() => {});
+  fs.promises.readdir(tmp).then(names => { for (const n of names) if (/^trustyshelf-(manual|emanual)/i.test(n)) { const f = path.join(tmp, n); fs.promises.stat(f).then(st => { if (st.mtimeMs < old) return fs.promises.rm(f, { recursive: true, force: true }); }).catch(() => {}); } }).catch(() => {});
 }
 // data\thumbs: small copies of covers for the shelf. Old ones (covers since replaced, games removed) are cleared out:
 // anything not used for 60 days, and the oldest beyond 300 MB
@@ -2578,13 +2580,13 @@ handle('companion:state', () => companion.state());
 handle('companion:set', o => companion.set(o && typeof o === 'object' ? { enabled: o.enabled, port: o.port } : {}));
 handle('companion:forget', ({ id } = {}) => companion.forget(String(id || '')));
 handle('companion:pin', () => companion.renewPin());
-// No page Boxshelf shows ever needs the camera, microphone, location, notifications…: refuse them all, everywhere
+// No page (T)rustyShelf shows ever needs the camera, microphone, location, notifications…: refuse them all, everywhere
 function denyPermissions(ses) { try { ses.setPermissionRequestHandler((wc, perm, cb) => cb(perm === 'fullscreen')); ses.setPermissionCheckHandler((wc, perm) => perm === 'fullscreen'); } catch {} }
 app.on('session-created', denyPermissions);
 if (firstInstance) app.whenReady().then(() => { try { startUp(); } catch (e) {
-  // something on this PC stops Boxshelf from starting (a read-only folder, a damaged file): say so, don't hang invisibly
+  // something on this PC stops (T)rustyShelf from starting (a read-only folder, a damaged file): say so, don't hang invisibly
   log('ERROR starting', e && e.stack || e);
-  try { dialog.showErrorBox('Boxshelf could not start', `${e && e.message || e}\n\nDetails are in data\\boxshelf.log. Boxshelf needs to be able to write to its own folder.`); } catch {}
+  try { dialog.showErrorBox('(T)rustyShelf could not start', `${e && e.message || e}\n\nDetails are in data\\trustyshelf.log. (T)rustyShelf needs to be able to write to its own folder.`); } catch {}
   try { app.exit(1); } catch { process.exit(1); }
 } });
 function startUp() {
@@ -2593,7 +2595,7 @@ function startUp() {
   arcadenames.init(app.getPath('userData'), log); // (beta.7) arcade game names, main/arcadenames.js
   emusetup.init({ log, dataDir: app.getPath('userData'), appRoot: paths.appRoot() }); racores.init({ log }); previews.init({ log, dataDir: app.getPath('userData'), appRoot: paths.appRoot() }); ytclips.init({ log, dataDir: app.getPath('userData') }); addgames.init({ log });
   cfg = unsealed(config.load()); { const fx = fixXenia(cfg); if (fx !== cfg) { cfg = fx; try { persistCfg(cfg); } catch {} } } applyArtLibrary();
-  { const here = paths.appRoot(), L = Array.isArray(cfg.ui.installs) ? cfg.ui.installs.filter(x => typeof x === 'string') : []; if (!L.some(x => x.toLowerCase() === here.toLowerCase())) { cfg.ui.installs = [here, ...L].slice(0, 6); try { persistCfg(cfg); } catch {} } } // where Boxshelf has run from: a later move can offer the magazines left here
+  { const here = paths.appRoot(), L = Array.isArray(cfg.ui.installs) ? cfg.ui.installs.filter(x => typeof x === 'string') : []; if (!L.some(x => x.toLowerCase() === here.toLowerCase())) { cfg.ui.installs = [here, ...L].slice(0, 6); try { persistCfg(cfg); } catch {} } } // where (T)rustyShelf has run from: a later move can offer the magazines left here
   // consoles added in an update (PS5): found once, as setup would have (an emulator or games folder set by hand is kept)
   { const known = Array.isArray(cfg.ui.knownSystems) ? cfg.ui.knownSystems : [], add = ['ps5', 'sw2'].filter(id => !known.includes(id) && cfg.systems[id]);
     if (add.length) { for (const id of add) { const c = cfg.systems[id]; if (cfg.setupDone && !c.emulator && !(c.romDirs || []).length) { const d = detectSystem(id); if (d) { if (d.emulator) c.emulator = d.emulator; if (d.romDirs.length) c.romDirs = d.romDirs; log('New console', id, d.emulator ? 'emulator found' : 'no emulator', d.romDirs.length + ' games folder(s)'); } } }

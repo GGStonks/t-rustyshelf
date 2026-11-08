@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/linux.js apart from the app's name ((T)rustyShelf).
 // Linux / Steam Deck only. Everything here is used behind process.platform === 'linux' checks; Windows never calls it.
 const path = require('path');
 const fs = require('fs');
@@ -6,14 +8,16 @@ const { spawnSync } = require('child_process');
 
 const isLinux = process.platform === 'linux';
 
-// Boxshelf's own folder (data\, Custom themes\, Songs\ …). An AppImage runs from a read-only mount that's gone after it
+// (T)rustyShelf's own folder (data\, Custom themes\, Songs\ …). An AppImage runs from a read-only mount that's gone after it
 // closes, so the folder beside the .AppImage is used only when it already has a "data" folder (a portable setup);
-// otherwise ~/Boxshelf. A plain `electron .` (development) keeps its project folder.
+// otherwise ~/TrustyShelf, or the ~/Boxshelf an earlier version made. A plain `electron .` (development) keeps its project folder.
 function appRoot(isPackaged, devDir) {
   if (!isPackaged) return devDir;
   const img = process.env.APPIMAGE;
   if (img) { const beside = path.dirname(img); try { if (fs.statSync(path.join(beside, 'data')).isDirectory()) return beside; } catch {} }
-  const home = path.join(os.homedir(), 'Boxshelf');
+  const home = path.join(os.homedir(), 'TrustyShelf'), legacy = path.join(os.homedir(), 'Boxshelf');
+  const isDir = d => { try { return fs.statSync(d).isDirectory(); } catch { return false; } };
+  if (!isDir(home) && isDir(path.join(legacy, 'data'))) return legacy; // (made before the rename: its settings, history and art stay in use)
   try { fs.mkdirSync(home, { recursive: true }); } catch {}
   return home;
 }

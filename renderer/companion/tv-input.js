@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// renderer/companion/tv-input.js apart from the app's name ((T)rustyShelf).
 // The TV side of the phone companion (main/companion.js): the phone's remote becomes one more controller in
 // navigator.getGamepads(), so every screen (shelf, Details, Settings, museum, Inspect…) reads it exactly like a real pad,
 // Confirm swap and prompt style included. Its typing goes into the text field that has focus, or to Settings' search
@@ -5,17 +7,17 @@
 // The Home menu is a separate window: main.js drives that one itself (homemenu.button).
 (function(){
 "use strict";
-const api=window.boxshelf;if(!api||!api.onCompanionInput||!navigator.getGamepads)return;
+const api=window.trustyshelf;if(!api||!api.onCompanionInput||!navigator.getGamepads)return;
 // standard mapping: the face buttons by position (a = bottom, b = right, x = left, y = top), as on any pad
 const IDX={a:0,b:1,x:2,y:3,lb:4,rb:5,view:8,start:9,up:12,down:13,left:14,right:15,home:16};
 const MIN_MS=90,HOLD_MS=1300; // a tap lasts long enough for a frame to see it; a hold lets go if the phone stops saying "still down"
 const buttons=[...Array(17)].map(()=>({pressed:false,touched:false,value:0}));
-const pad={id:"Boxshelf phone remote",index:7,connected:true,mapping:"standard",timestamp:0,axes:[0,0,0,0],buttons,vibrationActuator:null};
+const pad={id:"(T)rustyShelf phone remote",index:7,connected:true,mapping:"standard",timestamp:0,axes:[0,0,0,0],buttons,vibrationActuator:null};
 let live=false;const held={};
 const real=Navigator.prototype.getGamepads;
 // listed only once the phone has been used; it carries the real pad's name when there is one, so the shelf's prompts
 // and "controller connected" note don't change just because you picked up the phone
-try{Object.defineProperty(navigator,"getGamepads",{configurable:true,value:function(){const L=Array.from(real.call(navigator)||[]);if(!live)return L;const r=L.find(p=>p&&p.connected&&p!==pad);pad.id=r?r.id:"Boxshelf phone remote";L.push(pad);return L}})}catch(e){return}
+try{Object.defineProperty(navigator,"getGamepads",{configurable:true,value:function(){const L=Array.from(real.call(navigator)||[]);if(!live)return L;const r=L.find(p=>p&&p.connected&&p!==pad);pad.id=r?r.id:"(T)rustyShelf phone remote";L.push(pad);return L}})}catch(e){return}
 function set(i,on){buttons[i].pressed=on;buttons[i].touched=on;buttons[i].value=on?1:0;pad.timestamp=performance.now()}
 function press(b,down){const i=IDX[b];if(i==null)return;live=true;const now=performance.now();
   if(down){let h=held[b];if(!h||!buttons[i].pressed){h=held[b]={at:now,seq:(h?h.seq:0)+1};set(i,true)}h.until=now+HOLD_MS;return}

@@ -1,3 +1,5 @@
+/* Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+   android-app/web-extras/android.css apart from the app's name ((T)rustyShelf). */
 /* Android (AYN Thor and other handhelds): added to the Android build only, after the app's own styles.
    Frosted-glass blur (backdrop-filter) is one of the costliest effects for a phone GPU at 1080p and was the quick
    menu's lag on the Thor; the panels get a slightly more solid background instead, the same trade the Low

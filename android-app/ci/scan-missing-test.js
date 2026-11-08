@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// android-app/ci/scan-missing-test.js apart from the app's name ((T)rustyShelf).
 // Plain Node test (beta.10): games that went missing from the shelf. Builds made-up games folders and scans them with
 // main/scanner.js (sync and async). Run: node android-app/ci/scan-missing-test.js   (also run by ci/issues-test.js)
 //   - Xbox 360 Games on Demand / Arcade packages (no extension, …\00007000\<hash>) are games; a save in the same layout isn't;

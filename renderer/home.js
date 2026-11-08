@@ -1,7 +1,9 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// renderer/home.js apart from the app's name ((T)rustyShelf).
 // The Home menu overlay, used two ways:
 //  • in a game: Resume, Save/Load state, Screenshot, Power, Quit to shelf (only what that emulator supports)
 //  • on the shelf: Home shelf, Museum, Settings, Power
-// Power opens a sub-list in place (Sleep, Restart, Shut down, Quit Boxshelf). The main process opens the menu,
+// Power opens a sub-list in place (Sleep, Restart, Shut down, Quit (T)rustyShelf). The main process opens the menu,
 // forwards controller buttons (from the XInput helper) and carries out whatever is chosen here.
 (() => {
   // fonts are bundled (fonts/fonts.css, linked from home.html): no font CDN request
@@ -26,7 +28,7 @@
   };
   const LABEL = { resume: 'Resume', save: 'Save state', load: 'Load state', shot: 'Screenshot', quit: 'Quit to shelf', power: 'Power',
     shelfhome: 'Home shelf', museum: 'Museum', settings: 'Settings',
-    sleep: 'Sleep', restart: 'Restart', shutdown: 'Shut down', quitapp: 'Quit Boxshelf', back: 'Back' };
+    sleep: 'Sleep', restart: 'Restart', shutdown: 'Shut down', quitapp: 'Quit (T)rustyShelf', back: 'Back' };
   const HOLD = new Set(['quit', 'restart', 'shutdown', 'quitapp']); // these need A held, so a stray press never does them
   const SEP_BEFORE = new Set(['power', 'quit']);
   let main = [], power = [], items = [], inPower = false, sel = 0, mainSel = 0, open = false, info = null, holdT = 0, holdStart = 0, toastT = 0, clockT = 0;

@@ -1,4 +1,6 @@
-// Hidden window: cuts a two-page scan into its left and right halves (off Boxshelf's main thread, which a large
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// renderer/img-tools.js apart from the app's name ((T)rustyShelf).
+// Hidden window: cuts a two-page scan into its left and right halves (off (T)rustyShelf's main thread, which a large
 // scan used to freeze for up to a couple of seconds). The image arrives as bytes: a canvas holding a file:// image
 // is "tainted" and can't be exported.
 /* global wum */

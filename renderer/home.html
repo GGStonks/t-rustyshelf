@@ -1,19 +1,21 @@
 <!doctype html>
+<!-- Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+     renderer/home.html apart from the app's name ((T)rustyShelf). -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' bsfile: data: https://shared.cloudflare.steamstatic.com https://cdn.cloudflare.steamstatic.com">
-<title>Boxshelf Home</title>
+<title>(T)rustyShelf Home</title>
 <link rel="stylesheet" href="fonts/fonts.css">
 <link rel="stylesheet" href="home.css">
 </head>
 <body class="layout-side">
   <!-- The in-game Home menu. A transparent, non-focusable window over the running emulator: the game keeps focus
-       (so it stays fullscreen and gets the hotkeys Boxshelf sends), and the controller arrives from the main
+       (so it stays fullscreen and gets the hotkeys (T)rustyShelf sends), and the controller arrives from the main
        process. -->
   <div class="dim" id="dim"></div>
   <aside class="panel" id="panel" aria-label="Home menu">
-    <div class="top"><span class="brand">Boxshelf</span><span class="clock" id="clock"></span></div>
+    <div class="top"><span class="brand">(T)rustyShelf</span><span class="clock" id="clock"></span></div>
     <div class="now">
       <div class="cover"><img id="cover" alt=""></div>
       <div class="meta">

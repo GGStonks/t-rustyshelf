@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// android-app/ci/ra-test.js apart from the app's name ((T)rustyShelf).
 // Device test pass "RetroAchievements" (0.3.5, android-ra.js), run by web-device-test.js on the pretend Thor
 // (?fakeNative=1). The pretend device answers RetroAchievements' Web API deterministically (installFake in android-ra.js):
 // GameCube Pikmin mastered, The Wind Waker 5 of 40; SNES Chrono Trigger by title, Super Metroid only by its ROM hash.
@@ -19,7 +21,7 @@ module.exports = async function raPass({ browser, base, check, newPage, OUT }) {
     await page.goto(url); await page.waitForTimeout(4000);
     // ---- set up three consoles, then the account ----
     const acct = await page.evaluate(async () => {
-      const api = window.boxshelf, c = (await api.getConfig()).config, det = await api.detect();
+      const api = window.trustyshelf, c = (await api.getConfig()).config, det = await api.detect();
       const dirs = [await api.pick({ kind: 'folder' }), await api.pick({ kind: 'folder' }), await api.pick({ kind: 'folder' })];
       for (const [i, id] of ['gc', 'psx', 'snes'].entries()) { c.systems[id].romDirs = [dirs[i]]; c.systems[id].emulator = det.systems[id].emulator; }
       c.setupDone = true; await api.saveConfig(c); await api.scan();
@@ -28,7 +30,7 @@ module.exports = async function raPass({ browser, base, check, newPage, OUT }) {
       const bad = await api.testApi('ra');
       c.ra.key = 'k3y-for-tests'; await api.saveConfig(c);
       const good = await api.testApi('ra'), status = (await api.apiStatus()).ra, on = await api.raEnabled();
-      localStorage.setItem('boxshelf-ui', JSON.stringify({ sys: 'gc', sel: 0 }));
+      localStorage.setItem('trustyshelf-ui', JSON.stringify({ sys: 'gc', sel: 0 }));
       return { off, none, offShelf, bad, good, status, on };
     });
     check('RetroAchievements: off until signed in (no requests); Test refuses a wrong key, then connects with name and points',
@@ -40,7 +42,7 @@ module.exports = async function raPass({ browser, base, check, newPage, OUT }) {
     await page.goto(url);
     const pts = await until(() => { const e = document.getElementById('raPts'); return e && !e.hidden && /4,321 pts/.test(e.textContent) && /tester/.test(e.textContent); });
     const sh = await page.evaluate(async () => {
-      const api = window.boxshelf, lib = await api.cachedLibrary(), titles = id => lib.find(s => s.id === id).games.map(g => g.title);
+      const api = window.trustyshelf, lib = await api.cachedLibrary(), titles = id => lib.find(s => s.id === id).games.map(g => g.title);
       const gc = await api.raShelf('gc', titles('gc')), psx = await api.raShelf('psx', titles('psx'));
       const n0 = __fakeRa.calls.length; await api.raShelf('gc', titles('gc')); await api.raShelf('psx', titles('psx'));
       return { gc, psx, again: __fakeRa.calls.length - n0, titles: titles('gc') };
@@ -54,7 +56,7 @@ module.exports = async function raPass({ browser, base, check, newPage, OUT }) {
 
     // ---- SNES: Chrono Trigger by title; Super Metroid only by its ROM's hash, made natively once ----
     const sn = await page.evaluate(async () => {
-      const api = window.boxshelf, wait = ms => new Promise(r => setTimeout(r, ms)), T = ['Super Metroid', 'Chrono Trigger'];
+      const api = window.trustyshelf, wait = ms => new Promise(r => setTimeout(r, ms)), T = ['Super Metroid', 'Chrono Trigger'];
       const first = await api.raShelf('snes', T);
       for (let i = 0; i < 300 && !__fakeRa.hash.some(h => /^Super Metroid/.test(h.name)); i++) await wait(100);
       await wait(800);
@@ -92,7 +94,7 @@ module.exports = async function raPass({ browser, base, check, newPage, OUT }) {
 
     // ---- a game played: the unlock shown on the way back, then fresh numbers ----
     const play = await page.evaluate(async ww => {
-      const api = window.boxshelf, wait = ms => new Promise(r => setTimeout(r, ms));
+      const api = window.trustyshelf, wait = ms => new Promise(r => setTimeout(r, ms));
       const g = (await api.cachedLibrary()).find(s => s.id === 'gc').games.find(x => x.title === ww);
       __fakeRa.unlocks = [{ AchievementID: 160206, Title: 'Sail the Great Sea', Description: 'A pretend unlock', Points: 10, BadgeName: '00006', GameTitle: 'The Wind Waker', HardcoreMode: 0, Date: '2026-10-25 10:00:00' }];
       const n0 = __fakeRa.calls.length;
@@ -112,13 +114,13 @@ module.exports = async function raPass({ browser, base, check, newPage, OUT }) {
     await page.goto(url);
     await until(() => { const e = document.getElementById('raPts'); return e && !e.hidden && /4,321/.test(e.textContent); }, null, 30000);
     await page.waitForTimeout(2500);
-    const fresh = await page.evaluate(async () => { const api = window.boxshelf, sn = await api.raShelf('snes', ['Super Metroid', 'Chrono Trigger']);
+    const fresh = await page.evaluate(async () => { const api = window.trustyshelf, sn = await api.raShelf('snes', ['Super Metroid', 'Chrono Trigger']);
       await new Promise(r => setTimeout(r, 800)); return { calls: __fakeRa.calls.map(c => (c.url.match(/API_\w+/) || [''])[0]), sm: sn['Super Metroid'], hash: __fakeRa.hash.length }; });
     check('RetroAchievements: a fresh start answers from the saved copies (no requests, no hashing again)', !fresh.calls.length && fresh.sm && fresh.sm.id === 301 && !fresh.hash,
       `${fresh.calls.length} requests (${fresh.calls.join(', ')}) · Super Metroid ${JSON.stringify(fresh.sm || null)} · ${fresh.hash} hashed`);
 
     // ---- Settings: the account's chip, and the Android note about the emulators' own sign-in ----
-    await page.evaluate(async () => { await window.boxshelf.testApi('ra'); Setup.open({ page: 'acct' }); });
+    await page.evaluate(async () => { await window.trustyshelf.testApi('ra'); Setup.open({ page: 'acct' }); });
     // (waits for the account's status too: it comes from a background request a moment after the page draws)
     const set = await until(() => { const t = ((document.querySelector('#bss') || {}).innerText || '').replace(/\s+/g, ' '); return /RetroAchievements/.test(t) && /Connected · tester/.test(t); }, null, 30000);
     const setText = await page.evaluate(() => ((document.querySelector('#bss') || {}).innerText || '').replace(/\s+/g, ' '));

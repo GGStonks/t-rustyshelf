@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// renderer/themefx.js apart from the app's name ((T)rustyShelf).
 /* Moving backgrounds for the themes, drawn on one canvas behind the shelf.
    - Spectrum: slow ribbons of light and drifting dust in the console's colour
    - Keys: a field of dots rolling like a wave; every note the menu plays sends a ripple across it, coloured by the song

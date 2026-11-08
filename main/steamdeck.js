@@ -1,10 +1,12 @@
-// (beta.8) Linux / Steam Deck: where Boxshelf is running (a Steam Deck? started by Steam? Game Mode?) and "Add Boxshelf
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/steamdeck.js apart from the app's name ((T)rustyShelf).
+// (beta.8) Linux / Steam Deck: where (T)rustyShelf is running (a Steam Deck? started by Steam? Game Mode?) and "Add (T)rustyShelf
 // to Steam", the way Steam ROM Manager adds ES-DE and Pegasus: an entry in Steam's own list of non-Steam games
-// (userdata/<user>/config/shortcuts.vdf, binary KeyValues), so Boxshelf starts from Steam and Game Mode, and Steam gives
+// (userdata/<user>/config/shortcuts.vdf, binary KeyValues), so (T)rustyShelf starts from Steam and Game Mode, and Steam gives
 // it (and every emulator it starts) a real gamepad. In Desktop Mode, outside Steam, the Deck's controller is a keyboard
 // and mouse: B is Esc, which quits most emulators' games.
-// Steam rewrites shortcuts.vdf when it exits, so it's only written while Steam is closed (Boxshelf can close Steam and
-// start it again). The old file is kept as shortcuts.vdf.boxshelf-bak; adding again updates the same entry.
+// Steam rewrites shortcuts.vdf when it exits, so it's only written while Steam is closed ((T)rustyShelf can close Steam and
+// start it again). The old file is kept as shortcuts.vdf.trustyshelf-bak; adding again updates the same entry.
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -17,7 +19,7 @@ function init(o) { log = o.log || log; }
 const isLinux = process.platform === 'linux';
 const read = f => { try { return fs.readFileSync(f, 'utf8').trim(); } catch { return ''; } };
 
-// ---------- where Boxshelf runs ----------
+// ---------- where (T)rustyShelf runs ----------
 // a Steam Deck (Valve's board; LCD "Jupiter", OLED "Galileo"). BS_FAKE_DECK=1: the tests' pretend Deck
 function isDeck() {
   if (process.env.BS_FAKE_DECK === '1') return true;
@@ -74,15 +76,15 @@ function crc32(b) { if (zlib.crc32) return zlib.crc32(b) >>> 0; let c = ~0; for 
 const shortcutId = (exe, name) => (crc32(Buffer.from(exe + name, 'utf8')) | 0x80000000) >>> 0;
 const get = (L, k) => (L.find(e => e.k.toLowerCase() === k.toLowerCase()) || {}).v;
 
-// the entry for Boxshelf (exe: the AppImage). Returns the new list and whether one was already there.
-function withBoxshelf(root, o) {
+// the entry for (T)rustyShelf (exe: the AppImage). Returns the new list and whether one was already there.
+function withTrustyShelf(root, o) {
   const top = root.find(e => e.t === 0 && e.k.toLowerCase() === 'shortcuts') || (root.push({ k: 'shortcuts', t: 0, v: [] }), root[root.length - 1]);
   const L = top.v, q = s => '"' + s + '"', exe = q(o.exe), id = shortcutId(exe, o.name);
   const fields = [['appid', 2, id | 0], ['AppName', 1, o.name], ['Exe', 1, exe], ['StartDir', 1, q(path.dirname(o.exe))], ['icon', 1, o.icon || ''], ['ShortcutPath', 1, ''],
     ['LaunchOptions', 1, o.launch || ''], ['IsHidden', 2, 0], ['AllowDesktopConfig', 2, 1], ['AllowOverlay', 2, 1], ['OpenVR', 2, 0], ['Devkit', 2, 0], ['DevkitGameID', 1, ''],
     ['DevkitOverrideAppID', 2, 0], ['LastPlayTime', 2, 0], ['FlatpakAppID', 1, '']];
-  // (an entry that's ours: the same program, or a Boxshelf AppImage of another version / place)
-  const mine = e => { const x = String(get(e.v, 'Exe') || ''); return x === exe || /boxshelf[^/]*\.appimage"?$/i.test(x) || get(e.v, 'AppName') === o.name; };
+  // (an entry that's ours: the same program, or a (T)rustyShelf AppImage of another version / place)
+  const mine = e => { const x = String(get(e.v, 'Exe') || ''); return x === exe || /(trustyshelf|boxshelf)[^/]*\.appimage"?$/i.test(x) || get(e.v, 'AppName') === o.name || get(e.v, 'AppName') === 'Boxshelf'; };
   let ent = L.find(e => e.t === 0 && mine(e)), had = !!ent;
   if (!ent) { ent = { k: String(L.length), t: 0, v: [] }; L.push(ent); }
   for (const [k, t, v] of fields) { const cur = ent.v.find(e => e.k.toLowerCase() === k.toLowerCase()); if (cur) { cur.t = t; cur.v = v; } else ent.v.push({ k, t, v }); }
@@ -105,8 +107,8 @@ async function closeSteam() {
 }
 function startSteam() { try { const p = spawn(steamCmd(), [], { detached: true, stdio: 'ignore' }); p.unref(); } catch (e) { log('Steam: could not start it again:', e.message); } }
 
-// ---------- Add Boxshelf to Steam ----------
-// o: { exe (the AppImage), iconSrc (Boxshelf's icon, copied beside the data), dataDir, closeSteam (true: close it first and
+// ---------- Add (T)rustyShelf to Steam ----------
+// o: { exe (the AppImage), iconSrc ((T)rustyShelf's icon, copied beside the data), dataDir, closeSteam (true: close it first and
 // start it again after) }. Answers { ok, users, updated } or { ok: false, why: 'steam-running' | 'no-steam' | … }
 async function addToSteam(o) {
   if (!isLinux && process.env.BS_FAKE_DECK !== '1') return { ok: false, why: 'not-linux' };
@@ -116,20 +118,20 @@ async function addToSteam(o) {
   let reopened = false;
   if (steamRunning()) { if (!o.closeSteam) return { ok: false, why: 'steam-running' }; if (!(await closeSteam())) return { ok: false, why: 'steam-would-not-close' }; reopened = true; }
   let icon = '';
-  try { if (o.iconSrc && o.dataDir) { icon = path.join(o.dataDir, 'steam', 'boxshelf-icon.png'); fs.mkdirSync(path.dirname(icon), { recursive: true }); fs.copyFileSync(o.iconSrc, icon); } } catch { icon = ''; }
+  try { if (o.iconSrc && o.dataDir) { icon = path.join(o.dataDir, 'steam', 'trustyshelf-icon.png'); fs.mkdirSync(path.dirname(icon), { recursive: true }); fs.copyFileSync(o.iconSrc, icon); } } catch { icon = ''; }
   const done = []; let updated = 0;
   for (const u of users) {
     const f = path.join(u.dir, 'shortcuts.vdf');
     try {
       let root = [];
-      if (fs.existsSync(f)) { const buf = fs.readFileSync(f); root = buf.length ? parse(buf) : []; fs.copyFileSync(f, f + '.boxshelf-bak'); }
-      const r = withBoxshelf(root, { exe: o.exe, name: 'Boxshelf', icon, launch: '' });
+      if (fs.existsSync(f)) { const buf = fs.readFileSync(f); root = buf.length ? parse(buf) : []; fs.copyFileSync(f, f + '.trustyshelf-bak'); }
+      const r = withTrustyShelf(root, { exe: o.exe, name: '(T)rustyShelf', icon, launch: '' });
       const tmp = f + '.part'; fs.writeFileSync(tmp, write(r.root)); fs.renameSync(tmp, f);
-      // the Library's artwork: Boxshelf's icon as the tile, until a proper one is chosen in Steam
+      // the Library's artwork: (T)rustyShelf's icon as the tile, until a proper one is chosen in Steam
       try { const grid = path.join(u.dir, 'grid'); fs.mkdirSync(grid, { recursive: true }); if (icon) for (const n of [r.id + '_icon.png']) fs.copyFileSync(icon, path.join(grid, n)); } catch {}
       done.push(u.id); if (r.had) updated++;
       // (beta.10: the account number stays out of the log, which goes into problem reports: "Steam user 1 of 2")
-      log('Steam: Boxshelf', r.had ? 'updated in' : 'added to', 'the shortcuts of Steam user', (users.indexOf(u) + 1) + ' of ' + users.length);
+      log('Steam: (T)rustyShelf', r.had ? 'updated in' : 'added to', 'the shortcuts of Steam user', (users.indexOf(u) + 1) + ' of ' + users.length);
     } catch (e) { log('Steam: shortcuts for user', (users.indexOf(u) + 1) + ' of ' + users.length, 'not changed:', e.code || 'error'); } // (e.code only: the message holds the path, with the account number in it)
   }
   if (reopened) startSteam();
@@ -137,8 +139,8 @@ async function addToSteam(o) {
 }
 // already in Steam? (any account's shortcuts list has it)
 function inSteam(exe) {
-  for (const u of userDirs()) { try { const L = parse(fs.readFileSync(path.join(u.dir, 'shortcuts.vdf'))); const top = L.find(e => e.k.toLowerCase() === 'shortcuts'); if (top && top.v.some(e => e.t === 0 && (String(get(e.v, 'Exe') || '') === '"' + exe + '"' || /boxshelf[^/]*\.appimage"?$/i.test(String(get(e.v, 'Exe') || ''))))) return true; } catch {} }
+  for (const u of userDirs()) { try { const L = parse(fs.readFileSync(path.join(u.dir, 'shortcuts.vdf'))); const top = L.find(e => e.k.toLowerCase() === 'shortcuts'); if (top && top.v.some(e => e.t === 0 && (String(get(e.v, 'Exe') || '') === '"' + exe + '"' || /trustyshelf[^/]*\.appimage"?$/i.test(String(get(e.v, 'Exe') || ''))))) return true; } catch {} }
   return false;
 }
 
-module.exports = { init, info, isDeck, startedBySteam, gameMode, steamRoots, userDirs, parse, write, withBoxshelf, shortcutId, crc32, steamRunning, addToSteam, inSteam };
+module.exports = { init, info, isDeck, startedBySteam, gameMode, steamRoots, userDirs, parse, write, withTrustyShelf, shortcutId, crc32, steamRunning, addToSteam, inSteam };

@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/gx2.js apart from the app's name ((T)rustyShelf).
 // Wii U textures (BFLIM, as used by e-manual layouts): undo the GX2 GPU tiling and decode the pixel format to RGBA.
 // Tiling follows AMD's AddrLib for the R7xx-class GPU in the Wii U (2 pipes, 4 banks, 256-byte pipe interleave);
 // only the modes these files use: 1 linear-aligned, 2 1D-tiled-thin1, 4 2D-tiled-thin1.

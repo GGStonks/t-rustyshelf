@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// linux/ci/detect-test.js apart from the app's name ((T)rustyShelf).
 // Linux build, test 1 (plain Node, on Linux): emulator and games detection in a made-up Steam Deck-style home folder.
 // An EmuDeck ROM folder (~/Emulation/roms/snes), a RetroDECK one (~/retrodeck/roms/psx), a Flatpak Dolphin (its
 // exported launcher), a DuckStation AppImage in ~/Applications, RetroArch in ~/.local/bin with its SNES core in
@@ -18,7 +20,7 @@ const ryu = mk('Applications/Ryujinx.AppImage', '#!/bin/sh\nexit 0\n', true); mk
 fs.mkdirSync(path.join(HOME, '.local/share/Steam/steamapps'), { recursive: true });
 
 const root = path.resolve(__dirname, '..', '..');
-const paths = require(path.join(root, 'main', 'paths.js')); paths.setAppRoot(path.join(HOME, 'Boxshelf'));
+const paths = require(path.join(root, 'main', 'paths.js')); paths.setAppRoot(path.join(HOME, 'TrustyShelf'));
 const { CONSOLES } = require(path.join(root, 'main', 'systems.js'));
 const { detectAll } = require(path.join(root, 'main', 'detect.js'));
 const linux = require(path.join(root, 'main', 'linux.js'));
@@ -39,25 +41,25 @@ let fails = 0; const check = (name, ok, detail) => { console.log((ok ? 'PASS  ' 
   check('a missing core is reported as missing', linux.retroCore(ra, 'mesen') === null, linux.retroCore(ra, 'mesen'));
   check('(beta.8) EmuDeck\'s Ryujinx AppImage found for Switch', s('sw').emulator === ryu, s('sw').emulator);
 
-  // (beta.8) Add Boxshelf to Steam: Steam's binary shortcuts list (userdata/<id>/config/shortcuts.vdf). A list that already
-  // has another non-Steam game keeps it untouched; Boxshelf is added once (adding again updates the same entry)
+  // (beta.8) Add (T)rustyShelf to Steam: Steam's binary shortcuts list (userdata/<id>/config/shortcuts.vdf). A list that already
+  // has another non-Steam game keeps it untouched; (T)rustyShelf is added once (adding again updates the same entry)
   const sd = require(path.join(root, 'main', 'steamdeck.js'));
   const cfgDir = path.join(HOME, '.local/share/Steam/userdata/12345/config'); fs.mkdirSync(cfgDir, { recursive: true });
   const other = sd.write([{ k: 'shortcuts', t: 0, v: [{ k: '0', t: 0, v: [{ k: 'appid', t: 2, v: -123 }, { k: 'AppName', t: 1, v: 'Some Game' }, { k: 'Exe', t: 1, v: '"/x/game"' }, { k: 'LastPlayTime', t: 2, v: 5 }, { k: 'tags', t: 0, v: [{ k: '0', t: 1, v: 'Fav' }] }] }] }]);
   fs.writeFileSync(path.join(cfgDir, 'shortcuts.vdf'), other);
-  const img = path.join(HOME, 'Applications/Boxshelf-1.82.0-beta.8-linux.AppImage');
+  const img = path.join(HOME, 'Applications/TrustyShelf-1.82.0-beta.8-linux.AppImage');
   const r1 = await sd.addToSteam({ exe: img, closeSteam: false }), r2 = await sd.addToSteam({ exe: img, closeSteam: false });
   const L = sd.parse(fs.readFileSync(path.join(cfgDir, 'shortcuts.vdf'))), list = (L.find(e => e.k === 'shortcuts') || { v: [] }).v;
-  const g = (e, k) => (e.v.find(x => x.k === k) || {}).v, bx = list.filter(e => g(e, 'AppName') === 'Boxshelf');
-  check('Add to Steam: Boxshelf added once (again = the same entry), the other game kept as it was, a backup made',
-    r1.ok && r2.ok && r2.updated && list.length === 2 && bx.length === 1 && g(bx[0], 'Exe') === '"' + img + '"' && (g(bx[0], 'appid') >>> 0) === sd.shortcutId('"' + img + '"', 'Boxshelf') && g(list[0], 'AppName') === 'Some Game' && g(list[0], 'LastPlayTime') === 5 && g(list[0], 'tags')[0].v === 'Fav' && fs.existsSync(path.join(cfgDir, 'shortcuts.vdf.boxshelf-bak')),
+  const g = (e, k) => (e.v.find(x => x.k === k) || {}).v, bx = list.filter(e => g(e, 'AppName') === '(T)rustyShelf');
+  check('Add to Steam: (T)rustyShelf added once (again = the same entry), the other game kept as it was, a backup made',
+    r1.ok && r2.ok && r2.updated && list.length === 2 && bx.length === 1 && g(bx[0], 'Exe') === '"' + img + '"' && (g(bx[0], 'appid') >>> 0) === sd.shortcutId('"' + img + '"', '(T)rustyShelf') && g(list[0], 'AppName') === 'Some Game' && g(list[0], 'LastPlayTime') === 5 && g(list[0], 'tags')[0].v === 'Fav' && fs.existsSync(path.join(cfgDir, 'shortcuts.vdf.trustyshelf-bak')),
     JSON.stringify({ r1, r2, n: list.length, names: list.map(e => g(e, 'AppName')) }));
   check('Steam\'s id for a shortcut: CRC32 of exe + name with the top bit set', sd.crc32(Buffer.from('123456789')) === 0xCBF43926 && sd.shortcutId('"/a"', 'B') >= 0x80000000, sd.crc32(Buffer.from('123456789')).toString(16));
 
   // (beta.8) the AppImage's launch wrapper (scripts/linux-wrapper.js): what it adds, started from the desktop, by Steam, in Game Mode
   const { SCRIPT } = require(path.join(root, 'scripts', 'linux-wrapper.js'));
-  const wdir = fs.mkdtempSync(path.join(os.tmpdir(), 'bxwrap-')), wrap = path.join(wdir, 'boxshelf');
-  fs.writeFileSync(path.join(wdir, 'boxshelf-bin'), '#!/bin/sh\necho "$@"\n', { mode: 0o755 }); fs.writeFileSync(wrap, SCRIPT.replace(/@BIN@/g, 'boxshelf-bin'), { mode: 0o755 });
+  const wdir = fs.mkdtempSync(path.join(os.tmpdir(), 'bxwrap-')), wrap = path.join(wdir, 'trustyshelf');
+  fs.writeFileSync(path.join(wdir, 'trustyshelf-bin'), '#!/bin/sh\necho "$@"\n', { mode: 0o755 }); fs.writeFileSync(wrap, SCRIPT.replace(/@BIN@/g, 'trustyshelf-bin'), { mode: 0o755 });
   const { execFileSync } = require('child_process');
   const clean = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(Steam|GAMESCOPE)/i.test(k) && k !== 'XDG_CURRENT_DESKTOP'));
   const runW = env => execFileSync(wrap, ['--x'], { env: { ...clean, ...env }, encoding: 'utf8' }).trim();
@@ -66,7 +68,7 @@ let fails = 0; const check = (name, ok, detail) => { console.log((ok ? 'PASS  ' 
     w0 === '--x' && w1 === '--no-sandbox --x' && /^--ozone-platform=x11 --no-sandbox --x$/.test(w2), JSON.stringify([w0, w1, w2]));
   fs.rmSync(wdir, { recursive: true, force: true });
 
-  // (beta.9) hold Select + Start for 1.5 s during a game: Boxshelf closes it (main/linuxpad.js, joystick events fed in)
+  // (beta.9) hold Select + Start for 1.5 s during a game: (T)rustyShelf closes it (main/linuxpad.js, joystick events fed in)
   const LP = require(path.join(root, 'main', 'linuxpad.js'));
   const ev = (value, type, num) => { const b = Buffer.alloc(8); b.writeUInt32LE(1000, 0); b.writeInt16LE(value, 4); b[6] = type; b[7] = num; return b; };
   const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'bxjs-'));

@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): most of this file is Boxshelf's
+// android-app/copy-web.js; modified for (T)rustyShelf (see the git history).
 // Copies the shared UI (../renderer) into www/ for the Android build. renderer/ stays the single source of truth:
 // never edit files in www/, they are overwritten on every build.
 const fs = require('fs'), path = require('path');
@@ -10,7 +12,7 @@ for (const f of fs.readdirSync(path.join(__dirname, 'web-extras'))) fs.copyFileS
 const idx = path.join(dst, 'index.html'), html = fs.readFileSync(idx, 'utf8'), tag = '<script src="platform.js"></script>';
 if (!html.includes(tag)) throw new Error('index.html has no platform.js tag; is renderer/ up to date?');
 // shared logic (title rules) and Capacitor's bridge script, then the Android adapter right after the demo data (mock.js),
-// so window.boxshelf is the real thing before platform.js and the app read it
+// so window.trustyshelf is the real thing before platform.js and the app read it
 fs.cpSync(path.join(__dirname, '..', 'shared'), path.join(dst, 'shared'), { recursive: true, dereference: true });
 fs.copyFileSync(require.resolve('@capacitor/core/dist/capacitor.js'), path.join(dst, 'capacitor.js'));
 const mockTag = '<script src="mock.js"></script>';

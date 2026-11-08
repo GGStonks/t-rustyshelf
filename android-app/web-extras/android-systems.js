@@ -1,4 +1,6 @@
-// Android: which systems Boxshelf shows and how each emulator app is started with a game.
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// android-app/web-extras/android-systems.js apart from the app's name ((T)rustyShelf).
+// Android: which systems (T)rustyShelf shows and how each emulator app is started with a game.
 // Launch data follows ES-DE's Android rules (es_systems.xml / es_find_rules.xml); newer emulators (Azahar, NetherSX2,
 // Eden, Cemu) are also found by name pattern, and their activity is looked up on the device, so forks and renamed
 // builds work too.

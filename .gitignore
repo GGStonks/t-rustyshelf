@@ -1,4 +1,6 @@
-# Boxshelf uses an ALLOWLIST: everything is ignored, then only the app's own source is added back.
+# Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+# .gitignore apart from the app's name ((T)rustyShelf).
+# (T)rustyShelf uses an ALLOWLIST: everything is ignored, then only the app's own source is added back.
 # This keeps emulators, ROMs, BIOS, saves, art, manuals, magazines, music, console models, builds and
 # personal data out of the repo, even when new folders appear next to the app.
 
@@ -43,7 +45,7 @@ dist/
 *.wua
 *.pkg
 *.bin
-*.boxshelf-bak
+*.trustyshelf-bak
 .env
 *.key
 keys.txt

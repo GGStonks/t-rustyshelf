@@ -1,8 +1,10 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/kyty.js apart from the app's name ((T)rustyShelf).
 // PS5 through Kyty (the KytyJets fork first): starting a game straight with kyty_emulator.exe, the way Kyty's own
 // launcher does, so a game boots with the settings chosen there.
 //   - the launcher's settings: the shared settings file %ProgramData%\Kyty\Kyty.ini ([GlobalConfiguration], and the
 //     add-ons folder in [Launcher]) turned into kyty_emulator's command-line options. Fullscreen and the hidden cursor
-//     are always on here (Boxshelf is a TV front end).
+//     are always on here ((T)rustyShelf is a TV front end).
 //   - the build's preset: a u59-preset.json beside the emulator (KytyJets) is applied as environment variables, after
 //     clearing inherited KYTY_* / TRACY_* ones, as its launcher does.
 //   - the game's patch file: _Patches\<title id>.json beside the emulator (its fixes carry their own on / off flags).
@@ -56,7 +58,7 @@ async function optionsOf(exe) {
   let key = String(exe); try { key += '|' + (await fs.promises.stat(exe)).mtimeMs; } catch { return null; }
   if (optsMemo.has(key)) return optsMemo.get(key);
   const p = new Promise(resolve => {
-    try { const c = require('child_process').execFile(exe, ['--boxshelf-probe'], { cwd: path.dirname(exe), timeout: 8000, windowsHide: true }, (e, stdout, stderr) => resolve(e ? String(stdout || '') + '\n' + String(stderr || '') : '')); /* (the unknown option: help, exit 1) */ if (c.stdin) { c.stdin.on('error', () => {}); c.stdin.end(); } }
+    try { const c = require('child_process').execFile(exe, ['--trustyshelf-probe'], { cwd: path.dirname(exe), timeout: 8000, windowsHide: true }, (e, stdout, stderr) => resolve(e ? String(stdout || '') + '\n' + String(stderr || '') : '')); /* (the unknown option: help, exit 1) */ if (c.stdin) { c.stdin.on('error', () => {}); c.stdin.end(); } }
     catch { resolve(''); }
   }).then(text => {
     const o = {}; for (const m of text.matchAll(/^\s{2}(--[a-z0-9][a-z0-9-]*)(?:\s+<([^>]*)>)?/gm)) o[m[1]] = m[2] || '';

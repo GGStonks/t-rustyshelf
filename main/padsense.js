@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/padsense.js apart from the app's name ((T)rustyShelf).
 // The game controllers actually plugged in (Windows), for the button prompts: Windows hands XInput pads to the shelf
 // without saying what they are, and Steam Input or DS4Windows wrap PlayStation / Switch pads as XInput, so the shelf
 // asks which real pads are connected (USB or Bluetooth) to show the right buttons.

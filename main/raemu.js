@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/raemu.js apart from the app's name ((T)rustyShelf).
 'use strict';
 // Per console: will RetroAchievements actually work in its emulator? Reads each emulator's own
 // settings (portable folder first, then the usual Windows places). Never returns tokens.

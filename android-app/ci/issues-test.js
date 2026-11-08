@@ -1,7 +1,9 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// android-app/ci/issues-test.js apart from the app's name ((T)rustyShelf).
 // Device test pass "issues" (beta.10), run by web-device-test.js: fixes for what beta testers reported.
 //   - An 8BitDo pad gets Xbox-style prompts (and A / B the Xbox way round), not Nintendo's, unless it says it's a Switch pad;
 //     the controller list in main (padsense) agrees.
-//   - Android: ARMSX2 (PS2) starts with the game (VIEW with the game's document); an emulator app Boxshelf has no launch data
+//   - Android: ARMSX2 (PS2) starts with the game (VIEW with the game's document); an emulator app (T)rustyShelf has no launch data
 //     for is handed the game the same way instead of a dead end; the picker marks such apps.
 //   - A game added by hand can sit on the PC shelf: kept through the settings check, passed on by the PC library.
 //   - Settings → Switch names the emulator actually picked (Citron, Ryujinx), not always Eden.
@@ -59,7 +61,7 @@ module.exports = async function issuesPass({ browser, base, check, OUT }) {
         ds: BS_padInfo('DualSense Wireless Controller (STANDARD GAMEPAD Vendor: 054c Product: 0ce6)') }));
       check('An 8BitDo pad gets Xbox-style prompts on the shelf, named 8BitDo; one in Switch mode still gets Nintendo\'s; a DualSense PlayStation\'s',
         p.bit.style === 'xbox' && p.bit.name === '8BitDo controller' && p.bitSw.style === 'nintendo' && p.ds.style === 'ps', JSON.stringify(p));
-      await page.evaluate(async () => { const c = (await window.boxshelf.getConfig()).config; c.systems.sw = Object.assign({}, c.systems.sw, { emulator: 'C:\\Emus\\Citron\\citron.exe' }); await window.boxshelf.saveConfig(c); Setup.open({ console: 'sw' }); });
+      await page.evaluate(async () => { const c = (await window.trustyshelf.getConfig()).config; c.systems.sw = Object.assign({}, c.systems.sw, { emulator: 'C:\\Emus\\Citron\\citron.exe' }); await window.trustyshelf.saveConfig(c); Setup.open({ console: 'sw' }); });
       await page.waitForTimeout(1500);
       // the Consoles grid: the Switch tile names the emulator picked; pressing it opens the Switch page
       const tile = await page.evaluate(() => { const t = [...document.querySelectorAll('.bss-ctile')].find(x => (x.querySelector('b') || {}).textContent === 'Switch'); return t ? (t.querySelector('span') || {}).textContent : null; });
@@ -84,9 +86,9 @@ module.exports = async function issuesPass({ browser, base, check, OUT }) {
     page.on('pageerror', e => errors.push(e.message));
     try {
       await page.goto(base + '?platform=android&fakeNative=1&shelf=1');
-      await page.waitForFunction(() => window.boxshelf && window.__fakeLaunches, null, { timeout: 90000, polling: 250 });
+      await page.waitForFunction(() => window.trustyshelf && window.__fakeLaunches, null, { timeout: 90000, polling: 250 });
       const r = await page.evaluate(async () => {
-        const api = window.boxshelf, c = (await api.getConfig()).config, out = {};
+        const api = window.trustyshelf, c = (await api.getConfig()).config, out = {};
         const dir = await api.pick({ kind: 'folder' }); // the pretend device's first folder (GameCube games)
         c.systems.gc = Object.assign({}, c.systems.gc, { enabled: true, romDirs: [dir] }); c.setupDone = true;
         const lib = async () => ((await api.scan()).find(s => s.id === 'gc') || { games: [] }).games[0];
@@ -100,7 +102,7 @@ module.exports = async function issuesPass({ browser, base, check, OUT }) {
       const a = r.armsx2, u = r.unknown;
       check('ARMSX2 (PS2 on Android) starts with the game: VIEW with the game\'s document, read access granted',
         a && typeof a === 'object' && a.pkg === 'come.nanodata.armsx2' && a.action === 'android.intent.action.VIEW' && /\/document\//.test(String(a.data || '')) && (a.grant || []).includes(a.data), JSON.stringify(a).slice(0, 300));
-      check('An emulator app Boxshelf has no launch data for is handed the game (VIEW) instead of "doesn\'t know how to start"',
+      check('An emulator app (T)rustyShelf has no launch data for is handed the game (VIEW) instead of "doesn\'t know how to start"',
         u && typeof u === 'object' && u.pkg === 'com.example.someemu' && u.action === 'android.intent.action.VIEW' && !!u.data, JSON.stringify(u).slice(0, 300));
       check('No script errors on the pretend Thor (issues pass)', !errors.length, errors.slice(0, 3).join(' | '));
     } catch (e) { check('Issues pass (pretend Thor) ran to the end', false, e && e.message); }

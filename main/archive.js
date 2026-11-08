@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/archive.js apart from the app's name ((T)rustyShelf).
 // "Find magazines & guides": search the Internet Archive (archive.org) for scanned magazines and strategy guides and
 // download the ones it offers freely into your Magazines\ or Guides\ folder. Lending-library (borrow-only) items are
 // left out of the results and refused on download.
@@ -121,7 +123,7 @@ const pickFile = files => { const p = plan({ files }); return p && (p.type === '
 // Downloads go through Chromium's network stack (redirects to the archive's storage servers, proxies, HTTP/2), streamed
 // to <dest>.part and renamed when complete. Resolves { ok, status }.
 let fetchImpl = null; // tests swap this
-const UA = `Boxshelf/${(() => { try { return require('../package.json').version; } catch { return '0'; } })()}`;
+const UA = `TrustyShelf/${(() => { try { return require('../package.json').version; } catch { return '0'; } })()}`;
 async function fetchFile(url, dest, onBytes, expect, resume, signal) {
   if (signal && signal.aborted) return { ok: false, status: 'cancelled' };
   if (fetchImpl) return fetchImpl(url, dest, onBytes, expect, resume, signal);
@@ -196,7 +198,7 @@ const why = st => st === 'cancelled' ? 'Cancelled.' : st === 'write' ? 'The file
 const PAGE_PAR = 6; // page images fetched at once
 const MAX_BYTES = 2 * 1024 ** 3, MAX_BUNDLE = 6 * 1024 ** 3;
 const safeName = s => clean(s).replace(/['&]/g, '').slice(0, 90).trim() || 'Untitled';
-const MARK = '.boxshelf-archive.json'; // in a folder a download made: which item it is
+const MARK = '.trustyshelf-archive.json'; // in a folder a download made: which item it is
 const dl = (id, name) => `https://archive.org/download/${encodeURIComponent(id)}/${name.split('/').map(encodeURIComponent).join('/')}`;
 
 // ---------- what you already have: id → the file it became (kept beside the cover cache) ----------
@@ -250,7 +252,7 @@ async function downloadOne(id, kind, opts, onProgress, signal) {
   if (meta.is_dark || String(meta.metadata['access-restricted-item']) === 'true') throw new Error('This one is borrow-only on the Internet Archive, so it can\'t be downloaded.');
   const had = ownedPath(id); if (had && !opts.again) return { file: had, existed: true };
   const p = plan(meta);
-  if (!p) throw new Error('This item has no PDF or page scans Boxshelf can use. Press View to see what it has.');
+  if (!p) throw new Error('This item has no PDF or page scans (T)rustyShelf can use. Press View to see what it has.');
   const title = opts.title || (Array.isArray(meta.metadata.title) ? meta.metadata.title[0] : meta.metadata.title) || id;
   const dir = path.join(library.folder(kind), opts.series ? safeName(opts.series) : '');
   fs.mkdirSync(dir, { recursive: true });

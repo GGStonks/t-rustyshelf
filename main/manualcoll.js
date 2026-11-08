@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/manualcoll.js apart from the app's name ((T)rustyShelf).
 // Manual collections on the Internet Archive: single uploads holding hundreds of manuals for one console, scanned at
 // full resolution (GameCube, PS2, PSP, Wii) or Microsoft's own digital manuals (Xbox 360, named with the title id).
 // These are the sharpest manuals around, so they are used first, and they replace an existing manual when they are
@@ -212,7 +214,7 @@ const manualFiles = (dir, base, ls) => { const pre = (base + '-manual').toLowerC
 function moveFile(a, b) { try { fs.renameSync(a, b); } catch { fs.copyFileSync(a, b); fs.unlinkSync(a); } }
 
 // systems: [{def, cfg}]. opts: { renderPdf(pdfPath) -> [dataURL], crop(file, side) -> Buffer, cancelled() }
-// a manual's pages as Boxshelf sees them: how many are real pages, how sharp they are, whether some are junk
+// a manual's pages as (T)rustyShelf sees them: how many are real pages, how sharp they are, whether some are junk
 function inspect(dir, base) {
   const files = manualFiles(dir, base).filter(f => !/\.pdf$/i.test(f));
   const w = files.map(f => (spreads.sizeOf(path.join(dir, f)) || [0])[0]);
@@ -231,7 +233,7 @@ async function sharperPdf(def, g, base, collCount, opts, collBytesPerScan) {
   const t = clean(g.title).title, tries = [...new Set([t, stripBrand(t)])];
   let hit = null; for (const x of tries) { try { hit = await M.searchGamesDatabase(def.id, x); } catch {} if (hit) break; }
   if (!hit) return null;
-  const stage = fs.mkdtempSync(path.join(require('os').tmpdir(), 'boxshelf-manual-gdb-')), pdf = path.join(stage, base + '.pdf');
+  const stage = fs.mkdtempSync(path.join(require('os').tmpdir(), 'trustyshelf-manual-gdb-')), pdf = path.join(stage, base + '.pdf');
   let keep = false;
   try {
     if (!await M.getFile(hit.id.slice(4), pdf, 0, { stall: 30000, deadline: 150000 })) return null;
@@ -252,7 +254,7 @@ async function sharperPdf(def, g, base, collCount, opts, collBytesPerScan) {
 async function one(def, cfg, g, hit, m, key, opts, changes) {
   const dir = artDirFor(cfg, g.file), base = artBase(g.file), old = inspect(dir, base), seen = m[key] || {};
   const ours = !!(seen.src && old.files.length); // the manual there is this module's earlier (half-resolution) copy
-  let stage = fs.mkdtempSync(path.join(require('os').tmpdir(), 'boxshelf-manual-'));
+  let stage = fs.mkdtempSync(path.join(require('os').tmpdir(), 'trustyshelf-manual-'));
   try {
     let n = await fetchTo(hit.col, hit.ix, hit.e, stage, base, opts);
     if (opts.crop && !hit.e.digital) await spreads.splitManual(stage, base, opts.crop, { scan: !hit.col.digital, discard: true }); // (beta.9: a digital manual's screens stay whole)

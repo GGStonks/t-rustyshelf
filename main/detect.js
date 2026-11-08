@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/detect.js apart from the app's name ((T)rustyShelf).
 // Auto-detect emulators, ROM folders, Steam and media apps.
 const path = require('path');
 const { execFile } = require('child_process');

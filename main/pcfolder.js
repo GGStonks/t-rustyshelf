@@ -64,7 +64,7 @@ function windowsPrograms(dir, folder) {
   walk(dir, 0);
   return found.sort((a, b) => a.bat - b.bat || a.depth - b.depth || a.word - b.word || b.size - a.size).slice(0, 40).map(f => ({ rel: f.rel, native: false }));
 }
-// every program a game could start with, the one Boxshelf would pick first
+// every program a game could start with, the one (T)rustyShelf would pick first
 const programsIn = (dir, folder) => [...(isLinux ? linuxPrograms(dir, folder) : []), ...windowsPrograms(dir, folder)];
 
 // the games in the PC games folder: [{ id, source: 'folder', title, dir, exe, native, own, programs: [{ rel, native }] }]

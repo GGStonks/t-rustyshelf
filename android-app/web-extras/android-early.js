@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// android-app/web-extras/android-early.js apart from the app's name ((T)rustyShelf).
 // Android build only (copy-web.js puts it first in <head>, before anything reads the pixel ratio).
 // The Android page is laid out 1440 CSS px wide and the WebView scales it to fit the screen (page zoom), but
 // window.devicePixelRatio still reports the device's own density (2.25 on the AYN Thor). Every canvas sized from it

@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/artstudio.js apart from the app's name ((T)rustyShelf).
 // Art Studio: every version of a game's box art the sources know (LaunchBox, libretro, GameTDB, the picture in use and the
 // ones replaced before it), ranked by "looks" (authentic, HD, a region, special edition), applied safely (new file first,
 // the old one moved to replaced\, never deleted), with a style per console and per-game part locks auto-fetch respects.
@@ -94,7 +96,7 @@ let jobN = 0, addedBytes = 0, pruning = null, thumbGen = 0;
 function init(e) {
   env = e; log = e.log || log; candDir = path.join(e.dataDir, 'art-cand'); provFile = path.join(e.dataDir, 'art-provenance.json'); prov = null;
   try { fs.mkdirSync(candDir, { recursive: true }); } catch {}
-  covers.setOnPlaced(recordPlaced); // every picture placed from now on is on record as Boxshelf's (or the user's own pick)
+  covers.setOnPlaced(recordPlaced); // every picture placed from now on is on record as (T)rustyShelf's (or the user's own pick)
   const t = setTimeout(() => pruneCache().catch(() => {}), e.pruneDelay != null ? e.pruneDelay : 20000); if (t.unref) t.unref(); // cleaned on start, once the busy start-up is over
   // first start of 1.68: note every picture already there (see migrate) once the busy start-up is over
   const m = setTimeout(() => { if (!provGet().at) migrate().catch(x => log('Art provenance: first look failed', x.message)); }, e.migrateDelay != null ? e.migrateDelay : 15000); if (m.unref) m.unref();
@@ -119,9 +121,9 @@ function setLock(sysId, file, part, val) {
 // fn(entries) edits a copy of the locks map: { "<lockKey>": entry }
 function editLocks(fn) { const a = cfg().art || { styles: {}, locks: {} }, locks = { ...(a.locks || {}) }; const r = fn(locks); for (const k of Object.keys(locks)) if (!locks[k] || !Object.keys(locks[k]).length) delete locks[k]; env.setArt({ ...a, locks }); return r; }
 
-// ---------- provenance: which pictures Boxshelf wrote ----------
+// ---------- provenance: which pictures (T)rustyShelf wrote ----------
 // data\art-provenance.json: { v, at, files: { "<path lower-case>": [origin, bytes, mtime] }, base: { "<path>": [bytes, mtime] } }.
-// files = every picture Boxshelf placed since 1.68 (covers.placeArt reports each one). base = the pictures that were already
+// files = every picture (T)rustyShelf placed since 1.68 (covers.placeArt reports each one). base = the pictures that were already
 // there the first time 1.68 started (at = when), whose origin nothing on disk can tell (cover-checks.json keeps only when a
 // game was last looked at, the log only counts per run, data\art-cand only the 1.67 picker's downloads). A picture in
 // neither was put there by hand after that. The record matches a file only while its size and date are the same: one the
@@ -148,22 +150,22 @@ function recordPlaced(dest, origin) { record(dest, ['auto', 'studio', 'own', 're
 // a front the automatic art check took from SteamGridDB because no real box scan existed: the next check replaces it
 // with a real scan as soon as one turns up (any other front is left alone)
 function isPoster(file) { const st = statOf(file); if (!st) return false; const r = provGet().files[pk(file)]; return !!r && r[0] === 'poster' && sameStat([r[1], r[2]], st); }
-// 'boxshelf' (Boxshelf wrote it, or the user let a style manage it), 'own' (a picture the user chose through Boxshelf),
+// 'trustyshelf' ((T)rustyShelf wrote it, or the user let a style manage it), 'own' (a picture the user chose through (T)rustyShelf),
 // 'legacy' (there before 1.68, origin unknown), 'hand' (put there by hand since), null (no such file)
 function originOf(file) {
   const st = statOf(file); if (!st) return null; const p = provGet(), k = pk(file), r = p.files[k];
-  if (r && sameStat([r[1], r[2]], st)) return r[0] === 'own' ? 'own' : 'boxshelf';
+  if (r && sameStat([r[1], r[2]], st)) return r[0] === 'own' ? 'own' : 'trustyshelf';
   return p.base[k] && sameStat(p.base[k], st) ? 'legacy' : 'hand';
 }
-// may automatic work (auto-fetch's HD upgrade) replace this file? Only one Boxshelf wrote. explicit: "Download box art now"
+// may automatic work (auto-fetch's HD upgrade) replace this file? Only one (T)rustyShelf wrote. explicit: "Download box art now"
 // with HD, which the user starts and which says it replaces low-res art, may also upgrade pictures from before 1.68
-const mayReplace = (file, explicit) => { const o = originOf(file); return o === 'boxshelf' || (!!explicit && o === 'legacy'); };
+const mayReplace = (file, explicit) => { const o = originOf(file); return o === 'trustyshelf' || (!!explicit && o === 'legacy'); };
 // the art library copies pictures from beside the games: a copy is what its original was
-function copied(src, dest) { const o = originOf(src); if (o === 'boxshelf' || o === 'own') record(dest, o === 'own' ? 'own' : 'copied'); }
-// the user let the shelf style manage these (unlocked a game, released kept pictures, chose Shelf style): from now on they're Boxshelf's
-function adopt(files) { let n = 0; for (const f of files) { if (!f || !statOf(f)) continue; const o = originOf(f); if (o === 'boxshelf') continue; record(f, o === 'own' ? 'own' : 'adopted'); n++; } return n; }
+function copied(src, dest) { const o = originOf(src); if (o === 'trustyshelf' || o === 'own') record(dest, o === 'own' ? 'own' : 'copied'); }
+// the user let the shelf style manage these (unlocked a game, released kept pictures, chose Shelf style): from now on they're (T)rustyShelf's
+function adopt(files) { let n = 0; for (const f of files) { if (!f || !statOf(f)) continue; const o = originOf(f); if (o === 'trustyshelf') continue; record(f, o === 'own' ? 'own' : 'adopted'); n++; } return n; }
 // first start of 1.68: every picture already on a shelf goes into base, except the ones byte-identical to a picture the 1.67
-// Art Studio downloaded into data\art-cand (those are Boxshelf's for sure). Nothing is locked here: the background auto-fetch
+// Art Studio downloaded into data\art-cand (those are (T)rustyShelf's for sure). Nothing is locked here: the background auto-fetch
 // never replaces a 'legacy' picture (mayReplace); a shelf style change does (the lock rule above startRestyle)
 function migrate() {
   if (migrating) return migrating;
@@ -314,11 +316,11 @@ async function listFor(g, part, opts = {}) {
     if (st) { const c = { url: 'made:cart:' + sha(path.resolve(front).toLowerCase() + '|' + st.size + '|' + Math.round(st.mtimeMs)).slice(0, 24), made: front, ext: '.png', source: 'made', type: 'cart', region: '', edition: 'original', kind: 'clean', label: 'Cartridge made from the cover' };
       const inf = fileInfo(cachePath(c)); list.push({ ...c, key: 'r' + sha(c.url).slice(0, 15), w: inf ? inf.w : null, h: inf ? inf.h : null, bytes: inf ? inf.bytes : 0, cached: !!inf, inUse: false }); }
   }
-  // a back and a spine Boxshelf makes itself (main.js renderBack / renderSpine: the console's style, the game's own
+  // a back and a spine (T)rustyShelf makes itself (main.js renderBack / renderSpine: the console's style, the game's own
   // artwork, screenshots and logo), offered for every game whatever the sources have, ranked after every real scan
   if ((part === 'back' || part === 'spine') && maker[part] && front && paths.isFile(front)) {
     let st = null; try { st = fs.statSync(front); } catch {}
-    if (st) { const title = String(g.game.title || ''), c = { url: `made:${part}:` + sha(path.resolve(front).toLowerCase() + '|' + st.size + '|' + Math.round(st.mtimeMs) + '|' + title).slice(0, 24), made: front, madeKind: part, madeTitle: title, ext: '.jpg', source: 'made', type: part, region: '', edition: 'original', kind: 'clean', label: part === 'back' ? 'Back made by Boxshelf' : 'Spine made by Boxshelf' };
+    if (st) { const title = String(g.game.title || ''), c = { url: `made:${part}:` + sha(path.resolve(front).toLowerCase() + '|' + st.size + '|' + Math.round(st.mtimeMs) + '|' + title).slice(0, 24), made: front, madeKind: part, madeTitle: title, ext: '.jpg', source: 'made', type: part, region: '', edition: 'original', kind: 'clean', label: part === 'back' ? 'Back made by (T)rustyShelf' : 'Spine made by (T)rustyShelf' };
       const inf = fileInfo(cachePath(c)); list.push({ ...c, key: 'r' + sha(c.url).slice(0, 15), w: inf ? inf.w : null, h: inf ? inf.h : null, bytes: inf ? inf.bytes : 0, cached: !!inf, inUse: false }); }
   }
   const dirs = [...new Set([g.dir, cur ? path.dirname(cur) : null].filter(Boolean))];

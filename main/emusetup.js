@@ -1,11 +1,13 @@
-// (beta.7) "Set up for me": Boxshelf sets an emulator up the way the shelf expects, one switch per kind of change.
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/emusetup.js apart from the app's name ((T)rustyShelf).
+// (beta.7) "Set up for me": (T)rustyShelf sets an emulator up the way the shelf expects, one switch per kind of change.
 //   controller  the first pad mapped (only when the emulator is still on keyboard-only controls: a mapping you made is kept)
 //   hotkeys     save / load / pause / screenshot on the keys the Home menu presses (main/homemenu.js HOTKEYS)
-//   bios        one shared BIOS folder (Boxshelf\BIOS), only when the emulator's own BIOS folder has nothing in it
+//   bios        one shared BIOS folder (TrustyShelf\BIOS), only when the emulator's own BIOS folder has nothing in it
 //   graphics    a resolution preset: fast / balanced / pretty (picked for this PC unless you choose)
 //   quit        no "are you sure?" question when the game is closed
 //   resume      (RetroArch, off unless chosen) save on quit, carry on where you left off next time
-// Every file is backed up once before its first change (<file>.boxshelf-bak, the same backups Settings → Restore emulator
+// Every file is backed up once before its first change (<file>.trustyshelf-bak, the same backups Settings → Restore emulator
 // settings puts back), written whole through a temp file, and listed in data/emu-setup.json so Undo puts exactly those
 // back. Fullscreen needs nothing here: every launch already passes each emulator's fullscreen option.
 // Setting names checked against each emulator's source (2026-11): DuckStation settings.cpp / hotkeys.cpp, PCSX2
@@ -46,7 +48,7 @@ function duckIni(exe) { const dir = path.dirname(exe); return firstFile([...(isF
 function pcsx2Ini(exe) { return firstFile(emucfg.pcsx2Inis(exe)); }
 function ppssppIni(exe) { const dir = path.dirname(exe); return firstFile([path.join(dir, 'memstick', 'PSP', 'SYSTEM', 'ppsspp.ini'), ...emucfg.docsDirs().map(d => path.join(d, 'PPSSPP', 'PSP', 'SYSTEM', 'ppsspp.ini'))]); }
 // The settings file this emulator has (null: it hasn't been opened yet, so there's nothing to set up; RetroArch is the
-// exception, it reads a file Boxshelf starts for it)
+// exception, it reads a file (T)rustyShelf starts for it)
 function mainFile(kind, exe) {
   if (kind === 'retroarch') return raCfg(exe);
   if (kind === 'dolphin') { const d = dolphinDir(exe); return d ? path.join(d, 'Config', 'Dolphin.ini') : null; }
@@ -136,7 +138,7 @@ function plan(kind, exe, opts = {}) {
   } else if (kind === 'ppsspp') {
     const f = ppssppIni(exe); if (!f) return { ok: false, why: 'open PPSSPP once first', changes: [] };
     add('graphics', f, 'ini', 'Graphics', { InternalResolution: RES.ppsspp[preset] });
-  } else return { ok: false, why: 'not one Boxshelf can set up yet', changes: [] };
+  } else return { ok: false, why: 'not one (T)rustyShelf can set up yet', changes: [] };
   return { ok: true, changes: out, skipped, groups: [...new Set(out.map(c => c.group))] };
 }
 
@@ -150,7 +152,7 @@ function setCfg(f, want) {
   for (let i = 0; i < lines.length; i++) { const m = /^\s*([A-Za-z0-9_]+)\s*=/.exec(lines[i]); if (!m || want[m[1]] === undefined) continue; seen.add(m[1]); const v = `${m[1]} = "${want[m[1]]}"`; if (lines[i] !== v) { lines[i] = v; changed = true; } }
   for (const k of Object.keys(want)) if (!seen.has(k)) { if (lines.length && lines[lines.length - 1] === '') lines.pop(); lines.push(`${k} = "${want[k]}"`); changed = true; }
   if (!changed) return false;
-  if (buf) { const bak = f + '.boxshelf-bak'; if (!fs.existsSync(bak)) fs.copyFileSync(f, bak); }
+  if (buf) { const bak = f + '.trustyshelf-bak'; if (!fs.existsSync(bak)) fs.copyFileSync(f, bak); }
   fs.mkdirSync(path.dirname(f), { recursive: true });
   const tmp = f + '.tmp'; try { fs.writeFileSync(tmp, lines.join(nl) + nl); fs.renameSync(tmp, f); } catch (e) { try { fs.unlinkSync(tmp); } catch {} throw e; }
   return true;
@@ -163,7 +165,7 @@ const keyOf = (kind, exe) => kind + '|' + path.resolve(exe).toLowerCase();
 
 // Applies the switched-on groups. on: { controller: true, ... } (missing = the default). Returns { ok, applied, skipped, files }.
 function apply(exe, on = {}, opts = {}) {
-  const kind = kindOf(exe); if (!kind) return { ok: false, why: 'not one Boxshelf can set up yet' };
+  const kind = kindOf(exe); if (!kind) return { ok: false, why: 'not one (T)rustyShelf can set up yet' };
   if (!isFile(exe)) return { ok: false, why: 'the emulator isn\'t there any more' };
   const p = plan(kind, exe, opts); if (!p.ok) return p;
   const want = g => on[g] !== undefined ? !!on[g] : DEFAULT_ON[g];
@@ -185,14 +187,14 @@ function apply(exe, on = {}, opts = {}) {
   return { ok: true, kind, applied: groups, skipped: p.skipped.filter(s => want(s.group)), files: done };
 }
 
-// Puts back every file this set up changed (its pre-Boxshelf copy), and removes files it started from nothing.
+// Puts back every file this set up changed (its pre-(T)rustyShelf copy), and removes files it started from nothing.
 function undo(exe) {
   const kind = kindOf(exe); const m = manifest(), key = kind && keyOf(kind, exe), rec = key && m[key]; if (!rec) return { ok: true, restored: [] };
   const restored = [];
   for (const f of rec.files) {
     try {
       if (rec.created.includes(f)) { if (isFile(f)) fs.unlinkSync(f); restored.push(f); continue; }
-      const bak = f + '.boxshelf-bak'; if (!isFile(bak)) continue;
+      const bak = f + '.trustyshelf-bak'; if (!isFile(bak)) continue;
       const tmp = f + '.tmp'; fs.copyFileSync(bak, tmp); fs.renameSync(tmp, f); fs.unlinkSync(bak); restored.push(f);
     } catch (e) { log('Emulator setup undo:', f, e.message); }
   }

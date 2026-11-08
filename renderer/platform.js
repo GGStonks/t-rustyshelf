@@ -1,14 +1,16 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): most of this file is Boxshelf's
+// renderer/platform.js; modified for (T)rustyShelf (see the git history).
 // Which platform the shelf is running on, for the rest of the renderer.
 // window.bsPlatform = { os: 'windows' | 'android' | 'web', caps: {…}, has(cap) }
 // The page also gets class platform-<os>, plus no-<cap> for every capability the platform lacks, and any element
 // marked data-needs="cap" (space-separated) is hidden when a cap is missing. Windows has every cap, so nothing changes there.
 (function () {
-  const src = (window.boxshelf && window.boxshelf.platform) || { os: 'web', caps: {} };
+  const src = (window.trustyshelf && window.trustyshelf.platform) || { os: 'web', caps: {} };
   const os = String(src.os || 'web');
   const caps = Object.freeze(Object.assign({}, src.caps));
   // Settings → which pages and rows need a capability (anything not listed is kept everywhere)
   const PAGE_NEEDS = { pc: 'steam', apps: 'steam', custom: 'steam', phone: 'companionServer' } /* (beta.4) custom: the Custom games page (Windows programs) */;
-  const ROW_NEEDS = { 'Start Boxshelf with Windows': 'autostart', 'App folder': 'folders', 'Restore emulator settings': 'emuSettings', 'Home menu': 'homeMenu', 'Home menu layout': 'homeMenu', 'Hide the taskbar during games': 'winMode' /* (beta.6) Windows only */,
+  const ROW_NEEDS = { 'Start (T)rustyShelf with Windows': 'autostart', 'App folder': 'folders', 'Restore emulator settings': 'emuSettings', 'Home menu': 'homeMenu', 'Home menu layout': 'homeMenu', 'Hide the taskbar during games': 'winMode' /* (beta.6) Windows only */,
     'Show installed GOG games': 'winStores', 'Show installed Ubisoft games': 'winStores', 'Show installed EA games': 'winStores', 'Show installed Xbox games': 'winStores' /* (Linux: these four stores are Windows apps) */ };
   const okRow = r => !(r && typeof r === 'object' && ROW_NEEDS[r.label] && !caps[ROW_NEEDS[r.label]]);
   const pruneRows = rows => Array.isArray(rows) ? rows.filter(okRow).map(r => {

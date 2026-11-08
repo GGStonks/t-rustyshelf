@@ -1,5 +1,7 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// renderer/songs.js apart from the app's name ((T)rustyShelf).
 /* Songs for the Melody sound. Every move along the shelf plays the next note of the current song, so a song is just
-   its tune (one note per step) plus the chord under each bar. The built-in set is original, written for Boxshelf in the
+   its tune (one note per step) plus the chord under each bar. The built-in set is original, written for (T)rustyShelf in the
    style of old console soundtracks. MIDI files in the Songs folder are read here too: the busiest melodic part becomes
    the tune and the bass under it becomes the chords. */
 window.Songs = (() => {

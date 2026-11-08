@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// preload-wum.js apart from the app's name ((T)rustyShelf).
 // Bridge for the hidden Wii U manual renderer window (renderer/wiiu-manual.html)
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('wum', {

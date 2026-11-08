@@ -1,6 +1,8 @@
-// The museum's retro TV: vintage TV commercials from the Internet Archive. For each game on your shelves Boxshelf looks
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/commercials.js apart from the app's name ((T)rustyShelf).
+// The museum's retro TV: vintage TV commercials from the Internet Archive. For each game on your shelves (T)rustyShelf looks
 // for an ad uploaded there (once; a miss is looked at again after a month), plus a few ads for each console as the
-// fallback. Nothing is bundled with Boxshelf: an ad is fetched only when the TV plays it, kept in data\commercials
+// fallback. Nothing is bundled with (T)rustyShelf: an ad is fetched only when the TV plays it, kept in data\commercials
 // (up to a set size, oldest first out) and played from there. Off unless you turn the TV on in the museum's Room menu.
 const fs = require('fs');
 const path = require('path');

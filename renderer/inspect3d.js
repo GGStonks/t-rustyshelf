@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// renderer/inspect3d.js apart from the app's name ((T)rustyShelf).
 /* Inspect in real 3D: a lit, reflective game case you can turn in your hands, open, and take the disc
    (or cartridge / UMD) out of. Built with three.js; falls back to the CSS version if WebGL isn't there.
    Optional models: themes\<system>\cart.glb (Switch) or disc.glb / umd.glb replace the built-in media. */
@@ -578,7 +580,7 @@ window.Inspect3D = (() => {
   function bump() { st.bump = .12; }
   function setPaused(p) { paused = !!p; if (!paused && active && !raf && renderer) { lastT = 0; raf = requestAnimationFrame(frame); } }
   addEventListener('resize', () => { if (renderer && active) resize(); });
-  // the lid's manual, when it arrives late (Boxshelf's own booklet is drawn after the case opens)
+  // the lid's manual, when it arrives late ((T)rustyShelf's own booklet is drawn after the case opens)
   function setManual(url) { if (!manualPlane || !url || (cur && cur.manual)) return; const m = manualPlane.material, t = loadTex(url); m.map = t; m.color.set(0xffffff); m.needsUpdate = true; if (cur) cur.manual = url; }
   return { setManual, kit: { interiorTexture, discBackTexture, discLift, coverRect, fitCover, coverCrop }, available, open, close, leave, setPose, setState, bump, setPaused, isActive: () => active,
     busy: () => !paused && (phase === 'out' || phase === 'fade' || phase === 'wait' || phase === 'in'), _st: () => ({ phase, in: st.in, ry: st.ry, rotY: rot ? Math.round(rot.rotation.y / DEG) : null, ready, fade: !!fadeT0, pend: !!pend, op: canvas && canvas.style.opacity, on: !!(canvas && canvas.classList.contains('on')), from: cur && cur.from, standIn: !!standInTex, tok, disc: discPose() }) };

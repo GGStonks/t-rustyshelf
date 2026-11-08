@@ -1,3 +1,5 @@
+/* Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): most of this file is Boxshelf's
+   renderer/style.css; modified for (T)rustyShelf (see the git history). */
 /* Layout: full-screen TV shelf — 3D coverflow centered at 42% height, title strip under it, hint bar pinned bottom. Single dark look by design. */
 :root{
   --ink:#f3f5fb;
@@ -661,7 +663,7 @@ body.theme-aurora .theme-fx{display:none}
 .slot.rside .f-front{border-radius:var(--rc) 0 0 var(--rc)}
 .slot.rside .f-back{border-radius:0 var(--rc) var(--rc) 0}
 
-/* ---- start-up: the Boxshelf logo while the shelf loads, then the shelf ripples in (Settings → Display → Startup) ---- */
+/* ---- start-up: the (T)rustyShelf logo while the shelf loads, then the shelf ripples in (Settings → Display → Startup) ---- */
 #splash{position:fixed;inset:0;z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;pointer-events:none;
   background:radial-gradient(ellipse at 50% 46%,#151829 0%,#07070c 72%);transition:opacity .6s ease,transform .8s cubic-bezier(.2,.8,.2,1)}
 html.no-splash #splash{display:none}

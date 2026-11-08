@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/steamgrid.js apart from the app's name ((T)rustyShelf).
 // SteamGridDB (steamgriddb.com, API v2): community-made posters ("grids") for the Art Studio's Front, offered next to the
 // real box scans. Optional: nothing happens without the user's own free key (Settings → Accounts & services). The key is
 // sent only as the Authorization header to www.steamgriddb.com and never logged; errors are reported as words, not bodies.
@@ -8,7 +10,7 @@ const path = require('path');
 const { net } = require('electron');
 
 const BASE = 'https://www.steamgriddb.com/api/v2';
-const UA = `Boxshelf/${(() => { try { return require('../package.json').version; } catch { return '0'; } })()}`;
+const UA = `TrustyShelf/${(() => { try { return require('../package.json').version; } catch { return '0'; } })()}`;
 const ID_TTL = 7 * 864e5, MISS_TTL = 864e5, LIST_TTL = 864e5; // a title with no match is asked again after a day (SteamGridDB grows)
 const TIMEOUT = 8000, MAX_LISTS = 4000, MAX_IDS = 20000;
 // portrait posters only: the Front is a box. 600x900 is Steam's library capsule, 342x482 / 660x930 the older poster sizes.

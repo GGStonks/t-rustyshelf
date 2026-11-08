@@ -1,5 +1,7 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/n3ds.js apart from the app's name ((T)rustyShelf).
 // 3DS .cia files on the shelf. A .cia is an installer, not something Azahar boots: Azahar asks to install it first.
-// So the first time you play one, Boxshelf installs it into Azahar's own SD card folder the same way Azahar does
+// So the first time you play one, (T)rustyShelf installs it into Azahar's own SD card folder the same way Azahar does
 // (the title's TMD as 00000000.tmd and each content as <content id>.app) and then boots the installed game; after
 // that it boots straight away. Only unencrypted .cia files can be installed like this (Azahar has the same rule).
 const fs = require('fs');

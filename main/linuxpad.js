@@ -1,4 +1,6 @@
-// (beta.9) Linux / Steam Deck: hold Select + Start for 1.5 s during a game and Boxshelf closes it (closeGame), whatever
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/linuxpad.js apart from the app's name ((T)rustyShelf).
+// (beta.9) Linux / Steam Deck: hold Select + Start for 1.5 s during a game and (T)rustyShelf closes it (closeGame), whatever
 // the emulator, configured or not. Windows has the Home menu on the Guide button (padwatch.js, XInput); in Steam's Game
 // Mode the Steam button belongs to Steam, so Linux gets this instead.
 // It reads the joystick devices (/dev/input/js*: Steam's virtual gamepad shows up as one, with the Xbox layout) only while

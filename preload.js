@@ -1,9 +1,11 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): most of this file is Boxshelf's
+// preload.js; modified for (T)rustyShelf (see the git history).
 // The only bridge between the launcher screen and your PC.
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 const call = (name, arg) => ipcRenderer.invoke(name, arg).then(r => { if (!r.ok) throw new Error(r.error); return r.data; });
 
-contextBridge.exposeInMainWorld('boxshelf', {
+contextBridge.exposeInMainWorld('trustyshelf', {
   // What this build can do (docs/PLATFORM-API.md). The Android build reports os 'android' and turns off what it can't do.
   // (Linux / Steam Deck: no power menu, in-game Home menu, Windows emulator-settings fixes, start-with-Windows, Dolphin IPL
   // setup, RetroArch auto-config or taskbar switch there yet)
@@ -135,7 +137,7 @@ contextBridge.exposeInMainWorld('boxshelf', {
   onPreviewYt: (fn) => { const h = (_e, d) => fn(d); ipcRenderer.on('preview:yt', h); return () => ipcRenderer.removeListener('preview:yt', h); },
   // (beta.8) console trailers: a clip became ready; the helper's status, download and progress; clearing the clips
   onPreviewClip: (fn) => { const h = (_e, d) => fn(d); ipcRenderer.on('preview:clip', h); return () => ipcRenderer.removeListener('preview:clip', h); },
-  // (beta.8) Steam Deck: where Boxshelf runs ({ deck, steam, gameMode, canAdd, inSteam }) and Add Boxshelf to Steam
+  // (beta.8) Steam Deck: where (T)rustyShelf runs ({ deck, steam, gameMode, canAdd, inSteam }) and Add (T)rustyShelf to Steam
   deckInfo: () => call('deck:info'), addToSteam: (closeSteam) => call('deck:addToSteam', { closeSteam: !!closeSteam }),
   clipStatus: () => call('ytclip:status'), clipHelper: () => call('ytclip:helper'), clipClear: () => call('ytclip:clear'),
   onClipProgress: (fn) => { const h = (_e, d) => fn(d); ipcRenderer.on('ytclip:progress', h); return () => ipcRenderer.removeListener('ytclip:progress', h); },

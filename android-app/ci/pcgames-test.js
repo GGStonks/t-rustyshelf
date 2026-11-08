@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// android-app/ci/pcgames-test.js apart from the app's name ((T)rustyShelf).
 // Device test pass "pcgames" (beta.4), run by web-device-test.js. Checks results, never speed.
 //   Node (main/pcgames.js on made-up folders): Epic's install list keeps installed games only (not the engine, plugins or
 //   half-installed ones) and starts them through the launcher's link; Quiver 3 (apps.json beside its program) and Quiver 4
@@ -113,7 +115,7 @@ module.exports = async function pcGamesPass({ browser, base, check, newPage }) {
     check('PC games (Windows): the Epic game on the PC shelf says it starts through Epic, Play hands it over by id, Back returns',
       play.epic.game === 'Ember Trail' && /Epic/.test(play.epic.how) && /Epic Games/.test(play.epic.chips) && play.epic.launched && play.epic.back === 'browse', JSON.stringify(play.epic));
     // (beta.7) the new stores on the PC shelf: each game names its store; Ubisoft's is handed to Ubisoft Connect (Back returns),
-    // GOG's is started by Boxshelf like an app (the shelf comes back when it closes)
+    // GOG's is started by (T)rustyShelf like an app (the shelf comes back when it closes)
     const st7 = await page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), out = {};
       const key = k => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
       const go = async t => { for (let i = 0; i < 12 && Shelf._qs().g !== t; i++) { key('ArrowRight'); await w(350); } if (Shelf._qs().g !== t) for (let i = 0; i < 12 && Shelf._qs().g !== t; i++) { key('ArrowLeft'); await w(350); } return Shelf._qs().g === t; };
@@ -128,7 +130,7 @@ module.exports = async function pcGamesPass({ browser, base, check, newPage }) {
       return out; });
     check('PC stores (Windows): GOG, Ubisoft, EA and Xbox games are on the PC shelf, each naming its store in Details',
       ['GOG', 'Ubisoft', 'EA', 'Xbox'].every((s, i) => new RegExp(s).test(st7.chips[['Lantern Keep', 'Harbor Run', 'Dust Rally', 'Lumen Garden'][i]] || '')), JSON.stringify(st7.chips));
-    check('PC stores (Windows): a Ubisoft game is handed to Ubisoft Connect (Back returns); a GOG game is started by Boxshelf and the shelf comes back',
+    check('PC stores (Windows): a Ubisoft game is handed to Ubisoft Connect (Back returns); a GOG game is started by (T)rustyShelf and the shelf comes back',
       !!st7.ubi && st7.ubi.launched && /Ubisoft Connect/.test(st7.ubi.note) && st7.ubi.back === 'browse' && !!st7.gog && st7.gog.launched && st7.gog.mode === 'launch' && st7.gog.back === 'browse', JSON.stringify({ ubi: st7.ubi, gog: st7.gog }));
     check('PC games (Windows): Play on a Custom shelf game starts it by id (launch:pc) and the shelf comes back when it closes',
       /Custom/i.test(play.shelf) && play.game === 'Quarantine' && play.launched.includes('quiver-quarantine') && play.mode === 'launch' && play.back === 'browse', JSON.stringify(play));
@@ -137,7 +139,7 @@ module.exports = async function pcGamesPass({ browser, base, check, newPage }) {
     const st = await page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), out = {};
       const names = () => [...document.querySelectorAll('#bss .bss-row .nm')].map(e => e.textContent);
       const row = n => [...document.querySelectorAll('#bss .bss-row')].find(r => ((r.querySelector('.nm') || {}).textContent || '') === n);
-      const cfg = async () => (await window.boxshelf.getConfig()).config.pc || {};
+      const cfg = async () => (await window.trustyshelf.getConfig()).config.pc || {};
       for (let i = 0; i < 40 && Shelf.getMode() !== 'browse'; i++) await w(250); // (Settings opens from the shelf only)
       Setup.open({ page: 'pc' }); for (let i = 0; i < 40 && !document.querySelector('#bss.on .bss-row'); i++) await w(150); await w(600);
       out.pcPage = names();
@@ -219,7 +221,7 @@ module.exports = async function pcGamesPass({ browser, base, check, newPage }) {
       key('Enter'); await w(400); // (the page opens on its Name row: Enter starts editing it)
       const inp = document.querySelector('#bss .bss-edit'); out.editing = !!inp; if (inp) { inp.value = 'Quarantine DOS'; inp.dispatchEvent(new Event('input', { bubbles: true })); }
       key('Enter'); await w(1200);
-      out.saved = ((await window.boxshelf.getConfig()).config.games || {})['quiver-quarantine'];
+      out.saved = ((await window.trustyshelf.getConfig()).config.games || {})['quiver-quarantine'];
       out.resetRow = [...document.querySelectorAll('#bss .bss-row .nm')].some(e => e.textContent === "Use the file's name");
       if (window.Settings && Settings.isOpen && Settings.isOpen()) { await Settings.close(); await w(1500); }
       for (let i = 0; i < 20 && Shelf._qs().g !== 'Quarantine DOS'; i++) await w(250); out.after = Shelf._qs().g;
@@ -235,7 +237,7 @@ module.exports = async function pcGamesPass({ browser, base, check, newPage }) {
     const bt = await page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), out = {};
       const key = k => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
       for (let i = 0; i < 40 && Shelf.getMode() !== 'browse'; i++) await w(250);
-      window.__pcCovers = {}; const missing = await window.boxshelf.pcCoverMissing(); out.n = missing.length; out.titles = [];
+      window.__pcCovers = {}; const missing = await window.trustyshelf.pcCoverMissing(); out.n = missing.length; out.titles = [];
       Shelf.pcCoverBatch();
       for (let k = 0; k < out.n; k++) { let t = ''; for (let i = 0; i < 80; i++) { await w(250); const el = document.querySelector('.coverpick.on .bp-title'); if (el && /of \d/.test(el.textContent) && !out.titles.includes(el.textContent) && document.querySelector('.coverpick.on .cp-tile.on')) { t = el.textContent; break; } } // (slow build machines: up to 20 s)
         out.titles.push(t); key('Enter'); await w(700); }

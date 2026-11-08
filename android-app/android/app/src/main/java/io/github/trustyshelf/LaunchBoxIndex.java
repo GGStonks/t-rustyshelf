@@ -1,4 +1,6 @@
-package io.github.boxshelf;
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// android-app/android/app/src/main/java/io/github/boxshelf/LaunchBoxIndex.java apart from the app's name ((T)rustyShelf).
+package io.github.trustyshelf;
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -167,7 +169,7 @@ final class LaunchBoxIndex {
                     } finally { close(c); }
                     if (done[k] > before) attempt = -1; // it got somewhere before the drop: a weak connection never runs out of tries while it's making progress
                 }
-            }, "boxshelf-lb-" + i);
+            }, "trustyshelf-lb-" + i);
             th[i].start();
         }
         for (Thread t : th) t.join();

@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// android-app/android/app/src/androidTest/java/com/getcapacitor/myapp/ExampleInstrumentedTest.java apart from the app's name ((T)rustyShelf).
 package com.getcapacitor.myapp;
 
 import static org.junit.Assert.*;

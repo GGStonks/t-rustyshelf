@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/ra.js apart from the app's name ((T)rustyShelf).
 // RetroAchievements: progress and achievement lists for the shelves whose emulators support it
 // (GameCube and Wii through Dolphin, PSP through PPSSPP, PS2 through PCSX2). Achievements are earned inside the emulator;
 // this just reads your account through the RA web API and matches games by title.
@@ -10,7 +12,7 @@ const API = 'https://retroachievements.org/API/';
 const MEDIA = 'https://media.retroachievements.org';
 let dir = null, log = () => {}, creds = { user: '', key: '' };
 const mem = new Map();
-const UA = `Boxshelf/${(() => { try { return require('../package.json').version; } catch { return '0'; } })()}`;
+const UA = `TrustyShelf/${(() => { try { return require('../package.json').version; } catch { return '0'; } })()}`;
 
 function init(dataDir, logger) { dir = path.join(dataDir, 'ra'); fs.mkdirSync(dir, { recursive: true }); if (logger) log = logger; }
 function setCredentials(user, key) { const next = { user: String(user || '').trim(), key: String(key || '').trim() }; if (next.user !== creds.user || next.key !== creds.key) failed.clear(); /* a fixed key is tried at once, not after the failure pause */ creds = next; }
@@ -24,7 +26,7 @@ function getJson(u) {
     const req = https.get(u, { headers: { 'User-Agent': UA } }, res => {
       if (res.statusCode === 429) { res.resume(); return reject(new Error('RetroAchievements is busy (too many requests). Try again in a minute.')); }
       if (res.statusCode !== 200) { res.resume(); return reject(new Error(res.statusCode === 401 || res.statusCode === 403 ? 'RetroAchievements didn\'t accept your web API key. Check it in Settings → Accounts.' : `RetroAchievements didn't answer (HTTP ${res.statusCode}). Try again in a moment.`)); } // never the URL: it carries the API key
-      let b = ''; res.setEncoding('utf8'); res.on('data', c => b += c); res.on('end', () => { try { resolve(JSON.parse(b)); } catch { reject(new Error('RetroAchievements sent an answer Boxshelf couldn\'t read. Try again in a moment.')); } }); /* a maintenance or proxy page in HTML, not "Unexpected token <" */ res.on('error', reject);
+      let b = ''; res.setEncoding('utf8'); res.on('data', c => b += c); res.on('end', () => { try { resolve(JSON.parse(b)); } catch { reject(new Error('RetroAchievements sent an answer (T)rustyShelf couldn\'t read. Try again in a moment.')); } }); /* a maintenance or proxy page in HTML, not "Unexpected token <" */ res.on('error', reject);
     });
     req.on('error', reject); req.setTimeout(20000, () => req.destroy(new Error('timed out')));
   });

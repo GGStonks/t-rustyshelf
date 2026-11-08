@@ -1,12 +1,14 @@
-# Boxshelf: brief for teaser mock-ups
+<!-- Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+     docs/BOXSHELF-TEASER-BRIEF.md apart from the app's name ((T)rustyShelf). -->
+# (T)rustyShelf: brief for teaser mock-ups
 
 Paste or upload this file into a Claude chat and ask for teaser images, mock-ups or a Reddit post. Everything a designer
-needs is here: what Boxshelf is, what's in the newest version, how it looks, and what to show.
+needs is here: what (T)rustyShelf is, what's in the newest version, how it looks, and what to show.
 
 ---
 
-## 1. What Boxshelf is (the pitch)
-**Boxshelf turns your emulator library into a shelf of real game cases.**
+## 1. What (T)rustyShelf is (the pitch)
+**(T)rustyShelf turns your emulator library into a shelf of real game cases.**
 Every game is a 3D case with its real box art (front, back, spine and disc). You browse a shelf like the one in your
 living room, pick a case up, turn it in your hands, open it, take the disc out, read the real instruction manual, and
 press Play. Then walk into the **museum**: a 3D room where your whole collection stands on shelves, with a retro TV
@@ -23,7 +25,7 @@ shelf and the bottom touch screen holds the case in your hands.
 
 ---
 
-## 2. Newest version: Boxshelf for AYN Thor 0.3.4 (October 2026)
+## 2. Newest version: (T)rustyShelf for AYN Thor 0.3.4 (October 2026)
 ### The shelf
 - A row of **3D game cases** per console, each the right kind of case: DVD-style keep cases (GameCube, PS2, Wii, Switch),
   CD jewel cases (PlayStation, Saturn, Dreamcast), card boxes for cartridge consoles, each console's own case colour and
@@ -131,7 +133,7 @@ emulators and your own games).
 ---
 
 ## 6. Prompts to use in Claude
-- "Using this brief, design a 1920×1080 teaser image for Reddit: the Boxshelf shelf on the AYN Thor's top screen with the
+- "Using this brief, design a 1920×1080 teaser image for Reddit: the (T)rustyShelf shelf on the AYN Thor's top screen with the
   selected GameCube case forward and slightly turned, a soft Spectrum-theme glow behind, the title 'Your library, back on
   the shelf.' Clean, dark, no app chrome."
 - "Make a 1080×1350 portrait mock-up: an AYN Thor held in two hands, the top screen showing the shelf, the bottom screen
@@ -143,7 +145,7 @@ emulators and your own games).
 ---
 
 ## 7. Facts to keep straight
-- Name: **Boxshelf** (one word, capital B).
+- Name: **(T)rustyShelf** (one word, capital B).
 - Platforms: Windows PC / TV, and AYN Thor (Android, dual screen). The Thor build is version **0.3.4**.
 - It's a **front end**: it organises and launches your own emulators and games; it includes no games or BIOS files.
 - Art and data sources credited: LaunchBox Games Database, GameTDB, ScreenScraper, libretro thumbnails, IGDB, SteamGridDB;

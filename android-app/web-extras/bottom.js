@@ -1,10 +1,12 @@
-// Boxshelf bottom screen (AYN Thor's second display; Android build only). Shows the game the shelf on the top screen has
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// android-app/web-extras/bottom.js apart from the app's name ((T)rustyShelf).
+// (T)rustyShelf bottom screen (AYN Thor's second display; Android build only). Shows the game the shelf on the top screen has
 // settled on: its case in 3D (closed at first: turn it any way with a finger, flick it, then open it and take the disc
 // out), a few facts, trophies and a few big touch buttons that act on the shelf. In the museum it becomes the museum's
 // companion: the row on the wall as a shelf of cases, the chosen one, and shrink-wrap you can tear off by touch.
 //   in:  window.bsBottom.recv(json) — from android-bottom.js through BottomScreen.java ({ type: 'game', game } /
 //        { type: 'museum', row, games, game, hud })
-//   out: window.BoxshelfBottom.post(json) — BottomScreen.java's bridge ({ type: 'ready' } / { type: 'cmd', cmd, arg })
+//   out: window.TrustyShelfBottom.post(json) — BottomScreen.java's bridge ({ type: 'ready' } / { type: 'cmd', cmd, arg })
 // Opened on its own in a browser it shows a demo game, so it can be looked at and tested without a phone.
 // On the Case tab, Inspect (or a tap on the case) brings the case into a focus view: it alone, big, in the middle, with
 // only a Close button left; drag turns it, a flick spins it, two fingers zoom, a double-tap resets, and only in there can
@@ -26,7 +28,7 @@
     sent.push(obj);
     const s = JSON.stringify(obj);
     try {
-      if (window.BoxshelfBottom && BoxshelfBottom.post) BoxshelfBottom.post(s); // the device
+      if (window.TrustyShelfBottom && TrustyShelfBottom.post) TrustyShelfBottom.post(s); // the device
       else if (window.parent !== window) parent.postMessage({ bsBottom: s }, '*'); // a preview inside the main page (browser tests)
     } catch (e) { console.warn('bottom: send failed', e); }
   }
@@ -135,7 +137,7 @@
   const short = t => t && String(t).replace(/(\d+) h (\d+) min/, '$1h $2m').replace(/^under a minute$/, '< 1 min'); // fits the small box
   function paintSide(same) {
     const box = $('sideTxt'), g = game;
-    const html = !g ? '<div class="kick">Boxshelf</div><h1 class="title">Nothing selected</h1>' :
+    const html = !g ? '<div class="kick">(T)rustyShelf</div><h1 class="title">Nothing selected</h1>' :
       `<div class="kick">${esc(g.system && g.system.name || '')}</div>
        <h1 class="title${g.title.length > 38 ? ' long' : ''}">${esc(g.title)}</h1>
        <div class="meta">${facts(g).slice(0, 4).map(t => `<span>${esc(t)}</span>`).join('')}</div>
@@ -975,7 +977,7 @@
 
   // opened directly in a browser (no shelf talking to it): a demo game, so the page can be seen and tested
   // (?demo=museum shows the museum companion instead)
-  const alone = !window.BoxshelfBottom && window.parent === window && !/[?&]demo=0/.test(location.search);
+  const alone = !window.TrustyShelfBottom && window.parent === window && !/[?&]demo=0/.test(location.search);
   if (alone) setTimeout(() => { if (!game && !isMuseum()) { if (/[?&]demo=museum/.test(location.search)) recv({ type: 'museum', ...demoMuseum() }); else show(demoGame()); } }, 250);
   const svgUrl = s => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(s);
   function demoCover(a, b, title, sub) {
@@ -993,7 +995,7 @@
       style: { ratio: 0.712, depth: 0.105, rc: 0.03, re: 0.2, edge: 0.022, pack: 'keep', caseColor: '#16161b', caseSide: '#0b0b0e', spineInk: '#e8e8f0', band: { bg: '#26262e', fg: '#c3c3cf', label: 'GAMECUBE' },
         spineBand: { bg: '#2c2c35', fg: '#c3c3cf', label: 'GCN' }, glow: '#9d8cff', tint: ['#3a2a86', '#120d2c'] },
       media: { kind: 'disc', size: 0.62 }, art: { front: demoCover('#ff9f6b', '#7a3fd1', 'STARLIGHT', 'COURIER'), back: null, spine: null, disc: null },
-      year: 2003, genre: 'Adventure', dev: 'Lantern Works', pub: 'Boxshelf Demo', players: '1', rating: 4.4, region: 'USA', size: '1.3 GB', discs: 0,
+      year: 2003, genre: 'Adventure', dev: 'Lantern Works', pub: '(T)rustyShelf Demo', players: '1', rating: 4.4, region: 'USA', size: '1.3 GB', discs: 0,
       desc: 'Deliver the last letters of a fading kingdom by glider, across islands that drift a little further apart every night. A demo game, shown when this page is opened on its own.',
       played: '6 h 20 min', plays: 9, last: 'Yesterday', fav: true, manual: true, ach: { earned: 23, total: 40, mastered: false }, achOn: true };
   }

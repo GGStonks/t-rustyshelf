@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/icons.js apart from the app's name ((T)rustyShelf).
 // App icons for the shelf: the icon Windows shows for an .exe (Stremio, Nuvio, Dolphin, Eden…),
 // pulled out at the largest size the program ships and saved as data\icons\<name>.png.
 const fs = require('fs');

@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/paths.js apart from the app's name ((T)rustyShelf).
 const path = require('path');
 const fs = require('fs');
 
@@ -95,20 +97,20 @@ function artDirFor(cfg, file) { if (cfg && cfg.artDir) return expand(cfg.artDir)
 function manualDirFor(cfg, file) { if (cfg && cfg.artDir) return expand(cfg.artDir); const root = romRoot(cfg, file); return artLib ? path.join(libFolder(root), 'manuals') : path.join(root, 'covers'); }
 // every folder a console's art may be in, the library first (art left beside the games is still found)
 function artDirsFor(cfg) { const roms = (cfg && cfg.romDirs) || []; return [cfg && cfg.artDir && expand(cfg.artDir), ...(artLib ? roms.flatMap(d => [path.join(libFolder(d), 'covers'), path.join(libFolder(d), 'manuals'), ...(clashes(d) ? [path.join(plainLib(d), 'covers'), path.join(plainLib(d), 'manuals')] : [])]) : []), ...roms.flatMap(d => [path.join(d, 'covers'), path.join(d, 'media', 'covers'), path.join(d, 'boxart')])].filter(Boolean); }
-// ---- the reading corner's folder (Settings → Magazines & guides): Magazines\ and Guides\ live in it. Empty = beside Boxshelf ----
+// ---- the reading corner's folder (Settings → Magazines & guides): Magazines\ and Guides\ live in it. Empty = beside (T)rustyShelf ----
 let readLib = '';
 function setReadingLibrary(dir) { readLib = dir ? path.resolve(expand(String(dir))) : ''; }
 function readingRoot() { return readLib || APP_ROOT; }
-// Magazines left behind in an earlier Boxshelf folder (e.g. the Boxshelf folder was renamed or moved and
+// Magazines left behind in an earlier (T)rustyShelf folder (e.g. the (T)rustyShelf folder was renamed or moved and
 // the reading corner came up empty). Found three ways, none of them a fixed name:
-//  - folders the settings remember Boxshelf running from (known)
-//  - folders the log mentions as Boxshelf's own (…\<install>\data\…, …\<install>\Magazines\…): the log moves with the data
-//  - Boxshelf-looking folders next to this one (a data\config.json, a Boxshelf .exe or start .bat inside)
+//  - folders the settings remember (T)rustyShelf running from (known)
+//  - folders the log mentions as (T)rustyShelf's own (…\<install>\data\…, …\<install>\Magazines\…): the log moves with the data
+//  - TrustyShelf-looking folders next to this one (a data\config.json, a (T)rustyShelf .exe or start .bat inside)
 // Only folders whose Magazines\ or Guides\ hold something are offered, with a count; this one never is.
 const READ_KINDS = ['Magazines', 'Guides'], READ_FILE = /\.(pdf|cbz|cbr|cb7|zip|7z|rar|jpe?g|png|webp|gif)$/i;
 function tally(dir) { const r = { files: 0, bytes: 0 }; const walk = (d, depth) => { for (const e of readDir(d)) { if (r.files >= 20000 || e.name.startsWith('.')) continue; const f = path.join(d, e.name);
   if (e.isDirectory()) { if (depth < 4) walk(f, depth + 1); } else if (e.isFile() && READ_FILE.test(e.name)) { r.files++; try { r.bytes += fs.statSync(f).size; } catch {} } } }; walk(dir, 0); return r; }
-const looksLikeBoxshelf = d => isFile(path.join(d, 'data', 'config.json')) || isFile(path.join(d, 'Start Boxshelf.bat')) || readDir(d).some(e => e.isFile() && /^boxshelf.*\.exe$/i.test(e.name));
+const looksLikeTrustyShelf = d => isFile(path.join(d, 'data', 'config.json')) || isFile(path.join(d, 'Start TrustyShelf.bat')) || isFile(path.join(d, 'Start Boxshelf.bat')) || readDir(d).some(e => e.isFile() && /^(trustyshelf|boxshelf).*\.exe$/i.test(e.name));
 function logRoots(logFile, home) {
   const out = new Set(); let txt = '';
   try { const st = fs.statSync(logFile), fd = fs.openSync(logFile, 'r'); try { const n = Math.min(st.size, 8 << 20), b = Buffer.alloc(n); fs.readSync(fd, b, 0, n, st.size - n); txt = b.toString('utf8'); } finally { fs.closeSync(fd); } } catch { return []; }
@@ -122,7 +124,7 @@ function findOldReading({ current, logFile, known = [], home } = {}) {
   const add = (r, why) => { if (!r) return; let k; try { k = path.resolve(String(r)); } catch { return; } if (seen.has(k.toLowerCase())) return; seen.add(k.toLowerCase()); cands.push([k, why]); };
   known.forEach(r => add(r, 'settings'));
   if (logFile) logRoots(logFile, home).forEach(r => add(r, 'log'));
-  const parent = path.dirname(APP_ROOT); if (parent && parent !== APP_ROOT) readDir(parent).filter(e => e.isDirectory()).slice(0, 300).forEach(e => { const d = path.join(parent, e.name); if (READ_KINDS.some(k => isDir(path.join(d, k))) && looksLikeBoxshelf(d)) add(d, 'nearby'); });
+  const parent = path.dirname(APP_ROOT); if (parent && parent !== APP_ROOT) readDir(parent).filter(e => e.isDirectory()).slice(0, 300).forEach(e => { const d = path.join(parent, e.name); if (READ_KINDS.some(k => isDir(path.join(d, k))) && looksLikeTrustyShelf(d)) add(d, 'nearby'); });
   const out = [];
   for (const [root, why] of cands) {
     if (!isDir(root)) continue;

@@ -8,11 +8,11 @@
 //     BattlEye), NVAPI, an empty LD_PRELOAD and Steam's ids at 0.
 //   - Native games can be given a home of their own (Settings → PC games → Game data folder): their saves and settings
 //     then live there instead of in the account's home.
-//   - Epic: legendary (an open-source Epic Games client) keeps Boxshelf's own Epic sign-in and install list in
+//   - Epic: legendary (an open-source Epic Games client) keeps (T)rustyShelf's own Epic sign-in and install list in
 //     data/legendary; the account's whole library is kept in data/epic-library.json so games that aren't installed can
-//     be shown too. `legendary launch --json` gives a game's program, folder and Epic's sign-in arguments; Boxshelf starts
+//     be shown too. `legendary launch --json` gives a game's program, folder and Epic's sign-in arguments; (T)rustyShelf starts
 //     the game itself, so the quit combo, Home menu and play time work as for any game.
-// Every path Boxshelf starts comes from these lists, never from the screen.
+// Every path (T)rustyShelf starts comes from these lists, never from the screen.
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -30,7 +30,7 @@ const H = () => os.homedir();
 const which = name => { for (const d of String(process.env.PATH || '').split(':').filter(Boolean)) { const f = path.join(d, name); if (isExec(f)) return f; } return null; };
 const ls = d => { try { return fs.readdirSync(d, { withFileTypes: true }).filter(e => e.isDirectory() || e.isSymbolicLink()).map(e => path.join(d, e.name)); } catch { return []; } };
 const APP = /^[\w.-]{1,120}$/; // (an Epic app name: the only thing the screen may name)
-const root = () => appRoot || path.join(H(), 'Boxshelf');
+const root = () => appRoot || path.join(H(), 'TrustyShelf');
 const toolsDir = () => path.join(root(), 'tools');
 
 // opts.fetchBuf(url) → Buffer | null: downloads (main.js gives Electron's net, which follows redirects)
@@ -43,7 +43,7 @@ const PROTON_DIRS = () => [
   path.join(H(), '.var', 'app', 'com.valvesoftware.Steam', 'data', 'Steam', 'compatibilitytools.d'),
   '/usr/share/steam/compatibilitytools.d', '/usr/local/share/steam/compatibilitytools.d', path.join(toolsDir(), 'proton')];
 const STEAM_COMMON = () => [path.join(H(), '.steam', 'steam', 'steamapps', 'common'), path.join(H(), '.local', 'share', 'Steam', 'steamapps', 'common')];
-// Wine: a build folder with bin/wine (Lutris' runners, Boxshelf's tools/wine), and the system's wine
+// Wine: a build folder with bin/wine (Lutris' runners, (T)rustyShelf's tools/wine), and the system's wine
 const WINE_DIRS = () => [path.join(H(), '.local', 'share', 'lutris', 'runners', 'wine'), path.join(toolsDir(), 'wine')];
 // newest first: "GE-Proton11-5" before "GE-Proton10-4", "Proton 9.0" before "Proton 8.0"
 const verKey = n => (String(n).match(/\d+/g) || []).map(x => x.padStart(6, '0')).join('.');
@@ -80,8 +80,8 @@ const prefixName = title => String(title || '').replace(/[®™©]/g, '').replac
 const prefixFor = (title, custom) => path.join(prefixRoot(custom), prefixName(title));
 
 // ---------- the environment a game starts with ----------
-// Boxshelf's environment without what belongs to Boxshelf's own AppImage (its folder on the library and program paths: a
-// game would load Boxshelf's copies of GTK, libnotify…), then the game's own variables
+// (T)rustyShelf's environment without what belongs to (T)rustyShelf's own AppImage (its folder on the library and program paths: a
+// game would load (T)rustyShelf's copies of GTK, libnotify…), then the game's own variables
 function cleanEnv(extra = {}) {
   const e = { ...process.env }, own = process.env.APPDIR;
   for (const k of ['APPDIR', 'APPIMAGE', 'ARGV0', 'OWD']) delete e[k];
@@ -96,13 +96,13 @@ function gameHome(dir) {
   for (const d of Object.values(x)) { try { fs.mkdirSync(d, { recursive: true }); } catch {} }
   return x;
 }
-// the anti-cheat runtimes: Boxshelf's tools/runtimes, or Steam's own copies
+// the anti-cheat runtimes: (T)rustyShelf's tools/runtimes, or Steam's own copies
 const runtimeDir = (name, steamName) => [path.join(toolsDir(), 'runtimes', name), ...STEAM_COMMON().map(c => path.join(c, steamName))].find(isDir) || '';
 // What every Proton start gets: the anti-cheat runtimes (Easy Anti-Cheat and BattlEye: without them a game such as Rocket
 // League waits on an empty Wine window), NVAPI (DLSS / Reflex on NVIDIA), LD_PRELOAD emptied (the Steam overlay's library
 // from the session would be loaded into the game) and Steam's app ids at 0.
 function protonEnv(title) {
-  const e = { LD_PRELOAD: '', STEAM_COMPAT_APP_ID: '0', SteamAppId: '0', SteamGameId: 'boxshelf-' + slug(title).replace(/-/g, ''), PROTON_ENABLE_NVAPI: '1', DXVK_NVAPI_ALLOW_OTHER_DRIVERS: '1' };
+  const e = { LD_PRELOAD: '', STEAM_COMPAT_APP_ID: '0', SteamAppId: '0', SteamGameId: 'trustyshelf-' + slug(title).replace(/-/g, ''), PROTON_ENABLE_NVAPI: '1', DXVK_NVAPI_ALLOW_OTHER_DRIVERS: '1' };
   const eac = runtimeDir('eac_runtime', 'Proton EasyAntiCheat Runtime'); if (eac) e.PROTON_EAC_RUNTIME = eac;
   const be = runtimeDir('battleye_runtime', 'Proton BattlEye Runtime'); if (be) e.PROTON_BATTLEYE_RUNTIME = be;
   return e;
@@ -142,7 +142,7 @@ function umuId(store, codename) {
   const k = store + ':' + codename, e = umuIds[k];
   if (e && (e.id || Date.now() - e.at < 7 * 864e5)) return Promise.resolve(e.id || null);
   return new Promise(res => {
-    const rq = https.get(`https://umu.openwinecomponents.org/umu_api.php?store=${encodeURIComponent(store)}&codename=${encodeURIComponent(codename)}`, { headers: { 'User-Agent': 'Boxshelf' }, timeout: 4000 }, r => {
+    const rq = https.get(`https://umu.openwinecomponents.org/umu_api.php?store=${encodeURIComponent(store)}&codename=${encodeURIComponent(codename)}`, { headers: { 'User-Agent': 'TrustyShelf' }, timeout: 4000 }, r => {
       let b = ''; r.setEncoding('utf8'); r.on('data', c => { b += c; if (b.length > 1e5) rq.destroy(); });
       r.on('end', () => { let id = null; try { const j = JSON.parse(b); const x = Array.isArray(j) ? j[0] : j; if (x && /^umu-[\w.-]{1,40}$/.test(String(x.umu_id || ''))) id = x.umu_id; } catch {}
         umuIds[k] = { id, at: Date.now() }; try { fs.writeFileSync(umuFile(), JSON.stringify(umuIds)); } catch {} res(id); }); });
@@ -151,7 +151,7 @@ function umuId(store, codename) {
 }
 
 // ---------- legendary (Epic Games) ----------
-// legendary itself: the one chosen in Settings, one on the PATH, then Boxshelf's own tools/legendary (Get legendary)
+// legendary itself: the one chosen in Settings, one on the PATH, then (T)rustyShelf's own tools/legendary (Get legendary)
 const LEGENDARY = { version: '0.21.1', url: 'https://github.com/derrod/legendary/releases/download/0.21.1/legendary_linux_x64', sha256: 'dbed33bbe96031e65858233e4badf0a1d401bb6cb0cc995d1237cf3a0c826a45' };
 function legendaryBin(custom) {
   if (custom && isExec(custom)) return custom;
@@ -167,7 +167,7 @@ async function getLegendary() {
   fs.mkdirSync(toolsDir(), { recursive: true }); fs.writeFileSync(dest + '.tmp', buf, { mode: 0o755 }); fs.renameSync(dest + '.tmp', dest);
   log('legendary', LEGENDARY.version, 'downloaded to', dest); return dest;
 }
-// legendary's folder (Boxshelf's Epic sign-in and install list)
+// legendary's folder ((T)rustyShelf's Epic sign-in and install list)
 const legendaryConfig = () => ({ dir: process.env.LEGENDARY_CONFIG_PATH && isDir(process.env.LEGENDARY_CONFIG_PATH) ? process.env.LEGENDARY_CONFIG_PATH : path.join(dataDir, 'legendary') });
 function runLegendary(bin, args, { ms = 60000, onLine } = {}) {
   let proc = null; // (the executor runs at once: the child is known before the promise is returned, for Cancel)
@@ -259,7 +259,7 @@ function noteUnfinished(dirs, appName, finished) {
   else for (const d of dirs) m[d] = appName; // (stopped again after picking up: the folder noted the first time stays noted)
   try { fs.writeFileSync(unfinishedFile(), JSON.stringify(m)); } catch (e) { log('Epic: unfinished installs not kept', e.message); }
 }
-// where Epic games install: the folder chosen for them, else the PC games folder, else <Boxshelf>/Epic Games
+// where Epic games install: the folder chosen for them, else the PC games folder, else <(T)rustyShelf>/Epic Games
 const epicInstallDir = (custom, gamesDir) => [custom, gamesDir].find(d => d && path.isAbsolute(d)) || path.join(root(), 'Epic Games');
 function epicInstall(bin, appName, title, baseDir, onChange, update = false) {
   if (!APP.test(String(appName || ''))) throw new Error('Unknown Epic game.');

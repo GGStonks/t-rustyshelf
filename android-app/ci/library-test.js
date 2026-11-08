@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// android-app/ci/library-test.js apart from the app's name ((T)rustyShelf).
 // Device test pass "library" (beta.7), run by web-device-test.js: the demo page as Windows on a 1920x1080 TV.
 //   Details, redone in Settings' look: Close in the header, section labels, no empty fact rows, the hint bar shows what
 //   Details does (Back; not the shelf's Letter / Shuffle), and the buttons leave most of the panel to the game.

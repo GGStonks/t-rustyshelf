@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// android-app/ci/beta-test.js apart from the app's name ((T)rustyShelf).
 // Device test pass "beta" (1.82), run by web-device-test.js. Checks results, never speed.
 //   Node: a new install starts with the menu music off and the beta update check on, and a saved config keeps its music
 //   choice; versions order with betas (beta.10 after beta.9, a release after its betas).
@@ -61,7 +63,7 @@ module.exports = async function betaPass({ browser, base, check, newPage, OUT })
     // (beta.3) a game's manual page: its left column (Manual, Lock this manual, the console's choice), the cards and the first
     // page all have real width and fit the screen, for a game with a manual and one without (1.80 had squeezed the column to 0)
     const man = await page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), out = [];
-      const G = await window.boxshelf.manualGames({ systemId: 'gc' });
+      const G = await window.trustyshelf.manualGames({ systemId: 'gc' });
       for (const g of [G.find(x => x.status === 'have'), G.find(x => x.status === 'missing')]) {
         if (!g) { out.push({ none: true }); continue; }
         if (window.Settings && Settings.isOpen && Settings.isOpen()) { await Settings.close(); await w(800); }
@@ -91,7 +93,7 @@ module.exports = async function betaPass({ browser, base, check, newPage, OUT })
       const rowsNow = () => [...document.querySelectorAll('#bss .bss-row')].map(r => ({ nm: (r.querySelector('.nm') || {}).textContent || '', t: r.textContent.replace(/\s+/g, ' ').trim() }));
       const row = n => [...document.querySelectorAll('#bss .bss-row')].find(r => ((r.querySelector('.nm') || {}).textContent || '') === n);
       const click = async (n, ms = 500) => { const r = row(n); if (r) r.click(); await w(ms); return !!r; };
-      const sw2 = async () => (await window.boxshelf.getConfig()).config.systems.sw2;
+      const sw2 = async () => (await window.trustyshelf.getConfig()).config.systems.sw2;
       Setup.open({ page: 'sw2' }); for (let i = 0; i < 40 && !row('Builds'); i++) await w(150); await w(800);
       for (let i = 0; i < 20; i++) { out.consoleRow = (rowsNow().find(r => r.nm === 'Builds') || {}).t || ''; if (/builds found/.test(out.consoleRow)) break; await w(200); }
       await click('Builds', 900); out.page = rowsNow().map(r => r.nm);
@@ -117,14 +119,14 @@ module.exports = async function betaPass({ browser, base, check, newPage, OUT })
       Setup.open({ page: 'display' }); for (let i = 0; i < 40 && !document.querySelector('#bss.on .bss-tiles'); i++) await w(150); await w(600);
       for (let i = 0; i < 6 && cur() !== 'Theme'; i++) { key('ArrowDown'); await w(200); }
       key('ArrowRight'); await w(60); const picked = on(); key('Enter'); await w(120); const shelfNow = [...document.body.classList].filter(c => /^theme-/.test(c)).join(' ');
-      key('Enter'); await w(300); const out = { row: cur(), picked, afterA: on(), shelfNow, saved: (await window.boxshelf.getConfig()).config.ui.theme, toast: ((document.querySelector('#bss .bss-toast') || {}).textContent || '') };
+      key('Enter'); await w(300); const out = { row: cur(), picked, afterA: on(), shelfNow, saved: (await window.trustyshelf.getConfig()).config.ui.theme, toast: ((document.querySelector('#bss .bss-toast') || {}).textContent || '') };
       if (window.Settings && Settings.isOpen && Settings.isOpen()) { await Settings.close(); await w(800); }
-      const c = (await window.boxshelf.getConfig()).config; c.ui.theme = 'spectrum'; await window.boxshelf.saveConfig(c); Shelf.setTheme(null); await w(300); return out; });
+      const c = (await window.trustyshelf.getConfig()).config; c.ui.theme = 'spectrum'; await window.trustyshelf.saveConfig(c); Shelf.setTheme(null); await w(300); return out; });
     check('Beta (Windows): A on a theme tile keeps that theme (twice: still the same), puts it on the shelf at once and says so',
       th.row === 'Theme' && !!th.picked && th.afterA === th.picked && !!th.shelfNow && /Theme: /.test(th.toast), JSON.stringify(th));
     // a console's box art games page never stays on "Loading…": a list that doesn't come says so after 20 s, and the page
     // asks again by itself (the first ask is made to hang here)
-    const lg = await w3.page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), api = window.boxshelf, orig = api.artGames; let n = 0;
+    const lg = await w3.page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), api = window.trustyshelf, orig = api.artGames; let n = 0;
       api.artGames = a => (++n === 1 ? new Promise(() => {}) : orig(a));
       Setup.open({ page: 'artstudio', systemId: 'wii' }); const txt = () => ((document.querySelector('#bss .bsa-empty') || {}).textContent || '').trim();
       let said = ''; for (let i = 0; i < 60; i++) { await w(500); if (/took too long/.test(txt())) { said = txt(); break; } }
@@ -135,7 +137,7 @@ module.exports = async function betaPass({ browser, base, check, newPage, OUT })
     check('Beta (Windows): a box art games page that gets no list says so after 20 s and then loads by itself (no endless "Loading…")',
       /Couldn't load the games/.test(lg.said) && lg.asks >= 2 && lg.tiles > 0, JSON.stringify(lg));
     // (beta.4) Quick menu → Updates: A checks now and says a newer beta is out (the mock always has one); A again opens its page
-    const qu = await w3.page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), api = window.boxshelf;
+    const qu = await w3.page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), api = window.trustyshelf;
       const key = k => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
       let opened = ''; const oe = api.openExternal; api.openExternal = async u => { opened = u; return true; };
       Shelf.homeButton(); await w(700);

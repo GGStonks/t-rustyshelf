@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/logofind.js apart from the app's name ((T)rustyShelf).
 // Customize → Logo → Find a logo: a hand-picked list of official console logos on Wikimedia Commons. No search, no account, no API:
 // each entry is the file's fixed address on upload.wikimedia.org (SVGs as Commons' own 960px PNG render, a standard size its
 // thumbnailer always serves), checked by hand to be the real logo and Public domain / CC0 (no credit needed). If upload.wikimedia.org
@@ -7,7 +9,7 @@ const fs = require('fs');
 const path = require('path');
 
 const VER = (() => { try { return require('../package.json').version; } catch { return '0'; } })();
-const UA = `Boxshelf/${VER} (personal emulator front end for TVs) Electron`;
+const UA = `TrustyShelf/${VER} (personal emulator front end for TVs) Electron`;
 const TTL = 7 * 864e5, TIMEOUT = 15000, MAX_BYTES = 6 * 1048576;
 const HOSTS = ['https://upload.wikimedia.org/wikipedia/commons/', 'https://thumb.wikimedia.org/wikipedia/commons/'];
 // per console: [label, licence, path under /wikipedia/commons/] — best first

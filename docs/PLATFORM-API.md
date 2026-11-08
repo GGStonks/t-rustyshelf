@@ -1,9 +1,11 @@
-# Boxshelf platform API (`window.boxshelf`)
+<!-- Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+     docs/PLATFORM-API.md apart from the app's name ((T)rustyShelf). -->
+# (T)rustyShelf platform API (`window.trustyshelf`)
 
-The renderer (everything in `renderer/`) never touches the OS. It talks to one object, `window.boxshelf`,
+The renderer (everything in `renderer/`) never touches the OS. It talks to one object, `window.trustyshelf`,
 defined in `preload.js` (Electron, Windows). `renderer/mock.js` provides the same object with demo data so the
 UI runs in a plain browser. **That object is the seam for Android:** an Android build (Capacitor) supplies its
-own `window.boxshelf` backed by a Kotlin plugin, and the renderer stays shared.
+own `window.trustyshelf` backed by a Kotlin plugin, and the renderer stays shared.
 
 Two smaller bridges exist: `window.home` (`preload-home.js`, the in-game Home overlay) and `window.wum`
 (`preload-wum.js`, hidden Wii U manual renderer).

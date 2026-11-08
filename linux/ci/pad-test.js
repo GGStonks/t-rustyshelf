@@ -1,8 +1,8 @@
-// Linux pad watcher (main/linuxpad.js): a pad that's plugged in but idle must not keep Boxshelf alive after a game.
+// Linux pad watcher (main/linuxpad.js): a pad that's plugged in but idle must not keep (T)rustyShelf alive after a game.
 //   node linux/ci/pad-test.js            (the check runs in a child Node; exit code 1 = a check failed)
 // A FIFO stands in for /dev/input/js0, kept open and silent like a real pad between button presses. Select + Start held
 // for 1.5 s must close the game once; after end() the process must be able to exit. (beta.9's read streams left a libuv
-// pool thread waiting on the pad for ever: Boxshelf's process never ended after Quit and kept the single-instance lock.)
+// pool thread waiting on the pad for ever: (T)rustyShelf's process never ended after Quit and kept the single-instance lock.)
 'use strict';
 const fs = require('fs'), path = require('path'), os = require('os'), { execFileSync, spawnSync } = require('child_process');
 if (process.argv[2] === '--child') {

@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): most of this file is Boxshelf's
+// main/nx2.js; modified for (T)rustyShelf (see the git history).
 // Switch 2 games for Eglantine (an Eden fork). Most come unpacked: a folder with exefs\main (+ main.npdm) and romfs, or
 // the same split as base\ and updates\<version>\ (each update a full copy), or just <version>\ with no base at all.
 // Eden-family emulators boot such a game when handed its exefs\main. Packed games are .nsp / .xci / .nup files.
@@ -120,7 +122,7 @@ function filesUnder(d, out = [], max = 400) {
   return out;
 }
 async function appImageHas(exe, text) {
-  let dir = ''; try { dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'boxshelf-build-')); } catch { return null; }
+  let dir = ''; try { dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'trustyshelf-build-')); } catch { return null; }
   const unpack = args => new Promise(res => { try { const env = { ...process.env }; delete env.APPIMAGE_EXTRACT_AND_RUN;
     execFile(exe, args, { cwd: dir, env, timeout: 120000, maxBuffer: 8 << 20 }, err => res(!err)); } catch { res(false); } });
   try {
@@ -156,7 +158,7 @@ function buildExe(dir, files) {
 }
 // (Linux) a Switch 2 build is an AppImage (Eglantine.AppImage, Lichii_92.AppImage…), often several side by side in one
 // folder; the other consoles' emulators kept in the same place are left out
-const NOT_SW2 = /^(eden|citron|yuzu|suyu|sudachi|ryujinx|ryubing|dolphin|cemu|pcsx2|rpcs3|shadps4|ppsspp|xenia|azahar|lime3ds|citra|duckstation|retroarch|melonds|mgba|flycast|rmg|xemu|boxshelf)/i;
+const NOT_SW2 = /^(eden|citron|yuzu|suyu|sudachi|ryujinx|ryubing|dolphin|cemu|pcsx2|rpcs3|shadps4|ppsspp|xenia|azahar|lime3ds|citra|duckstation|retroarch|melonds|mgba|flycast|rmg|xemu|trustyshelf)/i;
 const linuxBuilds = (dir, files) => process.platform === 'win32' ? [] : files.filter(e => /\.appimage$/i.test(e.name) && !NOT_SW2.test(e.name)).map(e => path.join(dir, e.name));
 function exesUnder(dir, depth, out) {
   let ents = []; try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { return out; }

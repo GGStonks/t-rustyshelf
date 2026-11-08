@@ -1,5 +1,7 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/lbindex.js apart from the app's name ((T)rustyShelf).
 // LaunchBox index builder, kept free of Electron so it can run in a worker thread: reading the 500 MB XML holds a lot
-// of memory for a few seconds, and in Boxshelf's main process that once ran it out of memory (the app just closed).
+// of memory for a few seconds, and in (T)rustyShelf's main process that once ran it out of memory (the app just closed).
 const fs = require('fs');
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 const path = require('path');

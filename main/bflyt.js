@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/bflyt.js apart from the app's name ((T)rustyShelf).
 // BFLYT (Wii U / Cafe layout, big-endian): the pane tree with the bits needed to draw a page — pictures, windows
 // (frames + content), text boxes (position only; e-manual text comes pre-laid-out in a separate file), user data.
 // Layout space: y points up, a pane's translation is relative to its parent's position, its rect hangs off its origin.

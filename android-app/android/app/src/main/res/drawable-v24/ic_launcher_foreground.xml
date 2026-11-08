@@ -1,3 +1,5 @@
+<!-- Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+     android-app/android/app/src/main/res/drawable-v24/ic_launcher_foreground.xml apart from the app's name ((T)rustyShelf). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"

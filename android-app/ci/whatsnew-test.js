@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// android-app/ci/whatsnew-test.js apart from the app's name ((T)rustyShelf).
 // Device test pass "whatsnew" (beta.7), run by web-device-test.js: the demo page as Windows on a 1920x1080 TV.
 //   The first start of a new version shows its highlights once (a card over the dimmed shelf: left / right move between
 //   its buttons, the shelf doesn't move behind it, Esc closes, the version is remembered); a fresh install shows nothing.
@@ -26,7 +28,7 @@ module.exports = async function whatsNewPass({ browser, base, check, OUT }) {
     await page.keyboard.press('ArrowRight'); await pause(250); const c2 = await card();
     await page.keyboard.press('ArrowLeft'); await pause(250);
     await page.keyboard.press('Escape'); await pause(600);
-    const after = await page.evaluate(async () => ({ gone: !document.querySelector('.note-card'), mode: Shelf.getMode(), seen: (await window.boxshelf.getConfig()).config.ui.lastSeenVersion }));
+    const after = await page.evaluate(async () => ({ gone: !document.querySelector('.note-card'), mode: Shelf.getMode(), seen: (await window.trustyshelf.getConfig()).config.ui.lastSeenVersion }));
     check('What\'s new: the first start of a new version shows its highlights over the dimmed shelf',
       !!c && c.wide && /What's new in 1\.82\.0-beta\.8/.test(c.title) && c.items.length >= 3 && c.mode === 'note', JSON.stringify(c && { title: c.title, items: c.items.length, mode: c.mode }));
     check('What\'s new: right lights the other button (the shelf behind stays put), Esc closes it and the version is remembered',
@@ -34,7 +36,7 @@ module.exports = async function whatsNewPass({ browser, base, check, OUT }) {
 
     // a fresh install (the first run): no card, the version is just remembered
     await page.goto(base + '?platform=windows&ver=1.82.0-beta.8'); await page.waitForSelector('#setup.on', { timeout: 90000 }); await pause(7000);
-    const fresh = await page.evaluate(async () => ({ card: !!document.querySelector('.note-card'), seen: (await window.boxshelf.getConfig()).config.ui.lastSeenVersion }));
+    const fresh = await page.evaluate(async () => ({ card: !!document.querySelector('.note-card'), seen: (await window.trustyshelf.getConfig()).config.ui.lastSeenVersion }));
     check('What\'s new: a fresh install shows no card (it remembers the version for next time)', !fresh.card && fresh.seen === '1.82.0-beta.8', JSON.stringify(fresh));
 
     // a newer version out
@@ -48,17 +50,17 @@ module.exports = async function whatsNewPass({ browser, base, check, OUT }) {
     const st = await page.evaluate(() => document.body.innerText);
     await page.screenshot({ path: path.join(OUT, 'whatsnew-settings.png') });
     check('Update: See what\'s new opens Settings → System → What\'s new with the new version\'s notes, its download and this version\'s notes',
-      /What.s new/.test(st) && /New: Boxshelf 1\.82\.0-beta\.2/i.test(st) && /Get Boxshelf 1\.82\.0-beta\.2/i.test(st) && /Video previews in Details/.test(st), st.split('\n').filter(l => /new|Boxshelf|Video/i.test(l)).slice(0, 6).join(' | '));
+      /What.s new/.test(st) && /New: \(T\)rustyShelf 1\.82\.0-beta\.2/i.test(st) && /Get \(T\)rustyShelf 1\.82\.0-beta\.2/i.test(st) && /Video previews in Details/.test(st), st.split('\n').filter(l => /new|\(T\)rustyShelf|Video/i.test(l)).slice(0, 6).join(' | '));
     await page.evaluate(() => window.Settings && Settings.close && Settings.close()); await pause(600);
     await ready('?platform=windows&shelf=1&update=1'); await pause(7500);
     check('Update: the same version\'s card isn\'t shown twice', !(await card()));
-    // (beta.8) a Steam Deck in Desktop Mode, Boxshelf not started by Steam: a card says once how to get the controller in
-    // games (start from Steam), and its button adds Boxshelf to Steam. Started by Steam: no card
+    // (beta.8) a Steam Deck in Desktop Mode, (T)rustyShelf not started by Steam: a card says once how to get the controller in
+    // games (start from Steam), and its button adds (T)rustyShelf to Steam. Started by Steam: no card
     await ready('?platform=windows&shelf=1&deck=desktop'); let dk = null; for (let w = 0; w < 40 && !dk; w++) { await pause(400); dk = await card(); }
     if (dk) { await page.screenshot({ path: path.join(OUT, 'whatsnew-deck.png') }); await page.keyboard.press('Enter'); await pause(900); }
     const added = await page.evaluate(() => window.__added || 0);
     await ready('?platform=windows&shelf=1&deck=steam'); await pause(13000); const dk2 = await card();
-    check('Steam Deck: in Desktop Mode outside Steam a card explains the controller and adds Boxshelf to Steam; started by Steam, no card',
+    check('Steam Deck: in Desktop Mode outside Steam a card explains the controller and adds (T)rustyShelf to Steam; started by Steam, no card',
       !!dk && /Steam Deck/i.test(dk.html) && /from Steam/i.test(dk.title) && added === 1 && !dk2, JSON.stringify({ dk: dk && dk.title, added, dk2: dk2 && dk2.title }));
     check('What\'s new pass: no page errors', !errors.length, errors.slice(0, 3).join(' | '));
   } catch (e) { check('What\'s new pass ran to the end', false, e.message.split('\n')[0]); try { await page.screenshot({ path: path.join(OUT, 'whatsnew-fail.png') }); } catch {} }

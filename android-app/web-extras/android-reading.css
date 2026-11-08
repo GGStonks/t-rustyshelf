@@ -1,3 +1,5 @@
+/* Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+   android-app/web-extras/android-reading.css apart from the app's name ((T)rustyShelf). */
 /* Magazines & guides store (android-reading.js; Android build only). Laid out for the 1440 x 810 Android page (the Thor's
    1920 x 1080 top screen): text never under 14 px, touch targets at least 48 px. Moving the cursor changes classes and
    transforms only; covers fade in once loaded. */

@@ -1,3 +1,5 @@
+/* Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+   renderer/bootslide.css apart from the app's name ((T)rustyShelf). */
 /* The boot slide: when you press Play, a full screen in the console's own colours with its wordmark, the game's
    cover and title and a progress line, each console with its own moving background (all original designs).
    It stays until the game's window is up. GameCube keeps its disc-into-the-cube animation instead. */
@@ -121,7 +123,7 @@
 .bs-other .bs-fx i{left:50%;top:50%;width:70vh;height:70vh;border-radius:50%;background:radial-gradient(circle,color-mix(in srgb,var(--bs-acc) 30%,transparent),transparent 65%);animation:bsPulse 4s ease-in-out infinite}
 
 @media (prefers-reduced-motion:reduce){.ins-slide *{animation-duration:.01s!important;animation-iteration-count:1!important}}
-/* the same for Boxshelf's own Reduce motion setting (body.reduce-motion), which the rest of the app follows */
+/* the same for (T)rustyShelf's own Reduce motion setting (body.reduce-motion), which the rest of the app follows */
 body.reduce-motion .ins-slide *{animation-duration:.01s!important;animation-iteration-count:1!important}
 /* keep the words readable over the bright middle of the Xbox orb */
 .bs-x360 .bs-title,.bs-x360 .bs-emu,.bs-x360 .bs-boot{text-shadow:0 2px 14px rgba(0,40,0,.6)}

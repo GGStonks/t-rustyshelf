@@ -1,8 +1,10 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/ytclips.js apart from the app's name ((T)rustyShelf).
 // (beta.8) Console trailers: a short clip of a game's YouTube trailer, saved as a file so it plays like a Steam clip (behind
 // the shelf and behind the case in Details), the way Playnite's trailer add-on does it.
 //   - The helper is yt-dlp (free, Unlicense), fetched once into data\tools when you switch Console trailers on, and
 //     checked against the SHA-256 list yt-dlp publishes with every release. It only finds the video's 720p (else 480p) stream.
-//   - The clip: YouTube serves that stream as fragmented MP4 with an index (sidx) of its fragments. Boxshelf reads the
+//   - The clip: YouTube serves that stream as fragmented MP4 with an index (sidx) of its fragments. (T)rustyShelf reads the
 //     index, fetches only the bytes of the first ~20 seconds, and joins the header and those fragments into one small
 //     silent MP4, exactly the shape of the Steam clips (no video converter needed).
 //   - Kept in data\previews\youtube\<video id>.hd.mp4 (beta.9; <id>.mp4 = an older 480p one); the Steam and YouTube clips share one 400 MB limit (previews.trim).
@@ -29,7 +31,7 @@ const HELPER_URL = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/';
 function fetch(url, o = {}, hops = 0) {
   return new Promise((resolve, reject) => {
     const u = new URL(url); if (u.protocol !== 'https:') return reject(new Error('not https'));
-    const req = https.get(u, { headers: { 'User-Agent': 'Boxshelf', ...(o.headers || {}) } }, res => {
+    const req = https.get(u, { headers: { 'User-Agent': 'TrustyShelf', ...(o.headers || {}) } }, res => {
       if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location && hops < 6) { res.resume(); return resolve(fetch(new URL(res.headers.location, url).toString(), o, hops + 1)); }
       if (res.statusCode !== 200 && res.statusCode !== 206) { res.resume(); return reject(new Error('HTTP ' + res.statusCode)); }
       const total = +res.headers['content-length'] || 0; let got = 0, last = -1;

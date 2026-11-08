@@ -1,4 +1,6 @@
-// Node check (beta.10): a big library on a slow disk (a NAS) never holds Boxshelf's main process up. Checks results, and
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// android-app/ci/scan-async-test.js apart from the app's name ((T)rustyShelf).
+// Node check (beta.10): a big library on a slow disk (a NAS) never holds (T)rustyShelf's main process up. Checks results, and
 // how long the event loop is held at most (a loose 100 ms bound, never speed).
 //   A made-up library (2,000 Game Boy ROMs with art, manual pages, duplicates and update files beside them, GameCube discs,
 //   PS4 folder games) on a "slow disk": every sync fs call busy-waits (a network round trip on the main process), every

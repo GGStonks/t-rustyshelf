@@ -1,13 +1,15 @@
-// Boxshelf's Wii remote reader (Windows). A remote paired to a Mayflash DolphinBar in its Dolphin mode (mode 4) shows up as
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/wiimote.cs apart from the app's name ((T)rustyShelf).
+// (T)rustyShelf's Wii remote reader (Windows). A remote paired to a Mayflash DolphinBar in its Dolphin mode (mode 4) shows up as
 // HID devices 057E:0306, one per player slot, and speaks the remote's own protocol, so the bar never has to change mode:
-// Boxshelf reads the remote on the shelf and lets go of it (PAUSE) before Dolphin starts a game.
+// (T)rustyShelf reads the remote on the shelf and lets go of it (PAUSE) before Dolphin starts a game.
 //   - finds the slot with a remote (status request 0x15 → 0x20), lights player 1, turns the IR camera on and asks for
 //     buttons + accelerometer + IR (report 0x33, continuous)
 //   - pointer: the bar's two IR lights, their midpoint rotated back by the pair's angle (a tilted remote still points
 //     straight), as 0..1 of the camera's view (x flipped); one light seen: the other is guessed from the last pair
 //   - prints "S <buttons> <x> <y> <seen>" (at most ~120 a second, only on change), "C 1" / "C 0" (remote connected /
 //     gone), "P 1" / "P 0" (paused / reading); reads PAUSE, RESUME, RUMBLE <ms> and QUIT on stdin
-// Compiled once by Windows PowerShell's Add-Type (C# 5) and cached as a DLL beside Boxshelf's data.
+// Compiled once by Windows PowerShell's Add-Type (C# 5) and cached as a DLL beside (T)rustyShelf's data.
 using System; using System.IO; using System.Threading; using System.Collections.Generic; using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 
@@ -148,7 +150,7 @@ public static class WMH {
           else if (line.StartsWith("RUMBLE ")) { int ms; if (int.TryParse(line.Substring(7), out ms)) rumbleMs = Math.Max(0, Math.Min(500, ms)); }
         }
       } catch { }
-      quit = true; // Boxshelf gone: stop
+      quit = true; // (T)rustyShelf gone: stop
     }); stdin.IsBackground = true; stdin.Start();
     Say("READY");
     Dev live = null; bool wasPaused = false; var nextFind = DateTime.MinValue;

@@ -1,13 +1,15 @@
-// Boxshelf on Android: the AYN Thor's bottom screen, main-page side. The bottom page itself is bottom.html, shown on the
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// android-app/web-extras/android-bottom.js apart from the app's name ((T)rustyShelf).
+// (T)rustyShelf on Android: the AYN Thor's bottom screen, main-page side. The bottom page itself is bottom.html, shown on the
 // second display by BottomScreen.java. This file sends it the game the shelf has settled on and runs what its touch
 // buttons ask for (play, favourite, inspect, manual, shuffle, previous / next…). In the museum it sends the row on the
 // wall instead (Shelf.bottomMuseum), and the bottom page's touches choose a case there or unwrap it (mpick / unwrap).
 // Costs the shelf next to nothing: one small message after it has rested on a game for a moment (app.js's "bs-select",
 // never per slide frame), built in a quiet moment; on a device without a second screen it does nothing at all.
 (function () {
-  const N = window.BS_NATIVE, api = window.boxshelf;
+  const N = window.BS_NATIVE, api = window.trustyshelf;
   if (!N || !N.bottomStatus || !api) return; // not on a device (or a pretend one)
-  const log = (...m) => { try { console.log('[boxshelf] bottom:', ...m); } catch {} };
+  const log = (...m) => { try { console.log('[trustyshelf] bottom:', ...m); } catch {} };
   let st = { available: false, enabled: false, shown: false }, last = '', busy = false, again = false;
   const refresh = () => N.bottomStatus().then(s => { st = Object.assign({}, st, s || {}); return st; }).catch(() => st);
 

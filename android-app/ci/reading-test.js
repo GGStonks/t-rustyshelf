@@ -1,9 +1,11 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// android-app/ci/reading-test.js apart from the app's name ((T)rustyShelf).
 // Device test pass "magazines & guides" (0.3.2, android-reading.js), run by web-device-test.js on the pretend Thor
 // (?fakeNative=1, Thor-like screen, touch, a controller plugged in). The pretend device answers archive.org's search,
 // metadata and downloads deterministically (installFake in android-reading.js). Checks results, never speed: every wait
 // polls with a generous timeout (the build machine draws in software).
 //   Settings → Magazines & guides (Android rows) → the store; covers with year and size; d-pad + A downloads into
-//   "Boxshelf Reading/Magazines/<series>" beside the ROMs; touch search, tap + Download (into Guides); borrow-only and
+//   "TrustyShelf Reading/Magazines/<series>" beside the ROMs; touch search, tap + Download (into Guides); borrow-only and
 //   scan-only items refused; X cancels; back to Settings; the museum's reading corner has the downloads (and the PC-style
 //   folders), the museum's reader draws a downloaded page, X there opens the store; a comic archive's pages open.
 'use strict';
@@ -28,7 +30,7 @@ module.exports = async function readingPass({ browser, base, check, newPage, OUT
   try {
     await page.goto(url); await pause(4000);
     // the main ROMs folder picked (as the setup wizard does) and its consoles scanned
-    await page.evaluate(async () => { const api = window.boxshelf, c = (await api.getConfig()).config, det = await api.detect();
+    await page.evaluate(async () => { const api = window.trustyshelf, c = (await api.getConfig()).config, det = await api.detect();
       window.__fakePickNext = 'primary:ROMs'; const root = await api.romRoot(); c.romRoot = root.path;
       for (const f of root.found) { c.systems[f.id].romDirs = [f.dir]; c.systems[f.id].emulator = det.systems[f.id].emulator; }
       c.setupDone = true; await api.saveConfig(c); await api.scan(); });
@@ -37,19 +39,19 @@ module.exports = async function readingPass({ browser, base, check, newPage, OUT
     // ---- Settings → Magazines & guides ----
     await page.evaluate(() => Setup.open({ page: 'reading' }));
     // (beta.9: waits for the whole line it checks, the folder included: it can come a moment after the counts on a slow machine)
-    await until(() => /Your magazines & guides[\s\S]*1 magazine · 1 guide · ROMs\/Boxshelf Reading/.test((document.querySelector('#bss') || {}).innerText || ''), null, 30000);
+    await until(() => /Your magazines & guides[\s\S]*1 magazine · 1 guide · ROMs\/TrustyShelf Reading/.test((document.querySelector('#bss') || {}).innerText || ''), null, 30000);
     const set = await page.evaluate(() => (document.querySelector('#bss') || {}).innerText || '');
     await page.screenshot({ path: path.join(OUT, 'R0-settings-reading.png') });
     check('Store: Settings → Magazines & guides has the store and "Your magazines & guides" (no PC folder rows)', /Magazines & guides store/.test(set) && /Your magazines & guides/.test(set) && !/Magazines & guides folder|Guides folder|Bring them over/.test(set),
       (set.match(/Magazines & guides store|Your magazines & guides|Magazines & guides folder/g) || []).join(', '));
     // (beta.7: on a miss, say what the scan was waiting on, not just "none")
-    const why = /1 magazine · 1 guide · ROMs\/Boxshelf Reading/.test(set) && !process.env.BS_DIAG ? '' : await page.evaluate(async () => { const N = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.BoxshelfNative, c = (await window.boxshelf.getConfig()).config;
+    const why = /1 magazine · 1 guide · ROMs\/TrustyShelf Reading/.test(set) && !process.env.BS_DIAG ? '' : await page.evaluate(async () => { const N = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.TrustyShelfNative, c = (await window.trustyshelf.getConfig()).config;
       const L = async uri => { try { return ((await N.listDirs({ uri })) || {}).dirs.map(d => d.name); } catch (e) { return 'error: ' + e.message; } };
       const folders = window.BS_FOLDERS ? BS_FOLDERS() : null, rr = c.romRoot, tree = folders && rr ? folders[rr] : null;
-      return JSON.stringify({ row: ((document.querySelector('#bss') || {}).innerText || '').split('\n').filter(l => /magazine|Looking|Boxshelf Reading/i.test(l)).slice(0, 3), romRoot: rr, folders: folders ? Object.fromEntries(Object.entries(folders).map(([k, v]) => [k, typeof v + ':' + String(v).slice(0, 90)])) : 'n/a',
+      return JSON.stringify({ row: ((document.querySelector('#bss') || {}).innerText || '').split('\n').filter(l => /magazine|Looking|TrustyShelf Reading/i.test(l)).slice(0, 3), romRoot: rr, folders: folders ? Object.fromEntries(Object.entries(folders).map(([k, v]) => [k, typeof v + ':' + String(v).slice(0, 90)])) : 'n/a',
         reading: window.BS_READING && BS_READING.diag ? await BS_READING.diag() : 'n/a', fake: (window.__fakeReading || null), quiet: window.BS_QUIET ? BS_QUIET() : null }); });
     if (why) console.log('READING DIAGNOSIS ' + why); // (beta.7: the full picture in the build log; the summary table cuts details short)
-    check('Store: PC-style Magazines / Guides folders copied next to the ROMs are read (a PDF, a folder of pages)', /1 magazine · 1 guide · ROMs\/Boxshelf Reading/.test(set), (set.match(/\d+ magazines? · \d+ guides?[^\n]*/) || ['none'])[0] + (why ? ' · ' + why : ''));
+    check('Store: PC-style Magazines / Guides folders copied next to the ROMs are read (a PDF, a folder of pages)', /1 magazine · 1 guide · ROMs\/TrustyShelf Reading/.test(set), (set.match(/\d+ magazines? · \d+ guides?[^\n]*/) || ['none'])[0] + (why ? ' · ' + why : ''));
     // A on the store row (the first row): the store opens over a paused Settings
     await page.keyboard.press('Enter');
     const opened = await until(() => window.BS_READING && BS_READING.isOpen() && BS_READING.state().items >= 6, null, 60000);
@@ -67,7 +69,7 @@ module.exports = async function readingPass({ browser, base, check, newPage, OUT
     const seenPct = await until(() => [...document.querySelectorAll('#bsReading .brd-card[data-s="run"] .brd-badge')].some(b => /\d+%/.test(b.textContent)), null, 30000);
     await until(() => BS_READING.state().jobs.some(j => j.id === 'fk-np-008' && j.state === 'done'), null, 60000);
     const d1 = await page.evaluate(() => ({ job: BS_READING.state().jobs.find(j => j.id === 'fk-np-008'), saved: __fakeReading.saved.slice(), req: __fakeReading.dl[0], badge: (document.querySelector('#bsReading .brd-card[data-i="7"] .brd-badge') || {}).textContent }));
-    check('Store: native download with progress, saved in "Boxshelf Reading/Magazines/<series>" beside the ROMs', seenPct && d1.job && d1.job.state === 'done' && d1.saved.includes('primary:ROMs/Boxshelf Reading/Magazines/Nintendo Power/Nintendo Power Issue 008 (1995).pdf')
+    check('Store: native download with progress, saved in "TrustyShelf Reading/Magazines/<series>" beside the ROMs', seenPct && d1.job && d1.job.state === 'done' && d1.saved.includes('primary:ROMs/TrustyShelf Reading/Magazines/Nintendo Power/Nintendo Power Issue 008 (1995).pdf')
       && d1.req && /^https:\/\/archive\.org\/download\/fk-np-008\/.+\.pdf$/.test(d1.req.url) && /tree\/primary%3AROMs$/.test(d1.req.tree) && d1.req.size > 0 && d1.badge === 'Saved',
       `progress shown ${seenPct}, ${d1.saved.join(', ')}, badge ${d1.badge}`);
 
@@ -93,7 +95,7 @@ module.exports = async function readingPass({ browser, base, check, newPage, OUT
     await page.tap('#bsReading .brd-act');
     await until(() => BS_READING.state().jobs.some(j => j.id === 'fk-zelda-comic' && j.state === 'done'), null, 60000);
     const d2 = await page.evaluate(() => ({ saved: __fakeReading.saved.slice(), reqs: __fakeReading.dl.map(d => d.id), jobs: BS_READING.state().jobs.map(j => j.id + ':' + j.state) }));
-    check('Store: a tap picks a cover and Download gets it (into Guides); a borrow-only one is never downloaded', picked && d2.saved.includes('primary:ROMs/Boxshelf Reading/Guides/Zelda Comic Collection.cbz') && !d2.reqs.some(id => /lend|scan/.test(id)),
+    check('Store: a tap picks a cover and Download gets it (into Guides); a borrow-only one is never downloaded', picked && d2.saved.includes('primary:ROMs/TrustyShelf Reading/Guides/Zelda Comic Collection.cbz') && !d2.reqs.some(id => /lend|scan/.test(id)),
       `picked ${picked}; ${d2.saved.slice(-1)[0]}; requests ${d2.reqs.join(', ')}`);
     // X cancels a running download: nothing is kept
     await page.evaluate(() => { __fakeReading.lat = 900; });
@@ -150,7 +152,7 @@ module.exports = async function readingPass({ browser, base, check, newPage, OUT
     const comic = lib.find(i => i.type === 'arch');
     const cp = comic ? await page.evaluate(id => BS_READING._renderPage(id, 0), comic.id).catch(e => ({ err: e.message })) : { err: 'no comic' };
     const pc = lib.find(i => /GamePro/.test(i.title));
-    const pcCover = pc ? await page.evaluate(async id => { const u = await window.boxshelf.libraryCover(id); return { u, drawn: __fakeReading.covers.some(c => c.drawn) }; }, pc.id) : {};
+    const pcCover = pc ? await page.evaluate(async id => { const u = await window.trustyshelf.libraryCover(id); return { u, drawn: __fakeReading.covers.some(c => c.drawn) }; }, pc.id) : {};
     check('Reading corner: a comic archive\'s pages open; a PDF from the PC gets a cover drawn from its first page', cp.type === 'images' && cp.w > 0 && !!pcCover.u && pcCover.drawn, JSON.stringify(cp) + ' ' + JSON.stringify(pcCover));
     check('Magazines & guides pass: no script errors', !errors.length, errors.slice(0, 3).join(' | '));
   } catch (e) { check('Magazines & guides pass ran to the end', false, e && e.stack ? e.stack.split('\n').slice(0, 2).join(' ') : e); }

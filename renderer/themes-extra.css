@@ -1,3 +1,5 @@
+/* Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+   renderer/themes-extra.css apart from the app's name ((T)rustyShelf). */
 /* The extra shelf themes (themes-extra.js). Their backdrops are designed pictures, so the blurred cover behind them is
    left out (as Keys and Arcade do); the floor glow is toned to each. No animation here: the moving parts are drawn on the
    theme layer's canvas (themefx.js), which holds still at the Handheld level and whenever the shelf is idle or covered. */

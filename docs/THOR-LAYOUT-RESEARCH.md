@@ -1,6 +1,8 @@
+<!-- Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+     docs/THOR-LAYOUT-RESEARCH.md apart from the app's name ((T)rustyShelf). -->
 # Layout research for the Thor (2026-10-24)
 
-What the best Thor launchers, front-end themes and console UIs do, and what Boxshelf takes from it. Sources at the end.
+What the best Thor launchers, front-end themes and console UIs do, and what (T)rustyShelf takes from it. Sources at the end.
 
 ## What others do well
 | Product / theme | Standout technique |
@@ -14,7 +16,7 @@ What the best Thor launchers, front-end themes and console UIs do, and what Boxs
 | PSP / PS3 XMB | The background takes the highlighted game's art; colour follows the month, brightness the time of day. |
 | Art Book Next, Canvas (ES-DE) | One typeface, artwork tinted to the scheme; colour schemes named after hardware; a "help off" variant; warnings that animated wallpapers cost VRAM. |
 
-## Techniques for Boxshelf
+## Techniques for (T)rustyShelf
 1. The settled game takes over the backdrop: its art, darkened and blurred **in advance** (a small baked image), cross-faded once.
 2. Ambient colour from the art: the main colour worked out natively when art is saved, stored with the record, used for the rim light, the highlight bar and the bottom screen's backdrop (no GPU readback).
 3. One menu layout, console paint: the highlight colour, click sound and button glyphs follow the shelf you're on (PlayStation ✕○△□, Nintendo A/B).
@@ -41,7 +43,7 @@ What the best Thor launchers, front-end themes and console UIs do, and what Boxs
 - Quick menu: big tiles.
 - While a game runs: Off / Manual (the game's own manual, turned by touch) / Now Playing (the open, empty case, session time; dims after 10 s; minute updates only).
 
-## Boxshelf's own signatures
+## (T)rustyShelf's own signatures
 1. **Hands and room:** the bottom screen is always what you hold (case, disc, manual), the top is the room (shelf, museum, TV).
 2. **The case is the jingle.**
 3. **Console paint, one grammar.**

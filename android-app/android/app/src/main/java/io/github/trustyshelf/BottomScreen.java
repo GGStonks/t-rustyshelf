@@ -1,4 +1,6 @@
-package io.github.boxshelf;
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// android-app/android/app/src/main/java/io/github/boxshelf/BottomScreen.java apart from the app's name ((T)rustyShelf).
+package io.github.trustyshelf;
 
 import android.annotation.TargetApi;
 import android.app.Activity;
@@ -47,12 +49,12 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * The AYN Thor's second (bottom) screen. While Boxshelf is in front it shows a small page of its own there
+ * The AYN Thor's second (bottom) screen. While (T)rustyShelf is in front it shows a small page of its own there
  * (bottom.html: the selected game's case to turn and open, its details, trophies and a few big buttons), in an
  * android.app.Presentation holding a second WebView.
  *
  * Why it's built this way:
- *  - The Presentation belongs to Boxshelf's window, so it's hidden the moment Boxshelf pauses (a game starts, Android's
+ *  - The Presentation belongs to (T)rustyShelf's window, so it's hidden the moment (T)rustyShelf pauses (a game starts, Android's
  *    settings open…) and comes back on resume. The bottom screen is therefore always free for DS / 3DS emulators and
  *    bottom-screen mods while a game runs.
  *  - Its window can't take key focus (FLAG_NOT_FOCUSABLE): touching the bottom screen must never steal the controller
@@ -69,7 +71,7 @@ final class BottomScreen implements DisplayManager.DisplayListener {
         void onChange();             // shown / hidden / screen added or removed
     }
 
-    private static final String TAG = "BoxshelfBottom";
+    private static final String TAG = "TrustyShelfBottom";
     private static final String PAGE = "https://localhost/bottom.html";
     private static final String PREF_ON = "bottom_on";
     private static final int BG = 0xFF0B0B14;
@@ -90,7 +92,7 @@ final class BottomScreen implements DisplayManager.DisplayListener {
         this.activity = activity;
         this.listener = listener;
         this.dm = (DisplayManager) activity.getSystemService(Context.DISPLAY_SERVICE);
-        this.prefs = activity.getSharedPreferences("boxshelf_bottom", Context.MODE_PRIVATE);
+        this.prefs = activity.getSharedPreferences("trustyshelf_bottom", Context.MODE_PRIVATE);
         if (dm != null) dm.registerDisplayListener(this, main);
     }
 
@@ -296,7 +298,7 @@ final class BottomScreen implements DisplayManager.DisplayListener {
             v.setHorizontalScrollBarEnabled(false);
             v.setOverScrollMode(View.OVER_SCROLL_NEVER);
             v.setFocusable(false);
-            v.addJavascriptInterface(new PageBridge(main, listener), "BoxshelfBottom");
+            v.addJavascriptInterface(new PageBridge(main, listener), "TrustyShelfBottom");
             v.setWebViewClient(new Client());
             v.setWebChromeClient(new WebChromeClient() {
                 @Override
@@ -329,7 +331,7 @@ final class BottomScreen implements DisplayManager.DisplayListener {
     }
 
     /**
-     * window.BoxshelfBottom.post(json) on the bottom page. Called on a WebView thread: handed to the main thread.
+     * window.TrustyShelfBottom.post(json) on the bottom page. Called on a WebView thread: handed to the main thread.
      * A public static class with a public method, like Capacitor's own bridge, so the WebView may always call it.
      */
     public static final class PageBridge {

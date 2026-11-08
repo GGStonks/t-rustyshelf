@@ -1,3 +1,5 @@
+/* Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+   renderer/setup.css apart from the app's name ((T)rustyShelf). */
 /* Setup wizard, Settings, empty state and app-only additions */
 :root{--ok:#5fe0a0;--warn:#ffcf6b;--bad:#ff8a8a;--field:rgba(255,255,255,.06)}
 body{margin:0;font-family:var(--ui)}

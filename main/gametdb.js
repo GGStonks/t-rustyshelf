@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/gametdb.js apart from the app's name ((T)rustyShelf).
 // GameTDB (gametdb.com) for Switch and 3DS: which GameTDB id a game is, by its title. GameTDB keeps a full cover scan
 // (back | spine | front) for most boxed games, and the automatic art check cuts a real spine and back out of it when
 // no other source has one. (GameCube / Wii discs carry their GameTDB id in their header: covers.discId does those.)

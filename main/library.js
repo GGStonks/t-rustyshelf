@@ -1,5 +1,7 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/library.js apart from the app's name ((T)rustyShelf).
 // Your magazines and strategy guides for the museum's reading corner.
-//   <reading folder>\Magazines\   and   <reading folder>\Guides\   (Settings → Magazines & guides; beside Boxshelf by default)
+//   <reading folder>\Magazines\   and   <reading folder>\Guides\   (Settings → Magazines & guides; beside (T)rustyShelf by default)
 // Each issue / guide is a PDF, a comic archive (.cbz / .cbr / .zip of page images) or a folder of page images.
 // Sub-folders group them ("Magazines\Nintendo Power\Issue 001.pdf" → series "Nintendo Power").
 // Covers (page 1) and the pages of archives are made once and kept in data\library\.

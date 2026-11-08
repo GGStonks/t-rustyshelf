@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// renderer/themes-extra.js apart from the app's name ((T)rustyShelf).
 // Ten more shelf themes (made for the Thor in Android 0.3.5, on Windows too since 1.75). index.html loads this before the
 // app's scripts; the shelf (app.js THEMES / QM_THEMES), Settings' theme tiles (settings.js) and the theme layer
 // (themefx.js) add them after the original six.

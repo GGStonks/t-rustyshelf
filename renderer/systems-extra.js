@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// renderer/systems-extra.js apart from the app's name ((T)rustyShelf).
 // Extra shelves (retro and handheld systems people run on Android handhelds and through RetroArch).
 // app.js merges these into its STYLE / WORDMARKS / MEDIA tables, so a new system only needs an entry here.
 // Case looks: ratio = width / height of the real box, depth = thickness / width.

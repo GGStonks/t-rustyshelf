@@ -1,4 +1,6 @@
-/* Boxshelf on Android: the handheld Art Studio (added to the Android build only by copy-web.js; Windows keeps the
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// android-app/web-extras/android-studio.js apart from the app's name ((T)rustyShelf).
+/* (T)rustyShelf on Android: the handheld Art Studio (added to the Android build only by copy-web.js; Windows keeps the
    Settings picker). One game's four pictures, laid out for a 6" screen held in two hands:
    - a big row per part (Front, Back, Spine, Disc), and above them (0.3.5) Sets: whole matching sets (USA / Europe / Japan
      / HD, all four parts from one release) and the looks (the sharpest of each part, or every part from one region). The
@@ -24,7 +26,7 @@
 (function () {
   'use strict';
   // (this file is only in the Android build; it runs before platform.js, so the platform is checked when the studio opens)
-  const A = () => window.boxshelf || {};
+  const A = () => window.trustyshelf || {};
   const PARTS = ['front', 'back', 'spine', 'disc'], ROWS = ['sets', ...PARTS];
   const NAME = { sets: 'Sets', front: 'Front', back: 'Back', spine: 'Spine', disc: 'Disc' };
   const LONG = { sets: 'Whole case', front: 'Front cover', back: 'Back cover', spine: 'Spine', disc: 'Disc' };
@@ -50,7 +52,7 @@
   // (0.3.5: five rows, so the small ones are a little lower)
   const ROW_BIG = 266, ROW_SMALL = 80, ROW_GAP = 10, CARD_H = 242, IMG_H = 180, CARD_GAP = 14, SMALL_K = 0.28, MIN_W = 136;
 
-  let api = A();         // window.boxshelf (read again on each open: the adapter may replace it)
+  let api = A();         // window.trustyshelf (read again on each open: the adapter may replace it)
   let E = null;          // the overlay's elements (built on first open)
   let S = null;          // the game being edited: { sys, file, title, id, ratio, art, lock, sysName, row, rows: {row id: R}, info, o }
   let busy = false;      // a pick is being saved

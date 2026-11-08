@@ -1,4 +1,6 @@
-/* Boxshelf phone companion: dark, the shelf's violet accent, Lexend like the TV app. Mobile first. */
+/* Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+   renderer/companion/app.css apart from the app's name ((T)rustyShelf). */
+/* (T)rustyShelf phone companion: dark, the shelf's violet accent, Lexend like the TV app. Mobile first. */
 @font-face{font-family:Lexend;font-weight:400;font-display:swap;src:url(/font/lexend-400.woff2) format("woff2")}
 @font-face{font-family:Lexend;font-weight:600;font-display:swap;src:url(/font/lexend-600.woff2) format("woff2")}
 @font-face{font-family:Lexend;font-weight:800;font-display:swap;src:url(/font/lexend-800.woff2) format("woff2")}

@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/wiimote.js apart from the app's name ((T)rustyShelf).
 // The Wii remote on the shelf (Windows): runs main/wiimote.cs in a hidden Windows PowerShell (compiled once, cached as a
 // DLL in its own folder) and reports what the remote does. A remote paired to a Mayflash DolphinBar in its Dolphin mode
 // works as it is; pause() lets go of it before Dolphin starts a game, resume() takes it back after.
@@ -20,7 +22,7 @@ function start(opts = {}) {
   log = opts.log || log; handlers = opts; cacheDir = opts.cacheDir || cacheDir; stopping = false;
   const src = source(); if (!src || !cacheDir) return false;
   try { fs.mkdirSync(cacheDir, { recursive: true }); } catch {}
-  const dll = dllPath(src), cs = path.join(require('os').tmpdir(), `boxshelf-wm-${process.pid}.cs`);
+  const dll = dllPath(src), cs = path.join(require('os').tmpdir(), `trustyshelf-wm-${process.pid}.cs`);
   // old builds of the reader (in use ones can't be deleted: skipped)
   try { for (const f of fs.readdirSync(cacheDir)) if (f !== path.basename(dll)) { try { fs.unlinkSync(path.join(cacheDir, f)); } catch {} } } catch {}
   try { if (!fs.existsSync(dll)) fs.writeFileSync(cs, src, 'utf8'); } catch (e) { log('wiimote source', e.message); return false; }

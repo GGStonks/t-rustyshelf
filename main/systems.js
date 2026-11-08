@@ -1,7 +1,9 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): most of this file is Boxshelf's
+// main/systems.js; modified for (T)rustyShelf (see the git history).
 // Definitions for every shelf the launcher knows about.
-// Paths may use %ENV% variables and {app} (the folder Boxshelf lives in).
+// Paths may use %ENV% variables and {app} (the folder (T)rustyShelf lives in).
 // Game launch options use {rom} for the game file; edit them later in Settings.
-// coverSeconds: the longest Boxshelf's black loading screen stays on top while the emulator opens (it lifts as soon
+// coverSeconds: the longest (T)rustyShelf's black loading screen stays on top while the emulator opens (it lifts as soon
 // as the game's window is fullscreen), hiding its window until then (0 = off).
 // Dolphin: -b closes Dolphin when the game stops, -C overrides a setting for this launch only.
 
@@ -137,7 +139,7 @@ const CONSOLES = [
     emulatorFolders: ['{app}\\Azahar', '{app}\\azahar', '%ProgramFiles%\\Azahar', '%LOCALAPPDATA%\\Programs\\Azahar', '%LOCALAPPDATA%\\Azahar', '%APPDATA%\\Azahar', '{app}\\Citra', '%LOCALAPPDATA%\\Citra\\nightly', '%LOCALAPPDATA%\\Citra\\canary', '{app}\\Lime3DS'],
     romFolderNames: ['3ds', 'n3ds', 'nintendo 3ds', 'azahar', 'citra'],
     // decrypted game images (.3ds/.cci/.cxi), homebrew (.3dsx), Azahar's compressed versions (.z*) and .cia installers
-    // (Boxshelf installs a .cia into Azahar the first time it's played, then boots the installed game)
+    // ((T)rustyShelf installs a .cia into Azahar the first time it's played, then boots the installed game)
     extensions: ['3ds', 'cci', 'cxi', '3dsx', 'zcci', 'zcxi', 'z3dsx', 'cia'],
     // Azahar (Citra's successor): -f fullscreen, the game file last
     gameArgs: '-f "{rom}"',

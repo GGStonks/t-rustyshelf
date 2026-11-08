@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): most of this file is Boxshelf's
+// main/config.js; modified for (T)rustyShelf (see the git history).
 const fs = require('fs');
 const path = require('path');
 const { CONSOLES, APPS } = require('./systems');
@@ -37,9 +39,9 @@ function defaults() {
       // for a folder holding several
       gamesDir: '', userGamesDir: '', programs: {},
       // (Linux, main/linuxpc.js) Windows games run through Wine or Proton: runner = the one chosen in Settings ('' = the
-      // best one found), prefixDir = where each game's Wine prefix goes ('' = <Boxshelf>/Prefixes); homeDir = the home a
+      // best one found), prefixDir = where each game's Wine prefix goes ('' = <(T)rustyShelf>/Prefixes); homeDir = the home a
       // Linux game gets (its saves and settings; '' = the player's own); Epic through legendary (legendaryPath: '' = found
-      // by itself; epicDir: where Epic games install, '' = the PC games folder, else <Boxshelf>/Epic Games)
+      // by itself; epicDir: where Epic games install, '' = the PC games folder, else <(T)rustyShelf>/Epic Games)
       runner: '', prefixDir: '', homeDir: '', legendaryPath: '', epicDir: '',
       // (Linux) a game's own way of running, by game id: { runner: a runner id, prefix: its Wine prefix's folder, env: { NAME: value } }
       run: {} },
@@ -52,7 +54,7 @@ function defaults() {
     apps,
     ra: { user: '', key: '', enabled: true },
     // autoCovers / autoManuals: downloads from the Internet are opt-in for new installs; load() keeps them on for a config
-    // saved before the keys existed, so nothing changes for people already using Boxshelf
+    // saved before the keys existed, so nothing changes for people already using (T)rustyShelf
     keys: { fanart: '', steamgriddb: '', ssUser: '', ssPass: '', ssDevId: '', ssDevPass: '' }, // Settings → Accounts & services: personal API keys, kept encrypted on disk (steamgriddb: Art Studio posters; ss*: the ScreenScraper sign-in, 1.71)
     // Art Studio: styles = per console shelf style (a console without one follows defaultArtStyle(ui), i.e. the old Box art
     // region / Prefer HD settings, so nothing changes until a style is chosen); locks = per game parts auto-fetch never touches
@@ -172,7 +174,7 @@ async function writeLater(json) {
 }
 // (beta.9) save(): checked and turned into text at once (so a bad object or a blocked file is said straight away, as
 // before), then written in the background: one write at a time, the newest settings always the ones written. flush()
-// (Boxshelf quitting) writes anything still waiting, the old way, so nothing is lost.
+// ((T)rustyShelf quitting) writes anything still waiting, the old way, so nothing is lost.
 let waiting = null, writing = false, lastJson = null;
 async function pump() {
   if (writing) return; writing = true;
@@ -181,7 +183,7 @@ async function pump() {
 }
 function save(cfg) {
   if (!isObj(cfg)) throw new Error('Not a settings object.');
-  if (readBlocked) throw new Error('Your settings file couldn\'t be read when Boxshelf started (another program had it locked), so it won\'t be overwritten. Restart Boxshelf to load it.');
+  if (readBlocked) throw new Error('Your settings file couldn\'t be read when (T)rustyShelf started (another program had it locked), so it won\'t be overwritten. Restart (T)rustyShelf to load it.');
   lastJson = waiting = JSON.stringify(cfg, null, 2);
   pump();
   return cfg;

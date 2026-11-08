@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/wiiumanual.js apart from the app's name ((T)rustyShelf).
 // Wii U e-manuals → page images for the manual reader.
 // Every Wii U game carries its manual as meta/Manual.bfma: a SARC of zlib-packed SARCs. Per language there are page
 // layouts (BFLYT: background, content layers, a text layer, link buttons), pre-laid-out text lines, photos (JPEG);
@@ -286,7 +288,7 @@ async function collect(games, opts = {}) {
       // already has one (or the user picked one). A .bfma kept from before is only a copy of the game's own manual (up to
       // 27 MB): a tiny marker remembers that the pages were made here, and the copy goes
       if (ls.names(artDir).some(f => { const l = f.toLowerCase(); return l.startsWith(pre) && /\.(jpe?g|png|webp)$/.test(l); })) { if (fs.existsSync(cache)) { try { fs.writeFileSync(mark, VERSION); fs.unlinkSync(cache); } catch {} } continue; }
-      // a manual that couldn't be converted isn't retried on every launch (only after a Boxshelf update)
+      // a manual that couldn't be converted isn't retried on every launch (only after a (T)rustyShelf update)
       try { if (fs.readFileSync(failed, 'utf8') === VERSION) { try { fs.unlinkSync(cache); } catch {} continue; } } catch {} // not retried: the copy isn't needed (it's read from the game again after an update)
       let buf = null; try { buf = fs.readFileSync(cache); } catch {}
       if (!buf) { buf = readBfma(g); if (!buf) { if (/\.(wua|rpx)$/i.test(g.file)) { try { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(failed, VERSION); } catch {} } continue; } /* no e-manual in this game: don't re-read the .wua every launch */ try { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(cache + '.part', buf); fs.renameSync(cache + '.part', cache); } catch {} }
@@ -294,7 +296,7 @@ async function collect(games, opts = {}) {
       const ep = epubOf(buf); let model = null, imgs, tmp = null;
       if (ep) {
         if (!opts.renderEpub) continue;
-        tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'boxshelf-emanual-'));
+        tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'trustyshelf-emanual-'));
         try { unzip(ep.data, tmp); const pages = epubSpine(tmp); if (!pages.length) throw new Error('no pages in this e-book');
           model = { lang: ep.lang, pages }; imgs = await opts.renderEpub(tmp, pages); }
         finally { try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {} }

@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/covers.js apart from the app's name ((T)rustyShelf).
 // Box art downloader.
 //  1. Front covers from the libretro thumbnail library (no account; names match No-Intro file names).
 //  2. Backs, spines (and fronts libretro missed) from the LaunchBox Games Database (no account).
@@ -24,7 +26,7 @@ const LB_IMG = 'https://images.launchbox-app.com/';
 const ART_EXT = ['png', 'jpg', 'jpeg', 'webp'];
 const IDX_DAYS = 60; // the XML is deleted once indexed, so a rebuild means the ~110 MB download again: don't do that every fortnight
 // one descriptive User-Agent for every request from here (GameTDB and the others like to know who's calling)
-const UA = `Boxshelf/${(() => { try { return require('../package.json').version; } catch { return '0'; } })()}`;
+const UA = `TrustyShelf/${(() => { try { return require('../package.json').version; } catch { return '0'; } })()}`;
 const REGION_PREF = ['North America', 'United States', 'World', '', 'Canada', 'Europe', 'United Kingdom', 'Japan'];
 
 // Settings → Box art region (cfg.ui.artRegion): 'usa' | 'eur' | 'jpn' puts that region's scans first wherever a game
@@ -101,7 +103,7 @@ async function gametdbSpine(sysId, file, dir, base, old, region) {
 const REPLACED = 'replaced';
 const artStamp = () => new Date().toISOString().slice(0, 23).replace(/[:T.]/g, '-');
 const samePath = (a, b) => path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
-// every picture Boxshelf puts in place is reported here (main/artstudio.js keeps the record): what Boxshelf wrote vs a picture
+// every picture (T)rustyShelf puts in place is reported here (main/artstudio.js keeps the record): what (T)rustyShelf wrote vs a picture
 // the user put in the folder by hand, which nothing automatic may replace. origin: 'auto' (a cover download), 'studio',
 // 'own' (a picture the user chose), 'restored' (Undo / an earlier one)
 let onPlaced = null;
@@ -717,7 +719,7 @@ async function coversRun(systems, progress, plan, opts, tok) {
           const sharp = hd || look === 'hd' || !!(style && style.sharper && look !== 'special' && !/^region:/.test(look || ''));
           const reg = look ? require('./artstudio').regionForLook(style, look, game) : region;
           const old = await artFileA(tok.ls, dir, base, suffix); // (beta.10: the run's folder listing, not up to 4 file checks)
-          // an HD upgrade replaces only a picture Boxshelf may replace (opts.mayReplace: one it downloaded itself, never one the
+          // an HD upgrade replaces only a picture (T)rustyShelf may replace (opts.mayReplace: one it downloaded itself, never one the
           // user put there by hand); a redo is the user's own request for that part
           const upgrade = !!old && !redo(key) && sharp && await isLowA(old, key) && (!opts.mayReplace || !!opts.mayReplace(old));
           // a SteamGridDB poster standing in for a front no source had: a real scan replaces it whenever one is found

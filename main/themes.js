@@ -1,4 +1,6 @@
-// Your logo images and boot videos live in <Boxshelf folder>\themes\<system>\
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/themes.js apart from the app's name ((T)rustyShelf).
+// Your logo images and boot videos live in <(T)rustyShelf folder>\themes\<system>\
 //   logo.png / logo.svg / logo.webp,  boot.mp4 / boot.webm,  console.png (for the 3D start-up animation, which is switched off: unused for now),
 //   console.glb (a 3D model of the console, shown instead of the built-in one) + optional console.json tweaks
 const fs = require('fs');
@@ -83,7 +85,7 @@ function saveFit(sysId, patch) {
   return cur;
 }
 
-// A logo put in by Boxshelf itself (ScreenScraper's "Find a logo"): the one it replaces is moved aside into
+// A logo put in by (T)rustyShelf itself (ScreenScraper's "Find a logo"): the one it replaces is moved aside into
 // themes\<system>\.replaced\ (never deleted), and Restore swaps the two back. Only the newest moved-aside logo counts; older ones
 // stay in the folder for the user. The new file goes through set(), so the same extension check applies.
 const REPLACED = '.replaced';

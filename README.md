@@ -1,38 +1,42 @@
-# Boxshelf
+<!-- Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): most of this file is Boxshelf's
+     README.md; modified for (T)rustyShelf (see the git history). -->
+# (T)rustyShelf
 
 A TV-style launcher for your emulators, Steam games and streaming apps: real box art on a 3D shelf,
 cases you can open and inspect, disc-loading animations, manuals, RetroAchievements, and one controller
 for everything.
 
-**This fork** is based on Boxshelf and follows each of its betas (now 1.82.0-beta.10). It adds PC games on Linux
-without Steam: Windows games through Wine or Proton, your whole Epic Games library through legendary, and a PC games
-folder where every folder is a game, plus each game's size on the shelf and a held Exit button. It isn't the
-official Boxshelf: the additions are marked *(this fork)* below, and everything else is Boxshelf as released.
+(T)rustyShelf is based on [Boxshelf](https://github.com/sassiestrhihno/boxshelf-beta) by sassiestrhihno and follows each
+of its betas (now 1.82.0-beta.10). On top of Boxshelf it adds PC games on Linux without Steam: Windows games through Wine
+or Proton, your whole Epic Games library through legendary, and a PC games folder where every folder is a game, plus
+each game's size on the shelf and a held Exit button. Those are marked *(new in (T)rustyShelf)* below; everything else
+is Boxshelf's work, by its author.
 
-> **This is Boxshelf's source code** (Windows: Electron; Linux: an Electron AppImage; Android: Capacitor, in
-> `android-app\`), released under the [GNU GPL v3.0](LICENSE). **Just want to play the official Boxshelf?** Get the
-> ready-made download from the [Boxshelf beta page](https://github.com/sassiestrhihno/boxshelf-beta/releases); its bugs
-> and ideas go to the beta page's [issues](https://github.com/sassiestrhihno/boxshelf-beta/issues/new/choose), but not
-> ones about this fork's additions. The [official source](https://github.com/sassiestrhihno/boxshelf-source) is a
-> snapshot of each beta (it starts at 1.82.0-beta.4); the 3D PC model the museum can show isn't included here.
+> **This is (T)rustyShelf's source code** (Windows: Electron; Linux: an Electron AppImage; Android: Capacitor, in
+> `android-app\`), released under the [GNU GPL v3.0](LICENSE). There are no ready-made downloads of (T)rustyShelf yet:
+> build it as below. **Looking for the official Boxshelf?** Its download is on the
+> [Boxshelf beta page](https://github.com/sassiestrhihno/boxshelf-beta/releases), and its bugs and ideas go to that page's
+> [issues](https://github.com/sassiestrhihno/boxshelf-beta/issues/new/choose) (not ones about (T)rustyShelf). Boxshelf's
+> [source](https://github.com/sassiestrhihno/boxshelf-source) is a snapshot of each beta (it starts at 1.82.0-beta.4);
+> the 3D PC model the museum can show isn't included here.
 
 ## First run
 
 1. Install **Node.js LTS** from nodejs.org (one time).
-2. Double-click **Start Boxshelf.bat**. The first start installs what it needs (about a minute).
-3. The setup wizard opens. Click **Find automatically**, check each system, then **Open Boxshelf**.
+2. Double-click **Start TrustyShelf.bat**. The first start installs what it needs (about a minute).
+3. The setup wizard opens. Click **Find automatically**, check each system, then **Open (T)rustyShelf**.
 
-Use **Start Boxshelf (window).bat** to run it in a window instead of fullscreen. `npm run dist` builds a
-portable `Boxshelf.exe` in `dist\` if you'd rather not keep Node around; keep the exe in this folder.
+Use **Start TrustyShelf (window).bat** to run it in a window instead of fullscreen. `npm run dist` builds a
+portable `TrustyShelf.exe` in `dist\` if you'd rather not keep Node around; keep the exe in this folder.
 
 On Linux: `npm install`, then `npm start` (`npm run windowed` for a window), or `npm run dist:linux` for
-`dist/Boxshelf-<version>-linux.AppImage`. With no `data` folder beside the AppImage, Boxshelf keeps its settings in
-`~/Boxshelf`.
+`dist/TrustyShelf-<version>-linux.AppImage`. With no `data` folder beside the AppImage, (T)rustyShelf keeps its settings in
+`~/TrustyShelf`.
 
 ## Folder layout (portable)
 
 ```
-Boxshelf\
+TrustyShelf\
   Dolphin\       Dolphin.exe             GameCube + Wii
   Cemu\          Cemu.exe                Wii U
   Eden\          eden.exe                Switch
@@ -44,7 +48,7 @@ Boxshelf\
   Azahar\        azahar.exe              3DS
   ROMS\Gamecube  ROMS\Wii  ROMS\Wii U  ROMS\Switch  ROMS\PSP  ROMS\PS2  ROMS\PS3  ROMS\PS4  ROMS\Xbox 360  ROMS\3DS
   themes\<system>\   logo.png · boot.mp4 · console.png | console.glb (+ console.json) · cart.glb | disc.glb | umd.glb
-  data\          config.json, boxshelf.log, caches (art database index, icons, achievements)
+  data\          config.json, trustyshelf.log, caches (art database index, icons, achievements)
 ```
 
 Games in subfolders are found too; `DLC`, `Updates` and `Patches` folders are skipped, as are Switch update
@@ -52,7 +56,7 @@ and DLC packages. PS4 games are folders with an `eboot.bin` inside (`CUSA00223\e
 from `sce_sys\param.sfo`. Xbox 360 games are `.iso` discs, extracted folders with a `default.xex`, XBLA `.xex` files or `.zar`
 archives; the title ID inside the game gives the real name (via the Xenia compatibility list, cached in `data\`), so
 `DVD.iso` in a folder still shows up as the game. Details show Xenia's compatibility rating. Picking `XeniaManager.exe`
-is fine: Boxshelf launches the Canary build from its `Emulators` folder. Wii `.nkit.iso` dumps and Switch `[titleid][v0]` names are cleaned up automatically.
+is fine: (T)rustyShelf launches the Canary build from its `Emulators` folder. Wii `.nkit.iso` dumps and Switch `[titleid][v0]` names are cleaned up automatically.
 
 ## Art, manuals and game info
 
@@ -86,8 +90,8 @@ own icon.
 | Inspect | V | Click the right stick |
 | Shuffle (spin to a random game) | R | Click the left stick |
 | Settings · Customize | S · T | Start · Back (short press) |
-| Quit a game, or Boxshelf from the shelf | | hold L3 + R3 (changeable in Settings → Controller) |
-| Exit Boxshelf: hold 3 s (or hold the lower bar's **Exit** button); a card fills while you hold *(this fork)* | hold X | |
+| Quit a game, or (T)rustyShelf from the shelf | | hold L3 + R3 (changeable in Settings → Controller) |
+| Exit (T)rustyShelf: hold 3 s (or hold the lower bar's **Exit** button); a card fills while you hold *(new in (T)rustyShelf)* | hold X | |
 
 **Inspect**: left/right or D-pad step to the next side (front, spine, back, edge); the stick turns freely and
 settles on a side when released; triggers zoom (zoomed in, the left stick pans gently and the right stick turns); A opens the case, then takes the
@@ -103,17 +107,17 @@ Each system's command line is editable in Settings → (system) → Launch optio
 - Eden: `-f -g "{rom}"` · Cemu: `-f -g "{rom}"` · PPSSPP: `--fullscreen --pause-menu-exit "{rom}"` · PCSX2: `-fullscreen -nogui -batch -- "{rom}"`
 - RPCS3: `--no-gui --fullscreen "{rom}"` · shadPS4: `-f true -g "{rom}"` · Xenia: `--fullscreen=true "{rom}"` · Azahar: `-f "{rom}"`
 
-*Cover time* keeps Boxshelf's black screen on top while the emulator opens (raise it if you see the emulator's
+*Cover time* keeps (T)rustyShelf's black screen on top while the emulator opens (raise it if you see the emulator's
 window flash). GameCube can boot through the real startup sequence if you add an IPL to Dolphin (Settings →
 GameCube → Boot sequence).
 
 ## Controller while a game runs
 
-On the shelf, Guide (or Home / P on the keyboard) opens the same panel with Home shelf, Museum, Sort, Settings and **Power**: Sleep, Restart, Shut down and Quit Boxshelf (the last three need A held). A controller icon beside the clock lights while a pad is connected, the mouse pointer hides while you use the pad, and Settings → Display → Interface size makes everything larger for a TV across the room.
+On the shelf, Guide (or Home / P on the keyboard) opens the same panel with Home shelf, Museum, Sort, Settings and **Power**: Sleep, Restart, Shut down and Quit (T)rustyShelf (the last three need A held). A controller icon beside the clock lights while a pad is connected, the mouse pointer hides while you use the pad, and Settings → Display → Interface size makes everything larger for a TV across the room.
 
 Press **Guide** (or hold **View/Back** for about a second) in a game for the Home menu: the game pauses and a panel slides in from the left with Resume, Save state, Load state, Screenshot, Power and Quit to shelf (hold A). Sleep from a game saves a state first where it can and leaves the game paused; Restart and Shut down close the game properly first. It sends each emulator's default hotkeys — Dolphin F10/Shift+F1/F1/F9, PCSX2 Space/F1/F3/F8, PPSSPP F2/F4/F12, Eden F4/Ctrl+P — and only shows what that emulator can do. If you've remapped them, add `"hotkeys": { "pause": "f10", "save": "shift+f1", "load": "f1", "shot": "f9" }` under that console in `data\\config.json`. If Guide opens the Xbox Game Bar, turn off its controller shortcut (Windows Settings → Gaming → Xbox Game Bar) or use the hold.
 
-A small helper reads XInput directly, so it works while Boxshelf is minimized: hold the quit combo for about a
+A small helper reads XInput directly, so it works while (T)rustyShelf is minimized: hold the quit combo for about a
 second to close the emulator and come back to the shelf. Eden's "stop emulation?" confirmation is switched off in its
 settings before each launch so the combo closes it cleanly; anything still open a few seconds later is ended. Media apps can get their fullscreen key pressed for
 them once their window is up, and optionally a pointer driven by the pad (Settings → Media) for apps with no
@@ -155,7 +159,7 @@ which stays visible behind it.
 
 ## Settings
 
-*(this fork)* Settings → Shelf → **Show game sizes** shows how much room each game takes under its name and in Details:
+*(new in (T)rustyShelf)* Settings → Shelf → **Show game sizes** shows how much room each game takes under its name and in Details:
 a console game's file, a Steam game's install, and the folder of a PC games folder or Epic game (measured in the
 background, so the shelf never waits). Switch 2 build choices name the emulator ("Lichii · build"), and builds that
 come as AppImages are checked for `.nup` support too.
@@ -169,7 +173,7 @@ Point the Wii U page in Settings at `Cemu.exe` and add your games folder. Games 
 ## 3DS (Azahar) and PS3 (RPCS3)
 
 Point the 3DS page at `azahar.exe` and add your games folder. Unencrypted `.cia` files can be installed into
-Azahar from Boxshelf; encrypted ones have to be decrypted first. PS3 games are launched through RPCS3 with
+Azahar from (T)rustyShelf; encrypted ones have to be decrypted first. PS3 games are launched through RPCS3 with
 `--no-gui --fullscreen`; install games and firmware inside RPCS3 first.
 
 ## Phone companion
@@ -187,12 +191,12 @@ bands — and the museum puts a brass divider tab on the shelf edge where each s
 
 The speaker beside the clock mutes; hover it for a volume slider. On the keyboard, - and = nudge the volume.
 
-## PC games without Steam on Linux *(this fork)*
+## PC games without Steam on Linux *(new in (T)rustyShelf)*
 
-Settings → PC games puts every PC game on the PC shelf next to your Steam games, each started by Boxshelf itself,
+Settings → PC games puts every PC game on the PC shelf next to your Steam games, each started by (T)rustyShelf itself,
 with the Home menu and the quit combo like any game.
 
-- **PC games folder.** Every folder in it is a game, named after the folder. Boxshelf tells a Linux game (an AppRun,
+- **PC games folder.** Every folder in it is a game, named after the folder. (T)rustyShelf tells a Linux game (an AppRun,
   a start script, an AppImage or a Linux program) from a Windows one, and picks the game's own program over
   installers, crash reporters and helpers; *Program for each game* chooses another for a folder holding several.
   A folder of **your own copies** can stand in for shared ones (a game that keeps its saves in its own folder), and
@@ -209,11 +213,11 @@ with the Home menu and the quit combo like any game.
 
 ## PC (Steam) art
 
-Steam only keeps a box cover for games you've looked at in its library grid. For the rest, Boxshelf fetches the cover,
+Steam only keeps a box cover for games you've looked at in its library grid. For the rest, (T)rustyShelf fetches the cover,
 hero image, release date, developer, genres, Metacritic score and screenshots from Steam's public store (no account or
 key) and keeps them in `data\steam-art` and `steam-info.json`. Turning off automatic covers in Settings stops it.
 
-*(this fork)* Epic games use Epic's own box art. Settings → Box art & manuals → PC games shows every PC game's cover and
+*(new in (T)rustyShelf)* Epic games use Epic's own box art. Settings → Box art & manuals → PC games shows every PC game's cover and
 where it comes from (your pick, the store's box art, Steam's art, or a made-up case); pick a game to change it.
 
 ## Sounds
@@ -235,7 +239,7 @@ RetroAchievements and log in inside Dolphin (Config → Achievements; GameCube o
 Xbox 360 models take the disc upright through a front slot; GameCube opens a lid; `"slot": "top"|"front"` in
 console.json overrides that, and `"museumYaw"` / `"museumScale"` turn or resize the model on the museum shelf only) (Customize →
 Console → Add 3D model, or **Find a model**, which opens a search of free downloadable models in your browser and
-installs the first .glb / .zip you save to Downloads — check each model's licence; Boxshelf doesn't bundle console
+installs the first .glb / .zip you save to Downloads — check each model's licence; (T)rustyShelf doesn't bundle console
 models): it rises in, its lid opens, the disc lands on it, the lid closes. Loose accessories in the file are
 hidden; a lid is found by name (`lid`, `cover`, `door`…) or by shape. Tweak with `console.json`:
 
@@ -250,9 +254,9 @@ replace the media in Inspect. Files with several copies of the object are fine: 
 is used and the game's own cover goes where that picture was. `cart.json` (`{ "yaw": 0, "pitch": 0, "roll": 0,
 "scale": 1 }`) adjusts the automatic orientation. Customize → Test replays the insert animation without launching.
 
-## Privacy and what Boxshelf changes on your PC
+## Privacy and what (T)rustyShelf changes on your PC
 
-Boxshelf has no accounts, ads or telemetry, and everything it saves stays in its own folder (`data\`) and in the
+(T)rustyShelf has no accounts, ads or telemetry, and everything it saves stays in its own folder (`data\`) and in the
 `covers` folders next to your games. It goes online only for:
 
 | Service | When | What it's sent |
@@ -270,10 +274,10 @@ Boxshelf has no accounts, ads or telemetry, and everything it saves stays in its
 | Internet Archive | Retro TV commercials, magazines and guides you search for | search text |
 | Sketchfab, Poly Pizza | Only when you press **Find a model** (opens your browser) | the console name |
 | Wikimedia Commons | Only when you press **Find a logo** (Customize) | the console name |
-| GitHub *(this fork)* | Only when you press **Get legendary** | nothing (downloads legendary's release) |
-| Epic Games, through legendary *(this fork)* | Only once you sign in: your library, installs, starting a game | your Epic sign-in (kept by legendary in `data/legendary`) |
-| Epic's image CDN *(this fork)* | Box art for your Epic games | the picture addresses Epic lists |
-| umu database *(this fork)* | Starting a Windows game through Proton, once per game | the store and the game's ID, for its protonfixes |
+| GitHub *(new in (T)rustyShelf)* | Only when you press **Get legendary** | nothing (downloads legendary's release) |
+| Epic Games, through legendary *(new in (T)rustyShelf)* | Only once you sign in: your library, installs, starting a game | your Epic sign-in (kept by legendary in `data/legendary`) |
+| Epic's image CDN *(new in (T)rustyShelf)* | Box art for your Epic games | the picture addresses Epic lists |
+| umu database *(new in (T)rustyShelf)* | Starting a Windows game through Proton, once per game | the store and the game's ID, for its protonfixes |
 
 The **phone companion** is off until you switch it on. It runs a small web server on your home network only:
 it answers private-range addresses only, phones pair with a 6-digit PIN (5 wrong tries lock pairing for 10
@@ -283,23 +287,23 @@ hashes, and pictures go out under random IDs, never file paths.
 All API keys and passwords you enter are stored encrypted for your Windows account, like the RetroAchievements key.
 
 Fonts are bundled; nothing is loaded from Google. Your RetroAchievements key and other API keys are stored encrypted for your Windows
-account (it has to be entered again after moving the folder to another PC). `data\boxshelf.log` writes your home
+account (it has to be entered again after moving the folder to another PC). `data\trustyshelf.log` writes your home
 folder as `~` and is kept under about 4 MB.
 
-Changes outside Boxshelf's folder:
-- **Emulator settings.** So Home → Quit closes games cleanly, Boxshelf turns off the "are you sure?" questions in
-  Eden / yuzu, PCSX2 and RPCS3 before a launch (each file is backed up once as `<file>.boxshelf-bak`; Settings →
+Changes outside (T)rustyShelf's folder:
+- **Emulator settings.** So Home → Quit closes games cleanly, (T)rustyShelf turns off the "are you sure?" questions in
+  Eden / yuzu, PCSX2 and RPCS3 before a launch (each file is backed up once as `<file>.trustyshelf-bak`; Settings →
   Library & art → *Restore emulator settings* puts them back). Dolphin gets borderless fullscreen and no stop
   question on its command line for that run only — its own settings files aren't touched.
 - **Start with Windows** (only if you switch it on): a shortcut in your Startup folder or an entry under
   `HKCU\…\Run`; switch it off in Settings before deleting the folder.
 - While a game runs, a small controller helper (PowerShell, in `data\padwatch`) watches the pad for Guide / the
   quit combo, presses the emulator's own hotkeys for the Home menu, and moves the mouse pointer out of the way. It
-  only acts while the game is in front and exits on its own if Boxshelf closes.
+  only acts while the game is in front and exits on its own if (T)rustyShelf closes.
 
 ## Building the exe
 
-`Build Boxshelf.exe.bat` makes a portable `Boxshelf.exe` in `dist\`. The exe is locked down against tampering
+`Build TrustyShelf.exe.bat` makes a portable `TrustyShelf.exe` in `dist\`. The exe is locked down against tampering
 (Electron fuses): it only runs its own packed, integrity-checked app files, and it can't be started as a plain
 Node.js runtime or with a debugger attached. The exe isn't code-signed, so Windows may show a SmartScreen
 warning the first time; choose **More info → Run anyway**.
@@ -309,20 +313,21 @@ warning the first time; choose **More info → Run anyway**.
 Box art and metadata: [libretro thumbnails](https://thumbnails.libretro.com), [LaunchBox Games Database](https://gamesdb.launchbox-app.com),
 [GameTDB](https://www.gametdb.com). Manuals: [Internet Archive](https://archive.org) collections and
 [GamesDatabase.org](https://www.gamesdatabase.org). Box art and manuals are © their publishers. Fonts are under the
-SIL Open Font License (see `renderer\fonts\LICENSES`). This fork's PC games use
+SIL Open Font License (see `renderer\fonts\LICENSES`). (T)rustyShelf's PC games use
 [legendary](https://github.com/derrod/legendary) and [umu-launcher](https://github.com/Open-Wine-Components/umu-launcher). Bundled libraries and their licences: see
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 ## Licence
 
-Boxshelf is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
+(T)rustyShelf is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
 as published by the Free Software Foundation, version 3 ([LICENSE](LICENSE)). It comes with no warranty.
 
-**The name and logo:** the GPL covers the code, not the Boxshelf name or its logo. If you release a fork or a
-modified version, please give it a different name and logo, so people can tell it apart from the official Boxshelf
-(saying it's "based on Boxshelf" is welcome).
+**The name and logo:** (T)rustyShelf is a renamed fork of Boxshelf, as Boxshelf's author asks of forks: the GPL covers
+the code, not the Boxshelf name or its logo, which stay Boxshelf's. If you release a fork or a modified version of
+(T)rustyShelf, please give it a different name and logo too, so people can tell them apart (saying it's "based on
+(T)rustyShelf" is welcome).
 
 ## When something's off
 
-`data\boxshelf.log` records launches, downloads, matches that failed and renderer errors. Settings → Startup & system → *Open app folder* gets you there. Try Settings → Display →
+`data\trustyshelf.log` records launches, downloads, matches that failed and renderer errors. Settings → Startup & system → *Open app folder* gets you there. Try Settings → Display →
 *Visual effects → Smooth* if the shelf stutters on a large or high-refresh screen.

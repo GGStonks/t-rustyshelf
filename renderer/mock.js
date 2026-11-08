@@ -1,7 +1,9 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): most of this file is Boxshelf's
+// renderer/mock.js; modified for (T)rustyShelf (see the git history).
 // Demo data so the screen can be previewed in a normal browser (no Electron).
-// The real app replaces window.boxshelf from preload.js, so this file does nothing there.
+// The real app replaces window.trustyshelf from preload.js, so this file does nothing there.
 (function(){
-if(window.boxshelf)return;
+if(window.trustyshelf)return;
 const titles={
   gc:["Aether Drift","Bramblewood Tales","Cinder Circuit","Coral Kingdom","Echo Hollow","Ferrous Fist","Gale Riders","Kettle Knight","Lumen Isle","Moonmallow","Orbit Odyssey","Sky Harbor","Tidewalker"],
   wii:["Bubble Bay Bowling","Clockwork Carnival","Felt Friends","Jumble Jam","Paper Pilots","Snowglobe Party","Woolly Wonders"],
@@ -23,7 +25,7 @@ const consoles=[
   {id:"ps3",name:"PS3",emulatorName:"RPCS3",exeNames:["rpcs3.exe"],extensions:["bin","iso"],gameArgs:'--no-gui --fullscreen "{rom}"'},
   {id:"n3ds",name:"3DS",emulatorName:"Azahar",exeNames:["azahar.exe"],extensions:["3ds","cci","cxi"],gameArgs:'-f "{rom}"'}
 ];
-const root="C:\\Users\\you\\Desktop\\Boxshelf";
+const root="C:\\Users\\you\\Desktop\\TrustyShelf";
 const emu={gc:"Dolphin\\Dolphin.exe",wii:"Dolphin\\Dolphin.exe",wiiu:"Cemu\\Cemu.exe",sw:"Eden\\eden.exe",psp:"PPSPP\\PPSSPPWindows64.exe",ps3:"RPCS3\\rpcs3.exe",n3ds:"Azahar\\azahar.exe"};
 const folder={gc:"Gamecube",wii:"Wii",wiiu:"Wii U",sw:"Switch",psp:"PSP",ps3:"PS3",n3ds:"3DS"};
 // ?sw2=1 (beta.3 device test): a Switch 2 shelf with three Eglantine builds, for Settings → Switch 2 → Builds. Off by default,
@@ -60,7 +62,7 @@ if(RETRO)Object.assign(ext,{psx:"cue",snes:"sfc",gba:"gba",megadrive:"md",dreamc
 if(WAVE2)Object.assign(ext,{saturn:"chd",arcade:"zip",atari2600:"a26"});
 let onExit=()=>{};const apiHooks={};
 const wait=ms=>new Promise(r=>setTimeout(r,ms));const mockDl={};
-window.boxshelf={
+window.trustyshelf={
   // Demo platform: 'android' inside the Capacitor shell (window.Capacitor), else 'web'; ?platform=windows|android overrides for testing
   platform:(()=>{const q=(location.search.match(/[?&]platform=(\w+)/)||[])[1];const os=q||(window.Capacitor?'android':'web');const all=os==='windows';
     return {os,caps:{steam:all,power:all,homeMenu:all,emuSettings:all,autostart:all,displays:all,folders:all,companionServer:all,winMode:all,dolphinIpl:all,raAutoConfig:all,winStores:all}};})(),
@@ -92,7 +94,7 @@ window.boxshelf={
       previewYtMove:async(rect,show)=>{window.__ytOn=!!show;if(rect)window.__ytRect=rect},previewYtStop:async()=>{window.__ytOn=false;window.__ytStops=(window.__ytStops||0)+1},
       onPreviewYt:fn=>{ytFns.push(fn)},previewClearSteam:async()=>true,
       onPreviewClip:fn=>{clipFns.push(fn)},onClipProgress:fn=>{progFns.push(fn)},
-      // (beta.8) ?deck=desktop: a Steam Deck in Desktop Mode, Boxshelf not started by Steam (?deck=steam: started by Steam)
+      // (beta.8) ?deck=desktop: a Steam Deck in Desktop Mode, (T)rustyShelf not started by Steam (?deck=steam: started by Steam)
       deckInfo:async()=>{const m=(location.search.match(/[?&]deck=(\w+)/)||[])[1];return m?{linux:true,deck:true,steam:m==="steam",gameMode:false,canAdd:true,inSteam:!!window.__inSteam,flags:[]}:{linux:false,deck:false,steam:false,gameMode:false,canAdd:false}},
       addToSteam:async()=>{await wait(200);window.__added=(window.__added||0)+1;window.__inSteam=true;return {ok:true,users:1,updated:false,reopened:true}},
       clipStatus:async()=>({supported:true,helper,getting:false,n:kept.size,bytes:kept.size*4e6}),
@@ -163,7 +165,7 @@ window.boxshelf={
     const list=[{key:"cm-"+id+"-0",source:"commons",label:`${word} logo`,licence:"Public domain",by:"",preview:svg(960,163,"#111")},{key:"cm-"+id+"-1",source:"commons",label:`${word} symbol`,licence:"CC0",by:"",preview:svg(960,960,"#7b6cff","◆")},
       {key:"cm-"+id+"-2",source:"commons",label:`${word} logo, stacked`,licence:"Public domain",by:"",preview:svg(600,960,"#fff","S","#e60012")},{key:"cm-"+id+"-3",source:"commons",label:"Broken file",licence:"Public domain",by:"",preview:"data:image/png;base64,AAAA"}];
     return{ok:true,list,offline:false}},
-  useLogo:async(id,key)=>{const L=await window.boxshelf.findLogos(id);const c=L.list.find(x=>x.key===key);if(!c)return{ok:false,error:"That logo is no longer offered."};const T=window.__mockThemes=window.__mockThemes||{};const t=T[id]=T[id]||{};t.logoPrev=true;t.logo=URL.createObjectURL(new Blob([decodeURIComponent(c.preview.split(",")[1])],{type:"image/svg+xml"}));return{ok:true}}, /* (a blob: address, as the CSP lets the logo be read; the app hands over bsfile: ones) */
+  useLogo:async(id,key)=>{const L=await window.trustyshelf.findLogos(id);const c=L.list.find(x=>x.key===key);if(!c)return{ok:false,error:"That logo is no longer offered."};const T=window.__mockThemes=window.__mockThemes||{};const t=T[id]=T[id]||{};t.logoPrev=true;t.logo=URL.createObjectURL(new Blob([decodeURIComponent(c.preview.split(",")[1])],{type:"image/svg+xml"}));return{ok:true}}, /* (a blob: address, as the CSP lets the logo be read; the app hands over bsfile: ones) */
   restoreLogo:async id=>{const T=window.__mockThemes||{},t=T[id];if(!t||!t.logoPrev)throw new Error("No earlier logo to bring back.");t.logo=null;t.logoPrev=false;return true},
   saveConsoleFit:async(id,p)=>{(window.__fitSaves=window.__fitSaves||[]).push([id,p]);return p},
   openThemeFolder:async()=>{},
@@ -174,9 +176,9 @@ window.boxshelf={
   // 1.55 Settings APIs (fakes): displays, backup / restore, problem report, play history, account status
   listDisplays:async()=>[{id:"1",label:"Display 1 — 1920×1080 (main)",primary:true,current:true,width:1920,height:1080},{id:"2",label:"Display 2 — 3840×2160",primary:false,current:false,width:3840,height:2160}],
   moveToDisplay:async id=>{(window.__moves=window.__moves||[]).push(id);return true},
-  backupSettings:async()=>({ok:true,file:"C:\\Users\\you\\Documents\\Boxshelf settings.json"}),
+  backupSettings:async()=>({ok:true,file:"C:\\Users\\you\\Documents\\TrustyShelf settings.json"}),
   restoreSettings:async()=>{config=Object.assign(JSON.parse(JSON.stringify(config)),{ui:Object.assign({},config.ui,{theme:"aurora"})});(apiHooks.lib||[]).forEach(f=>f({restored:1}));(apiHooks.hist||[]).forEach(f=>f({restored:1}));return {ok:true}},
-  reportProblem:async()=>({ok:true,file:"C:\\Users\\you\\Desktop\\Boxshelf problem report.zip"}),
+  reportProblem:async()=>({ok:true,file:"C:\\Users\\you\\Desktop\\TrustyShelf problem report.zip"}),
   // (1.82) the beta page: a newer beta is out (tests check the Settings rows and the shelf's notice)
   updateCheck:async()=>({current:"1.82.0-beta.1",latest:"1.82.0-beta.2",newer:true,url:"https://example.com/releases/beta.2",notes:"## What's new\n- **Video previews** in Details\n- A new [Details](https://example.com) page\n- <b>Ten</b> more consoles",links:{page:"https://example.com/",releases:"https://example.com/releases",issues:"https://example.com/issues/new/choose"},checkedAt:Date.now()}),
   onUpdate:cb=>{if(/[?&]update=1/.test(location.search))setTimeout(()=>cb({current:"1.82.0-beta.1",latest:"1.82.0-beta.2",newer:true,url:"https://example.com/releases/beta.2",notes:"## What's new\n- **Video previews** in Details\n- A new [Details](https://example.com) page\n- <b>Ten</b> more consoles\n- Fourth item"}),4000)}, // only on a test page that asks for it
@@ -187,14 +189,14 @@ window.boxshelf={
     // ScreenScraper (1.71): an account with no developer login answers "developer login not accepted" (window.__ssNoDev)
     screenscraper:config.keys&&config.keys.ssUser&&config.keys.ssPass?(window.__ssNoDev&&!config.keys.ssDevId?{state:"fail",at:Date.now(),msg:"developer login not accepted"}:{state:"ok",at:Date.now(),msg:"Working",left:19876}):{state:"none",at:0,msg:"Not set up"}}),
   clipboardText:async()=>String(window.__bsClip||"").split(/\r?\n/)[0].trim(), // (beta.9: tests set window.__bsClip)
-  testApi:async s=>{await wait(300);const st=await window.boxshelf.apiStatus();(apiHooks.api||[]).forEach(f=>f(st));return st[s]},
+  testApi:async s=>{await wait(300);const st=await window.trustyshelf.apiStatus();(apiHooks.api||[]).forEach(f=>f(st));return st[s]},
   onApiStatus:fn=>{(apiHooks.api=apiHooks.api||[]).push(fn)},
   raEmulators:async()=>[{system:"gc",emulator:"Dolphin",state:"ok",user:"paul"},{system:"wii",emulator:"Dolphin",state:"off",user:"paul",detail:"Achievements are turned off in Dolphin"},{system:"psp",emulator:"PPSSPP",state:"signed-out"},{system:"ps2",emulator:"PCSX2",state:"no-emulator"}],
   // the rest of preload.js, as neutral fakes (empty lists, no account, nothing opened) so every screen runs here the way it
   // does with nothing set up: a call the renderer makes must never be a TypeError in the preview (test scenarios patch these)
   log:()=>{},uiBusy:()=>{},homeMeta:()=>{},shelfInfo:()=>{},openShelfMenu:()=>{},shelfMenuKey:()=>{},
   onLaunchStatus:()=>{},onRunReady:()=>{},onRunQuitting:()=>{},onRunAside:()=>{},onRaUnlocks:()=>{},onTvFound:()=>{},onShelfMenu:()=>{},onShelfMenuRequest:()=>{},onUiScale:()=>{},onArchiveProgress:()=>{},
-  cachedLibrary:async()=>null,scanIfChanged:async()=>window.boxshelf.scan(),
+  cachedLibrary:async()=>null,scanIfChanged:async()=>window.trustyshelf.scan(),
   raEnabled:async()=>({enabled:false,systems:["gc","wii","psp","ps2"]}),raProfile:async()=>null,raShelf:async()=>({}),raProgress:async()=>null,
   
   openExternal:async()=>true,openSongsFolder:async()=>true,openLibraryFolder:async()=>true,openAppFolder:async()=>true,restoreEmuSettings:async()=>[],
@@ -231,11 +233,11 @@ window.boxshelf={
   archiveDownload:(id,kind,title)=>new Promise((res,rej)=>{mockDl[id]={rej,t:setTimeout(()=>{delete mockDl[id];res({existed:false,name:`${title}.pdf`,count:0})},4000)}}),
   archiveCancel:async id=>{const j=mockDl[id];if(!j)return false;clearTimeout(j.t);delete mockDl[id];setTimeout(()=>j.rej(new Error("Cancelled.")),50);return true},
   readingWhere:async()=>({root,custom:false,magazines:root+"\\Magazines",guides:root+"\\Guides"}),
-  readingOld:async()=>[{root:"C:\\Users\\you\\Desktop\\Old Boxshelf",why:"log",magazines:{files:12,bytes:9.6e8},guides:{files:3,bytes:2.1e8},files:15,bytes:1.17e9}],
+  readingOld:async()=>[{root:"C:\\Users\\you\\Desktop\\Old (T)rustyShelf",why:"log",magazines:{files:12,bytes:9.6e8},guides:{files:3,bytes:2.1e8},files:15,bytes:1.17e9}],
   readingImport:async()=>{await wait(600);return {copied:15,skipped:0,failed:0,bytes:1.17e9,total:15}},readingImportStop:async()=>true,onReadingImport:()=>{}
 };
-artStudioMock(window.boxshelf,{consoles,titles,config:()=>config,root,folder,ext,wait});
-manualStudioMock(window.boxshelf,{consoles,titles,config:()=>config,root,folder,ext,wait});
+artStudioMock(window.trustyshelf,{consoles,titles,config:()=>config,root,folder,ext,wait});
+manualStudioMock(window.trustyshelf,{consoles,titles,config:()=>config,root,folder,ext,wait});
 })();
 
 // ---------- Art Studio (1.67) fake: the whole art:* contract (scratchpad/studio/SPEC.md) ----------
@@ -278,7 +280,7 @@ const DRAW={front:cover,back,spine,disc};
 const SRC={launchbox:"LaunchBox",libretro:"libretro",gametdb:"GameTDB",steam:"Steam",steamgriddb:"SteamGridDB",screenscraper:"ScreenScraper",current:"In use",earlier:"Earlier"};
 const RG={usa:"USA",eur:"EUR",jpn:"JPN",world:"World"};
 const TDB=new Set(["gc","wii","wiiu"]);
-// every version Boxshelf "found" for one game + part; deterministic per game, so lists are stable between visits
+// every version (T)rustyShelf "found" for one game + part; deterministic per game, so lists are stable between visits
 function versions(sys,g,part){const n=hash(g.title+part),L=[],add=(key,source,reg,ed,kind,w,h,x={})=>L.push({key,source,region:reg,edition:ed,kind,w,h,...x});
   if(g.noCands&&g.noCands.includes(part)&&!(part==="disc"&&indexBuilt))return L;
   if(g.only){add("cur-"+part,"current",g.region,"original","scan",600,860);return L}
@@ -342,7 +344,7 @@ o.consoles.forEach(c=>{styles[c.id]={preset:"authentic",region:"usa",parts:{}};
     if(c.id==="gc"&&(i===0||i===3)){g.lock.front={look:"hd"};const L=versions(c.id,g,"front"),hd=L.find(x=>x.kind==="hd");if(hd)g.sel.front=hd.key}
     if(c.id==="wii"&&i===1){g.lock.disc={look:"region:jpn"};g.sel.disc="lb-jpn-d"}
     if(c.id==="gc"&&i===4)g.frozen=true; // a game locked as it is (1.68)
-    // pictures from before 1.68 that Boxshelf can't vouch for: kept (locked) at the console's first style change
+    // pictures from before 1.68 that (T)rustyShelf can't vouch for: kept (locked) at the console's first style change
     g.legacy=PARTS.filter(p=>g.sel[p]&&(hash(t+p)%5===1));
     return g})});
 const keptOnce={};
@@ -450,7 +452,7 @@ const hash=s=>{let h=2166136261;for(const c of String(s)){h^=c.charCodeAt(0);h=M
 const xe=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const url=s=>"data:image/svg+xml;charset=utf-8,"+encodeURIComponent(s);
 const LN={en:"English",fr:"French",de:"German",ja:"Japanese",es:"Spanish",it:"Italian"},RN={usa:"USA",eur:"Europe",jpn:"Japan"};
-const PREFS=[{id:"best",label:"Best English manual",sub:"The sharpest complete English manual (how Boxshelf always chose)"},{id:"region:eur",label:"English · Europe",sub:"PAL booklets in English"},{id:"region:jpn",label:"Japanese",sub:"Japanese booklets"},{id:"lang:fr",label:"French",sub:"Manuals in French"},{id:"lang:de",label:"German",sub:"Manuals in German"},{id:"lang:es",label:"Spanish",sub:"Manuals in Spanish"},{id:"lang:it",label:"Italian",sub:"Manuals in Italian"}];
+const PREFS=[{id:"best",label:"Best English manual",sub:"The sharpest complete English manual (how (T)rustyShelf always chose)"},{id:"region:eur",label:"English · Europe",sub:"PAL booklets in English"},{id:"region:jpn",label:"Japanese",sub:"Japanese booklets"},{id:"lang:fr",label:"French",sub:"Manuals in French"},{id:"lang:de",label:"German",sub:"Manuals in German"},{id:"lang:es",label:"Spanish",sub:"Manuals in Spanish"},{id:"lang:it",label:"Italian",sub:"Manuals in Italian"}];
 // a booklet's first page: the game's colour, its title, the language's word for "instruction booklet", blurred when low-res
 function page(title,lang,w,v){const h=(hash(title)+v*37)%360,blur=w&&w<700?2.2:w&&w<1000?.9:0,word={en:"INSTRUCTION BOOKLET",fr:"MODE D'EMPLOI",de:"SPIELANLEITUNG",ja:"取扱説明書",es:"MANUAL DE INSTRUCCIONES",it:"ISTRUZIONI"}[lang]||"INSTRUCTION BOOKLET";
   return url(`<svg xmlns="http://www.w3.org/2000/svg" width="260" height="360" viewBox="0 0 260 360"><g ${blur?`filter="url(#b)"`:""}><defs><filter id="b"><feGaussianBlur stdDeviation="${blur}"/></filter></defs><rect width="260" height="360" fill="#f3efe4"/><rect x="0" y="0" width="260" height="120" fill="hsl(${h},55%,38%)"/><circle cx="200" cy="70" r="70" fill="hsl(${(h+40)%360},70%,60%)" opacity=".5"/><text x="18" y="160" font-family="Arial" font-weight="800" font-size="20" fill="#222">${xe(title.slice(0,22))}</text><text x="18" y="186" font-family="Arial" font-size="11" letter-spacing="1.5" fill="#555">${xe(word)}</text>${[0,1,2,3,4,5].map(i=>`<rect x="18" y="${214+i*18}" width="${150+((v+i)*29)%70}" height="6" fill="#bbb"/>`).join("")}</g></svg>`)}

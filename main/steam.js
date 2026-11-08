@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/steam.js apart from the app's name ((T)rustyShelf).
 // Reads installed Steam games, playtime and cover art straight from the Steam folder.
 const fs = require('fs');
 const path = require('path');

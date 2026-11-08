@@ -1,5 +1,7 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// android-app/ci/addgames-test.js apart from the app's name ((T)rustyShelf).
 // (beta.7) Add games (main/addgames.js) in plain Node: a folder of games scanned (each folder's main program picked,
-// helpers left out), names from programs, and a pretend Playnite library turned into what Boxshelf adds.
+// helpers left out), names from programs, and a pretend Playnite library turned into what (T)rustyShelf adds.
 // node ci/addgames-test.js
 const fs = require('fs'), path = require('path'), os = require('os');
 const A = require('../../main/addgames');
@@ -43,7 +45,7 @@ ok(P.pc.length === 1 && ori.title === 'Ori' && /D:\\Games\\Ori\\ori\.exe$/.test(
   'Playnite: a game you added by hand comes over with its program ({InstallDir} filled in), options, cover and favourite', JSON.stringify(ori));
 ok(P.consoles.gc && P.consoles.gc.count === 2 && P.consoles.gc.dirs.length === 1 && P.consoles.gc.dirs[0] === 'E:\\ROMs\\GC' && P.consoles.gc.emulatorDir === 'D:\\Emus\\Dolphin',
   'Playnite: emulated games become their folder on the matching console shelf, with the emulator\'s folder', JSON.stringify(P.consoles));
-ok(P.skipped.store === 1 && P.skipped.hidden === 1 && P.skipped.link === 1, 'Playnite: store games (Boxshelf reads Steam itself), hidden games and web links are left out and counted', JSON.stringify(P.skipped));
+ok(P.skipped.store === 1 && P.skipped.hidden === 1 && P.skipped.link === 1, 'Playnite: store games ((T)rustyShelf reads Steam itself), hidden games and web links are left out and counted', JSON.stringify(P.skipped));
 
 fs.rmSync(root, { recursive: true, force: true });
 console.log(fails ? `add games test: ${fails} failed` : 'add games test: all good');

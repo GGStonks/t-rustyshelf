@@ -1,8 +1,10 @@
-# Boxshelf full review (beta.8, 2026-11-06)
+<!-- Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+     docs/REVIEW-beta8.md apart from the app's name ((T)rustyShelf). -->
+# (T)rustyShelf full review (beta.8, 2026-11-06)
 
 Six independent reviews covered the main process, the shelf (app.js), the museum, Settings and setup, the Android build
 (web extras and Java), and the new console trailers. Every finding below was checked against the code before
-anything was changed. Nothing that changes how Boxshelf looks or moves was touched, apart from removing glitches.
+anything was changed. Nothing that changes how (T)rustyShelf looks or moves was touched, apart from removing glitches.
 
 ## Fixed in beta.8
 
@@ -17,7 +19,7 @@ anything was changed. Nothing that changes how Boxshelf looks or moves was touch
   - Its self-update only runs between clips.
   - Downloading it can't leave half a file behind.
   - Its checksum is computed without freezing the app.
-- **Tested for real:** offering yt-dlp a JavaScript runtime (Node or Deno) made YouTube hand out streams that refuse downloads (HTTP 403), so Boxshelf deliberately doesn't.
+- **Tested for real:** offering yt-dlp a JavaScript runtime (Node or Deno) made YouTube hand out streams that refuse downloads (HTTP 403), so (T)rustyShelf deliberately doesn't.
 - Smaller fixes:
   - A clip header with an unusual layout is read correctly.
   - The shelf no longer lists the clip folder on every rest.
@@ -40,7 +42,7 @@ anything was changed. Nothing that changes how Boxshelf looks or moves was touch
   - Collection rows and Add games rows no longer hold the previous visit's settings: deleting or renaming a collection after reopening Settings silently did nothing.
 
 ### The shelf and the museum
-- **Holds** (A on the disc in Inspect, a held Restart / Shut down, the museum's hold) end, unfinished, if the touch is cancelled or Boxshelf loses focus. A pulled-down notification shade or Alt-Tab mid-hold could start a game or restart the PC.
+- **Holds** (A on the disc in Inspect, a held Restart / Shut down, the museum's hold) end, unfinished, if the touch is cancelled or (T)rustyShelf loses focus. A pulled-down notification shade or Alt-Tab mid-hold could start a game or restart the PC.
 - **Clicking a side case** no longer moves the shelf behind a note card, Sort, Achievements or Customize.
 - **Note cards** (What's new, updates, the trailer helper) wait for the quick menu to close instead of opening on top of it.
 - **Non-standard controllers** whose triggers rest at -1 no longer look "held" forever. That used to swallow every press after Settings closed, and the screen never dimmed.
@@ -70,7 +72,7 @@ Most valuable first.
 5. **Details screenshots** load at full size for the small strip and the backdrop. Fix: use the existing thumbnail sizes (no visible change).
 6. **Settings rebuilds its rows 4-5 times per button press**, and search rebuilds everything on each key. Caching would make Settings snappier on the Thor.
 7. **Every settings save** writes and fsyncs the whole file on the main thread. On a slow disk it can stall for tens of milliseconds. Fix: an async writer.
-8. **Android saving and art (Java):** file writes run on the plugin's single thread, art saving lists the whole "Boxshelf Art" folder for every picture (slow with thousands of games), and thread pools aren't shut down when the app closes. Worth a careful pass with a device in hand.
+8. **Android saving and art (Java):** file writes run on the plugin's single thread, art saving lists the whole "TrustyShelf Art" folder for every picture (slow with thousands of games), and thread pools aren't shut down when the app closes. Worth a careful pass with a device in hand.
 9. **The bottom screen** acts on the top screen's game if you tap it in the half second before it updates. That's arguably right (it's the game you're looking at), so it's left as is.
 10. Smaller items:
     - Hold progress bars use `width` instead of a transform.

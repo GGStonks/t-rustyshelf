@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/previews.js apart from the app's name ((T)rustyShelf).
 // (beta.7) Video previews: the clip that plays in Details (and, if chosen, behind the shelf) when you rest on a game.
 // Where a game's preview comes from, first found wins:
 //   1. a video file you already have: ES-DE / EmuDeck "downloaded_media/<console>/videos", RetroBat / Batocera "videos"
@@ -34,7 +36,7 @@ function index(dir) {
 }
 function forget() { listing.clear(); }
 
-// ES-DE's own console folder names where they differ from Boxshelf's
+// ES-DE's own console folder names where they differ from (T)rustyShelf's
 const ESDE = { sw: 'switch', sw2: 'switch2', x360: 'xbox360', megadrive: 'genesis', segacd: 'megacd', pcengine: 'tg16' };
 function homes() { const h = process.env.USERPROFILE || process.env.HOME || os.homedir(); return h ? [h] : []; }
 // every folder that may hold this console's videos
@@ -73,7 +75,7 @@ function countFiles(def, sc, games, opts = {}) {
 const steamDir = () => path.join(dataDir, 'previews', 'steam');
 function get(url, hops = 0) {
   return new Promise((resolve, reject) => {
-    const req = https.get(url, { headers: { 'User-Agent': 'Boxshelf' } }, res => {
+    const req = https.get(url, { headers: { 'User-Agent': 'TrustyShelf' } }, res => {
       if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location && hops < 5) { res.resume(); return resolve(get(new URL(res.headers.location, url).toString(), hops + 1)); }
       if (res.statusCode !== 200) { res.resume(); return reject(new Error('HTTP ' + res.statusCode)); }
       const parts = []; let size = 0; res.on('data', c => { size += c.length; if (size > 24 << 20) { req.destroy(new Error('too big')); return; } parts.push(c); });

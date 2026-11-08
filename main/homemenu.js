@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/homemenu.js apart from the app's name ((T)rustyShelf).
 // The in-game Home menu: a transparent overlay window over the running emulator (it never takes focus, so the game
 // stays fullscreen and keeps receiving keys). The XInput helper (padwatch) reports the Home trigger and, while the
 // menu is open, the controller buttons; this module shows the menu, pauses the game and sends the emulator's own
@@ -46,7 +48,7 @@ let shelf = null;   // the shelf version of the menu while it's open: { open: tr
 let hideT = null;
 
 let getMainWin = () => null;
-// the screen Boxshelf itself is on (a TV set up as the second display), not always the primary one
+// the screen (T)rustyShelf itself is on (a TV set up as the second display), not always the primary one
 function displayBounds() { try { const m = getMainWin(); if (m && !m.isDestroyed()) return screen.getDisplayMatching(m.getBounds()).bounds; } catch {} return screen.getPrimaryDisplay().bounds; }
 // menu-wide preferences: which face button confirms, and the chosen audio output device
 function uiExtras() { let u = {}; try { u = getUi() || {}; } catch {} return { confirmButton: u.confirmButton === 'b' ? 'b' : 'a', audioOut: typeof u.audioOut === 'string' ? u.audioOut : '' }; }
@@ -64,7 +66,7 @@ function ensureWindow() {
   if (win && !win.isDestroyed()) { try { const b = displayBounds(), c = win.getBounds(); if (b.x !== c.x || b.y !== c.y || b.width !== c.width || b.height !== c.height) win.setBounds(b); } catch {} return win; }
   const b = displayBounds();
   win = new BrowserWindow({ x: b.x, y: b.y, width: b.width, height: b.height, show: false, frame: false, transparent: true, focusable: false, skipTaskbar: true,
-    resizable: false, movable: false, hasShadow: false, fullscreenable: false, backgroundColor: '#00000000', title: 'Boxshelf Home',
+    resizable: false, movable: false, hasShadow: false, fullscreenable: false, backgroundColor: '#00000000', title: '(T)rustyShelf Home',
     webPreferences: { preload: path.join(__dirname, '..', 'preload-home.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false } });
   win.setIgnoreMouseEvents(true);
   win.loadFile(path.join(__dirname, '..', 'renderer', 'home.html'));
@@ -133,20 +135,20 @@ async function pauseNow(s) {
   log('home menu: open', m.title || '', s.paused ? '(paused)' : k.pause ? '(could not pause)' : '');
 }
 // The PC woke from a Sleep chosen in this menu: the game was left paused for the menu's Resume, so the menu comes back
-// over it. Boxshelf can't read the emulator's pause state: a user who unpaused in the emulator first got a Home that
+// over it. (T)rustyShelf can't read the emulator's pause state: a user who unpaused in the emulator first got a Home that
 // didn't pause the game and a Resume that paused it (and every Home / Resume after that stayed the wrong way round).
 function woke() {
   const s = session; if (!s || !s.slept) return; s.slept = false; if (s.open || !s.paused) return;
   log('home menu: woke from sleep, menu back over the paused game');
   setTimeout(() => { if (session === s && !s.open && s.paused) Promise.resolve(open()).catch(e => log('home menu', e && e.message)); }, 1500);
 }
-// the game's window is up and Boxshelf has stepped aside: from now on the menu can pause it. A menu opened while it was
+// the game's window is up and (T)rustyShelf has stepped aside: from now on the menu can pause it. A menu opened while it was
 // starting is brought back on top of the game (which just came to the front) and the game is paused now.
 function ready() {
   const s = session; if (!s || s.ready) return; s.ready = true;
   if (s.open) { showWin(); setTimeout(() => { if (session === s && s.open) showWin(); }, 400); if (s.pausePending) { s.pausePending = false; pauseNow(s); } }
 }
-// keep the menu above Boxshelf's own loading screen while that screen is re-asserting itself on top
+// keep the menu above (T)rustyShelf's own loading screen while that screen is re-asserting itself on top
 function raise() { if (isOpen() && win && !win.isDestroyed()) { try { win.moveTop(); } catch {} } }
 function button(name, down) {
   if (!(((session && session.open) || shelf) && win && !win.isDestroyed())) return;
@@ -157,7 +159,7 @@ function button(name, down) {
 }
 const isOpen = () => !!((session && session.open) || shelf);
 
-// The shelf version: Boxshelf itself is in front, nothing is paused; the choice goes back to the shelf (or Power).
+// The shelf version: (T)rustyShelf itself is in front, nothing is paused; the choice goes back to the shelf (or Power).
 function openShelf(info) {
   if (session || shelf) return false;
   shelf = { open: true, shownAt: Date.now() }; padwatch.setMenu(true); showWin();

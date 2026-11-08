@@ -1,4 +1,6 @@
-// The controller helper while a game or app runs (and for Home on the shelf). Boxshelf's own window is in the background
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/padwatch.js apart from the app's name ((T)rustyShelf).
+// The controller helper while a game or app runs (and for Home on the shelf). (T)rustyShelf's own window is in the background
 // then, and Chromium only delivers gamepad input to a focused page, so a small PowerShell helper reads the pads directly:
 // XInput (Xbox pads, and anything presenting as XInput such as DS4Windows / Steam Input) plus Nintendo and PlayStation
 // pads over HID.
@@ -186,7 +188,7 @@ public class XI {
       return true; }, IntPtr.Zero);
     return found; }
   // The taskbar only stays behind a fullscreen game while Windows counts it as the fullscreen app in front, and after
-  // Boxshelf's loading screen stepped aside it often didn't: the taskbar stayed over the game. ITaskbarList2's
+  // (T)rustyShelf's loading screen stepped aside it often didn't: the taskbar stayed over the game. ITaskbarList2's
   // MarkFullscreenWindow is Windows' own way of telling the taskbar so (only for a window that really covers its screen).
   [ComImport, Guid("602D4995-B13A-429b-A66E-1935E44F4317"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
   public interface ITaskbarList2 { void HrInit(); void AddTab(IntPtr h); void DeleteTab(IntPtr h); void ActivateTab(IntPtr h); void SetActiveAlt(IntPtr h); void MarkFullscreenWindow(IntPtr h, [MarshalAs(UnmanagedType.Bool)] bool full); }
@@ -210,16 +212,16 @@ public class XI {
     IntPtr h = GetForegroundWindow(); if (h == IntPtr.Zero || h == marked) return false;
     uint pid; GetWindowThreadProcessId(h, out pid); if (Array.IndexOf(pids, (int)pid) < 0) return false;
     return MarkFull(h); }
-  // While a game runs, Boxshelf's own window stays on screen fully transparent (see stepAside in main.js). When its
+  // While a game runs, (T)rustyShelf's own window stays on screen fully transparent (see stepAside in main.js). When its
   // loading cover lifted it dropped out of "always on top" straight into the slot just above the game, so Windows saw a
   // screen-sized window over the game, decided the game wasn't the fullscreen app in front, and raised the taskbar over
-  // it until a click put the game back on top (every emulator, every launch). Sink puts Boxshelf's window at the bottom
-  // of the z-order, without activating it; Boxshelf raises itself again when the game ends.
+  // it until a click put the game back on top (every emulator, every launch). Sink puts (T)rustyShelf's window at the bottom
+  // of the z-order, without activating it; (T)rustyShelf raises itself again when the game ends.
   [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint f);
   [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr h, uint cmd);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string cls, string name);
   static bool Above(IntPtr a, IntPtr b) { int n = 0; for (IntPtr w = GetWindow(a, 2); w != IntPtr.Zero && n < 5000; w = GetWindow(w, 2), n++) if (w == b) return true; return false; }
-  // Only while Boxshelf is stepped aside: not on top and fully see-through. Its loading screen and its quit cover are on top
+  // Only while (T)rustyShelf is stepped aside: not on top and fully see-through. Its loading screen and its quit cover are on top
   // and opaque, and must stay over the game.
   [DllImport("user32.dll")] static extern bool GetLayeredWindowAttributes(IntPtr h, out uint key, out byte alpha, out uint flags);
   static bool Aside(IntPtr self) {
@@ -247,7 +249,7 @@ public class XI {
   static bool Remark(IntPtr h) {
     if (!CoversScreen(h)) return false;
     try { if (taskbar == null) { taskbar = (ITaskbarList2)new TaskbarList(); taskbar.HrInit(); } taskbar.MarkFullscreenWindow(h, false); taskbar.MarkFullscreenWindow(h, true); marked = h; return true; } catch { return false; } }
-  // the game in front and fullscreen: Boxshelf's window kept below it, and the taskbar behind it. 1 = fixed something.
+  // the game in front and fullscreen: (T)rustyShelf's window kept below it, and the taskbar behind it. 1 = fixed something.
   public static int KeepFront(IntPtr self, int[] pids) {
     IntPtr h = GetForegroundWindow(); if (h == IntPtr.Zero || h == self) return 0;
     uint pid; GetWindowThreadProcessId(h, out pid); if (Array.IndexOf(pids, (int)pid) < 0) return 0;
@@ -259,7 +261,7 @@ public class XI {
     return 0; }
   static int remarkAt = Environment.TickCount - 10000;
   // (beta.6) Hide the taskbar (every monitor's) while a game starts, runs and closes: an emulator's window that isn't
-  // fullscreen yet (starting) or any more (closing) made Windows raise the taskbar over Boxshelf's black cover for a
+  // fullscreen yet (starting) or any more (closing) made Windows raise the taskbar over (T)rustyShelf's black cover for a
   // moment. Shown again (without taking the focus) once the shelf is back. Returns how many taskbars it found.
   // (ShowWindowAsync: Explorer is often busy just as a game opens or closes, and a plain ShowWindow waits for it, which
   // stalled this helper's loop, the cover's upkeep included)
@@ -281,11 +283,11 @@ public class XI {
       if (!IsIconic(h)) { FSRECT r; if (!GetWindowRect(h, out r) || (long)(r.R - r.L) * (r.B - r.T) < 64 * 64) return true; }
       found = true; return false; }, IntPtr.Zero);
     return found; }
-  // While Boxshelf's black cover is up (a game starting or closing) it must be always-on-top and above the game's windows
+  // While (T)rustyShelf's black cover is up (a game starting or closing) it must be always-on-top and above the game's windows
   // and the taskbars. Measured: after a Quit the cover was opaque but had lost always-on-top (Electron skips setting it
   // again when it thinks it's set), so the emulator's closing window showed over it for a quarter second. Checked every
   // pass of the helper (~40 ms); fixed from here, straight on the window. 1 = moved.
-  // Also its size: measured, while the game had the focus Boxshelf's fullscreen window was one pixel short (2560x1439 on a
+  // Also its size: measured, while the game had the focus (T)rustyShelf's fullscreen window was one pixel short (2560x1439 on a
   // 1440p screen; Chromium shrinks an inactive fullscreen window), and the game showed through that last row as a sliver
   // at the bottom while starting and quitting. It's stretched back over the whole monitor.
   public static int CoverOnTop(IntPtr self, int[] pids) {
@@ -305,7 +307,7 @@ public class XI {
         hit = Array.IndexOf(pids, (int)pid) >= 0 || c == "Shell_TrayWnd" || c == "Shell_SecondaryTrayWnd"; }
       if (!hit) return 0; }
     return SetWindowPos(self, (IntPtr)(-1), 0, 0, 0, 0, 0x0213) ? 1 : 0; } // HWND_TOPMOST; NOSIZE | NOMOVE | NOACTIVATE | NOOWNERZORDER
-  // The cover lifted (Boxshelf see-through, the game in front): Boxshelf must not stay always-on-top over the game (a
+  // The cover lifted ((T)rustyShelf see-through, the game in front): (T)rustyShelf must not stay always-on-top over the game (a
   // pass of CoverOnTop can land between the lift and this helper hearing of it). 1 = fixed.
   public static int Unpin(IntPtr self) {
     if (self == IntPtr.Zero || !IsWindowVisible(self)) return 0;
@@ -314,7 +316,7 @@ public class XI {
     return SetWindowPos(self, (IntPtr)(-2), 0, 0, 0, 0, 0x0213) ? 1 : 0; } // HWND_NOTOPMOST
 }
 "@
-# The C# above is compiled once and kept as a DLL in Boxshelf's data folder (named after a hash of the code, so a
+# The C# above is compiled once and kept as a DLL in (T)rustyShelf's data folder (named after a hash of the code, so a
 # change always recompiles): loading it takes milliseconds, compiling it took 1-2 s on every launch.
 $dll = '__DLL__'; $xiOk = $false
 if ($dll -and (Test-Path -LiteralPath $dll)) { try { Add-Type -Path $dll; $xiOk = [bool]('XI' -as [type]) } catch {} }
@@ -324,9 +326,9 @@ if (-not $xiOk -and $dll) {
     if ($xiOk) { Copy-Item -LiteralPath $own -Destination $dll -Force -ErrorAction SilentlyContinue } } catch {} }
 if (-not $xiOk) { Add-Type -TypeDefinition $xiSrc }
 $mask = __MASK__; [XI]::NinOn = __NIN__; $need = __NEED__; $mouse = __MOUSE__; $fsPid = __FSPID__; $fsKey = __FSKEY__; $appPid = __APPPID__; $homeOn = __HOME__; $backHome = __BACKHOME__; $cmd = '__CMD__'; $waitFs = __WAITFS__; $wfAt = Get-Date; $parentPid = __PARENT__; $self = [IntPtr][long]__SELF__
-# (beta.6) $tbHid: this helper has the taskbar hidden (it's shown again if Boxshelf goes away); $coverOn: Boxshelf's black
+# (beta.6) $tbHid: this helper has the taskbar hidden (it's shown again if (T)rustyShelf goes away); $coverOn: (T)rustyShelf's black
 # cover is up (kept over the game's windows); $everFs / $goneAt / $goneSent: the game's window was up fullscreen, and
-# since when it has had none (the game closed from its own menu: Boxshelf covers the screen until the emulator exits)
+# since when it has had none (the game closed from its own menu: (T)rustyShelf covers the screen until the emulator exits)
 $tbHid = __TBHIDE__; $coverOn = $false; $everFs = $false; $goneAt = 0; $goneSent = $false
 if ($tbHid) { [XI]::Taskbar($false) | Out-Null }
 function TbBack() { if ($script:tbHid) { [XI]::Taskbar($true) | Out-Null; $script:tbHid = $false } }
@@ -350,7 +352,7 @@ function FrontGame() { if ($appPid -le 0) { return $true }
   if ([XI]::GetForegroundWindow() -eq $h) { [XI]::KeepFront($self, [int[]]$script:fam) | Out-Null; return $true }
   for ($k = 0; $k -lt 3; $k++) { [XI]::Tap([byte]0x87); [XI]::SetForegroundWindow($h) | Out-Null; Start-Sleep -Milliseconds 80; if ([XI]::GetForegroundWindow() -eq $h) { [XI]::KeepFront($self, [int[]]$script:fam) | Out-Null; return $true } }
   return $false }
-# (Sink: Boxshelf's see-through window below the game; KeepFront: the taskbar told the game's window is fullscreen, so it
+# (Sink: (T)rustyShelf's see-through window below the game; KeepFront: the taskbar told the game's window is fullscreen, so it
 #  stays behind the game)
 # (F24 above: an unused key; the last process to send input may move the foreground, so Windows doesn't refuse it)
 $names = @{ 0x0001 = 'up'; 0x0002 = 'down'; 0x0004 = 'left'; 0x0008 = 'right'; 0x1000 = 'a'; 0x2000 = 'b'; 0x0010 = 'start'; 0x0400 = 'home' }
@@ -370,14 +372,14 @@ $fam = @($appPid); $famAt = $t0.AddSeconds(-10); $tbAt = $t0; $frontUntil = $t0;
 function Family($root) { $set = @($root); try { $all = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Select-Object ProcessId, ParentProcessId } catch { return $set }
   $grew = $true; while ($grew) { $grew = $false; foreach ($q in $all) { if (($set -contains [int]$q.ParentProcessId) -and -not ($set -contains [int]$q.ProcessId)) { $set += [int]$q.ProcessId; $grew = $true } } }
   return $set }
-# QUIT and HOME only count while the game is in front (or Boxshelf itself, e.g. its launch cover over a game that hangs
+# QUIT and HOME only count while the game is in front (or (T)rustyShelf itself, e.g. its launch cover over a game that hangs
 # on start): pressed in some other app the user switched to, they'd close or interrupt the game behind their back.
 # A launcher's child the family list hasn't caught yet gets a fresh look, at most every 2 s.
 function GameFront() { if ($appPid -le 0) { return $true }
   $fg = [int][XI]::FgPid(); if ($fg -eq $parentPid -or $script:fam -contains $fg) { return $true }
   if (((Get-Date) - $script:famAt).TotalSeconds -gt 2) { $script:fam = Family $appPid; $script:famAt = Get-Date; return ($script:fam -contains $fg) }
   return $false }
-# Boxshelf gone (crashed, killed): nobody reads this output any more, so stop polling pads and sending input.
+# (T)rustyShelf gone (crashed, killed): nobody reads this output any more, so stop polling pads and sending input.
 # The start time guards against Windows handing its pid to some other process later.
 $parentStart = $null; $parentAt = $t0
 if ($parentPid -gt 0) { $pp = Get-Process -Id $parentPid -ErrorAction SilentlyContinue; if (-not $pp) { TbBack; exit }; try { $parentStart = $pp.StartTime } catch {} }
@@ -395,19 +397,19 @@ while ($true) {
   # the black cover up (starting / closing): the game's windows or a taskbar that got over it go back under it at once
   if ($coverOn -and $appPid -gt 0 -and -not $menu) { [XI]::CoverOnTop($self, [int[]]$fam) | Out-Null }
   elseif (-not $coverOn -and $appPid -gt 0) { [XI]::Unpin($self) | Out-Null }
-  # the game's window gone while the emulator still runs (closed from its own menu, or Esc): tell Boxshelf at once (it
-  # covers the screen), and again if a window comes back (the emulator only rebuilt it: Boxshelf steps aside again)
+  # the game's window gone while the emulator still runs (closed from its own menu, or Esc): tell (T)rustyShelf at once (it
+  # covers the screen), and again if a window comes back (the emulator only rebuilt it: (T)rustyShelf steps aside again)
   if ($everFs -and -not $coverOn -and $appPid -gt 0) {
     if ([XI]::HasWindow([int[]]$fam)) { $goneAt = 0; if ($goneSent) { $goneSent = $false; Write-Output "GAMEBACK" } }
     elseif ($goneAt -eq 0) { $goneAt = $ms } elseif (-not $goneSent -and $ms - $goneAt -ge 30) { $goneSent = $true; Write-Output "GAMEGONE" } } # (two passes in a row without a window, ~40-80 ms)
   $needFam = ($mouse -or -not $fsDone -or $waitFs)
   # the game's window came to the front fullscreen on its own (or went fullscreen later): keep the taskbar behind it, and
-  # Boxshelf's see-through window below it (every 250 ms for a few seconds after the hand-over, then every second)
+  # (T)rustyShelf's see-through window below it (every 250 ms for a few seconds after the hand-over, then every second)
   if ($appPid -gt 0 -and -not $menu -and ($now - $tbAt).TotalMilliseconds -gt $(if ($now -lt $frontUntil) { 250 } else { 1000 })) { $tbAt = $now; [XI]::KeepFront($self, [int[]]$fam) | Out-Null }
-  # for a few seconds after Boxshelf handed over (FRONT): the taskbar / desktop ending up active means the game lost the
+  # for a few seconds after (T)rustyShelf handed over (FRONT): the taskbar / desktop ending up active means the game lost the
   # focus on its way up (the taskbar then shows over it until a click), so the game goes back to the front
   if ($appPid -gt 0 -and -not $menu -and $now -lt $frontUntil -and ($now - $refAt).TotalMilliseconds -gt 400) { $refAt = $now; if ([XI]::FgIsShell()) { FrontGame | Out-Null } }
-  # the game's window is up and fullscreen: Boxshelf can lift its loading screen now (gives up after a minute)
+  # the game's window is up and fullscreen: (T)rustyShelf can lift its loading screen now (gives up after a minute)
   if ($waitFs -and $appPid -gt 0 -and ($now - $wfAt).TotalMilliseconds -gt 100) { $wfAt = $now
     if ([XI]::FullscreenOf([int[]]$fam)) { Write-Output "GAMEFS"; $waitFs = $false; $everFs = $true } elseif (($now - $t0).TotalSeconds -gt 60) { $waitFs = $false } }
   # (pointer mode only: skip the slow full process listing while the game's family is already in front; it hitched the pointer)
@@ -430,9 +432,9 @@ while ($true) {
     }
     elseif (($now - $t0).TotalSeconds -gt 40) { $fsDone = $true }
   }
-  # commands from Boxshelf: MENU 1/0 (menu open: report buttons, don't act as a mouse), KEYS <spec> [<spec>…]
+  # commands from (T)rustyShelf: MENU 1/0 (menu open: report buttons, don't act as a mouse), KEYS <spec> [<spec>…]
   if ($cmd -and (Test-Path -LiteralPath $cmd)) {
-    # take the file over first (a rename is atomic), so a line Boxshelf appends meanwhile lands in a fresh file, never lost
+    # take the file over first (a rename is atomic), so a line (T)rustyShelf appends meanwhile lands in a fresh file, never lost
     $work = $cmd + '.w'; Move-Item -LiteralPath $cmd -Destination $work -Force -ErrorAction SilentlyContinue
     $lines = @(Get-Content -LiteralPath $work -ErrorAction SilentlyContinue); Remove-Item -LiteralPath $work -ErrorAction SilentlyContinue
     foreach ($l in $lines) { $w = $l.Trim().Split(' ')
@@ -440,11 +442,11 @@ while ($true) {
       if ($w[0] -eq 'MENU') { $menu = ($w[1] -eq '1'); if ($menu) { $fresh = $true; $acc = @(0,0,0,0,0,0) }; if (-not $ninStart) { [XI]::NinOn = $menu } }
       # (FRONT keep: the Home menu closing over a media app, where the pointer is the user's own and stays put)
       elseif ($w[0] -eq 'FRONT') { FrontGame | Out-Null; $frontUntil = (Get-Date).AddSeconds(8); if (-not ($mouse -and $w[1] -eq 'keep')) { [XI]::SetCursorPos(32000, 32000) | Out-Null } }
-      # FOCUS <hwnd>: give Boxshelf's own window the keyboard focus (Windows refuses a background app asking for it itself;
+      # FOCUS <hwnd>: give (T)rustyShelf's own window the keyboard focus (Windows refuses a background app asking for it itself;
       # this helper may, because it just sent input). Without focus Chromium delivers no controller input to the shelf.
       elseif ($w[0] -eq 'FOCUS') { $fh = [IntPtr][long]$w[1]; for ($k = 0; $k -lt 4; $k++) { [XI]::Tap([byte]0x87); [XI]::SetForegroundWindow($fh) | Out-Null; Start-Sleep -Milliseconds 60; if ([XI]::GetForegroundWindow() -eq $fh) { break } }
         Write-Output ("FOCUSED " + $(if ([XI]::GetForegroundWindow() -eq $fh) { 1 } else { 0 })) }
-      # TASKBAR 0/1: hide / show the taskbar now (answered, so a launch can wait for it); COVER 1/0: Boxshelf's black cover is up / lifted
+      # TASKBAR 0/1: hide / show the taskbar now (answered, so a launch can wait for it); COVER 1/0: (T)rustyShelf's black cover is up / lifted
       elseif ($w[0] -eq 'TASKBAR') { if ($w[1] -eq '1') { [XI]::Taskbar($true) | Out-Null; $tbHid = $false } else { [XI]::Taskbar($false) | Out-Null; $tbHid = $true }; Write-Output ("TASKBAR-DONE " + $w[1]) }
       elseif ($w[0] -eq 'COVER') { $coverOn = ($w[1] -eq '1'); $goneAt = 0; if ($coverOn) { $goneSent = $false } }
       elseif ($w[0] -eq 'KEYS') { $tag = $w[1]
@@ -540,12 +542,12 @@ const COMBOS = {
 let proc = null, log = () => {}, runs = 0, cacheDir = null;
 // dataDir: where the compiled helper DLL is kept (data\padwatch)
 function init(logger, dataDir) { if (logger) log = logger; if (dataDir) { cacheDir = require('path').join(dataDir, 'padwatch'); cleanCache(); setTimeout(prewarm, 8000); } }
-// build the DLL in the background a few seconds after Boxshelf starts, so even the first game launch loads it ready-made
+// build the DLL in the background a few seconds after (T)rustyShelf starts, so even the first game launch loads it ready-made
 function prewarm() {
   if (process.platform !== 'win32' || !cacheDir) return; const fs = require('fs'), path = require('path');
   if (fs.existsSync(dllPath())) return;
   const head = SCRIPT.slice(0, SCRIPT.indexOf('$mask = ')).replace('__DLL__', () => psq(dllPath()));
-  const ps1 = path.join(require('os').tmpdir(), `boxshelf-padbuild-${process.pid}.ps1`);
+  const ps1 = path.join(require('os').tmpdir(), `trustyshelf-padbuild-${process.pid}.ps1`);
   try { fs.writeFileSync(ps1, '\ufeff' + head, 'utf8'); } catch { return; }
   const t0 = Date.now();
   try { const p = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', ps1], { windowsHide: true, stdio: 'ignore' });
@@ -582,7 +584,7 @@ function start(comboName, holdMs, onQuit, opts = {}) {
   if (opts.isMenuOpen) setTimeout(() => { try { if (opts.isMenuOpen()) command('MENU 1'); } catch {} }, 0); /* asked just before the game's helper went away (only the shelf's helper repeats it, never a game's) */
   // The script runs from a temp file: passed inline (-EncodedCommand) it outgrew Windows' 32,767-character command
   // line and the helper silently never started (no Guide, no quit combo). UTF-8 with a BOM for Windows PowerShell 5.1.
-  const ps1 = require('path').join(require('os').tmpdir(), `boxshelf-pad-${process.pid}-${++runs}.ps1`);
+  const ps1 = require('path').join(require('os').tmpdir(), `trustyshelf-pad-${process.pid}-${++runs}.ps1`);
   try { require('fs').writeFileSync(ps1, '\ufeff' + script, 'utf8'); } catch (e) { log('padwatch script', e.message); return false; }
   try {
     proc = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', ps1], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -603,7 +605,7 @@ function start(comboName, holdMs, onQuit, opts = {}) {
       if ((line === 'HOME' || line.startsWith('HOME ')) && opts.onHome) { homeNin = line === 'HOME 4'; try { opts.onHome(line === 'HOME 5' ? 'ps' : line === 'HOME 4' ? 'nintendo' : ''); } catch (e) { log('padwatch onHome', e.message); } } // (the pad's prompts: slot 5 PlayStation, 4 Nintendo, XInput unknown)
       if (line.startsWith('BTN ') && opts.onButton) { const [, name, d] = line.split(' '); try { opts.onButton(name, d === '1'); } catch {} }
       if (line.startsWith('KEYS-DONE ') || line.startsWith('KEYS-FAIL ')) { const ok = line.startsWith('KEYS-DONE'), id = line.slice(10).trim(); const f = pendingKeys.get(id); if (f) { pendingKeys.delete(id); if (!ok) log('padwatch: the game window could not be brought to the front, keys not sent'); try { f(ok); } catch {} } }
-      if (line.startsWith('FOCUSED ')) { if (line.endsWith('1')) focusWant = null; } if (line.startsWith('FOCUSED ')) log('padwatch: gave Boxshelf the focus', line.endsWith('1') ? 'ok' : '(Windows refused)');
+      if (line.startsWith('FOCUSED ')) { if (line.endsWith('1')) focusWant = null; } if (line.startsWith('FOCUSED ')) log('padwatch: gave (T)rustyShelf the focus', line.endsWith('1') ? 'ok' : '(Windows refused)');
       if (line === 'FULLSCREEN-SKIPPED') log('padwatch: app never came to the front, fullscreen key not sent');
     }
   });
@@ -619,10 +621,10 @@ function start(comboName, holdMs, onQuit, opts = {}) {
   me.on('error', e => { log('padwatch error', e.message); if (proc === me) proc = null; try { require('fs').unlinkSync(ps1); } catch {} }); // e.g. no powershell.exe: no 'exit' follows
   return true;
 }
-// (the script file goes now too: the 'exit' cleanup never runs if Boxshelf itself is quitting)
+// (the script file goes now too: the 'exit' cleanup never runs if (T)rustyShelf itself is quitting)
 let stops = 0; // (beta.10) counts stop() calls: a restart planned before one is dropped
 function stop() { stops++; if (tbWait) { const f = tbWait; tbWait = null; f(false); } if (proc) { const p = proc; proc = null; try { p.kill(); } catch {} if (p.clickHeld) { p.clickHeld = false; releaseClick(); } } if (curPs1) { try { require('fs').unlinkSync(curPs1); } catch {} curPs1 = null; } pendingKeys.clear(); }
-// A helper killed (game over, Boxshelf quitting) while A held the pointer's left button down can't let it go itself: a
+// A helper killed (game over, (T)rustyShelf quitting) while A held the pointer's left button down can't let it go itself: a
 // one-line PowerShell does it, with the cached helper DLL when there is one (no compile). (Encoded: no quoting trouble.)
 function releaseClick() {
   if (process.platform !== 'win32') return; const d = dllPath(), fs = require('fs');
@@ -638,7 +640,7 @@ const psq = v => String(v).replace(/['\u2018-\u201B]/g, c => c + c);
 let swept = false, curPs1 = null;
 function sweepTemp() {
   if (swept) return; swept = true; const fs = require('fs'), path = require('path'), dir = require('os').tmpdir();
-  try { for (const f of fs.readdirSync(dir)) { if (!/^boxshelf-pad(build)?-[\d-]+\.ps1$/i.test(f)) continue; const p = path.join(dir, f); try { if (Date.now() - fs.statSync(p).mtimeMs > 864e5) fs.unlinkSync(p); } catch {} } } catch {}
+  try { for (const f of fs.readdirSync(dir)) { if (!/^trustyshelf-pad(build)?-[\d-]+\.ps1$/i.test(f)) continue; const p = path.join(dir, f); try { if (Date.now() - fs.statSync(p).mtimeMs > 864e5) fs.unlinkSync(p); } catch {} } } catch {}
 }
 // Commands to the running helper go through a small file it checks every loop (stdin isn't reliable from PowerShell).
 let cmdFile = null, pendingKeys = new Map(), keySeq = 0; // each KEYS command carries an id, answered by KEYS-DONE <id>
@@ -649,7 +651,7 @@ let focusWant = null;
 function focusOnce(hwnd) { return hwnd ? command('FOCUS ' + String(hwnd)) : false; } // just now (not repeated for the next helper, unlike focusWindow)
 const focusPending = () => !!(focusWant && Date.now() - focusWant.at < 8000);
 function focusWindow(hwnd) { if (!hwnd) return false; focusWant = { h: String(hwnd), at: Date.now() }; return command('FOCUS ' + focusWant.h); }
-// bring the running game's window to the front (and park the mouse pointer) — after Boxshelf's launch cover lifts.
+// bring the running game's window to the front (and park the mouse pointer) — after (T)rustyShelf's launch cover lifts.
 // keepPointer: the Home menu closing over a media app, where the pointer stays where the user left it
 function front(keepPointer) { return command(keepPointer ? 'FRONT keep' : 'FRONT'); }
 // keys: ['f10'], ['shift+f1'], 'wait300' between steps; resolves when the helper has sent them
@@ -662,7 +664,7 @@ function sendKeys(keys) {
   });
 }
 
-// (beta.6) Boxshelf's black cover is up (a game starting or closing) / lifted: while it's up the helper keeps it over the
+// (beta.6) (T)rustyShelf's black cover is up (a game starting or closing) / lifted: while it's up the helper keeps it over the
 // game's windows and the taskbar, and doesn't take the game's window closing as the game ending
 function cover(on) { return command('COVER ' + (on ? 1 : 0)); }
 // (beta.6) Hide / show the taskbar. The running helper does it within one pass (~40 ms, answered); with none running, a
@@ -682,14 +684,14 @@ function taskbar(show) {
     p.on('exit', () => { clearTimeout(t); res(true); }); p.on('error', () => { clearTimeout(t); res(false); });
   });
 }
-// the same, waiting for it (Boxshelf quitting: the taskbar must be back before the process ends)
+// the same, waiting for it ((T)rustyShelf quitting: the taskbar must be back before the process ends)
 function taskbarSync(show) {
   if (process.platform !== 'win32') return;
   try { require('child_process').spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-EncodedCommand', Buffer.from(taskbarPs(show), 'utf16le').toString('base64')], { windowsHide: true, stdio: 'ignore', timeout: 4000 }); } catch (e) { log('taskbar', e.message); }
 }
 // A watchdog while the taskbar is hidden. It keeps it hidden (every ~100 ms: Windows 11 shows it again by itself on some
-// focus changes, e.g. as a game's window closes, also in the moments no controller helper runs), and if Boxshelf crashes
-// or is ended from Task Manager it shows it again (every process Boxshelf starts goes into Node's kill-on-close job, so
+// focus changes, e.g. as a game's window closes, also in the moments no controller helper runs), and if (T)rustyShelf crashes
+// or is ended from Task Manager it shows it again (every process (T)rustyShelf starts goes into Node's kill-on-close job, so
 // the helpers die with it). It quits by itself as soon as the marker file is gone (the taskbar shown normally). Started
 // through a short-lived PowerShell (Start-Process): a grandchild breaks out of the job by itself (the job allows silent
 // breakaway), while a detached PowerShell never ran.
@@ -711,7 +713,7 @@ function taskbarType() {
 function taskbarPs(show) { const t = taskbarType(); return `$ErrorActionPreference = 'SilentlyContinue'; ${t.load}; ${t.call(show)}`; }
 
 const isRunning = () => !!proc;
-// Boxshelf's own window handle (decimal string): kept below a running game (see Sink in the helper)
+// (T)rustyShelf's own window handle (decimal string): kept below a running game (see Sink in the helper)
 let selfHwnd = '0'; function setSelf(hwnd) { selfHwnd = String(hwnd || '0'); }
 // the last Home came from a Nintendo pad (slot 4): the Home menu then follows its A/B layout under Confirm "Match my controller"
 let homeNin = false; const homeFromNintendo = () => homeNin;

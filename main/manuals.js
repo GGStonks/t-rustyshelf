@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/manuals.js apart from the app's name ((T)rustyShelf).
 // Game manuals from the Internet Archive (archive.org): search per game, let the
 // user pick, then save pages as <games folder>\covers\<game file>-manual-01.jpg …
 const fs = require('fs');
@@ -23,7 +25,7 @@ function withTimers(req, res, reject, stall, deadline) {
 }
 // One descriptive User-Agent, and at most HOST_MAX requests in flight per host across everything that uses these helpers
 // (manualcoll runs 2 games × 4 pages at once; archive.org answers bursts like that with 429s and temporary blocks).
-const UA = `Boxshelf/${(() => { try { return require('../package.json').version; } catch { return '0'; } })()}`;
+const UA = `TrustyShelf/${(() => { try { return require('../package.json').version; } catch { return '0'; } })()}`;
 const HOST_MAX = 4, hostBusy = new Map(), hostWait = new Map(), REDIR = Symbol('redirect');
 function hostSlot(url) {
   let h = ''; try { h = new URL(url).host.toLowerCase(); } catch {}

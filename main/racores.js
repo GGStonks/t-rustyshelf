@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/racores.js apart from the app's name ((T)rustyShelf).
 // (beta.7) RetroArch cores and BIOS files.
 // get(): a console's core downloaded from the libretro buildbot (the same files RetroArch's own Online Updater gets),
 //   unpacked into the cores folder RetroArch reads. Windows only (Linux RetroArch builds come with their own updater).
@@ -29,7 +31,7 @@ const coreFile = (exe, core) => path.join(coresDir(exe), core + '_libretro.dll')
 const URL_BASE = 'https://buildbot.libretro.com/nightly/windows/x86_64/latest/';
 function download(url, dest, onPct, hops = 0) {
   return new Promise((resolve, reject) => {
-    const req = https.get(url, { headers: { 'User-Agent': 'Boxshelf' } }, res => {
+    const req = https.get(url, { headers: { 'User-Agent': 'TrustyShelf' } }, res => {
       if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location && hops < 5) { res.resume(); return resolve(download(new URL(res.headers.location, url).toString(), dest, onPct, hops + 1)); }
       if (res.statusCode !== 200) { res.resume(); return reject(new Error('the download server said ' + res.statusCode)); }
       const total = +res.headers['content-length'] || 0; let got = 0, last = -1;

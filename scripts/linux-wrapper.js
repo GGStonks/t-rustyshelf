@@ -1,9 +1,11 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): most of this file is Boxshelf's
+// scripts/linux-wrapper.js; modified for (T)rustyShelf (see the git history).
 // electron-builder artifactBuildStarted hook (package.json build.artifactBuildStarted). Only the Linux AppImage is touched:
 // Windows builds are left exactly as they are.
 //
 // (beta.8) Steam Deck: an Electron AppImage started by Steam (a non-Steam game, and above all in Game Mode) needs
 // --no-sandbox, and Game Mode's compositor (gamescope) wants Chromium on X11 (Xwayland) rather than Wayland. Other
-// Electron launchers tell users to type these into Steam's launch options (their Steam Deck guides); Boxshelf adds them
+// Electron launchers tell users to type these into Steam's launch options (their Steam Deck guides); (T)rustyShelf adds them
 // itself. The program is renamed <name>-bin and <name> becomes this small script, which the AppImage's own AppRun starts:
 //   started by Steam (Desktop or Game Mode)  -> --no-sandbox
 //   in Game Mode (gamescope)                 -> --ozone-platform=x11
@@ -15,7 +17,7 @@ const fs = require('fs');
 const path = require('path');
 
 const SCRIPT = `#!/bin/sh
-# Boxshelf (Linux): adds the options Steam and the Steam Deck's Game Mode need, then starts Boxshelf.
+# (T)rustyShelf (Linux): adds the options Steam and the Steam Deck's Game Mode need, then starts (T)rustyShelf.
 # (made by scripts/linux-wrapper.js when the AppImage was built)
 here="$(dirname "$(readlink -f "$0")")"
 if [ -n "\${SteamGameId}\${SteamClientLaunch}\${SteamEnv}\${SteamGamepadUI}\${SteamAppId}" ]; then
@@ -45,7 +47,7 @@ module.exports = async function linuxWrapper(event) {
   const arch = ARCH[event.arch] || 'x64', out = path.dirname(event.file);
   const dir = [path.join(out, arch === 'x64' ? 'linux-unpacked' : `linux-${arch}-unpacked`), path.join(out, 'linux-unpacked')].find(d => fs.existsSync(d));
   if (!dir) throw new Error('linux-wrapper: the unpacked app was not found beside ' + event.file);
-  let name = 'boxshelf'; try { name = String(require(path.join(__dirname, '..', 'package.json')).name || name); } catch {}
+  let name = 'trustyshelf'; try { name = String(require(path.join(__dirname, '..', 'package.json')).name || name); } catch {}
   if (wrap(dir, name)) console.log('  • linux-wrapper: Steam / Game Mode launch wrapper put in for', name);
 };
 module.exports.SCRIPT = SCRIPT;

@@ -1,5 +1,7 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/customthemes.js apart from the app's name ((T)rustyShelf).
 // Custom themes (1.76, Windows): a picture behind the shelf, made by the user. Each one is a folder in "Custom themes"
-// beside Boxshelf:
+// beside (T)rustyShelf:
 //   background.jpg / .png / .webp / .svg   the picture (required; a folder with a single picture uses that one)
 //   gc.jpg, ps2.png, …                     optional: a picture for one console's shelf (named after its id)
 //   theme.json                             optional: { "name", "accent": "#rrggbb", "shade": 0-0.9, "blur": true/false,
@@ -130,7 +132,7 @@ function ensureExamples() {
       'theme.json (optional): {"name": "My theme", "accent": "#6b8cff", "shade": 0.35, "blur": false, "glow": 0.35}',
       '  shade: how much darker the picture is made (0 to 0.9), so the shelf stays easy to read.',
       '  blur: true softens the picture.   glow: how bright the light under the shelf is (0 to 1).',
-      'Then in Boxshelf: Settings > Display > Find themes again. Themes are only pictures and settings, never programs.', ''].join('\r\n'));
+      'Then in (T)rustyShelf: Settings > Display > Find themes again. Themes are only pictures and settings, never programs.', ''].join('\r\n'));
     log('Custom themes: made the folder with three examples');
   } catch (e) { log('Custom themes: could not make the folder', e.message); }
 }

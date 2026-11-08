@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/emucfg.js apart from the app's name ((T)rustyShelf).
 // Emulator settings: small, safe tweaks so the controller quit combo closes them without a dialog (only run right before
 // a launch: the emulator rewrites its config when it exits, keeping what we set), putting the user's own files back
 // (Settings → Restore emulator settings), the real Xenia exe behind Xenia Manager, and where each emulator keeps its
@@ -35,10 +37,10 @@ function readIni(f, label, readOnly) { // readOnly (beta.10): only looked at, ne
   if (src.charCodeAt(0) === 0xFEFF) { bom = '\uFEFF'; src = src.slice(1); } // kept aside so section matching sees "[UI]", put back on write
   return { src, bom, isNew: false };
 }
-// One-time backup of the user's own file (never refreshed, so it stays the pre-Boxshelf version), then temp + rename:
+// One-time backup of the user's own file (never refreshed, so it stays the pre-(T)rustyShelf version), then temp + rename:
 // never a half-written config. No backup -> no write.
 function writeIni(f, text, ini) {
-  if (!ini.isNew) { const bak = f + '.boxshelf-bak'; if (!fs.existsSync(bak)) fs.copyFileSync(f, bak); }
+  if (!ini.isNew) { const bak = f + '.trustyshelf-bak'; if (!fs.existsSync(bak)) fs.copyFileSync(f, bak); }
   fs.mkdirSync(path.dirname(f), { recursive: true });
   const tmp = f + '.tmp'; try { fs.writeFileSync(tmp, ini.bom + text); fs.renameSync(tmp, f); } catch (e) { try { fs.unlinkSync(tmp); } catch {} throw e; }
 }
@@ -143,7 +145,7 @@ function rpcs3NoConfirm(exe) {
   } catch (e) { log('RPCS3 config tweak failed', e.message); return false; }
 }
 // Dolphin's Stop hotkey listens to one device (its "Hotkeys" controller, usually the Xbox pad). A Wii game played with
-// another controller (a Switch Pro for its gyro, set up as Wii Remote 1) then had no way back to the shelf: Boxshelf's
+// another controller (a Switch Pro for its gyro, set up as Wii Remote 1) then had no way back to the shelf: (T)rustyShelf's
 // own quit combo only hears Xbox-style (XInput) pads. So the quit combo is added to Dolphin's Stop for every other
 // controller its Wii Remote / GameCube settings use, as fully named inputs (`Device:Input`). Only ever added to.
 const DOLPHIN_COMBO = { 'l3+r3': ['Thumb L', 'Thumb R'], 'start+back': ['Start', 'Back'], 'lb+rb+start': ['Shoulder L', 'Shoulder R', 'Start'], 'back+b': ['Back', 'Button E'] };
@@ -161,14 +163,14 @@ function dolphinQuitPads(exe, combo) {
   const padOk = d => d && d !== hotDev && !/keyboard|mouse|^Android|^Bluetooth|^XInput2?\//i.test(d) && !d.includes('`');
   // Dolphin names the east face button per backend: SDL "Button E", XInput / Windows.Gaming.Input "Button B"
   const name = (d, i) => i === 'Button E' && !/^SDL\//i.test(d) ? 'Button B' : i;
-  // (beta.10) Boxshelf's own terms ("(`<pad>:<input>`&…)": one such pad, exactly one quit combo's inputs) are rebuilt on every
+  // (beta.10) (T)rustyShelf's own terms ("(`<pad>:<input>`&…)": one such pad, exactly one quit combo's inputs) are rebuilt on every
   // apply: a pad already there was skipped before, so a changed combo never reached it. The user's own terms stay as they are
   const terms = s => { const out = []; let d = 0, q = false, cur = ''; for (const ch of s) { if (ch === '`') q = !q; else if (!q && ch === '(') d++; else if (!q && ch === ')') d--; if (!q && !d && ch === '|') { out.push(cur.trim()); cur = ''; } else cur += ch; } if (cur.trim()) out.push(cur.trim()); return out.filter(Boolean); };
   const isOwn = t => { const m = /^\(((?:`[^`]+`&)*`[^`]+`)\)$/.exec(t); if (!m) return false; const ins = m[1].split('&').map(x => x.slice(1, -1)), at = ins[0].lastIndexOf(':'), dev = at > 0 ? ins[0].slice(0, at) : '';
     if (!padOk(dev) || !ins.every(x => x.startsWith(dev + ':'))) return false; const got = ins.map(x => x.slice(dev.length + 1)).join('&');
     return Object.values(DOLPHIN_COMBO).some(l => l.map(i => name(dev, i)).join('&') === got); };
   const wrapped = b => { if (b[0] !== '(') return false; let d = 0, q = false; for (let i = 0; i < b.length; i++) { const c = b[i]; if (c === '`') q = !q; else if (!q && c === '(') d++; else if (!q && c === ')' && --d === 0) return i === b.length - 1; } return false; };
-  // (beta.10) the main pad's term Boxshelf writes when Stop was empty ("(`Back`&`Button B`)": no device, exactly one quit combo's
+  // (beta.10) the main pad's term (T)rustyShelf writes when Stop was empty ("(`Back`&`Button B`)": no device, exactly one quit combo's
   // inputs as the Hotkeys device names them) is its own too when it's the only other term beside its pad terms: kept as the
   // user's, a changed combo never reached the main pad and the old one still stopped the game
   const isBase = t => { const m = /^\(((?:`[^`]+`&)*`[^`]+`)\)$/.exec(t); if (!m) return false; const ins = m[1].split('&').map(x => x.slice(1, -1)); if (ins.some(x => x.includes(':'))) return false;
@@ -200,7 +202,7 @@ const isDolphin = (systemId, exe) => (systemId === 'gc' || systemId === 'wii') &
 function launchArgs(systemId, exe) {
   return isDolphin(systemId, exe) ? ['-C', 'Dolphin.Interface.ConfirmStop=False', '-C', 'Graphics.Settings.BorderlessFullscreen=True'] : [];
 }
-// Put back every .boxshelf-bak this module made (the user's file from before the first tweak) and drop the backup, so a
+// Put back every .trustyshelf-bak this module made (the user's file from before the first tweak) and drop the backup, so a
 // later tweak backs up the file as it is then. exeBySystem: { gc: exe, ps2: exe, ... } (or { gc: { emulator } }).
 // Looks in the same places the tweaks use; returns the files restored.
 function restoreBackups(exeBySystem) {
@@ -214,7 +216,7 @@ function restoreBackups(exeBySystem) {
   }
   const done = [];
   for (const f of files) {
-    const bak = f + '.boxshelf-bak'; if (!fs.existsSync(bak)) continue;
+    const bak = f + '.trustyshelf-bak'; if (!fs.existsSync(bak)) continue;
     const tmp = f + '.tmp';
     try { fs.copyFileSync(bak, tmp); fs.renameSync(tmp, f); fs.unlinkSync(bak); done.push(f); log('Settings restored from', bak); }
     catch (e) { try { fs.unlinkSync(tmp); } catch {} log('Could not restore', f, e.message); }

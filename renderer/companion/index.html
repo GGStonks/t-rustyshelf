@@ -1,4 +1,6 @@
 <!doctype html>
+<!-- Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+     renderer/companion/index.html apart from the app's name ((T)rustyShelf). -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -8,7 +10,7 @@
 <meta name="referrer" content="no-referrer">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Boxshelf</title>
+<title>(T)rustyShelf</title>
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icon.svg">
 <link rel="manifest" href="/manifest.json">
@@ -20,7 +22,7 @@
   <section id="pair" class="screen" hidden>
     <div class="pair-card">
       <img class="logo" src="/icon.svg" alt="">
-      <h1>Pair with Boxshelf</h1>
+      <h1>Pair with (T)rustyShelf</h1>
       <p class="muted">Enter the 6-digit PIN shown on the TV in <b>Settings → Phone companion</b>.</p>
       <form id="pairForm" autocomplete="off">
         <input id="pin" class="pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="••••••" aria-label="PIN" autocomplete="one-time-code">
@@ -34,7 +36,7 @@
   <!-- the paired app -->
   <section id="main" class="screen" hidden>
     <header class="top">
-      <div class="brand"><img src="/icon.svg" alt=""><span>Boxshelf</span></div>
+      <div class="brand"><img src="/icon.svg" alt=""><span>(T)rustyShelf</span></div>
       <div id="nowPlaying" class="now" hidden><span class="dot"></span><span id="nowTitle"></span><button id="nowQuit" class="chip warn" type="button">Quit</button></div>
     </header>
 

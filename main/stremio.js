@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/stremio.js apart from the app's name ((T)rustyShelf).
 // Your Stremio library, for the museum's movie shelves. Stremio 5 (stremio-shell-ng) keeps its web app's storage in a
 // WebView2 folder beside the program: Chromium's localStorage, a small LevelDB database. Its "library" and
 // "library_recent" entries hold every title you've added (name, type, poster). This reads those files directly (the

@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/spreads.js apart from the app's name ((T)rustyShelf).
 // Manual scans uploaded as two-page spreads (the outside of the booklet = back cover | front cover, inside = left | right)
 // are cut into single pages: the front cover comes first, the back cover moves to the end, inside spreads become two pages.
 // Image sizes come from the file headers, so checking a manual that's already fine costs a few tiny reads.

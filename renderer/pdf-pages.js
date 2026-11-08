@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// renderer/pdf-pages.js apart from the app's name ((T)rustyShelf).
 // Hidden window: turns one downloaded PDF manual into JPEG pages (same size rule as the reader's own converter).
 /* global pdfjsLib, wum */
 wum.onModel(async job => {

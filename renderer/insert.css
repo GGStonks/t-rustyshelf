@@ -1,3 +1,5 @@
+/* Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+   renderer/insert.css apart from the app's name ((T)rustyShelf). */
 /* "Insert the game" animation: the case opens, the disc (or cartridge) lifts out
    and slides into a drive. Plays when you press Play on a console game. */
 .insert{position:absolute;inset:0;z-index:22;opacity:0;pointer-events:none;transition:opacity .35s;background:#04050a;overflow:hidden;

@@ -1,9 +1,11 @@
-# Boxshelf feedback form
+<!-- Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+     docs/FEEDBACK-FORM.md apart from the app's name ((T)rustyShelf). -->
+# (T)rustyShelf feedback form
 
 A short form with no account needed, made on Tally (tally.so). It should take about a minute to fill in.
 
-**Title:** Tell us about Boxshelf
-**Intro text:** Thanks for trying Boxshelf! This takes about a minute. Nothing is sent from your PC or handheld
+**Title:** Tell us about (T)rustyShelf
+**Intro text:** Thanks for trying (T)rustyShelf! This takes about a minute. Nothing is sent from your PC or handheld
 except what you type here.
 
 ## Hidden fields (filled in by the app through the link)
@@ -18,9 +20,9 @@ Nothing personal goes in it.
 
 ## Questions
 
-1. **What do you play Boxshelf on?** (choose one, required)
+1. **What do you play (T)rustyShelf on?** (choose one, required)
    Windows PC · AYN Thor · Other Android device · Steam Deck · Other Linux PC
-2. **How do you like Boxshelf so far?** (rating, 1 to 5 stars, required)
+2. **How do you like (T)rustyShelf so far?** (rating, 1 to 5 stars, required)
 3. **What do you like most?** (long answer, optional)
 4. **What annoyed you or got in the way?** (long answer, optional)
 5. **What's missing that would make you use it every day?** (long answer, optional)

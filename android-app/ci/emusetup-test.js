@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// android-app/ci/emusetup-test.js apart from the app's name ((T)rustyShelf).
 // (beta.7) "Set up for me" (main/emusetup.js) on pretend emulator folders: what it writes, what it leaves alone, Undo.
 // node ci/emusetup-test.js   (no Electron needed; Windows-style layouts are made in a temp folder on any OS)
 const fs = require('fs'), path = require('path'), os = require('os');
@@ -20,7 +22,7 @@ ok(new RegExp('system_directory = "' + path.join(root, 'BIOS').replace(/\\/g, '\
 ok(!/savestate_auto_save/.test(t1), 'RetroArch: "resume where you left off" stays off unless chosen');
 r = S.apply(ra, { resume: true }); ok(/savestate_auto_load = "true"/.test(read(raCfg)), 'RetroArch: resume when switched on');
 ok(S.status(ra).done && S.status(ra).done.groups.includes('resume'), 'status remembers what was set up');
-S.undo(ra); ok(!fs.existsSync(raCfg) && !S.status(ra).done, 'RetroArch Undo: the file Boxshelf started is gone again');
+S.undo(ra); ok(!fs.existsSync(raCfg) && !S.status(ra).done, 'RetroArch Undo: the file (T)rustyShelf started is gone again');
 
 // RetroArch with its own settings and BIOS files: the user's lines stay, the BIOS folder isn't moved
 const ra2 = put(path.join(root, 'RA2', 'retroarch.exe'), 'x'); const cfg2 = put(path.join(root, 'RA2', 'retroarch.cfg'), 'video_driver = "vulkan"\r\nconfirm_quit = "true"\r\n');
@@ -28,7 +30,7 @@ put(path.join(root, 'RA2', 'system', 'scph5501.bin'), 'bios');
 r = S.apply(ra2, {}); const t2 = read(cfg2);
 ok(/video_driver = "vulkan"/.test(t2) && /confirm_quit = "false"/.test(t2) && t2.includes('\r\n'), 'RetroArch: your other settings and line endings kept');
 ok(!/system_directory/.test(t2) && r.skipped.some(s => s.group === 'bios'), 'RetroArch: a system folder with BIOS files in it is left as it is');
-S.undo(ra2); ok(read(cfg2) === 'video_driver = "vulkan"\r\nconfirm_quit = "true"\r\n' && !fs.existsSync(cfg2 + '.boxshelf-bak'), 'RetroArch Undo: your file back exactly');
+S.undo(ra2); ok(read(cfg2) === 'video_driver = "vulkan"\r\nconfirm_quit = "true"\r\n' && !fs.existsSync(cfg2 + '.trustyshelf-bak'), 'RetroArch Undo: your file back exactly');
 
 // DuckStation, portable, keyboard-only: pad mapped, hotkeys, graphics; a second run changes nothing
 const duck = put(path.join(root, 'Duck', 'duckstation-qt-x64-ReleaseLTCG.exe'), 'x'); put(path.join(root, 'Duck', 'portable.txt'), '');

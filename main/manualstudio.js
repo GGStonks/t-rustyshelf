@@ -1,6 +1,8 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/manualstudio.js apart from the app's name ((T)rustyShelf).
 // Manual Studio (Settings → Art & manuals → Manuals, Details → Choose manual…, the Art Studio's "Manual" part): every
 // manual found for a game side by side — archive.org uploads, GamesDatabase's PDF, the console's manual collections, the
-// manual on disk and earlier ones Boxshelf set aside — with a first-page preview, language / region, pages and scan quality.
+// manual on disk and earlier ones (T)rustyShelf set aside — with a first-page preview, language / region, pages and scan quality.
 // "Use" downloads one, turns it into pages the same way the automatic download does, puts it in place (the manual it
 // replaces goes to covers\.manual-originals\<game>\<time>, never deleted); it is your pick, not a lock (1.73): only the Lock switch keeps
 // a new console choice off it. Automatic passes leave a picked manual alone.
@@ -16,7 +18,7 @@ const C = require('./manualcoll');
 const spreads = require('./spreads');
 
 const PREFS = [
-  { id: 'best', label: 'Best English manual', sub: 'The sharpest complete English manual (how Boxshelf always chose)' },
+  { id: 'best', label: 'Best English manual', sub: 'The sharpest complete English manual (how (T)rustyShelf always chose)' },
   { id: 'region:eur', label: 'English · Europe', sub: 'PAL booklets in English' },
   { id: 'region:jpn', label: 'Japanese', sub: 'Japanese booklets' },
   { id: 'lang:fr', label: 'French', sub: 'Manuals in French' },
@@ -26,7 +28,7 @@ const PREFS = [
 ];
 const LANG_LABEL = { en: 'English', fr: 'French', de: 'German', es: 'Spanish', it: 'Italian', ja: 'Japanese', pt: 'Portuguese', nl: 'Dutch' };
 const REG_LABEL = { usa: 'USA', eur: 'Europe', jpn: 'Japan' };
-const SIDE = '.boxshelf-manual.json'; // in a backup folder: what that manual was (for its "Earlier" card)
+const SIDE = '.trustyshelf-manual.json'; // in a backup folder: what that manual was (for its "Earlier" card)
 const CACHE_CAP = 600 * 1048576, CACHE_DAYS = 14, MAX_PDF = 400 * 1048576, JOB_MAX = 40, HIST_MAX = 12;
 const PDF_CUT = 80, IA_CUT = 60; // renderPdfPages draws at most 80 pages of a PDF, fetchManual takes at most 60 archive.org pages (MAX_PAGES): a longer manual is cut there, and the counts say so
 
@@ -54,7 +56,7 @@ const prefFor = sysId => db().prefs[sysId] || 'best';
 // a manual the user picked (Use, My PDF…): automatic passes leave it alone, a new console choice replaces it (1.73)
 const isPick = c => !!(c && (c.origin === 'studio' || c.origin === 'own'));
 const picked = (sysId, file) => isPick(db().cur[keyOf(sysId, file)]);
-// a manual Boxshelf put in from somewhere else than the game itself (the reader then doesn't open a Wii U e-manual on the box front)
+// a manual (T)rustyShelf put in from somewhere else than the game itself (the reader then doesn't open a Wii U e-manual on the box front)
 const chosen = (sysId, file) => { const c = db().cur[keyOf(sysId, file)]; return !!(c && c.src && c.src !== 'builtin'); };
 
 // ---------- arguments (everything the screen sends is checked) ----------
@@ -93,7 +95,7 @@ function quality(w, bpp) {
 }
 const thumbUrl = f => { if (!f) return null; const u = env.fileUrl(f); return u + (u.includes('?') ? '&' : '?') + 't=360'; };
 const readSide = d => { try { return JSON.parse(fs.readFileSync(path.join(d, SIDE), 'utf8')); } catch { return null; } };
-// what the manual in use is, as far as Boxshelf knows: picked here, fetched by the automatic search, or from a collection
+// what the manual in use is, as far as (T)rustyShelf knows: picked here, fetched by the automatic search, or from a collection
 function curMeta(g) {
   const s = db().cur[g.key]; if (s) return s;
   const c = C.info(g.key); if (c && c.src) return { src: c.src.startsWith('gdb/') ? 'gdb:' + c.src.slice(4) : 'coll:' + c.src, label: c.src.startsWith('gdb/') ? 'GamesDatabase' : 'Collection · ' + c.src.split('/')[0], lang: 'en', region: c.src.startsWith('gdb/') ? '' : 'usa', origin: 'auto' };
@@ -234,7 +236,7 @@ async function cands(a) {
   const expect = () => expectOf(entry.list);
   (async () => {
     const title = g.game.title, found = [], seen = new Set(local.map(c => c.src).filter(Boolean)); let offline = false;
-    // the copy already in use (Boxshelf knows where it came from) isn't offered twice: the "in use" card stands for it
+    // the copy already in use ((T)rustyShelf knows where it came from) isn't offered twice: the "in use" card stands for it
     const add = x => { if (!x || found.some(y => y.key === x.key)) return; if (seen.has(x.key)) return; found.push(x); };
     const searches = [
       ...(C.COLLECTIONS[g.sysId] || []).map(col => C.index(col).then(ix => C.matches(ix.entries, g.game).slice(0, 3).forEach(e => add(collCand(col, ix, e)))).catch(e => log('Manual Studio: collection', col.id, e.message))),
@@ -265,7 +267,7 @@ async function cands(a) {
 
 // ---------- putting a manual in place ----------
 function withGame(k, fn) { const prev = gameChain.get(k) || Promise.resolve(); const run = prev.catch(() => {}).then(fn); const tail = run.catch(() => {}); gameChain.set(k, tail); tail.then(() => { if (gameChain.get(k) === tail) gameChain.delete(k); }); return run; }
-const stageDir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'boxshelf-manual-studio-'));
+const stageDir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'trustyshelf-manual-studio-'));
 async function pdfToPages(pdf, stage, base) {
   if (!env.renderPdf) throw new Error('no PDF renderer');
   const pages = await env.renderPdf(pdf); const n = await M.writePages(stage, base, pages);
@@ -320,7 +322,7 @@ async function apply(g, c, opts = {}) {
     try {
       const cut = await fill(g, c, stage, prog);
       const prev = curMeta(g), r = swapIn(g, stage, prev), meta = { ...metaOf(c), origin: opts.origin || 'studio' };
-      if (cut) meta.expected = r.n; // cut at 80 / 60: what came out is the whole of what Boxshelf can show (not "N pages missing" for ever)
+      if (cut) meta.expected = r.n; // cut at 80 / 60: what came out is the whole of what (T)rustyShelf can show (not "N pages missing" for ever)
       remember(g, r.keep, meta, opts.lock === true);
       // (beta.9) an earlier copy put back is moved, not copied: it leaves the Earlier list (it used to stay there, and the
       // manual it replaced was kept as one more, so every press added a copy). Undo still has the one it replaced
@@ -388,7 +390,7 @@ async function own(a) {
   const send = useJob(g, g.game.title); send({ state: 'run', msg: 'Turning your PDF into pages…' });
   const tmp = stageDir(), copy = path.join(tmp, 'own.pdf');
   try {
-    await fs.promises.copyFile(src, copy); // never moved or changed: Boxshelf works on its own copy
+    await fs.promises.copyFile(src, copy); // never moved or changed: (T)rustyShelf works on its own copy
     if (!isPdf(copy)) throw new Error('That file isn\'t a PDF.');
     const name = path.basename(src).replace(/\.pdf$/i, '');
     const c = { key: 'own', source: 'own', pdf: copy, label: 'Your PDF · ' + name, lang: '', region: '', pages: await pdfPages(copy) };
@@ -442,10 +444,10 @@ async function setPref(a) {
   log('Manual Studio:', def.id, 'manuals now follow', pref);
   return { pref, jobId: job.id };
 }
-// 1.73 (the owner's rule): only the Lock switch keeps a game's manual from a new console choice. Manuals Boxshelf fetched,
+// 1.73 (the owner's rule): only the Lock switch keeps a game's manual from a new console choice. Manuals (T)rustyShelf fetched,
 // picks and your own PDF that don't give the new choice get the best copy that does (only one that does: never a swap for
 // another copy that doesn't); games with none get one. Left alone: locked games, Wii U built-in manuals, manuals of unknown
-// origin (added by hand, or from before Boxshelf kept a record), and a pick made after the choice changed. JOB_MAX a run,
+// origin (added by hand, or from before (T)rustyShelf kept a record), and a pick made after the choice changed. JOB_MAX a run,
 // each old manual kept in .manual-originals.
 async function repick(job, pref) {
   const send = d => env.send('manual:job', { id: job.id, systemId: job.systemId, label: job.label, done: job.done, total: job.total, state: job.state, ...d });
@@ -458,7 +460,7 @@ async function repick(job, pref) {
       const g = gameRec(job.systemId, item.sc, game);
       if (isLocked(job.systemId, game.file)) continue;
       const has = (game.art && game.art.manual && game.art.manual.length) || (game.art && game.art.manualPdf), meta = curMeta(g);
-      if (has && (!meta || meta.src === 'builtin')) { kept++; continue; } // unknown origin (no record: Boxshelf can't tell what it is) or the Wii U's own
+      if (has && (!meta || meta.src === 'builtin')) { kept++; continue; } // unknown origin (no record: (T)rustyShelf can't tell what it is) or the Wii U's own
       if (has && M.prefMatch(meta, pref)) continue;
       todo.push(g);
     }

@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/vdf.js apart from the app's name ((T)rustyShelf).
 // Minimal parser for Valve's text KeyValues format (.vdf / .acf).
 function parse(text) {
   let i = 0;

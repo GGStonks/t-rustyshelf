@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/scanner.js apart from the app's name ((T)rustyShelf).
 // Scans ROM folders and turns file names into clean game titles.
 const fs = require('fs');
 const path = require('path');

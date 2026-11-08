@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/imgcheck.js apart from the app's name ((T)rustyShelf).
 // (beta.10) Is this download a picture? PNG, JPEG, WebP, GIF, BMP or AVIF/HEIF, by its first bytes. A 200 that isn't one
 // (a Wi-Fi sign-in page, a CDN error page) is never saved as a cover or poster: a cached picture is trusted for good.
 // No dependencies (covers.js, stremio.js, archive.js and pccovers.js share it; the Node tests load it without Electron).

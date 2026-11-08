@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// renderer/model.js apart from the app's name ((T)rustyShelf).
 /* Your own 3D console for the insert animation.
    Drop a model at themes\<system>\console.glb and it replaces the built-in cube:
    it rises in, its lid (if the model has one) swings open, the disc lands on top, the lid closes.

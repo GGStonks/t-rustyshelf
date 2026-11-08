@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// renderer/splash-start.js apart from the app's name ((T)rustyShelf).
 // Hands the start-up logo to its own thread (see splash-worker.js). Until that thread has drawn it, the page's own
 // copy (same look, standing still) shows, so there's never a blank moment. Without OffscreenCanvas the page copy stays.
 (function () {

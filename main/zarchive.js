@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/zarchive.js apart from the app's name ((T)rustyShelf).
 // Read single files out of a ZArchive (.wua, Cemu's Wii U format) without unpacking the whole thing.
 // Format (github.com/Exzap/ZArchive): big-endian; a 144-byte footer at the end points at the sections: zstd-compressed
 // data in 64 KiB blocks, offset records (a 64-bit base + 16 sizes per record), a name table and a flat file tree.

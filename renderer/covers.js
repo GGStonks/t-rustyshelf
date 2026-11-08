@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// renderer/covers.js apart from the app's name ((T)rustyShelf).
 // Placeholder box art, drawn when a game has no cover image yet.
 // Exposes window.Covers.{front, back, hash, hsl}.
 (function(){

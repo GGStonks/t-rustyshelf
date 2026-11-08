@@ -1,6 +1,6 @@
 {
-  "name": "boxshelf",
-  "productName": "Boxshelf",
+  "name": "trustyshelf",
+  "productName": "TrustyShelf",
   "version": "1.82.0-beta.10",
   "description": "TV-style launcher for emulators, Steam and media apps",
   "license": "GPL-3.0-only",
@@ -17,8 +17,8 @@
     "electron-builder": "^26.0.12"
   },
   "build": {
-    "appId": "io.github.boxshelf",
-    "productName": "Boxshelf",
+    "appId": "io.github.trustyshelf",
+    "productName": "TrustyShelf",
     "files": [
       "main.js",
       "preload.js",
@@ -37,8 +37,9 @@
       "target": "AppImage",
       "icon": "renderer/app-icon.png",
       "category": "Game",
+      "desktop": { "entry": { "Name": "(T)rustyShelf" } },
       "synopsis": "TV-style launcher for emulators and Steam",
-      "artifactName": "Boxshelf-${version}-linux.${ext}"
+      "artifactName": "TrustyShelf-${version}-linux.${ext}"
     },
     "artifactBuildStarted": "scripts/linux-wrapper.js",
     "asar": true,

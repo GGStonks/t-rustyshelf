@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): most of this file is Boxshelf's
+// main/pcgames.js; modified for (T)rustyShelf (see the git history).
 // PC games beyond Steam (beta.4): the Epic Games Launcher's installs (on the PC shelf), and on the Custom shelf the apps
 // Quiver Launcher installed (recomps, ports; Quiver 3, portable or installed, and Quiver 4) plus any program added by hand
 // in Settings → Custom games. Each game is { id, source, title, exe | uri, icon?, appid? }: the screen only ever names a
@@ -8,7 +10,7 @@
 //     keeps library.json / installs.json / apps-folder.json in %APPDATA%\com.quiverlauncher.app. Read only, never written.
 //   - Covers: an Epic game's title is matched once to a Steam app (the store's search) and Steam's own art is used
 //     (steamart.js); only while box art downloads are on. Quiver's and hand-added games aren't matched (a recomp often
-//     shares its name with an unrelated Steam game) and keep Boxshelf's made-up case, as does a title with no match.
+//     shares its name with an unrelated Steam game) and keep (T)rustyShelf's made-up case, as does a title with no match.
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
@@ -44,7 +46,7 @@ function epicGames(dir = EPIC_DIR()) {
 // ---------- (beta.7) more stores on the PC shelf: GOG Galaxy, Ubisoft Connect, EA app, Xbox / Game Pass ----------
 // Windows only; read only. Each store's install list, the way the store itself leaves it:
 //   - GOG: HKLM\SOFTWARE\WOW6432Node\GOG.com\Games\<id> (gameName, path, exe / launchCommand, dependsOn = a DLC). GOG games
-//     have no copy protection: Boxshelf starts the game's own program (Home menu and quit work as for any app).
+//     have no copy protection: (T)rustyShelf starts the game's own program (Home menu and quit work as for any app).
 //   - Ubisoft Connect: HKLM\SOFTWARE\WOW6432Node\Ubisoft\Launcher\Installs\<id>\InstallDir; started through Connect's
 //     link uplay://launch/<id>/0 (its sign-in and cloud saves).
 //   - EA app: every EA game folder has __Installer\installerdata.xml (its content ids and title); found from the
@@ -273,7 +275,7 @@ function steamIdOf(title) { if (!map) map = readJson(mapFile()) || {}; const e =
 const norm = s => String(s || '').toLowerCase().replace(/[™®©]/g, '').replace(/&/g, 'and').replace(/[^a-z0-9]+/g, ' ').trim();
 function getJson(url, ms = 12000) {
   return new Promise(res => {
-    const rq = https.get(url, { headers: { 'User-Agent': 'Boxshelf' }, timeout: ms }, r => { if (r.statusCode !== 200) { r.resume(); return res({ err: 'HTTP ' + r.statusCode }); } let b = ''; r.setEncoding('utf8'); r.on('data', c => { b += c; if (b.length > 2e6) rq.destroy(); }); r.on('end', () => { try { res({ data: JSON.parse(b) }); } catch { res({ err: 'bad reply' }); } }); });
+    const rq = https.get(url, { headers: { 'User-Agent': 'TrustyShelf' }, timeout: ms }, r => { if (r.statusCode !== 200) { r.resume(); return res({ err: 'HTTP ' + r.statusCode }); } let b = ''; r.setEncoding('utf8'); r.on('data', c => { b += c; if (b.length > 2e6) rq.destroy(); }); r.on('end', () => { try { res({ data: JSON.parse(b) }); } catch { res({ err: 'bad reply' }); } }); });
     rq.on('timeout', () => rq.destroy(new Error('timeout'))); rq.on('error', e => res({ err: e.message }));
   });
 }

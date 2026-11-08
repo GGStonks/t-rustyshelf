@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/wikiart.js apart from the app's name ((T)rustyShelf).
 // Box art from the Super Mario Wiki (mariowiki.com, a MediaWiki): official box scans of Nintendo's own games for every
 // region, uploaded as "<Game> NA box art.jpg", "<Game> Box EUR.png", "<Game> EUR back.jpg"… The automatic art check
 // asks it only when no other source had the part, on the Switch 2 shelf (its boxes are there months before the art
@@ -12,7 +14,7 @@ const API = 'https://www.mariowiki.com/api.php';
 // re-releases ("Super Mario Galaxy" would find the Wii box for the Switch one). Switch 2 is where the databases lag.
 const SYS = new Set(['sw2']);
 const TTL = 7 * 864e5, TIMEOUT = 10000;
-const UA = `Boxshelf/${(() => { try { return require('../package.json').version; } catch { return '0'; } })()} (box art for a personal game launcher)`;
+const UA = `TrustyShelf/${(() => { try { return require('../package.json').version; } catch { return '0'; } })()} (box art for a personal game launcher)`;
 let file = null, cache = null, saveT = null, log = () => {}, norm = s => String(s || '').toLowerCase(), chain = Promise.resolve();
 function init(o) { file = o.dir ? path.join(o.dir, 'wikiart.json') : null; log = o.log || log; norm = o.norm || norm; cache = null; }
 const has = sysId => SYS.has(sysId);

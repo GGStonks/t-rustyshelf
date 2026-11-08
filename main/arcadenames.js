@@ -1,3 +1,5 @@
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
+// main/arcadenames.js apart from the app's name ((T)rustyShelf).
 // (beta.7) Arcade and Neo Geo games are zips named by their ROM set ("sf2.zip", "mslug.zip"). FinalBurn Neo's game list
 // (its ClrMame Pro XML, published in the FBNeo repository) says what each set is ("Street Fighter II - The World Warrior
 // (World 910522)") and which sets are BIOS files (neogeo.zip, pgm.zip: not games). It's read once, streamed straight
@@ -44,7 +46,7 @@ function parse(stream) {
 }
 function get(url, hops = 0) {
   return new Promise((resolve, reject) => {
-    const req = https.get(url, { headers: { 'User-Agent': 'Boxshelf' } }, res => {
+    const req = https.get(url, { headers: { 'User-Agent': 'TrustyShelf' } }, res => {
       if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location && hops < 5) { res.resume(); return resolve(get(new URL(res.headers.location, url).toString(), hops + 1)); }
       if (res.statusCode !== 200) { res.resume(); return reject(new Error('arcade list: HTTP ' + res.statusCode)); }
       resolve(res);
