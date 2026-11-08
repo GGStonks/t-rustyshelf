@@ -25,7 +25,22 @@ is Boxshelf's work, by its author.
 > [source](https://github.com/sassiestrhihno/boxshelf-source) is a snapshot of each beta (it starts at 1.82.0-beta.4);
 > the 3D PC model the museum can show isn't included here.
 
-## First run
+## Installing a ready-made build
+
+Download the newest release from the [releases page](https://github.com/GGStonks/t-rustyshelf/releases):
+
+- **Windows:** `TrustyShelf-<version>-windows-portable.exe`. Put it in a folder of its own (its `data` folder goes beside
+  it) and double-click it. Windows may warn that it's from an unknown publisher: More info → Run anyway.
+- **Linux (any distribution: CachyOS, Arch, Fedora, Ubuntu, SteamOS …):** `TrustyShelf-<version>-linux.AppImage`. Make it
+  runnable once (`chmod +x TrustyShelf-*-linux.AppImage`, or Properties → Allow executing as a program) and start it.
+  If nothing happens, your system lacks FUSE 2, which AppImages use: install it (Arch / CachyOS: `sudo pacman -S fuse2`;
+  Fedora: `sudo dnf install fuse fuse-libs`; Ubuntu: `sudo apt install libfuse2t64`) or start it with
+  `./TrustyShelf-*-linux.AppImage --appimage-extract-and-run`. Its settings go in `~/TrustyShelf`. On a Steam Deck, in
+  Desktop Mode, (T)rustyShelf offers to add itself to Steam, for Game Mode.
+- **Android (AYN Thor and other handhelds):** `TrustyShelf-<version>-android.apk`. Open it on the device and allow
+  installing from this source when Android asks.
+
+## First run (from the source)
 
 1. Install **Node.js LTS** from nodejs.org (one time).
 2. Double-click **Start TrustyShelf.bat**. The first start installs what it needs (about a minute).
