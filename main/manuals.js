@@ -400,24 +400,38 @@ function setStore(file) { autoFile = file; autoMemo = null; }
 function memo() { if (autoMemo) return autoMemo; try { autoMemo = JSON.parse(fs.readFileSync(autoFile, 'utf8')); } catch { autoMemo = {}; } return autoMemo; }
 function saveMemo() { if (!autoFile || !autoMemo) return; try { fs.writeFileSync(autoFile + '.tmp', JSON.stringify(autoMemo)); fs.renameSync(autoFile + '.tmp', autoFile); } catch {} }
 // per console: games, how many have a manual, and how many of those are small scans (first page under 1200 px wide)
-function coverage(systems) {
-  const { scanSystem } = require('./scanner'), { artBase, manualDirFor: artDirFor } = require('./paths'), { sizeOf } = require('./spreads');
-  return systems.map(({ def, cfg }) => {
-    const games = scanSystem(def, cfg), r = { id: def.id, name: def.name, total: games.length, have: 0, low: 0 };
-    const listing = new Map();
-    games.forEach(g => { const dir = artDirFor(cfg, g.file), base = artBase(g.file).toLowerCase(); if (!listing.has(dir)) { try { listing.set(dir, fs.readdirSync(dir)); } catch { listing.set(dir, []); } }
-      const pre = base + '-manual', files = listing.get(dir).filter(f => isManualFile(f, pre));
-      if (!files.length) return; r.have++;
+// (beta.10) async, and each folder indexed once (manualIndex): filtering the whole shared covers folder for every game was
+// games x files on the main process, seconds for a big console
+async function coverage(systems) {
+  const { scanSystemAsync } = require('./scanner'), { artBase, manualDirFor: artDirFor } = require('./paths'), { sizeOfAsync } = require('./spreads');
+  const out = []; let t0 = Date.now(); const breath = async () => { if (Date.now() - t0 > 25) { await new Promise(r => setImmediate(r)); t0 = Date.now(); } };
+  for (const { def, cfg } of systems) {
+    const games = await scanSystemAsync(def, cfg), r = { id: def.id, name: def.name, total: games.length, have: 0, low: 0 };
+    const index = new Map();
+    for (const g of games) { await breath(); const dir = artDirFor(cfg, g.file), base = artBase(g.file).toLowerCase(); if (!index.has(dir)) { let names = []; try { names = await fs.promises.readdir(dir); } catch {} index.set(dir, manualIndex(names)); }
+      const files = index.get(dir).get(base) || [];
+      if (!files.length) continue; r.have++;
       const first = files.filter(f => /\.(jpe?g|png)$/i.test(f)).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))[0];
-      const z = first && sizeOf(path.join(dir, first)); if (z && z[0] < 1200) r.low++; });
-    return r;
-  });
+      const z = first && await sizeOfAsync(path.join(dir, first)); if (z && z[0] < 1200) r.low++; }
+    out.push(r);
+  }
+  return out;
+}
+// (beta.10) a folder's manual files by lowercase game base, in listing order: exactly the names isManualFile(f, base + '-manual')
+// accepts. An image counts for every base it starts with "<base>-manual-" for (each "-manual-" in the name), a pdf for one.
+function manualIndex(names) {
+  const m = new Map(), add = (b, f) => { const a = m.get(b); if (a) a.push(f); else m.set(b, [f]); };
+  for (const f of names) { const l = f.toLowerCase();
+    if (l.endsWith('-manual.pdf')) add(l.slice(0, -11), f);
+    else if (/\.(jpe?g|png|webp)$/.test(l)) for (let i = l.indexOf('-manual-'); i >= 0; i = l.indexOf('-manual-', i + 1)) add(l.slice(0, i), f); }
+  return m;
 }
 // <base>-manual-NN.jpg / .png / .webp pages (the image types the scanner shows as manual pages), or <base>-manual.pdf. Only
 // finished files: a page still downloading (or left by one that broke off) is a .part, and counted as a manual it kept the
 // game from ever getting one. pre: lowercase "<base>-manual"
 const isManualFile = (f, pre) => { const l = f.toLowerCase(); return (l.startsWith(pre + '-') && /\.(jpe?g|png|webp)$/.test(l)) || l === pre + '.pdf'; };
 function hasManual(dir, base, ls) {
+  if (ls && ls.derived) return ls.derived(dir, 'manuals', manualIndex).has(base.toLowerCase()); // (beta.10) a run's lister: the folder's index, built once
   const pre = (base + '-manual').toLowerCase();
   return (ls || require('./dircache').fresh).names(dir).some(f => isManualFile(f, pre));
 }
@@ -577,8 +591,8 @@ function rejects() { if (rejMemo) return rejMemo; try { rejMemo = JSON.parse(fs.
 function isRejected(key, id) { const r = rejFile ? rejects()[key] : null; return !!(r && id && r.includes(String(id))); }
 async function rejectManual(systems, systemId, file, opts = {}) {
   const sys = systems.find(x => x.def.id === systemId); if (!sys) throw new Error('Unknown system.');
-  const { scanSystem } = require('./scanner'), spreads = require('./spreads');
-  const g = scanSystem(sys.def, sys.cfg).find(x => x.file.toLowerCase() === String(file).toLowerCase()); if (!g) throw new Error('Game not found.');
+  const { scanSystemAsync } = require('./scanner'), spreads = require('./spreads');
+  const g = (await scanSystemAsync(sys.def, sys.cfg)).find(x => x.file.toLowerCase() === String(file).toLowerCase()); if (!g) throw new Error('Game not found.'); // (beta.10: async, the Wrong game press held main up)
   const key = systemId + '|' + g.file.toLowerCase(), m = memo(), dir = artDir(sys.cfg, g.file), base = artBase(g.file);
   // which copy this was: the collections' record, our own record, or (older downloads) the match the search makes now
   const bad = []; if (opts.collSrc) { bad.push('coll:' + opts.collSrc); if (opts.collSrc.startsWith('gdb/')) bad.push('gdb:' + opts.collSrc.slice(4)); } if (m[key] && m[key].got) bad.push(String(m[key].got));

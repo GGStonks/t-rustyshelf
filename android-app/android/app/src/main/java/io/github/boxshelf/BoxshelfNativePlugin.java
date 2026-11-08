@@ -90,10 +90,14 @@ public class BoxshelfNativePlugin extends Plugin {
         Uri tree = data.getData();
         // read + write, so the same pick works for an art & manuals folder Boxshelf saves into (read only if write isn't offered)
         ContentResolver cr = getContext().getContentResolver();
-        try { cr.takePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION); }
-        catch (SecurityException e) { try { cr.takePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION); } catch (SecurityException ignored) {} }
+        // (beta.10) whether Android kept the permission is said back (persisted): without it the folder reads today but not
+        // after a restart, and the page tells the player so instead of the pick quietly "working"
+        boolean kept = false; String why = "";
+        try { cr.takePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION); kept = true; }
+        catch (SecurityException e) { try { cr.takePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION); kept = true; } catch (SecurityException e2) { why = String.valueOf(e2.getMessage()); } }
         JSObject r = new JSObject();
         r.put("uri", tree.toString());
+        r.put("persisted", kept); if (!kept) r.put("persistError", why);
         // (beta.8) a picker that hands back a plain document link instead of a folder tree (some makers' pickers) threw
         // here and left the folder step waiting forever: it's answered as a cancel instead
         try { r.put("docId", DocumentsContract.getTreeDocumentId(tree)); }
@@ -106,6 +110,32 @@ public class BoxshelfNativePlugin extends Plugin {
         JSArray a = new JSArray();
         for (android.content.UriPermission p : getContext().getContentResolver().getPersistedUriPermissions()) if (p.isReadPermission()) a.put(p.getUri().toString());
         JSObject r = new JSObject(); r.put("uris", a); call.resolve(r);
+    }
+
+    @PluginMethod
+    public void releaseFolder(PluginCall call) { // (beta.10) a folder removed in Settings: its lasting permission given back { uri } → { released }
+        String s = call.getString("uri", "");
+        boolean done = false;
+        if (s != null && !s.isEmpty()) {
+            ContentResolver cr = getContext().getContentResolver();
+            for (android.content.UriPermission p : cr.getPersistedUriPermissions()) { // (only a grant that's really there: anything else would throw)
+                if (!s.equals(p.getUri().toString())) continue;
+                int flags = (p.isReadPermission() ? Intent.FLAG_GRANT_READ_URI_PERMISSION : 0) | (p.isWritePermission() ? Intent.FLAG_GRANT_WRITE_URI_PERMISSION : 0);
+                if (flags == 0) continue;
+                try { cr.releasePersistableUriPermission(p.getUri(), flags); done = true; } catch (SecurityException ignored) {}
+            }
+        }
+        JSObject r = new JSObject(); r.put("released", done); call.resolve(r);
+    }
+
+    @PluginMethod
+    public void openUrl(PluginCall call) { // (beta.10) Settings' "Open site" links: an https address in the device's browser (nothing else is opened)
+        String s = call.getString("url", "");
+        Uri u = Uri.parse(s == null ? "" : s.trim());
+        if (!"https".equalsIgnoreCase(u.getScheme()) || u.getHost() == null || u.getHost().isEmpty()) { call.reject("Only https links can be opened"); return; }
+        try { getContext().startActivity(new Intent(Intent.ACTION_VIEW, u).addCategory(Intent.CATEGORY_BROWSABLE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); call.resolve(); }
+        catch (ActivityNotFoundException e) { call.reject("No browser is installed to open that link"); }
+        catch (RuntimeException e) { call.reject("That link couldn't be opened"); }
     }
 
     @PluginMethod
@@ -331,12 +361,16 @@ public class BoxshelfNativePlugin extends Plugin {
     }
 
     // ---------- magazines & guides (0.3.2): the Internet Archive store's downloads and the reading corner (ReadingStore) ----------
-    private ReadingStore readingStore;
+    // (beta.10) made in load() (the plugin's own thread, before any call): no lock needed, so a reading call never waits
+    // behind anything else that locks the plugin
+    private volatile ReadingStore readingStore;
 
-    private synchronized ReadingStore reading() {
-        if (readingStore == null) readingStore = new ReadingStore(getContext(), userAgent(), (e, o) -> notifyListeners(e, o));
-        return readingStore;
+    private ReadingStore reading() {
+        ReadingStore s = readingStore;
+        if (s == null) { synchronized (readingLock) { if (readingStore == null) readingStore = new ReadingStore(getContext(), userAgent(), (e, o) -> notifyListeners(e, o)); s = readingStore; } }
+        return s;
     }
+    private final Object readingLock = new Object(); // (only if load() couldn't make it: a short lock of its own)
 
     @PluginMethod
     public void readingDownload(PluginCall call) { reading().download(call); } // progress: "readingProgress" events { id, bytes, total, conns }
@@ -381,7 +415,11 @@ public class BoxshelfNativePlugin extends Plugin {
     // GET with timeouts, following redirects by hand (HttpURLConnection won't follow http <-> https on its own)
     private Got httpGet(String url, JSObject headers, int maxBytes) throws IOException {
         String u = url;
+        final String host0 = new URL(url).getHost();
         for (int hop = 0; hop < 6; hop++) {
+            // (beta.10) the caller's headers (a SteamGridDB key, say) go only to the host they were meant for, and an
+            // https request never follows a redirect down to plain http
+            if (hop > 0) { URL nu = new URL(u); if (!nu.getHost().equalsIgnoreCase(host0)) headers = null; if ("http".equals(nu.getProtocol()) && url.startsWith("https:")) throw new IOException("Refused a redirect from https to http"); }
             HttpURLConnection c = (HttpURLConnection) new URL(u).openConnection();
             boolean reuse = false; // answered and read to the end: the connection stays open for the next request (keep-alive)
             try {
@@ -400,6 +438,7 @@ public class BoxshelfNativePlugin extends Plugin {
                 }
                 Got g = new Got(); g.status = code; g.type = c.getContentType();
                 if (code >= 200 && code < 300) {
+                    if (c.getContentLengthLong() > maxBytes) throw new TooBig(); // (beta.10) said up front: not downloaded at all (API 24)
                     try (InputStream in = new BufferedInputStream(c.getInputStream())) { g.body = readAll(in, maxBytes); }
                     reuse = true;
                 } else reuse = drain(c); // a 404 (GameTDB's region guesses, mostly) is read out too, so it doesn't cost a new connection
@@ -423,10 +462,14 @@ public class BoxshelfNativePlugin extends Plugin {
         finally { try { in.close(); } catch (IOException ignored) {} }
     }
 
+    // (beta.10) a file over the size limit: not "busy" (tried again every start, the whole 80 MB each time) but there and
+    // too big, which the callers answer as missing (toobig)
+    static final class TooBig extends IOException { TooBig() { super("File too large"); } }
+
     private static byte[] readAll(InputStream in, int maxBytes) throws IOException {
         ByteArrayOutputStream bo = new ByteArrayOutputStream();
         byte[] buf = new byte[16384]; int n;
-        while ((n = in.read(buf)) > 0) { bo.write(buf, 0, n); if (bo.size() > maxBytes) throw new IOException("File too large"); }
+        while ((n = in.read(buf)) > 0) { bo.write(buf, 0, n); if (bo.size() > maxBytes) throw new TooBig(); }
         return bo.toByteArray();
     }
 
@@ -570,23 +613,44 @@ public class BoxshelfNativePlugin extends Plugin {
     }
 
     private String igdbTok = null, igdbTokFor = null; private long igdbTokUntil = 0;
+    // (beta.10) the token's own lock: it's held across the sign-in request, which must never block the plugin's thread
+    // (reading(), lbIndex and the rest lock the plugin itself; a slow Twitch answer used to hold them all up)
+    private final Object tokenLock = new Object();
     // a Twitch app token for IGDB (client credentials; it lasts about two months), kept in memory for this run
-    private synchronized String igdbToken(String[] k, boolean fresh) {
-        if (!fresh && igdbTok != null && k[0].equals(igdbTokFor) && System.currentTimeMillis() < igdbTokUntil) return igdbTok;
-        try {
-            String form = "client_id=" + java.net.URLEncoder.encode(k[0], "UTF-8") + "&client_secret=" + java.net.URLEncoder.encode(k[1], "UTF-8") + "&grant_type=client_credentials";
-            Got g = httpPost("https://id.twitch.tv/oauth2/token", null, form, "application/x-www-form-urlencoded", 64 * 1024);
-            if (g.status != 200 || g.body == null) { igdbTok = null; return null; }
-            JSONObject j = new JSONObject(new String(g.body, StandardCharsets.UTF_8));
-            igdbTok = j.optString("access_token", null); igdbTokFor = k[0];
-            igdbTokUntil = System.currentTimeMillis() + Math.max(60, j.optLong("expires_in", 3600) - 300) * 1000L;
-            return igdbTok;
-        } catch (Exception e) { return null; }
+    private String igdbToken(String[] k, boolean fresh) {
+        synchronized (tokenLock) {
+            if (!fresh && igdbTok != null && k[0].equals(igdbTokFor) && System.currentTimeMillis() < igdbTokUntil) return igdbTok;
+            try {
+                String form = "client_id=" + java.net.URLEncoder.encode(k[0], "UTF-8") + "&client_secret=" + java.net.URLEncoder.encode(k[1], "UTF-8") + "&grant_type=client_credentials";
+                Got g = httpPost("https://id.twitch.tv/oauth2/token", null, form, "application/x-www-form-urlencoded", 64 * 1024);
+                if (g.status != 200 || g.body == null) { igdbTok = null; return null; }
+                JSONObject j = new JSONObject(new String(g.body, StandardCharsets.UTF_8));
+                igdbTok = j.optString("access_token", null); igdbTokFor = k[0];
+                igdbTokUntil = System.currentTimeMillis() + Math.max(60, j.optLong("expires_in", 3600) - 300) * 1000L;
+                return igdbTok;
+            } catch (Exception e) { return null; }
+        }
     }
 
     // ScreenScraper's sign-in, added to one of its addresses at the moment of the request, from the saved settings: the page
     // never builds, logs or keeps an address with the password in it (or passes one through the bridge, which logs calls in
     // debug builds). Not a ScreenScraper https address: left as it is
+    // (beta.10) Boxshelf's own ScreenScraper developer login, when this build has one: assets/ss-dev.json { "devId", "devPass" }
+    // (outside the web page's folder, so the page can't read it; never in git, the .gitignore lists it). Read once; null: none
+    private String[] ssOwn = null; private boolean ssOwnRead = false;
+    private synchronized String[] readSsOwnDev() {
+        if (ssOwnRead) return ssOwn; ssOwnRead = true;
+        try (InputStream in = getContext().getAssets().open("ss-dev.json")) {
+            JSONObject j = new JSONObject(new String(readAll(in, 64 * 1024), StandardCharsets.UTF_8));
+            String id = j.optString("devId", "").trim(), pw = j.optString("devPass", "");
+            if (!id.isEmpty() && !pw.isEmpty()) ssOwn = new String[] { id, pw };
+        } catch (Exception e) { ssOwn = null; }
+        return ssOwn;
+    }
+    // whether this build has its own developer login (yes / no only, never the values), for Settings' wording
+    @PluginMethod
+    public void ssOwnDev(PluginCall call) { JSObject r = new JSObject(); r.put("has", readSsOwnDev() != null); call.resolve(r); }
+
     private String ssSign(String url) {
         try {
             URL u = new URL(url);
@@ -599,6 +663,7 @@ public class BoxshelfNativePlugin extends Plugin {
             JSONObject keys = new JSONObject(text).optJSONObject("keys");
             if (keys == null) return url;
             String user = keys.optString("ssUser", "").trim(), pass = keys.optString("ssPass", ""), devId = keys.optString("ssDevId", "").trim(), devPass = keys.optString("ssDevPass", "");
+            if (devId.isEmpty()) { String[] own = readSsOwnDev(); if (own != null) { devId = own[0]; devPass = own[1]; } } // (beta.10) Boxshelf's own, when this build has one
             StringBuilder b = new StringBuilder(url);
             char sep = url.indexOf('?') >= 0 ? '&' : '?';
             String[][] add = { { "softname", "Boxshelf" }, { "ssid", user }, { "sspassword", pass }, { "devid", devId }, { "devpassword", devId.isEmpty() ? "" : devPass } };
@@ -874,7 +939,9 @@ public class BoxshelfNativePlugin extends Plugin {
         net.execute(() -> {
             JSObject r = new JSObject();
             Got g;
-            try { g = httpGet(url, null, (pdf ? 80 : 40) * 1024 * 1024); } catch (Throwable e) { r.put("ok", false); r.put("busy", true); call.resolve(r); return; }
+            try { g = httpGet(url, null, (pdf ? 80 : 40) * 1024 * 1024); }
+            catch (TooBig e) { r.put("ok", false); r.put("missing", true); r.put("toobig", true); call.resolve(r); return; } // (beta.10) never fetched again for nothing
+            catch (Throwable e) { r.put("ok", false); r.put("busy", true); call.resolve(r); return; }
             try {
                 if (g.status == 404 || g.status == 410) { r.put("ok", false); r.put("missing", true); call.resolve(r); return; }
                 if (g.body == null) { r.put("ok", false); r.put("busy", true); r.put("status", g.status); call.resolve(r); return; } // 5xx / 429 / 403: try later
@@ -883,6 +950,9 @@ public class BoxshelfNativePlugin extends Plugin {
                     if (g.body[0] != '%' || g.body[1] != 'P' || g.body[2] != 'D' || g.body[3] != 'F') { r.put("ok", false); r.put("missing", true); call.resolve(r); return; } // not a PDF after all
                     File dir = new File(getContext().getCacheDir(), "manpdf");
                     if (!dir.isDirectory()) dir.mkdirs();
+                    // (beta.10) the page drops each PDF once its pages are saved (dropPdf); any left over from a run cut short go here
+                    File[] old = dir.listFiles(); long stale = System.currentTimeMillis() - 3600_000L;
+                    if (old != null) for (File x : old) if (x.isFile() && x.lastModified() < stale) x.delete();
                     File f = new File(dir, safeName(key) + "-" + name + ".pdf");
                     try (FileOutputStream fo = new FileOutputStream(f)) { fo.write(g.body); }
                     r.put("ok", true); r.put("name", f.getName()); r.put("file", f.getAbsolutePath()); call.resolve(r); return;
@@ -901,26 +971,49 @@ public class BoxshelfNativePlugin extends Plugin {
         });
     }
 
+    @PluginMethod
+    public void dropPdf(PluginCall call) { // (beta.10) a PDF manual's download once its pages are saved { path } → { removed }. Only the cache's manpdf folder
+        String p = call.getString("path", "");
+        boolean ok = false;
+        try {
+            File dir = new File(getContext().getCacheDir(), "manpdf"), f = new File(p == null ? "" : p);
+            if (f.getCanonicalPath().startsWith(dir.getCanonicalPath() + File.separator) && f.isFile()) ok = f.delete();
+        } catch (Exception ignored) {}
+        JSObject r = new JSObject(); r.put("removed", ok); call.resolve(r);
+    }
+
     // (beta.9) a game's video preview, found beside the games (a "videos" folder): copied once into the app's cache so the
     // page can play it (the page can't open the games folder's documents itself). { uri, name, size } → { ok, path }.
     // Kept under 300 MB, the oldest dropped first; a copy that's already there (same size) is used as it is.
     private static final long PREVIEW_CAP = 300L << 20;
+    // (beta.10) previews copy on a thread of their own (a 300 MB video used to hold up folder scans, art lists and manual
+    // pages on io), and only the newest ask counts: one for another video (you moved on) stops an older copy part way
+    private final ExecutorService previewIo = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(() -> { android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND); r.run(); }, "boxshelf-preview");
+        t.setDaemon(true);
+        return t;
+    });
+    private volatile String previewWant = "";
     @PluginMethod
     public void copyPreview(PluginCall call) {
         final String uriStr = call.getString("uri", ""), name = safeName(call.getString("name", "preview"));
         final long size = call.getLong("size", 0L);
         if (uriStr.isEmpty()) { call.reject("No video"); return; }
-        io.execute(() -> {
+        previewWant = name;
+        previewIo.execute(() -> {
+            File part = null;
             try {
+                if (!name.equals(previewWant)) { JSObject x = new JSObject(); x.put("ok", false); x.put("superseded", true); call.resolve(x); return; } // a newer one was asked for
                 File dir = new File(getContext().getCacheDir(), "previews");
                 if (!dir.isDirectory()) dir.mkdirs();
                 File f = new File(dir, name);
                 if (f.isFile() && (size <= 0 || f.length() == size)) { f.setLastModified(System.currentTimeMillis()); JSObject r = new JSObject(); r.put("ok", true); r.put("path", f.getAbsolutePath()); call.resolve(r); return; }
-                File part = new File(dir, name + ".part");
+                part = new File(dir, name + ".part");
                 try (java.io.InputStream in = getContext().getContentResolver().openInputStream(Uri.parse(uriStr)); FileOutputStream out = new FileOutputStream(part)) {
                     if (in == null) throw new java.io.IOException("can't open the video");
                     byte[] b = new byte[256 * 1024]; int n; long total = 0;
-                    while ((n = in.read(b)) > 0) { out.write(b, 0, n); total += n; if (total > PREVIEW_CAP) throw new java.io.IOException("video too big"); }
+                    while ((n = in.read(b)) > 0) { out.write(b, 0, n); total += n; if (total > PREVIEW_CAP) throw new java.io.IOException("video too big");
+                        if (!name.equals(previewWant)) throw new java.io.InterruptedIOException("superseded"); }
                 }
                 if (!part.renameTo(f)) { part.delete(); throw new java.io.IOException("couldn't keep the video"); }
                 // the cache stays under its cap: the videos not shown for longest go first
@@ -930,7 +1023,10 @@ public class BoxshelfNativePlugin extends Plugin {
                     for (File x : all) { used += x.length(); if (used > PREVIEW_CAP && !x.equals(f)) x.delete(); }
                 }
                 JSObject r = new JSObject(); r.put("ok", true); r.put("path", f.getAbsolutePath()); call.resolve(r);
-            } catch (Throwable e) { JSObject x = new JSObject(); x.put("ok", false); x.put("error", String.valueOf(e.getMessage())); call.resolve(x); }
+            } catch (Throwable e) {
+                if (part != null && part.isFile()) part.delete(); // (a copy stopped part way leaves nothing behind)
+                JSObject x = new JSObject(); x.put("ok", false); x.put("error", String.valueOf(e.getMessage())); if (e instanceof java.io.InterruptedIOException) x.put("superseded", true); call.resolve(x);
+            }
         });
     }
 
@@ -979,7 +1075,9 @@ public class BoxshelfNativePlugin extends Plugin {
                 String url = urls.optString(k, "");
                 if (url.isEmpty()) continue;
                 Got g;
-                try { g = httpGet(ss ? ssSign(url) : url, null, 25 * 1024 * 1024); } catch (Throwable e) { busy = true; continue; } // Throwable: even out of memory, the call must still be answered
+                try { g = httpGet(ss ? ssSign(url) : url, null, 25 * 1024 * 1024); }
+                catch (TooBig e) { continue; } // (beta.10) over the limit: as good as not there (never "busy": it would be fetched again every start)
+                catch (Throwable e) { busy = true; continue; } // Throwable: even out of memory, the call must still be answered
                 if (g.status == 404 || g.status == 410) continue;
                 if (g.body == null) { busy = true; continue; } // 5xx / 429 / 403: not remembered as "not there"
                 if (g.body.length < 1024) continue; // an error page (or ScreenScraper's "NOMEDIA"), not a picture
@@ -1108,7 +1206,9 @@ public class BoxshelfNativePlugin extends Plugin {
                 if (f.isFile() && f.length() > 0) { try (InputStream in = new FileInputStream(f)) { body = readAll(in, 40 * 1024 * 1024); } }
                 else {
                     Got g;
-                    try { g = httpGet(ss ? ssSign(url) : url, null, 25 * 1024 * 1024); } catch (Throwable e) { r.put("busy", true); call.resolve(r); return; }
+                    try { g = httpGet(ss ? ssSign(url) : url, null, 25 * 1024 * 1024); }
+                    catch (TooBig e) { r.put("missing", true); r.put("toobig", true); call.resolve(r); return; } // (beta.10) not offered, never fetched again for nothing
+                    catch (Throwable e) { r.put("busy", true); call.resolve(r); return; }
                     if (g.status == 404 || g.status == 410 || (g.body != null && g.body.length < 1024)) { r.put("missing", true); call.resolve(r); return; }
                     if (g.body == null) { r.put("busy", true); call.resolve(r); return; }
                     body = g.body; fresh = true;
@@ -1300,6 +1400,7 @@ public class BoxshelfNativePlugin extends Plugin {
 
     @Override
     public void load() {
+        try { readingStore = new ReadingStore(getContext(), userAgent(), (e, o) -> notifyListeners(e, o)); } catch (RuntimeException e) { readingStore = null; } // (beta.10: reading() makes it later if this failed)
         try {
             bottom = new BottomScreen(getActivity(), new BottomScreen.Listener() {
                 @Override

@@ -117,4 +117,4 @@ async function detectAll() {
 // one console's emulator and games folders (a console added in an update, found once as setup would have)
 function detectSystem(id) { const s = CONSOLES.find(c => c.id === id); return s ? { emulator: findExe(s.emulatorFolders, s.exeNames), romDirs: findRomDirs(s) } : null; }
 
-module.exports = { detectAll, detectSystem };
+module.exports = { detectAll, detectSystem, findSteam };

@@ -347,7 +347,8 @@ function mount(s){
   if(g.installed===false)slot.classList.add("notinst"); // (an Epic game the account owns but isn't installed: greyed, Play offers to install it)
   slot.querySelectorAll(".spine-band").forEach(band=>{band.style.background=os.spineBand.bg;band.style.color=os.spineBand.fg;band.textContent=g.kind==="emulator"?"EMU":g.kind==="setup"?"ADD":os.spineBand.label});
   slot.querySelectorAll(".spine-title").forEach(t=>t.textContent=g.title);
-  if(g.art&&g.art.spine){slot.querySelectorAll(".f-left,.f-right").forEach(face=>{const sp=new Image();sp.className="spine-img";sp.alt="";sp.draggable=false;sp.decoding="async";sp.src=g.art.spine;sp.onerror=()=>sp.remove();face.appendChild(sp)})}
+  // (beta.10) Android: the spine's small copy sized like the front's (thumb), not the 1024 px display copy, on every case made
+  if(g.art&&g.art.spine){const su=ANDROID?thumb(g.art.spine,bh*OS):g.art.spine;slot.querySelectorAll(".f-left,.f-right").forEach(face=>{const sp=new Image();sp.className="spine-img";sp.alt="";sp.draggable=false;sp.decoding="async";sp.src=su;sp.onerror=()=>sp.remove();face.appendChild(sp)})}
   slot.style.setProperty("--glow",hsl(g.hue,90,62));
   slot.addEventListener("click",()=>{if(dragMoved||(mode!=="browse"&&mode!=="details"))return; /* (beta.8: not under a note card, Sort, Achievements or Customize) */if(i===sel){flip()}else{setInput("pointer");go(i)}});
   // keep DOM order = shelf order so stacking stays predictable
@@ -1296,7 +1297,7 @@ function play(){
   if(raw.kind==="random"){if(raw.pick)playPick(raw);else shuffle();return}
   if(cur()===HOME){playPick({pick:{shelf:shelves.indexOf(shelfFor(raw)),game:raw}});return}
   const g=raw;
-  const s=cur();
+  const s=cur().col?(g._sh||shelfFor(g)):cur(); // (beta.10) on a collection shelf: the game's own console (build picker, boot video and slide, its name)
   // Switch 2: which build first (before the boot slide starts); Back on the list leaves you on the shelf
   if(needsBuild(g,s)){pickBuild(g).then(exe=>{if(exe==null)return;nextBuild={id:g.id,exe};play()});return}
   const boot=g.kind==="rom"&&s.bootOnLaunch&&!s.useIpl,vid=boot&&!!(themes[s.id]||{}).boot;
@@ -1322,7 +1323,7 @@ function relight(e){if(!e||!e.classList.contains("lift"))return;e.classList.add(
 function unhold(e,fade){if(!e)return;if(!e.classList.contains("held")){relight(e);return}if(fade){e.classList.add("unhold");clearTimeout(e._uh);e._uh=setTimeout(()=>e.classList.remove("unhold"),260)}e.classList.remove("held");relight(e)}
 function openInspect(){uiCrumb("Inspect");
   const g=curGame(),s=pickShelf();if(!g||g.kind!=="rom"||sysBusy()||(mode!=="browse"&&mode!=="details"))return;
-  closeDetails(true);mode="inspect";clearTimeout(isp.wd);const tok=++isp.tok;
+  detailsBack=mode==="details"?g:null;closeDetails(true);mode="inspect";clearTimeout(isp.wd);const tok=++isp.tok;
   const el=$("inspect"),style=STYLE[s.id]||STYLE.media,m=MEDIA[s.id]||MEDIA.wii;
   const ch=Math.min(innerHeight*.58,innerWidth*.34/style.ratio),cw=ch*style.ratio;
   el.style.setProperty("--ch",ch+"px");el.style.setProperty("--cw",cw+"px");el.style.setProperty("--t",(cw*Math.max(.06,style.depth*.7))+"px");el.style.setProperty("--disc",(cw*m.size)+"px");
@@ -1355,6 +1356,10 @@ function openInspect(){uiCrumb("Inspect");
   if(!gl)el.classList.add("on");el.setAttribute("aria-hidden","false");renderIspHints();sfx.flip();
   cancelAnimationFrame(isp.raf);isp.lt=0;isp.raf=requestAnimationFrame(ispLoop);
 }
+// (beta.10) the game whose Details were open when Inspect or the quick menu came over them: backing out of those (Back, Esc,
+// a touch back, the menu button) opens its Details again; a launch, or anything else taking over, doesn't
+let detailsBack=null;
+function detailsReturn(){const g=detailsBack;detailsBack=null;if(g&&mode==="browse"&&!qm.open&&!sysBusy()&&curGame()===g)openDetails()}
 function closeInspect(){
   // the manual reader open on top (a phone companion's Play can close Inspect from under it): shut it too, or the paused 3D view
   // and rd.open stayed behind and every later Inspect stuck with the box lifted
@@ -1632,7 +1637,7 @@ function ispBack(){
   if(rd.open){closeReader();return}
   if(isp.state===2){if(ispSpins()){isp.ty=isp.sy0+Math.round((isp.ty-isp.sy0)/360)*360;if(!(window.Inspect3D&&Inspect3D.isActive()))isp.ry=isp.ty} /* back the nearest whole spin: the case comes back facing as it left (the CSS case at once: its spin isn't blended out) */isp.tf=0;isp.tx=Math.max(-50,Math.min(50,isp.tx));isp.state=1;el.classList.remove("out")} /* (the disc could tilt further than the case does) */
   else if(isp.state===1){isp.state=0;el.classList.remove("open")}
-  else{closeInspect();sfx.back();return}
+  else{closeInspect();sfx.back();detailsReturn();return}
   if(window.Inspect3D)Inspect3D.setState(isp.state);
   sfx.back();renderIspHints();
 }
@@ -1670,7 +1675,7 @@ function inspectKey(e){
   else if(k==="f"||k==="F"){if(!e.repeat)ispFlip()}
   else if(k==="Enter"){if(e.repeat)return;if(isp.state===2)holdBegin();else ispAdvance()}
   else if(k==="Escape"||k==="Backspace"){if(!e.repeat)ispBack()}
-  else if(k==="v"||k==="V"){if(!e.repeat)closeInspect()}
+  else if(k==="v"||k==="V"){if(!e.repeat){closeInspect();detailsReturn()}}
   else handled=false;
   if(handled)e.preventDefault();
 }
@@ -1731,7 +1736,7 @@ function runInsert(s,g,done,hideAfter){
   const drive=themes[s.id]&&themes[s.id].console;el.classList.toggle("has-console",!!drive);if(drive)el.querySelector(".ins-console-img").src=drive;
   const mdl=themes[s.id]&&themes[s.id].model;
   const useModel=!!mdl&&!drive&&window.ConsoleModel&&ConsoleModel.ready(mdl);
-  if(mdl&&!useModel&&!drive&&window.ConsoleModel)ConsoleModel.load(mdl,modelOpts(s.id)).then(ok=>{if(!ok)toast(`Couldn't use your 3D console: ${ConsoleModel.error()||"unknown error"}`)});
+  if(mdl&&!useModel&&!drive&&window.ConsoleModel)ConsoleModel.load(mdl,modelOpts(s.id)).then(ok=>{if(ok===false)toast(`Couldn't use your 3D console: ${ConsoleModel.error()||"unknown error"}`)});
   el.classList.toggle("has-model",useModel);
   const top=(m.drive==="top"||useModel)&&!drive;el.classList.toggle("topload",top);
   const slot=m.drive==="slot"&&!drive&&!useModel;el.classList.toggle("slotload",slot);
@@ -1804,7 +1809,7 @@ function testModel(id){
   if(!sh||!g){toast("Add a game to this shelf first, then test");return}
   const t=themes[id]||{};
   const go=()=>{closeCustomize();mode="launch";runInsert(sh,g,()=>{mode="browse"},true)};
-  if(t.model&&window.ConsoleModel&&!ConsoleModel.ready(t.model)){toast("Loading your 3D model…");ConsoleModel.load(t.model,modelOpts(id)).then(ok=>{if(ok)go();else toast(`Couldn't use your 3D console: ${ConsoleModel.error()||"unknown error"}`)})}
+  if(t.model&&window.ConsoleModel&&!ConsoleModel.ready(t.model)){toast("Loading your 3D model…");ConsoleModel.load(t.model,modelOpts(id)).then(ok=>{if(ok)go();else if(ok===false)toast(`Couldn't use your 3D console: ${ConsoleModel.error()||"unknown error"}`)})}
   else go();
 }
 function openEmulator(){const s=shelfFor(curGame());if(!s||s.kind!=="console"||!s.hasEmulator)return;closeDetails(true);launchNow({kind:"emulator",title:`${s.emulatorName} settings`,_sh:s})}
@@ -1868,8 +1873,9 @@ let musLaunch=null;
 function musLaunchFrom(){const c=window.Museum&&Museum.current&&Museum.current();musLaunch={row:c&&c.row&&c.row.id||(cur()&&cur().id)||null,at:performance.now()}}
 function musLaunchBack(){const m=musLaunch;musLaunch=null;if(!m||mode!=="browse")return;setTimeout(()=>{if(mode==="browse"&&!sysBusy())openMuseum(m.row||undefined)},0)}
 // library updates that arrive while you're playing / in the museum / Inspect wait here and are applied back on the shelf
-let pendingLib=null,pendingRefresh=false;
-setInterval(()=>{if((pendingRefresh||pendingLib)&&mode==="browse"&&performance.now()-returnAt>2500&&!sysBusy()&&performance.now()-lastInputAt>800){const lib=pendingLib;pendingLib=null;pendingRefresh=false;refresh(true,lib||undefined)}},700);
+// (beta.10) libLater: a library change that came in mid-scroll ({msgs, rk, n0, watch}); its notes are said once its refresh is applied
+let pendingLib=null,pendingRefresh=false,libLater=null;
+setInterval(()=>{if((pendingRefresh||pendingLib||libLater)&&mode==="browse"&&performance.now()-returnAt>2500&&!sysBusy()&&!(window.BS_BUSY&&BS_BUSY())&&performance.now()-lastInputAt>800){const lib=pendingLib,L=libLater,need=pendingRefresh||!!lib;pendingLib=null;pendingRefresh=false;libLater=null;const r=need?refresh(true,lib||undefined):null;if(L){L.msgs.forEach(m=>toast(m));if(L.rk)toastDone(L.rk);Promise.resolve(r).then(()=>libAfter(L.n0,L.watch))}}},700);
 // Back to the shelf: the shelf is put in place *under* a plain black cover (no zoom, no fade of the heavy scene), its
 // covers are decoded, and only then the black cover fades away — one light layer fading, so no stutter or half-drawn frame.
 // Quitting from the Home menu / quit combo starts this while the emulator is still closing (run:quitting).
@@ -2047,9 +2053,15 @@ api.onUpdate&&api.onUpdate(r=>noteUpdate(r)); // (beta.7: a card with the releas
 api.onLibraryChanged&&api.onLibraryChanged(info=>{const note=info&&manualNote(info.manualUpdates);
   // (beta.9) the background manual re-check set some aside and looked them up again: said plainly, once it's all done
   const rk=info&&info.rechecked&&info.rechecked.moved?`✓ Manuals checked: ${info.rechecked.moved} set aside and looked up again`:"";
-  if((mode!=="browse"&&mode!=="details")||sysBusy()){pendingRefresh=true;if(rk||note)pendingNote=rk||note;return}if(note)toast(note);if(info&&info.covers)toast(`Added covers for ${info.covers} new game${info.covers===1?"":"s"}`);if(info&&info.manuals)toast(`Added the built-in manual for ${info.manuals} Wii U game${info.manuals===1?"":"s"}`);if(info&&info.onlineManuals)toast(`Added manuals for ${info.onlineManuals} game${info.onlineManuals===1?"":"s"}`);if(rk)toastDone(rk);
-  const nGames=()=>allShelves.reduce((a,sh)=>a+((sh.games||[]).filter(g=>g.kind==="rom").length),0),n0=nGames();
-  Promise.resolve(refresh(true)).then(()=>{if(qm.open)qsSoft();const n=nGames()-n0;if(info&&info.watch&&n>0)toast(`${n} new game${n===1?"":"s"} found`+(musStyle().mail!==false?(n===1?" · it's":" · they're")+" waiting for you in the museum mail":""))})});
+  if((mode!=="browse"&&mode!=="details")||sysBusy()){pendingRefresh=true;if(rk||note)pendingNote=rk||note;return}
+  const artSaid=info&&info.covers&&ARTC.said===info.covers&&performance.now()-(ARTC.saidAt||0)<20000;if(artSaid)ARTC.said=0; // (beta.10) the art card's "Box art: N added" said it already
+  const msgs=[note,info&&info.covers&&!artSaid?`Added covers for ${info.covers} new game${info.covers===1?"":"s"}`:"",info&&info.manuals?`Added the built-in manual for ${info.manuals} Wii U game${info.manuals===1?"":"s"}`:"",info&&info.onlineManuals?`Added manuals for ${info.onlineManuals} game${info.onlineManuals===1?"":"s"}`:""].filter(Boolean);
+  // (beta.10) mid-slide or mid-scroll: no rebuild under your thumb; the 700 ms check above applies it (and says these) once you rest
+  if((window.BS_BUSY&&BS_BUSY())||performance.now()-lastInputAt<800){pendingRefresh=true;const L=libLater||(libLater={msgs:[],rk:"",n0:libGames(),watch:false});L.msgs.push(...msgs);if(rk)L.rk=rk;if(info&&info.watch)L.watch=true;return}
+  msgs.forEach(m=>toast(m));if(rk)toastDone(rk);
+  const n0=libGames();Promise.resolve(refresh(true)).then(()=>libAfter(n0,info&&info.watch))});
+function libGames(){return allShelves.reduce((a,sh)=>a+((sh.games||[]).filter(g=>g.kind==="rom").length),0)}
+function libAfter(n0,watch){if(qm.open)qsSoft();const n=libGames()-n0;if(watch&&n>0)toast(`${n} new game${n===1?"":"s"} found`+(musStyle().mail!==false?(n===1?" · it's":" · they're")+" waiting for you in the museum mail":""))}
 // console.json options with per-system defaults: front-slot consoles load the disc upright through the front; GameCube is top-loading
 const FRONT_SLOT=new Set(["wii","wiiu","ps2","ps3","ps4","ps5","x360"]);
 // 3D models that come with Boxshelf: the PC shelf's gaming PC (an original model, made for Boxshelf), turned so its glass side shows
@@ -2062,7 +2074,7 @@ let pmT=0;
 function preloadModel(){if(!INSERT_3D)return;clearTimeout(pmT);pmT=setTimeout(function tryPM(){
   const s=cur(),t=s&&themes[s.id];if(!(t&&t.model&&window.ConsoleModel)||ConsoleModel.ready(t.model))return;
   if(!revealedAt||performance.now()-revealedAt<2500||performance.now()-lastInputAt<1200||(mode!=="browse"&&mode!=="details")||document.hidden){pmT=setTimeout(tryPM,700);return}
-  const go=()=>{if(cur()!==s){preloadModel();return}bootMark("model");ConsoleModel.load(t.model,modelOpts(s.id)).then(ok=>{bootMark("model-done");if(!ok)toast(`Couldn't use your 3D console: ${ConsoleModel.error()||"unknown error"}`)})};
+  const go=()=>{if(cur()!==s){preloadModel();return}bootMark("model");ConsoleModel.load(t.model,modelOpts(s.id)).then(ok=>{bootMark("model-done");if(ok===false)toast(`Couldn't use your 3D console: ${ConsoleModel.error()||"unknown error"}`)})};
   window.requestIdleCallback?requestIdleCallback(go,{timeout:2000}):go()},400)}
 // Customize: one system at a time. Tabs along the top (bumpers / Q E switch), then a row per thing you can change, each with its
 // current state and its buttons; the D-pad walks the buttons, A presses, B closes.
@@ -2100,8 +2112,12 @@ function renderCustomize(){
   THEME_IDS.filter(x=>x[0]===custSel).forEach(([id,name,isConsole])=>{
     const t=themes[id]||{};const sc=cfgInfo&&cfgInfo.config.systems[id];
     const row=document.createElement("div");row.className="set-row cz";
-    const B=(a,label,primary)=>`<button class="chip${primary?" primary":""}" type="button" data-a="${a}">${label}</button>`;
-    const R=(title,state,btns,note)=>`<div class="cz-row"><div class="cz-l"><b>${title}</b><span>${state}</span>${note?`<small>${note}</small>`:""}</div><div class="cz-btns">${btns}</div></div>`;
+    // (beta.10) each button only where its API exists: the Thor has no setTheme / findModel / removeTheme / openThemeFolder,
+    // and its api.pick of a file opens the emulator picker, so Add image / model / video stay hidden there; a row with nothing left is dropped
+    const can=k=>typeof api[k]==="function",FILE=!ANDROID&&can("setTheme")&&can("pick"),
+      CAN={logo:FILE,boot:FILE,console:FILE,model:FILE,ctl:FILE,media:FILE,findmodel:can("findModel"),restorelogo:can("restoreLogo"),folder:can("openThemeFolder"),rmlogo:can("removeTheme")};
+    const B=(a,label,primary)=>(CAN[/^rm/.test(a)?"rmlogo":a]===false)?"":`<button class="chip${primary?" primary":""}" type="button" data-a="${a}">${label}</button>`;
+    const R=(title,state,btns,note)=>!btns?"":`<div class="cz-row"><div class="cz-l"><b>${title}</b><span>${state}</span>${note?`<small>${note}</small>`:""}</div><div class="cz-btns">${btns}</div></div>`;
     const media=(MEDIA[id]||{}).kind==="cart"?"Cartridge":id==="psp"?"UMD":"Disc",autoBoot=!sc||sc.bootOnLaunch!==false;
     row.innerHTML=`<div class="set-head"><div class="set-thumb"></div><div class="set-name"></div></div>`+
       R("Logo",t.logo?"Your image":"Built-in wordmark",B("logo",t.logo?"Replace":"Add image",!t.logo)+(isConsole&&api.findLogos?B("findlogo","Find a logo"):"")+(t.logoPrev?B("restorelogo","Restore previous"):"")+(t.logo?B("rmlogo","Remove"):""),isConsole&&api.findLogos&&!(czPick&&czPick.id===id)?"Find a logo: official logos from Wikimedia Commons, free to use":"")+
@@ -2133,7 +2149,7 @@ function renderCustomize(){
         else if(act==="rmlogo"||act==="rmboot"||act==="rmconsole"||act==="rmmodel"||act==="rmmedia"||act==="rmcontroller"){await api.removeTheme(id,act.slice(2));if(act==="rmcontroller"&&themes[id]&&themes[id].modelOpts&&themes[id].modelOpts.controller==="file")await api.saveConsoleFit(id,{controller:null}).catch(()=>{});reloadThemes()}
         else if(act==="preview"){closeCustomize();runBoot({id,name},null)}
         else if(act==="folder")api.openThemeFolder(id);
-        else if(act==="bootauto"){const c=cfgInfo.config;c.systems[id].bootOnLaunch=!(c.systems[id].bootOnLaunch!==false);await api.saveConfig(c);const sh=shelves.find(x=>x.id===id);if(sh)sh.bootOnLaunch=c.systems[id].bootOnLaunch;play_("tick",{dir:1});renderCustomize();const f=$("setRows").querySelector('[data-a="bootauto"]');if(f)padSet($("customize"),f)}
+        else if(act==="bootauto"){const c=cfgInfo&&cfgInfo.config;if(!c||!c.systems||!c.systems[id]){play_("error");toast(`Set up ${name} in Settings first`);return} /* (beta.10) a console not set up yet has no systems entry (no TypeError) */c.systems[id].bootOnLaunch=!(c.systems[id].bootOnLaunch!==false);await api.saveConfig(c);const sh=shelves.find(x=>x.id===id);if(sh)sh.bootOnLaunch=c.systems[id].bootOnLaunch;play_("tick",{dir:1});renderCustomize();const f=$("setRows").querySelector('[data-a="bootauto"]');if(f)padSet($("customize"),f)}
       }catch(err){toast(err.message)}});
     box.appendChild(row);
   });
@@ -2147,6 +2163,7 @@ function renderCustomize(){
    Power open in place (A / →) into lines of chips like the Sort panel's. Theme and Background preview live as you move
    over them: A keeps one, B puts back what you had. Restart PC and Shut down are held to confirm. */
 const qm={open:false,r:1,sub:null,sr:0,sc:0,ac:0,rows:[],pv:null,outs:null};
+const ARTC={el:null,on:false,paused:false,stopping:false,done:0,total:0,t:0}; // (beta.10) the background box art run (artCardOn, under misc)
 const QM_THEMES=[["spectrum","Spectrum"],["classic","Classic"],["keys","Keys"],["arcade","Arcade"],["aurora","Aurora"],["midnight","Midnight"],["artwork","Artwork"],["blur","Blur"]];
 QM_THEMES.push(...XTHEMES.map(t=>[t.id,t.name])); // (the extra themes, after the original six)
 const QM_SOUNDS=[["aero","Aero"],["melody","Melody"],["musicbox","Music box"]];
@@ -2205,6 +2222,9 @@ function qsRows(){const ui=qsUi(),r=qsAch(),g=qsGame(),out=[];
     lines:()=>!RA.on?[{k:"note",note:"Sign in once and Boxshelf tracks every unlock."},{k:"go",opts:[["rasetup","Connect RetroAchievements ›"]],big:1}]:[{k:"achinfo",info:1},...(r&&r.total?[{k:"go",opts:[["achg","See this game's achievements ›"]],big:1}]:[])]});
   out.push({id:"mus",icon:QS_I.museum,lbl:"Museum",val:()=>"Walk your collection",go:1});
   if(ANDROID)qsAndroidOrder(out,ui); // (0.3.2) the Thor's order: Museum, Art Studio, Trophies first; then the looks, sounds and sorting
+  // (beta.10) while box art downloads in the background: the controller's way to its Pause / Resume and Cancel (the card in
+  // the corner takes the mouse and touch; the shelf keeps the D-pad)
+  if(ARTC.on&&!ARTC.stopping)out.push({id:"artrun",icon:QS_I.image,lbl:"Box art download",val:artCardText,lines:()=>[{k:"artrun",opts:[...(api.pauseCovers?[ARTC.paused?["resume","Resume"]:["pause","Pause"]]:[]),...(api.cancelCovers?[["cancel","Cancel"]]:[])],big:1}]});
   out.push({sep:1});
   if(api.updateCheck&&!ANDROID)out.push({id:"upd",icon:QS_I.info,lbl:"Updates",val:qsUpdVal}); // (beta.4) check for a newer beta from here
   out.push({id:"set",icon:QS_I.gear,lbl:"Settings",val:()=>"",go:1});
@@ -2262,7 +2282,8 @@ function qsFill(x,instant){const inn=document.createElement("div");inn.className
       o.appendChild(b);arr.push(b)});
     d.appendChild(o);if(ln.sw){const n=document.createElement("div");n.className="qm-swname";d.appendChild(n)}inn.appendChild(d);if(arr.length)x.lines.push(arr)});
   x.sub.innerHTML="";x.sub.appendChild(inn);const h=inn.offsetHeight;
-  if(instant||reduced()){x.sub.style.transition="none";x.sub.style.height=h+"px";void x.sub.offsetHeight;x.sub.style.transition=""}else x.sub.style.height=h+"px"}
+  // (beta.10) the row takes its full height at once (no layout every frame); the pills fade and slide in on the compositor (quickshelf.css)
+  x.sub.style.height=h+"px";if(instant||reduced()||document.body.classList.contains("perf-handheld"))inn.classList.add("now");inn.classList.add("in")}
 function qsPos(b){const x=qm.rows[qm.sub];if(!x||!x.lines)return null;for(let r=0;r<x.lines.length;r++){const c=x.lines[r].indexOf(b);if(c>=0)return [r,c]}return null}
 function qsFocusEl(){if(qm.sub!=null){const x=qm.rows[qm.sub];return x&&x.lines&&x.lines[qm.sr]&&x.lines[qm.sr][qm.sc]}const x=qm.rows[qm.r];if(!x)return null;return x.r.id==="acts"?x.el.children[qm.ac]:x.el}
 function qsPaint(){if(!qsEl)return;const hl=qsEl.querySelector(".qm-hl");
@@ -2282,15 +2303,16 @@ function qsHints(){if(!qsEl)return;const pad=showPad(),G=(p,k)=>pad?glyph(p):`<s
   else{const x=qm.rows[qm.r],id=x&&x.r.id;out.push([pad?glyph("↕"):`<span class="g">↑↓</span>`,"Move"]);if(id==="vol")out.push([pad?glyph("↔"):`<span class="g">←→</span>`,"Volume"]);
     out.push([G("x","Enter"),x&&x.r.lines?"Open":"Select"],[G("o","Esc"),"Close"])}
   qsEl.querySelector(".qm-hints").innerHTML=out.map(([k,l])=>`<span class="hint">${k}<span>${qsEsc(l)}</span></span>`).join("")}
-function qmOpen(){if(qm.open||(mode!=="browse"&&mode!=="details")||sysBusy())return;uiCrumb("Quick menu");qsBuild();if(mode==="details")closeDetails(true);
+function qmOpen(){if(qm.open||(mode!=="browse"&&mode!=="details")||sysBusy())return;uiCrumb("Quick menu");qsBuild();detailsBack=mode==="details"?curGame():null;if(mode==="details")closeDetails(true); /* (beta.10) back out of the menu: Details again */
   qm.open=true;qm.sub=null;qm.pv=null;qm.ac=0;qsEl.querySelector(".qm-scroll").scrollTop=0;if(!ANDROID||qm.sig!==qsSig())qsRender(); /* Android: rows already built for this game and these settings (qsFreshSoon) are kept: the press only moves the highlight and slides the panel in */qm.r=qm.rows.findIndex(x=>x.r.id===(ANDROID?"mus":"vol"));if(qm.r<0)qm.r=0; /* (Android 0.3.2: the highlight starts on the top three) */
   // Android: the menu's own rows are measured (qsPaint reads their offsetTop) before the page-wide qm-open class goes on.
   // The other way round, that read made the phone restyle and lay out the whole shelf, every case face included, right
   // there in the key press (~60% of the open's main-thread time); now the class change is styled once, in the next frame
-  qsEl.setAttribute("aria-hidden","false");if(ANDROID){qsPaint();app.classList.add("qm-open")}else{app.classList.add("qm-open");qsPaint()}play_("panel");
+  qsEl.setAttribute("aria-hidden","false");qsPaint();app.classList.add("qm-open");play_("panel"); // (beta.10) the Android order everywhere: qm-open only moves the panel (transform / visibility), so the measures are the same
   if(RA.on)raShelfLoad().then(()=>{if(qm.open&&qm.sub==null)qsSoft()}).catch(()=>{})}
 function qmClose(quiet){qsHoldStop();if(!qm.open)return;qsUnpreview();if(qm.sub!=null){const x=qm.rows[qm.sub];if(x&&x.sub)x.sub.style.height="0px";qm.sub=null}
-  qm.open=false;if(ANDROID){if(qsEl)qsEl.setAttribute("aria-hidden","true");qsPaint();app.classList.remove("qm-open")}else{app.classList.remove("qm-open");if(qsEl)qsEl.setAttribute("aria-hidden","true");qsPaint()}if(!quiet)play_("back");renderHints()} /* Android: measured before the page-wide class change (see qmOpen) */
+  qm.open=false;if(ANDROID){if(qsEl)qsEl.setAttribute("aria-hidden","true");qsPaint();app.classList.remove("qm-open")}else{app.classList.remove("qm-open");if(qsEl)qsEl.setAttribute("aria-hidden","true");qsPaint()}if(!quiet)play_("back");renderHints();
+  if(quiet)detailsBack=null;else setTimeout(detailsReturn,0)} /* Android: measured before the page-wide class change (see qmOpen). (beta.10) Backed out: Details again if they were open; after this key's own shortcut, if any, had its go */
 function qsSoft(){if(!qm.open)return;const s=[qm.r,qm.sub,qm.sr,qm.sc,qm.ac],sc=qsEl.querySelector(".qm-scroll").scrollTop,rid=qm.rows[qm.r]&&qm.rows[qm.r].r.id,sid=qm.sub!=null&&qm.rows[qm.sub]?qm.rows[qm.sub].r.id:null;
   if(sid){const k=qsRows().filter(r=>!r.sep).findIndex(r=>r.id===sid);qm.sub=k>=0?k:null} /* rows can shift (the game row comes and goes): follow them by name */
   qsRender();[qm.r,,qm.sr,qm.sc,qm.ac]=s;{const k=qm.rows.findIndex(x=>x.r.id===rid);if(k>=0)qm.r=k}if(sid){const k=qm.rows.findIndex(x=>x.r.id===sid);qm.sub=k>=0?k:null}
@@ -2354,6 +2376,7 @@ function qsPreview(){const f=qm.sub!=null&&qsFocusEl(),k=f&&f.dataset.k;
 function qsUnpreview(){clearTimeout(qsThemeT);qsThemeT=0;if(!qm.pv)return;const k=qm.pv.k;qm.pv=null;if(k==="theme"){themeOverride=null;applyTheme()}else bgOverride=null;updateBg()}
 function qsChoose(){const f=qsFocusEl();if(!f)return;const k=f.dataset.k,v=f.dataset.v,ui=qsUi();
   if(f.dataset.hold){qsHoldStart(f);return}
+  if(k==="artrun"){artCmd(v);return} // (beta.10) the background box art run
   if(k==="go"){qmClose(true);play_("open");if(v==="achg")openAchievements();else if(v==="rasetup")Setup.open({page:"ra"});return}
   if(k==="pow"){qmClose(true);if(v==="quit")api.quit("quick menu: Power → Exit");else if(api.power)api.power(v);return} // Windows: sleep (restart / shut down are held); Android: its own options
   if(k==="song"){if(window.Sound&&Sound.nextSong){Sound.nextSong("shelf");play_("tick",{dir:1})}qsSoft();return}
@@ -2438,7 +2461,9 @@ if(window.bsPlatform&&bsPlatform.os==="linux"){delete PC_EXT.epic;PC_HOW.epic="O
 // a quick rainbow lick over the tile as each cover flips past
 function flick(el){if(!el)return;el.classList.remove("flick");void el.offsetWidth;el.classList.add("flick");setTimeout(()=>el.classList.remove("flick"),520)}
 const coverOf=(sh,g)=>(g.art&&g.art.front)||Covers.front(STYLE[sh.id]||STYLE.media,g);
-const preload=url=>new Promise(r=>{const im=new Image();im.onload=im.onerror=()=>r();im.src=url;setTimeout(r,900)});
+const preload=url=>new Promise(r=>{const im=new Image();im.onload=()=>{if(im.decode)im.decode().then(r,r);else r()};im.onerror=()=>r();im.src=url;setTimeout(r,900)}); // (beta.10) decoded too, so the swap costs nothing
+// (beta.10) a reel face's URL: real box art as is; a made-up cover encoded in the worker (never Covers.front mid-roll)
+const coverAsync=(sh,g)=>(g.art&&g.art.front)?Promise.resolve(g.art.front):Covers.frontAsync(STYLE[sh.id]||STYLE.media,g).catch(()=>coverOf(sh,g));
 // Slot machine on the "Surprise me" tile: its cover flips through random games (from every shelf, or this one),
 // slowing down until it stops on the pick. The tile then shows that game; A plays it, R rolls again.
 async function shuffle(){
@@ -2446,27 +2471,31 @@ async function shuffle(){
   const sh=cur(),ri=sh.items.findIndex(g=>g.kind==="random");if(ri<0){toast("Nothing to shuffle on this shelf");return}
   if(sel!==ri)go(ri);
   const tileG=sh.items[ri];
-  const pool=[];const srcs=shuffleAll()?shelves.map((x,i)=>i).filter(i=>shelves[i]!==HOME):[sysIdx];
+  const pool=[];const srcs=shuffleAll()?shelves.map((x,i)=>i).filter(i=>shelves[i]!==HOME&&!shelves[i].col):[sysIdx]; // (beta.10) not your collections: their games are on their consoles' shelves already
   srcs.forEach(i=>shelves[i].items.forEach((g,j)=>{if(isGame(g)&&g.installed!==false)pool.push({shelf:i,sh:shelves[i],index:j,game:g})}));
   if(!pool.length)return;
   const rnd=n=>Math.floor(Math.random()*n);
   const target=pool[rnd(pool.length)];
   // the reel: ~22 faces, mostly distinct, ending on the pick
-  const K=Math.min(24,Math.max(10,pool.length+6));const reel=[];let last=null;
-  for(let i=0;i<K-1;i++){let e=pool[rnd(pool.length)];if(pool.length>1&&e===last)e=pool[(pool.indexOf(e)+1)%pool.length];reel.push(e);last=e}
+  // (beta.10) the faces before the pick: games with real box art when there are a few (nothing has to be drawn while it rolls)
+  const realArt=pool.filter(e=>e.game.art&&e.game.art.front),fill=realArt.length>=3?realArt:pool;
+  const K=Math.min(24,Math.max(10,fill.length+6));const reel=[];let last=null;
+  for(let i=0;i<K-1;i++){let e=fill[rnd(fill.length)];if(fill.length>1&&e===last)e=fill[(fill.indexOf(e)+1)%fill.length];reel.push(e);last=e}
   reel.push(target);
+  const U=[],face=i=>U[i]||(U[i]=coverAsync(reel[i].sh,reel[i].game).then(u=>preload(u).then(()=>u))); // each face: URL resolved and decoded once
   shuffling=true;app.classList.add("shuffling");closeDetails(true);rumble(.15,.35,120);
   clearTimeout(tileG.revealT);if(tileG.revealed&&slots[ri]&&slots[ri].el)reveal(slots[ri],tileG,tileG.pick,false);
   const alive=()=>mode==="browse"&&shuffling&&slots[ri]&&slots[ri].el&&cur()===sh;
   let rolled=null,landed=false;
   try{
-    await Promise.all(reel.slice(0,8).map(e=>preload(coverOf(shelves[e.shelf],e.game))));
+    if(fill!==realArt)while(performance.now()-shelfMovedAt<600&&alive())await wait(60); // (beta.10) made-up faces: drawn once the slide to the tile has settled
+    await Promise.all(reel.slice(0,8).map((e,i)=>face(i)));
     const tile=slots[ri];if(!alive())return;
     tile.el.classList.add("rolling");rolled=tile;
     for(let i=0;i<reel.length&&alive();i++){
-      const e=reel[i],t=i/(reel.length-1);
-      tile.img.src=coverOf(shelves[e.shelf],e.game);flick(tile.el);play_("tick",{dir:1});
-      if(i+6<reel.length)preload(coverOf(shelves[reel[i+6].shelf],reel[i+6].game));
+      const t=i/(reel.length-1),u=await face(i);if(!alive())break;
+      tile.img.src=u;flick(tile.el);play_("tick",{dir:1});
+      if(i+6<reel.length)face(i+6);
       await wait(90+Math.pow(t,2.6)*620);
     }
     if(!alive())return;
@@ -3273,11 +3302,11 @@ let padSeen=null;
 const PAD_MODELS={"054c":{"05c4":"DualShock 4","09cc":"DualShock 4","0ba0":"DualShock 4 (wireless adapter)","0ce6":"DualSense","0df2":"DualSense Edge","0e5f":"Access controller","*":"PlayStation controller"},
   "057e":{"2009":"Switch Pro Controller","2069":"Switch 2 Pro Controller","2006":"Joy-Con (L)","2007":"Joy-Con (R)","200e":"Joy-Con pair","2066":"Joy-Con 2 (R)","2067":"Joy-Con 2 (L)","2017":"SNES controller","2073":"GameCube controller","0337":"GameCube adapter","0306":"Wii remote","0330":"Wii remote","*":"Nintendo controller"},
   "045e":{"*":"Xbox controller"},"28de":{"1102":"Steam Controller","1142":"Steam Controller","1205":"Steam Deck","*":"Steam controller"},"2dc8":{"*":"8BitDo controller"}};
-const PAD_STYLE={"054c":"ps","057e":"nintendo","045e":"xbox","28de":"xbox","2dc8":"nintendo"};
+const PAD_STYLE={"054c":"ps","057e":"nintendo","045e":"xbox","28de":"xbox"}; // (beta.10: 8BitDo pads go by their name, Xbox by default: most are used in X-input mode; in Switch mode they report as Nintendo's own pad)
 function padInfo(id){id=String(id||"");const m=/vendor:?\s*([0-9a-f]{4})[^0-9a-f]+product:?\s*([0-9a-f]{4})/i.exec(id),v=m&&m[1].toLowerCase(),p=m&&m[2].toLowerCase();
-  if(v&&PAD_MODELS[v])return {style:PAD_STYLE[v],name:PAD_MODELS[v][p]||PAD_MODELS[v]["*"],vendor:v,product:p,virtual:false};
-  // makers of pads for every console (Hori, PDP, PowerA…): what the name says
+  // makers of pads for every console (Hori, PDP, PowerA, 8BitDo…): what the name says
   const style=/switch|nintendo|joy-?con|pro controller|pokken/i.test(id)?"nintendo":/dualsense|dualshock|playstation|ps[345]\b|^wireless controller/i.test(id)?"ps":"xbox";
+  if(v&&PAD_MODELS[v])return {style:PAD_STYLE[v]||style,name:PAD_MODELS[v][p]||PAD_MODELS[v]["*"],vendor:v,product:p,virtual:false};
   const virtual=/xinput/i.test(id)&&!v;
   return {style,name:virtual?"Xbox-style controller (XInput)":style==="ps"?"PlayStation controller":style==="nintendo"?"Nintendo controller":/xbox/i.test(id)?"Xbox controller":"Controller",vendor:v||"",product:p||"",virtual}}
 window.BS_padInfo=padInfo;
@@ -3526,6 +3555,9 @@ function poll(t){
   // 144 / 240 Hz screen woke the page that often for nothing); every frame again while the shelf moves (the smoothness
   // log) and the moment a controller connects
   else if(!ANDROID&&!anyPad()&&!(window.BS_BUSY&&BS_BUSY())){clearTimeout(bgPoll);slowPoll=true;bgPoll=setTimeout(()=>{slowPoll=false;poll(performance.now())},100)}
+  // (beta.10, PC) a controller connected but nothing touched for 3 s and the shelf still: read ~30 times a second on a timer,
+  // not every vsync; any press or input brings back every frame on the next read
+  else if(!ANDROID&&!(window.BS_BUSY&&BS_BUSY())&&performance.now()-Math.max(lastInputAt,padActAt)>3000){clearTimeout(bgPoll);bgPoll=setTimeout(()=>poll(performance.now()),33)}
   else{requestAnimationFrame(poll);frameWatch(t)}
   // on a 240 Hz screen the pad is read every other frame (~120 times a second): the same feel, half the work
   if(t-pollLast<6.5)return;padF=Math.min(3,Math.max(.25,(t-pollLast)/16.667));pollLast=t;
@@ -3534,13 +3566,16 @@ function poll(t){
 // Several pads (or one listed twice: a Switch Pro over Bluetooth can leave a frozen copy behind when it re-connects,
 // Steam / BetterJoy add a virtual one): follow the pad that was last actually used, not simply the first in the list.
 // "Used" = its buttons or sticks changed (sticks rounded, so an idle pad's tiny drift doesn't count).
-const padUse=new Map();let padIdx=-1;
-function activePad(){const pads=Array.from(safe(()=>navigator.getGamepads())||[]),now=performance.now();let best=null,bt=-1,cur=null;if(wmPad)pads.push(wmPad);
-  for(const p of pads){if(!p||!p.connected||(p!==wmPad&&WM_RAW.test(p.id)))continue;let sig="";for(let i=0;i<p.buttons.length;i++)sig+=p.buttons[i]&&p.buttons[i].pressed?"1":"0";
-    for(const a of p.axes||[])sig+=","+(Math.abs(a)<.3?0:Math.round(a*4));
-    const k=p.index+"|"+p.id,o=padUse.get(k);if(!o||o.sig!==sig){padUse.set(k,{sig,at:o?now:0});if(o&&window.BS_METER)BS_METER.input()}const at=padUse.get(k).at;
-    if(p.index===padIdx)cur=p;if(at>bt){bt=at;best=p}}
-  if(cur&&best!==cur&&padUse.get(cur.index+"|"+cur.id).at>=bt)best=cur;
+// (beta.10) padActAt: the last time a pad changed or had a button held (poll stays on every frame for ~3 s after). The state
+// is a number now and the list is read in place: no array or string made per read
+const padUse=new Map();let padIdx=-1,padActAt=-1e9;
+function activePad(){const L=safe(()=>navigator.getGamepads()),n=L?L.length:0,now=performance.now();let best=null,bt=-1,cur=null;
+  for(let j=0;j<=n;j++){const p=j<n?L[j]:wmPad;if(!p||!p.connected||(p!==wmPad&&WM_RAW.test(p.id)))continue;
+    let h=0;const b=p.buttons,ax=p.axes;for(let i=0;i<b.length;i++){const on=!!(b[i]&&b[i].pressed);if(on)padActAt=now;h=(Math.imul(h,31)+(on?1:2))|0}
+    if(ax){const std=p.mapping==="standard";for(let i=0;i<ax.length;i++){const a=ax[i],q=Math.abs(a)<.3?0:Math.round(a*4);if(q&&std&&i<4)padActAt=now;h=(Math.imul(h,31)+q+9)|0}} // (a stick held over: in use; other axes can rest at -1)
+    let o=padUse.get(p.index);if(!o||o.id!==p.id){o={id:p.id,sig:h,at:0};padUse.set(p.index,o)}else if(o.sig!==h){o.sig=h;o.at=now;padActAt=now;if(window.BS_METER)BS_METER.input()}
+    if(p.index===padIdx)cur=p;if(o.at>bt){bt=o.at;best=p}}
+  if(cur&&best!==cur&&padUse.get(cur.index).at>=bt)best=cur;
   if(best)padIdx=best.index;if(padUse.size>16)padUse.clear();return best}
 window.BS_activePad=activePad;
 /* ---------- the Wii remote (Windows, through a DolphinBar) ----------
@@ -3634,7 +3669,7 @@ function pollBody(t){
       if((sx||sy)&&isp.tz<=1)isp.stick=true;else if(isp.stick){isp.stick=false;ispSnap()}
       // D-pad left/right: step to the next side (front → spine → back → edge); up/down tilts
       edge(gp,14,()=>{ispTurn(-90,0,true);ispSnap()});edge(gp,15,()=>{ispTurn(90,0,true);ispSnap()});if(B(12))ispTurn(0,1.1*ISP_PAD*padF,ANDROID);if(B(13))ispTurn(0,-1.1*ISP_PAD*padF,ANDROID);
-      if(isp.state===2){if(B(0)&&!holdT&&!prevBtn[0])holdBegin();else if(!B(0)&&prevBtn[0]&&holdT)holdEnd(false);prevBtn[0]=B(0)} /* (only the pad's own A let go ends a hold: one held on Enter or the mouse is theirs to end) */else edge(gp,0,()=>ispAdvance());edge(gp,1,()=>ispBack());edge(gp,2,()=>{if(isp.state>=1)openReader()});edge(gp,3,()=>ispFlip());tap(gp,11,t,()=>closeInspect());tap(gp,10,t,()=>closeInspect());
+      if(isp.state===2){if(B(0)&&!holdT&&!prevBtn[0])holdBegin();else if(!B(0)&&prevBtn[0]&&holdT)holdEnd(false);prevBtn[0]=B(0)} /* (only the pad's own A let go ends a hold: one held on Enter or the mouse is theirs to end) */else edge(gp,0,()=>ispAdvance());edge(gp,1,()=>ispBack());edge(gp,2,()=>{if(isp.state>=1)openReader()});edge(gp,3,()=>ispFlip());tap(gp,11,t,()=>{closeInspect();detailsReturn()});tap(gp,10,t,()=>{closeInspect();detailsReturn()});
       prevBtn.v=!!v;prevBtn.h=!!h;
     }else if(mode==="setup"){
       if(v&&!prevBtn.v)Setup.pad(v>0?"down":"up");if(h&&!prevBtn.h)Setup.pad(h>0?"right":"left");prevBtn.v=!!v;prevBtn.h=!!h;
@@ -3725,11 +3760,65 @@ function padNav(root,dir){
 function panelScroll(el,d){const max=el.scrollHeight-el.clientHeight;if(max<=0)return;const to=Math.max(0,Math.min(max,el.scrollTop+d*el.clientHeight*.45));if(to===el.scrollTop)return;el.scrollTo({top:to,behavior:document.body.classList.contains("reduce-motion")?"auto":"smooth"});play_("tick",{dir:d})}
 function padActivate(root){const e=root.querySelector(".pad-focus");if(!e||!padItems(root).includes(e))return false;e.click();return true}
 /* ---------- misc ---------- */
-let toastT,undoHide=null;function toast(msg){undoHide=null;const el=$("toast");el.textContent=msg;el.classList.remove("work","done");el.classList.add("on");clearTimeout(toastT);toastT=setTimeout(()=>el.classList.remove("on"),2600)}
+// (beta.10) toasts take turns: one that comes while another is up waits for it (the same text twice: shown once), each up
+// ~60 ms a character (2.6 to 8 s). Your own action's answer (input in the last 0.4 s) shows at once; a working note and its
+// "done" too, as before. A toast with Undo is only ended by you (Undo, or doing something that answers) or its time running out
+let toastT,undoHide=null,toastCur=null;const toastQ=[];
+const toastMs=m=>Math.max(2600,Math.min(8000,String(m).length*60)),toastMine=()=>performance.now()-lastInputAt<400;
+function toastShow(x){const el=$("toast");clearTimeout(toastT);toastT=0;undoHide=null;toastCur=x;
+  if(el.textContent!==x.msg||el.firstElementChild)el.textContent=x.msg;el.classList.remove("work","done");el.classList.add("on");if(x.kind==="work"||x.kind==="done")el.classList.add(x.kind);
+  if(x.kind!=="work")toastT=setTimeout(toastEnd,x.kind==="done"?Math.max(6000,toastMs(x.msg)):toastMs(x.msg))}
+function toastEnd(){clearTimeout(toastT);toastT=0;toastCur=null;undoHide=null;if(toastQ.length){toastShow(toastQ.shift());return}$("toast").classList.remove("on","done")}
+function toastAdd(x){if(!x.msg)return;const c=toastCur,overUndo=!!undoHide&&!toastMine();
+  if(c&&c.msg===x.msg&&c.kind===x.kind&&!undoHide){if(x.kind!=="work")toastShow(x);return} // the same text again: its time starts over
+  if(toastQ.some(q=>q.msg===x.msg&&q.kind===x.kind))return;
+  if(!c||(!overUndo&&(x.kind!=="plain"||c.kind==="work"||toastMine()))){toastShow(x);return}
+  if(x.kind==="work"){const i=toastQ.findIndex(q=>q.kind==="work");if(i>=0){toastQ[i]=x;return}} // (a working note waiting behind an Undo: only its newest text)
+  toastQ.push(x);if(toastQ.length>8)toastQ.shift()}
+function toast(msg){toastAdd({msg:String(msg==null?"":msg),kind:"plain"})}
 // (beta.9) a message that stays up while something works (a turning ring), changing as it goes, then a plain "done" with a
 // tick (the manual fixes showed "Repairing…" for 2.6 s and then nothing until the result popped up)
-function toastWork(msg){undoHide=null;const el=$("toast");clearTimeout(toastT);if(el.textContent!==msg)el.textContent=msg;el.classList.remove("done");el.classList.add("on","work")}
-function toastDone(msg){undoHide=null;const el=$("toast");el.textContent=msg;el.classList.remove("work");el.classList.add("on","done");clearTimeout(toastT);toastT=setTimeout(()=>el.classList.remove("on","done"),6000)}
+function toastWork(msg){msg=String(msg);const c=toastCur;if(c&&c.kind==="work"&&!undoHide){c.msg=msg;const el=$("toast");if(el.textContent!==msg)el.textContent=msg;return}toastAdd({msg,kind:"work"})}
+function toastDone(msg){toastAdd({msg:String(msg),kind:"done"})}
+// (beta.10) Background box art (main.js autoCovers): a small card in the shelf's bottom-left corner, "Box art 312 of 2,000",
+// with Pause / Resume and Cancel for the mouse and touch. A controller gets the same in the quick menu ("Box art download"
+// row), so the card never takes the D-pad from the shelf. Only where main can pause or cancel the run (the Android build's
+// API can't: it never shows there); it goes when the run ends. Its updates wait while the shelf slides
+function artCardText(){const n=x=>Number(x||0).toLocaleString();return ARTC.stopping?"Stopping…":ARTC.total?`${n(Math.min(ARTC.done,ARTC.total))} of ${n(ARTC.total)}${ARTC.paused?" · paused":""}`:"Getting ready…"}
+function artCardEl(){if(ARTC.el)return ARTC.el;const el=document.createElement("div");el.className="art-card";el.setAttribute("role","status");
+  el.innerHTML='<div class="ac-top"><span class="ac-t">Box art</span><span class="ac-n"></span></div><div class="ac-bar"><i></i></div><div class="ac-btns"><button type="button" class="ac-b" data-k="pause" tabindex="-1"></button><button type="button" class="ac-b" data-k="cancel" tabindex="-1">Cancel</button></div><div class="ac-hint"></div>';
+  el.addEventListener("click",e=>{const b=e.target.closest(".ac-b");if(!b)return;e.stopPropagation();b.blur();setInput("pointer");artCmd(b.dataset.k)});app.append(el);ARTC.el=el;return el}
+function artCardPaint(){clearTimeout(ARTC.t);ARTC.t=0;if(!ARTC.on)return;if(window.BS_BUSY&&BS_BUSY()){ARTC.t=setTimeout(artCardPaint,500);return}
+  const el=artCardEl(),p=el.querySelector('[data-k="pause"]');el.querySelector(".ac-n").textContent=artCardText();el.querySelector(".ac-bar i").style.transform=`scaleX(${ARTC.total?Math.min(1,ARTC.done/ARTC.total).toFixed(3):0})`;
+  p.hidden=!api.pauseCovers||ARTC.stopping;p.textContent=ARTC.paused?"Resume":"Pause";el.querySelector('[data-k="cancel"]').hidden=!api.cancelCovers||ARTC.stopping;
+  el.querySelector(".ac-hint").innerHTML=showPad()&&!ARTC.stopping?`${glyph("☰")}<span>Menu: pause or cancel</span>`:"";el.classList.toggle("paused",ARTC.paused);
+  if(!el.classList.contains("on"))requestAnimationFrame(()=>{if(ARTC.on&&ARTC.el)ARTC.el.classList.add("on")});
+  if(qm.open&&qm.sub==null){const x=qm.rows.find(x=>x.r.id==="artrun"),v=x&&x.el.querySelector(".qm-val");if(v)v.textContent=artCardText()}} // (the open menu's row: its text only)
+function artCardOn(i){i=i||{};if(!api.pauseCovers&&!api.cancelCovers)return;const was=ARTC.on,wasP=ARTC.paused;
+  if(i.end){const cut=ARTC.stopping;ARTC.on=false;ARTC.paused=false;ARTC.stopping=false;clearTimeout(ARTC.t);ARTC.t=0;if(ARTC.el)ARTC.el.classList.remove("on");if(was&&qm.open)qsSoft();
+    // (beta.10) the card says how it went as it goes (main's got / failed; a run you cancelled with nothing yet: nothing to say).
+    // Its "N added" stands in for the library's own "Added covers for N new games" that follows (ARTC.said, see onLibraryChanged)
+    const got=Math.max(0,+i.got||0);ARTC.said=0;
+    if(was&&i.failed)toast("Couldn't reach the art sites. Try again from Settings → Box art");
+    else if(was&&typeof i.got==="number"&&(got||!cut)){if(got){ARTC.said=got;ARTC.saidAt=performance.now()}toast(got?`Box art: ${got.toLocaleString()} added`:"No new box art found")}
+    return}
+  ARTC.on=true;if(i.allTotal!=null){ARTC.done=+i.allDone||0;ARTC.total=+i.allTotal||0}if(typeof i.paused==="boolean"&&!ARTC.stopping)ARTC.paused=i.paused;
+  artCardPaint();if(qm.open&&(!was||wasP!==ARTC.paused))qsSoft()}
+// Pause / Resume / Cancel, from the card or the quick menu. Main says ok:false when no run is there any more: the card goes
+async function artCmd(k){if(!ARTC.on||ARTC.stopping)return;
+  if(k==="pause"||k==="resume"){const fn=k==="pause"?api.pauseCovers:api.resumeCovers;if(!fn)return;let r=null;try{r=await fn()}catch{}if(!ARTC.on)return;
+    if(!r||!r.ok){artCardOn({end:true});return}ARTC.paused=k==="pause";play_("tick",{dir:k==="pause"?-1:1})}
+  else if(k==="cancel"){if(!api.cancelCovers)return;ARTC.stopping=true;ARTC.paused=false;play_("back");try{await api.cancelCovers({auto:true})}catch{}if(!ARTC.on)return}
+  else return;
+  artCardPaint();if(qm.open)qsSoft()}
+if(api&&api.onCoversAuto&&(api.pauseCovers||api.cancelCovers))api.onCoversAuto(artCardOn);
+window.BS_artCard=artCardOn; // (tests: the demo page has no background run to feed it)
+// (beta.10) the graphics process went away and came back (main.js): the cases go up again, as a step to another shelf puts
+// them up (they could stay black until then). Never mid-slide; elsewhere (the museum, a game) it waits for the shelf
+let gpuT=0,gpuTries=0;
+function gpuBack(){clearTimeout(gpuT);gpuT=0;if(mode!=="browse"||(window.BS_BUSY&&BS_BUSY())||sysBusy()){if(++gpuTries<90)gpuT=setTimeout(gpuBack,2000);return}gpuTries=0;
+  try{flipped=false;spin=0;spinT=0;cancelAnimationFrame(spinRaf);spinRaf=0;build();updateBg()}catch(e){try{api.log("gpu back: "+(e&&e.message||e))}catch{}}}
+if(api&&api.onGpuBack)api.onGpuBack(()=>{gpuTries=0;clearTimeout(gpuT);gpuT=setTimeout(gpuBack,300)});
 $("dAchBtn").addEventListener("click",()=>achAct());
 let HIST={},shotSel=0;
 function fmtPlay(ms){const m=Math.round((ms||0)/60000);if(m<1)return "under a minute";if(m<60)return m+" min";const h=Math.floor(m/60);return h+" h"+(m%60?" "+(m%60)+" min":"")} // no trailing space on whole hours ("2 h played")
@@ -3820,7 +3909,7 @@ async function refresh(keepPlace,lib){
   if(cfgInfo&&cfgInfo.config&&cfgInfo.config.ui&&cfgInfo.config.ui.background==="art"){cfgInfo.config.ui.theme="artwork";cfgInfo.config.ui.background="blur";api.saveConfig(cfgInfo.config).catch(()=>{})} /* a setting changed while the config was being re-read: keep it (its save is still on the way) */soundOn=cfgInfo.config.ui.sound!==false;if(window.Sound)Sound.set({enabled:soundOn,boot:cfgInfo.config.ui.bootSound||"chime",theme:cfgInfo.config.ui.soundTheme||"aero",volume:cfgInfo.config.ui.volume==null?.7:cfgInfo.config.ui.volume});if(window.Sound&&Sound.loadSongs&&!songsLoaded){songsLoaded=true;Sound.loadSongs(api,cfgInfo.config.ui.builtInSongs)}(window.Perf&&Perf.set(cfgInfo.config.ui.performance||"auto"),applyEffects());paintVol();themeOverride=null;themeCls();if(api.customThemes&&!loadCustomThemes.done){loadCustomThemes.done=1;loadCustomThemes()}buttonsPref=cfgInfo.config.ui.buttons||"auto";applyUiAll();updateSkipText();fresh=lib||await api.scan()}catch(err){toast(err.message);fresh=[]}
   if(Array.isArray(fresh))lastLib=fresh;
   // a scan can take a few seconds: if you've moved on meanwhile (playing, museum, Inspect, mid-switch), apply it later
-  if(keepPlace&&((mode!=="browse"&&mode!=="details")||sysBusy())){pendingLib=fresh;return}
+  if(keepPlace&&((mode!=="browse"&&mode!=="details")||sysBusy()||(window.BS_BUSY&&BS_BUSY()))){pendingLib=fresh;return} // (beta.10) mid-slide too: never rebuilt under a scroll
   pendingLib=null;pendingRefresh=false; // this refresh is newer than anything waiting
   const prevId=cur()&&cur().id,prevItem=curGame()&&curGame().id; // where you are *now*, not when the scan started
   try{shelves=prepare(fresh)}catch(err){toast(err.message);shelves=[]}
@@ -3941,9 +4030,10 @@ async function setHidden(id,on){if(!cfgInfo||id==null)return false;id=String(id)
   if(lastLib){if(mode==="browse"||mode==="details")await refresh(true,lastLib);else pendingLib=lastLib}
   return true}
 function hideGame(g){if(!g||!isGame(g))return;const id=String(g.id),title=g.title;closeDetails(true);play_("back");rumble(0,.25,60);
-  setHidden(id,true).then(()=>{const fn=()=>{undoHide=null;$("toast").classList.remove("on");setHidden(id,false).then(()=>{toast(`${title} is back on the shelf`);play_("toast")})};
-    const pad=showPad(),el=$("toast");toast("");undoHide=fn;el.textContent=`Hidden: ${title}  `;const b=document.createElement("button");b.type="button";b.className="t-undo";b.innerHTML=pad?`${glyph("sq")}<span>Undo</span>`:`<span class="g">U</span><span>Undo</span>`;b.addEventListener("click",e=>{e.stopPropagation();fn()});el.append(b);
-    clearTimeout(toastT);toastT=setTimeout(()=>{el.classList.remove("on");if(undoHide===fn)undoHide=null},6000)})}
+  setHidden(id,true).then(()=>{const fn=()=>{if(undoHide!==fn)return;toastEnd();setHidden(id,false).then(()=>{toast(`${title} is back on the shelf`);play_("toast")})};
+    // (beta.10) through the toast queue: it waits for nothing (your own action), and a toast from the background waits for it
+    const pad=showPad(),el=$("toast");toastShow({msg:`Hidden: ${title}  `,kind:"undo"});undoHide=fn;const b=document.createElement("button");b.type="button";b.className="t-undo";b.innerHTML=pad?`${glyph("sq")}<span>Undo</span>`:`<span class="g">U</span><span>Undo</span>`;b.addEventListener("click",e=>{e.stopPropagation();fn()});el.append(b);
+    clearTimeout(toastT);toastT=setTimeout(()=>{if(undoHide===fn)toastEnd()},6000)})}
 // a game's own emulator build (Details → Emulator): chosen in main (a native picker, like Settings' paths), stored in
 // cfg.games by game id; launching uses it instead of the shelf's emulator
 const gameEmu=g=>{const o=g&&cfgInfo&&cfgInfo.config.games&&cfgInfo.config.games[g.id];return o&&o.emulator||""};
@@ -3987,7 +4077,10 @@ window.Shelf={
   _lib:{filters:()=>filterList(),filter:v=>pickSort(1,v),cur:()=>{const g=curGame();return g?{id:g.id,title:g.title,kind:g.kind}:null},
     games:()=>(cur()?cur().items.filter(isGame):[]).map(g=>({id:g.id,year:yearOf(g),genres:genresOf(g)})),shelves:()=>shelves.map(s=>({id:s.id,name:s.name,col:!!s.col,ids:(s.items||[]).filter(isGame).map(g=>g.id),last:((s.items||[])[(s.items||[]).length-1]||{}).id||null}))},
   // (beta.7) Settings changed your collections: their shelves are made again (the one you're on stays, if it still has games)
-  previewStop:()=>{if(PV){pvStop();pvBackStop()}},setCollections:list=>{if(!cfgInfo||!Array.isArray(list))return;cfgInfo.config.ui.collections=list;const wasCol=cur()&&cur().col;buildHome();if(wasCol&&!shelves.includes(cur()))sel=0;renderTabs();if(cur()&&cur().col)build()},
+  previewStop:()=>{if(PV){pvStop();pvBackStop()}},setCollections:list=>{if(!cfgInfo||!Array.isArray(list))return;cfgInfo.config.ui.collections=list;const was=cur();buildHome();
+    // (beta.10) the shelf you were on is gone (buildHome keeps the index, so another shelf slid into it): show that shelf's own cases, from its first game
+    if(cur()!==was){closeDetails(true);sel=cur()?Math.max(0,cur().items.findIndex(isGame)):0;flipped=false;spin=0;spinT=0;cancelAnimationFrame(spinRaf);spinRaf=0;build();if(cur()){updateInfo();raShelfLoad();preloadModel()}tuneTo(cur());save();return}
+    renderTabs();if(cur()&&cur().col)build()},
   homeButton:()=>{if(qm.open){qmClose();return "closed"}qmOpen();return qm.open?"opened":"busy"},quickMenuOpen:()=>!!qm.open, // the Thor's Home key while Boxshelf is the Home app
   _mus:{set:(k,v)=>musSetOpt(k,v),style:()=>musStyle(),hist:h=>{HIST=Object.assign({},HIST,h||{})},tv:()=>({ch:tvS.ch,n:tvS.list.length,list:tvS.list.slice(0,4).map(e=>String(e.key).slice(0,12)),i:tvS.i,ads:tvS.ads.length,bad:[...tvS.bad],guide:!!tvS.guide}),games:()=>allShelves.filter(sh=>sh.kind==="console").flatMap(sh=>sh.items.filter(isGame).map(g=>({id:g.id,title:g.title,sys:sh.id})))}, // museum test hooks (the harness can't see these names)
   refresh,flushSaves,toast,shuffle,cleanLogo,attractNow:()=>{lastInputAt=-1e9;attractCheck()},sound:(o)=>{if(o&&o.enabled!=null){soundOn=!!o.enabled;musTvVol()}if(o&&o.volume!=null&&cfgInfo){cfgInfo.config.ui.volume=+o.volume;paintVol()}if(window.Sound){Sound.set(o);if(o.preview)Sound.play(o.preview);if(o.music!=null||o.musicLevel!=null){if(o.music!=null)mmTrack=String(o.music);if(o.musicLevel!=null)mmLevel=+o.musicLevel;ambient(mmWant)}else if(o.enabled===true)ambient(mmWant)}},raReload:()=>{RA.shelf={};RA.game.clear();raInit()},
@@ -4019,8 +4112,8 @@ window.Shelf={
   // the cases in view swap their cover in place, nothing is rebuilt; cases not built yet pick it up when they are
   artUpdated:ids=>{const want=new Set((ids||[]).map(String));let n=0;for(const s of slots){if(!s.el||!s.g||!want.has(String(s.g.id)))continue;const g=s.g;
     // a spine that arrived after the case was made (Android's full box art, or one picked in Art Studio): onto its sides as mount() puts it
-    if(g.art&&g.art.spine){const have=s.el.querySelectorAll(".spine-img");if(have.length)have.forEach(sp=>{if(sp.getAttribute("src")!==g.art.spine)sp.src=g.art.spine});
-      else s.el.querySelectorAll(".f-left,.f-right").forEach(face=>{const sp=new Image();sp.className="spine-img";sp.alt="";sp.draggable=false;sp.decoding="async";sp.src=g.art.spine;sp.onerror=()=>sp.remove();face.appendChild(sp)})}
+    if(g.art&&g.art.spine){const su=ANDROID?thumb(g.art.spine,bh*OS):g.art.spine,have=s.el.querySelectorAll(".spine-img");if(have.length)have.forEach(sp=>{if(sp.getAttribute("src")!==su)sp.src=su});
+      else s.el.querySelectorAll(".f-left,.f-right").forEach(face=>{const sp=new Image();sp.className="spine-img";sp.alt="";sp.draggable=false;sp.decoding="async";sp.src=su;sp.onerror=()=>sp.remove();face.appendChild(sp)})}
     if(!s.img||!(g.art&&g.art.front))continue;if(ANDROID)artSwapQueue(s);else setFront(s,g,g.art.front);n++} /* Android: decoded first, one swap per frame, never mid-slide */
     // a case still waiting for its generated cover would otherwise paint that over the real picture a moment later
     if(coverQ.length)coverQ=coverQ.filter(q=>!(q.g&&want.has(String(q.g.id))&&q.g.art&&q.g.art.front));
@@ -4084,6 +4177,7 @@ window.Shelf.shortcutOptions=async kind=>{if(!ANDROID)return [];
 window.Shelf.bottomShortcut=key=>{if(!ANDROID)return false;const k=String(key||""),at=k.indexOf(":"),kind=k.slice(0,at),v=k.slice(at+1);if(at<0||!v)return false;
   if(mode==="setup"||mode==="museum"||mode==="launch"||mode==="boot"||(window.BS_STUDIO&&BS_STUDIO.isOpen()))return false;if(qm.open)qmClose(true);
   if(kind==="app"){if(!api.launchApp)return false;play_("open");toast("Opening the app…");api.launchApp(v).catch(e=>{toast(e&&e.message||"Couldn't open that app");play_("error")});return true}
+  if(sysBusy()||!/^(browse|details|inspect)$/.test(mode))return false; // (beta.10) mid-switch, Settings, Customize…: no rebuild under them
   if(mode==="inspect")closeInspect();
   if(kind==="shelf"){const si=shelves.findIndex(s=>s.id===v);if(si<0)return false;if(si!==sysIdx)setSystem(si);return true}
   if(kind==="game"){let si=-1,gi=-1;shelves.forEach((s,n)=>{if(si>=0||s.kind!=="console")return;const j=s.items.findIndex(g=>g&&String(g.id)===v);if(j>=0){si=n;gi=j}});if(si<0)return false;
@@ -4115,7 +4209,7 @@ window.Shelf.bottomCmd=(c,arg)=>{if(qm.open&&c!=="menu")qmClose(true);
   if(c==="play"){if(browsing)play();return}
   if(c==="fav")return toggleFav();
   if(c==="details"){if(mode==="details")closeDetails();else openDetails();return}
-  if(c==="inspect"){if(mode==="inspect")closeInspect();else openInspect();return}
+  if(c==="inspect"){if(mode==="inspect"){closeInspect();detailsReturn()}else openInspect();return}
   if(c==="manual"){if(mode!=="inspect")openInspect();const t0=performance.now();(function wait(){if(mode!=="inspect")return;if(performance.now()-t0>650){openReader();return}setTimeout(wait,80)})();return} // the reader opens once the case has landed in Inspect
   if(c==="shuffle"){shuffle();return}
   if(c==="prev"||c==="next"){move(c==="next"?1:-1);return}

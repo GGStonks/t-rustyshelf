@@ -33,7 +33,7 @@
 // Writes a table to the GitHub run's Summary and screenshots to out/device-test/. Exit code 1 = failed (APK not published).
 // Usage: node ci/web-device-test.js <www dir> <out dir> [--group=thor|screens|windows]
 //   (beta.7) --group runs one third of the passes, so GitHub runs the three at once (android.yml): thor = passes 1-9 (the
-//   Thor flow on the pretend device), screens = 10-17, windows = 18-23. No group (or all) runs every pass, one after another.
+//   Thor flow on the pretend device), screens = 10-17, windows = 18-24. No group (or all) runs every pass, one after another.
 'use strict';
 const http = require('http'), fs = require('fs'), path = require('path');
 const { chromium } = require('playwright');
@@ -62,7 +62,7 @@ const NATIVE_STANDIN = `window.androidBridge = { postMessage(s) { const m = JSON
   const data = { apps: { apps: [] }, readText: { text: null }, folderAccess: { uris: [] }, homeStatus: { isDefault: false, launchers: [] }, bottomStatus: { available: false, enabled: true, shown: false } }[m.methodName] || {};
   setTimeout(() => window.Capacitor && Capacitor.fromNative && Capacitor.fromNative({ callbackId: m.callbackId, pluginId: m.pluginId, methodName: m.methodName, success: true, data }), 5); } };`;
 const HEADERS = `;window.Capacitor.PluginHeaders = [{ name: 'BoxshelfNative', methods: ['readText','writeText','apps','activities','folderAccess','pickFolder','listFiles','launch','chooseApp',
-  'homeStatus','openHomeSettings','openAndroidSettings','launchHome','closeApp','artIndex','artList','artThumb','fetchArt','discId','httpText','artCache','saveArt','pickImage','fetchFile','saveBytes','bottomStatus','bottomShow','bottomHide','bottomPost','listDirs','artExists','artForget'].map(n => ({ name: n, rtype: 'promise' })).concat([{ name: 'addListener', rtype: 'callback' }, { name: 'removeListener', rtype: 'promise' }]) }];`;
+  'homeStatus','openHomeSettings','openAndroidSettings','launchHome','closeApp','artIndex','artList','artThumb','fetchArt','discId','httpText','artCache','saveArt','pickImage','fetchFile','saveBytes','bottomStatus','bottomShow','bottomHide','bottomPost','listDirs','artExists','artForget','releaseFolder','openUrl','dropPdf'].map(n => ({ name: n, rtype: 'promise' })).concat([{ name: 'addListener', rtype: 'callback' }, { name: 'removeListener', rtype: 'promise' }]) }];`;
 
 async function newPage(browser, init) {
   const ctx = await browser.newContext({ viewport: { width: 853, height: 480 }, deviceScaleFactor: 2.25, isMobile: true, hasTouch: true });
@@ -149,14 +149,49 @@ server.listen(0, async () => {
       // a ScreenScraper account: backs, spines and discs for the other consoles, the sign-in only ever added natively
       const ss = await page.evaluate(async () => {
         const api = window.boxshelf, wait = ms => new Promise(r => setTimeout(r, ms)), c = (await api.getConfig()).config;
+        // (beta.10) an account but no developer login (Boxshelf's own or the player's): the test says so, nothing is sent
         c.keys = Object.assign({}, c.keys, { ssUser: 'me', ssPass: 'secret' }); await api.saveConfig(c);
+        const noDev = await api.testApi('screenscraper'), noDevCalls = __fakeArt.ss.length;
+        c.keys = Object.assign({}, c.keys, { ssDevId: 'dev', ssDevPass: 'dp' }); await api.saveConfig(c);
         const t = await api.testApi('screenscraper'); await wait(1500); for (let i = 0; i < 80 && api.artProgress().running; i++) await wait(250);
         const psx = (await api.cachedLibrary()).find(s => s.id === 'psx').games.map(g => g.art || {});
-        return { t, psx, calls: __fakeArt.ss.length, signed: __fakeArt.ss.every(x => x.ss), dl: __fakeArt.fetch.filter(f => f.ss).length,
+        return { noDev, noDevCalls, t, psx, calls: __fakeArt.ss.length, signed: __fakeArt.ss.every(x => x.ss), dl: __fakeArt.fetch.filter(f => f.ss).length,
           leaked: __fakeArt.fetch.some(f => /sspassword|secret/.test(f.urls.join(' '))) || __fakeArt.ss.some(x => /sspassword|secret/.test(x.url)) };
       });
       check('ScreenScraper (account set): test works, PlayStation gets back + spine + disc, sign-in added only natively', ss.t && ss.t.state === 'ok' && ss.psx.every(a => a.back && a.spine && a.disc) && ss.signed && ss.dl > 0 && !ss.leaked,
         `test ${ss.t && ss.t.state}, ${ss.calls} lookups, ${ss.dl} downloads, leaked ${ss.leaked}`);
+      check('ScreenScraper without a developer login: the test says so ("Not available yet"), nothing is sent', ss.noDev && ss.noDev.state === 'fail' && /no developer login/.test(ss.noDev.msg) && ss.noDevCalls === 0,
+        JSON.stringify({ noDev: ss.noDev, calls: ss.noDevCalls }));
+
+      // (beta.10) review fixes: the demo's pretend features are gone, links really open (https only), the start-up check says
+      // "unchanged", Rename works and is undone, a removed folder's permission is given back, a pick Android won't keep says so
+      const fx = await page.evaluate(async () => {
+        const api = window.boxshelf, wait = ms => new Promise(r => setTimeout(r, ms)), out = {};
+        out.gone = ['updateCheck', 'checkManuals', 'onManualCheck', 'clipStatus', 'clipHelper', 'customThemes', 'customThemeCreate', 'customThemesOpen'].filter(k => k in api);
+        out.open = await api.openExternal('https://example.com/help').then(() => 'ok', e => e.message);
+        out.http = await api.openExternal('http://example.com/').then(() => 'opened', e => (/https/.test(e.message) ? 'refused' : e.message));
+        out.urls = (window.__fakeCalls || []).filter(c => /^openUrl:/.test(c));
+        await api.scan(); const same = await api.scanIfChanged(); out.same = !!(same && same.unchanged);
+        const zel = (await api.cachedLibrary()).find(s => s.id === 'gc').games.find(g => /Wind Waker/.test(g.title)) || {};
+        await api.renameGame({ systemId: 'gc', file: zel.file, title: '  My   Zelda ' }); const ren = await api.scanIfChanged();
+        const rz = ren && !ren.unchanged ? ren.find(s => s.id === 'gc').games.find(g => g.file === zel.file) : null; out.renamed = rz ? [rz.title, rz.fileTitle] : ren;
+        const c0 = (await api.getConfig()).config; delete c0.games; await api.saveConfig(c0); out.kept = ((await api.getConfig()).config.games || {})['gc:' + zel.file]; // (an older copy of the settings doesn't undo it)
+        await api.renameGame({ systemId: 'gc', file: zel.file, title: '' }); const back = (await api.scan()).find(s => s.id === 'gc').games.find(g => g.file === zel.file); out.back = [back.title, back.fileTitle || null];
+        const c = (await api.getConfig()).config, snes = c.systems.snes.romDirs.slice(), uri = (window.BS_FOLDERS() || {})[snes[0]]; window.__fakeReleased = [];
+        c.systems.snes.romDirs = []; await api.saveConfig(c); await wait(50); out.released = (window.__fakeReleased || []).includes(uri);
+        c.systems.snes.romDirs = snes; await api.saveConfig(c); await api.scan(); // (put back for the rest of the pass)
+        const said = [], t0 = Shelf.toast; Shelf.toast = m => { said.push(String(m)); return t0(m); }; // (what the shelf was asked to say, whatever else says something after)
+        window.__fakePersistFail = true; window.__fakePickNext = 'primary:ROMs/gc'; out.pick = await api.pick({ kind: 'folder' }); await wait(100);
+        Shelf.toast = t0; out.warn = said.join(' | ');
+        return out; });
+      check('Android: the demo\'s pretend updates, manual check, trailer clips and custom themes are gone; links open in the browser (https only)',
+        !fx.gone.length && fx.open === 'ok' && fx.http === 'refused' && fx.urls.join() === 'openUrl:https://example.com/help', JSON.stringify(fx).slice(0, 400));
+      check('Android: the start-up check answers "unchanged" when nothing changed (no library compared on the page), and a rename counts as a change',
+        fx.same && Array.isArray(fx.renamed) && fx.renamed[0] === 'My Zelda' && /Wind Waker/.test(fx.renamed[1] || ''), JSON.stringify({ same: fx.same, renamed: fx.renamed }));
+      check('Android: Rename keeps the name (a later settings save doesn\'t undo it) and "back to the file\'s name" undoes it',
+        fx.kept && fx.kept.title === 'My Zelda' && /Wind Waker/.test(fx.back[0]) && fx.back[1] === null, JSON.stringify({ kept: fx.kept, back: fx.back }));
+      check('Android: a games folder removed in Settings gives its permission back; a pick Android won\'t keep says so', fx.released && /keep access to that folder/.test(fx.warn) && !!fx.pick,
+        JSON.stringify({ released: fx.released, warn: fx.warn.slice(0, 80), pick: fx.pick }));
 
       await page.goto(url); await page.waitForTimeout(7000);
       await page.screenshot({ path: path.join(OUT, '2-shelf.png') });
@@ -1517,7 +1552,7 @@ server.listen(0, async () => {
     // ---------- pass 17: other Android screens (0.4.0): a 20:9 phone, a small phone, a 16:10 tablet (ci/screens-test.js) ----------
     await require('./screens-test')({ browser, base, check, newPage, OUT });
     } // ===== end of group screens =====
-    if (runs('windows')) { // ===== group windows: passes 18-23 =====
+    if (runs('windows')) { // ===== group windows: passes 18-24 =====
     // ---------- pass 18: the retro shelves (beta.6): PlayStation, NES … Dreamcast through RetroArch (ci/retro-test.js) ----------
     await require('./retro-test')({ browser, base, check, newPage, OUT });
     // ---------- pass 19: the library (beta.7): Details redone, filters by decade / genre / players, collections (ci/library-test.js) ----------
@@ -1530,6 +1565,8 @@ server.listen(0, async () => {
     await require('./whatsnew-test')({ browser, base, check, newPage, OUT });
     // ---------- pass 23: Add games: several programs, a folder, Playnite (experimental), the Custom shelf's tile (ci/addgames-pass.js) ----------
     await require('./addgames-pass')({ browser, base, check, newPage, OUT });
+    // ---------- pass 24: beta testers' reports (beta.10): 8BitDo prompts, ARMSX2 and unknown emulator apps on Android, custom games on the PC shelf, the Switch's emulator name (ci/issues-test.js) ----------
+    await require('./issues-test')({ browser, base, check, newPage, OUT });
     } // ===== end of group windows =====
     check('Every file the page loads is in the APK', !missing.size, [...missing].join(', '));
   } catch (e) { check('Test ran to the end', false, e && e.stack ? e.stack.split('\n').slice(0, 2).join(' ') : e); }

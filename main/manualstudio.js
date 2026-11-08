@@ -64,7 +64,7 @@ async function gamesFor(sysId, fresh) {
   const m = gamesMemo.get(sysId); if (m && !fresh && Date.now() - m.at < 30000) return m;
   const item = env.consoles().find(x => x.def.id === sysId); if (!item) throw new Error('Unknown system.');
   await new Promise(r => setImmediate(r));
-  const list = env.scan(item.def, item.sc, !!fresh).filter(g => g.kind !== 'app' && !g.extra); // (beta.9: fresh reads the folders again, past the scanner's kept scan)
+  const list = (await env.scan(item.def, item.sc, !!fresh)).filter(g => g.kind !== 'app' && !g.extra); // (beta.9: fresh reads the folders again, past the scanner's kept scan; beta.10: env.scan is the async scan)
   const r = { at: Date.now(), list, byFile: new Map(list.map(g => [path.resolve(g.file).toLowerCase(), g])) }; gamesMemo.set(sysId, r); return r;
 }
 async function gameArg(a) {
@@ -156,7 +156,8 @@ async function fetchPdf(c, url) {
 // a downloaded PDF's first page as the card's picture
 async function pdfThumb(c, pdf) {
   const jpg = cacheName(c.key, '.jpg');
-  if (!paths.isFile(jpg)) { const b = env.renderFirst ? await env.renderFirst(pdf) : null; if (!b || !b.length) return null; fs.writeFileSync(jpg, b); }
+  if (!paths.isFile(jpg)) { const b = env.renderFirst ? await env.renderFirst(pdf) : null; if (!b || !b.length) return null; const tmp = `${jpg}.${process.pid}.tmp`; // (beta.10) temp + rename: a cut-off write was trusted from then on
+    try { fs.writeFileSync(tmp, b); fs.renameSync(tmp, jpg); } catch (e) { try { fs.unlinkSync(tmp); } catch {} throw e; } }
   const size = fs.statSync(pdf).size, n = await pdfPages(pdf);
   return { jpg, pages: n, bpp: n ? size / n : 0 };
 }

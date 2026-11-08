@@ -32,7 +32,8 @@ function prepared(file) {
     const img = nativeImage.createFromPath(file), sz = img.isEmpty() ? null : img.getSize();
     if (sz && (sz.width > MAX_W * 1.1 || st.size > 6 * 1024 * 1024)) {
       const dst = path.join(CACHE, crypto.createHash('sha1').update(key).digest('hex').slice(0, 24) + '.jpg');
-      if (!fs.existsSync(dst)) { fs.mkdirSync(CACHE, { recursive: true }); fs.writeFileSync(dst, img.resize({ width: Math.min(MAX_W, sz.width), quality: 'good' }).toJPEG(88)); }
+      if (!fs.existsSync(dst)) { fs.mkdirSync(CACHE, { recursive: true }); const tmp = `${dst}.${process.pid}.tmp`; // (beta.10) temp + rename: a cut-off write was trusted from then on
+        try { fs.writeFileSync(tmp, img.resize({ width: Math.min(MAX_W, sz.width), quality: 'good' }).toJPEG(88)); fs.renameSync(tmp, dst); } catch (e) { try { fs.unlinkSync(tmp); } catch {} throw e; } }
       out = dst;
     }
   } catch (e) { log('Custom theme: could not prepare', path.basename(file), e.message); }

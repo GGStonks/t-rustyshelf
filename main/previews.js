@@ -55,16 +55,17 @@ function dirsFor(def, sc, opts = {}) {
   return [...new Set(out.map(d => path.resolve(d)))].filter(isDir);
 }
 // the video file for one console game, or null. game: { file, title }
-function findFile(def, sc, game, opts = {}) {
+function findFile(def, sc, game, opts = {}, dirsKnown) { // dirsKnown (beta.10): dirsFor's answer, worked out once for a whole console
   const base = path.basename(game.file || '').replace(/\.[^.]+$/, '').toLowerCase(), k = key(game.title), kb = key(base);
-  const dirs = dirsFor(def, sc, opts);
+  const dirs = dirsKnown || dirsFor(def, sc, opts);
   for (const d of dirs) { const ix = index(d); for (const b of [base, base + '-video', base + '-01', (game.title || '').toLowerCase() + '-01']) { const f = ix.exact.get(b); if (f) return f; } }
   for (const d of dirs) { const ix = index(d); const f = ix.loose.get(kb) || ix.loose.get(k); if (f) return f; }
   return null;
 }
 // how many games of a console have a video (Settings and the first run's "Found previews for N games")
 function countFiles(def, sc, games, opts = {}) {
-  let n = 0; for (const g of games) if (g.kind === 'rom' && findFile(def, sc, g, opts)) n++;
+  // (beta.10) the folder list once per console: dirsFor stats ~20 folders, and redoing that per game was ~60,000 statSyncs for 3,000 games
+  const dirs = dirsFor(def, sc, opts); let n = 0; for (const g of games) if (g.kind === 'rom' && findFile(def, sc, g, opts, dirs)) n++;
   return n;
 }
 
@@ -111,7 +112,7 @@ function steamClip(appid) {
     if (!/^https:\/\/[a-z0-9.-]+\.steamstatic\.com\//i.test(mv.dash_h264)) return null;
     const plan = dashPlan((await get(mv.dash_h264)).toString('utf8'), mv.dash_h264); if (!plan) { fs.writeFileSync(none, ''); return null; }
     const bufs = [await get(plan.init)];
-    for (const u of plan.media) { try { bufs.push(await get(u)); } catch (e) { if (bufs.length > 1) break; throw e; } } // (a short trailer simply ends sooner)
+    for (const u of plan.media) { try { bufs.push(await get(u)); } catch (e) { if (bufs.length > 1 && /^HTTP 4(04|10)$/.test(e.message)) break; throw e; } } // (a short trailer simply ends sooner; beta.10: only a piece that isn't there ends it, a dropped connection saves nothing and is tried again)
     const tmp = out + '.part'; fs.writeFileSync(tmp, Buffer.concat(bufs)); fs.renameSync(tmp, out);
     trim(); log('Preview: Steam trailer kept for', appid, Math.round(fs.statSync(out).size / 1024) + ' KB'); return out;
   })().catch(e => { log('Preview: Steam trailer for', appid, 'failed:', e.message); return null; }).finally(() => flights.delete(appid));

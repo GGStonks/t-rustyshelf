@@ -216,7 +216,7 @@ window.boxshelf={
   tvScan:async()=>true,tvList:async()=>[],tvAdFor:async()=>null,tvLocal:async()=>null,
   manualCoverage:async()=>consoles.filter(c=>config.systems[c.id]&&config.systems[c.id].romDirs.length).map(c=>({id:c.id,name:c.name,total:titles[c.id].length,have:0,low:0})),
   artCoverage:async()=>consoles.filter(c=>config.systems[c.id]&&config.systems[c.id].romDirs.length).map(c=>({id:c.id,name:c.name,total:titles[c.id].length,front:0,back:0,spine:0,disc:0,frontLow:0,backLow:0,spineLow:0,discLow:0})),
-  recentManuals:async()=>[],cancelManuals:async()=>true,cancelCovers:async()=>true,// (beta.9) Wrong game / Repair as main does them: the "waiting" / "go" steps, Wrong game's pages arriving one by one
+  recentManuals:async()=>[],cancelManuals:async()=>true,cancelCovers:async()=>true,pauseCovers:async()=>({ok:true}),resumeCovers:async()=>({ok:true}),/* (beta.10: the shelf's art card; window.BS_artCard feeds it in tests) */onGpuBack:fn=>{(window.__mockGpu=window.__mockGpu||[]).push(fn)},/* (beta.10: tests call these as main's "gpu:back") */// (beta.9) Wrong game / Repair as main does them: the "waiting" / "go" steps, Wrong game's pages arriving one by one
   onManualTurn:fn=>{(window.__mockTurn=window.__mockTurn||[]).push(fn)},
   // (beta.9) Check my manuals as main does it: a step per console, then the set-aside games looked up again (Cancel stops it)
   onManualCheck:fn=>{(window.__mockCheck=window.__mockCheck||[]).push(fn)},

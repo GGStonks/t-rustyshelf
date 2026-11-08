@@ -15,7 +15,7 @@ module.exports = async function pcGamesPass({ browser, base, check, newPage }) {
   // first, 1x if that fails); a custom game gets the Steam games of its exact name (asked exactly), a typed name loosely
   try {
     const pcc = require(path.join(root, 'main', 'pccovers.js')), d = fs.mkdtempSync(path.join(os.tmpdir(), 'bs-pcc-')), asked = [], got = [];
-    const img = Buffer.alloc(3000, 7);
+    const img = Buffer.alloc(3000, 7); img[0] = 0xff; img[1] = 0xd8; // (beta.10: a JPEG's first bytes: downloads that aren't pictures are refused now)
     pcc.init({ dataDir: d, log: () => {}, fileUrl: f => 'bsfile:///' + f, steamCover: () => null, steamgrid: { enabled: () => false },
       fetchImage: async u => { got.push(u); return /_2x/.test(u) ? null : img; }, steamSearch: async (t, exact) => { asked.push([t, exact]); return /hollow/i.test(t) ? [{ id: '367520', name: 'Hollow Knight' }] : []; } });
     const st = await pcc.options({ id: 'steam-1145360', appid: '1145360', title: '' });

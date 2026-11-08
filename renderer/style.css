@@ -150,8 +150,8 @@ button:focus-visible{outline:2px solid var(--ink);outline-offset:3px;border-radi
 /* hints */
 .hints{position:absolute;left:50%;bottom:max(24px,calc(env(safe-area-inset-bottom,0px) + 12px));transform:translateX(-50%);z-index:6;display:flex;flex-wrap:wrap;justify-content:center;gap:4px 6px;
   max-width:calc(100% - 32px);padding:6px 8px;border-radius:999px;background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(14px)}
-.hints{transition:left .6s cubic-bezier(.22,.9,.25,1)}
-@media (min-width:761px){#app.details-open .hints{left:calc(50% - min(230px,50vw));max-width:calc(100% - min(460px,100%) - 32px)}} /* never under the panel or off the left edge (1280×720) */
+.hints{transition:transform .6s cubic-bezier(.22,.9,.25,1)} /* (beta.10) it steps aside with a transform, not `left` (no layout every frame under its blur) */
+@media (min-width:761px){#app.details-open .hints{transform:translateX(calc(-50% - min(230px,50vw)));max-width:calc(100% - min(460px,100%) - 32px)}} /* never under the panel or off the left edge (1280×720) */
 .hint{display:inline-flex;align-items:center;gap:7px;padding:5px 10px;border-radius:999px;font-size:12px;font-weight:500;white-space:nowrap}
 .hint:hover{background:rgba(255,255,255,.1)}
 .hint .keys{display:inline-flex;gap:3px}
@@ -815,3 +815,25 @@ html.reduce-motion .note-card{transition:none}
 .hint-exit:active{background:rgba(255,255,255,.16)}
 /* Box art → PC games: a game still on a made-up case is marked, like the Art Studio's missing covers */
 .pcgallery .cp-tile.made span{color:#ffcf6e}
+/* (beta.10) the background box art download (renderer/app.js artCardOn): a small card in the bottom-left corner, out of the
+   shelf's way. Its buttons take the mouse and touch (a controller uses the quick menu's row); hidden over the museum, Inspect,
+   Customize, a note card and a launch, under Settings */
+.art-card{position:fixed;left:max(clamp(16px,2vw,36px),env(safe-area-inset-left,0px));bottom:clamp(84px,11vh,120px);z-index:45;width:min(270px,calc(100% - 32px));box-sizing:border-box;padding:12px 14px;border-radius:16px;contain:layout;
+  background:linear-gradient(180deg,rgba(18,21,36,.94),rgba(11,13,22,.96));border:1px solid rgba(255,255,255,.1);box-shadow:0 16px 40px rgba(0,0,0,.45);color:#f3f5fb;font-size:13px;
+  opacity:0;transform:translateY(10px);pointer-events:none;transition:opacity .26s ease,transform .26s cubic-bezier(.22,.9,.25,1)}
+.art-card.on{opacity:1;transform:none;pointer-events:auto}
+#app.museum-open .art-card,#app.inspecting .art-card,#app.launching .art-card,#app.settings-open .art-card,#app.note-open .art-card{opacity:0;pointer-events:none}
+.ac-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.ac-t{font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:#a9bfff}
+.ac-n{font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ac-bar{margin-top:8px;height:4px;border-radius:99px;background:rgba(255,255,255,.12);overflow:hidden}
+.ac-bar i{display:block;height:100%;background:#6b8cff;transform-origin:left center;transform:scaleX(0);transition:transform .4s ease}
+.art-card.paused .ac-bar i{background:rgba(169,191,255,.5)}
+.ac-btns{display:flex;gap:8px;margin-top:10px}
+.ac-b{flex:1 1 0;min-height:34px;border:0;border-radius:10px;background:rgba(255,255,255,.1);color:#fff;font:inherit;font-size:12px;font-weight:600;cursor:pointer;touch-action:manipulation}
+.ac-b:hover{background:rgba(255,255,255,.18)}
+.ac-b[hidden],.ac-hint:empty{display:none}
+.ac-hint{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;color:rgba(233,236,245,.6)}
+.ac-hint .g{min-width:18px;height:18px;padding:0 3px;box-sizing:border-box;display:inline-grid;place-items:center;border-radius:5px;background:rgba(255,255,255,.14);font-size:10px;font-weight:700}
+.ac-hint .g svg{width:14px;height:14px}
+html.reduce-motion .art-card,html.reduce-motion .ac-bar i{transition:none}

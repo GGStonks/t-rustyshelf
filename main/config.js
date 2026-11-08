@@ -155,7 +155,7 @@ function writeNow(json, tmpName) {
   fs.mkdirSync(path.dirname(FILE), { recursive: true });
   const tmp = FILE + (tmpName || '.tmp'); let fd = null;
   try {
-    fd = fs.openSync(tmp, 'w'); fs.writeSync(fd, json); fs.fsyncSync(fd); fs.closeSync(fd); fd = null;
+    fd = fs.openSync(tmp, 'w', 0o600); fs.writeSync(fd, json); fs.fsyncSync(fd); fs.closeSync(fd); fd = null; // (beta.10: 0600, readable by this user only, on Linux; Windows ignores it)
     // Windows: antivirus / indexing can hold the file for a moment; retry for up to about a second
     for (let i = 0; ; i++) { try { fs.renameSync(tmp, FILE); break; } catch (e) { if (i >= 20 || !['EPERM', 'EACCES', 'EBUSY'].includes(e.code)) throw e; sleepSync(50); } }
   } catch (e) { if (fd != null) { try { fs.closeSync(fd); } catch {} } try { fs.unlinkSync(tmp); } catch {} throw e; }
@@ -166,7 +166,7 @@ async function writeLater(json) {
   await fs.promises.mkdir(path.dirname(FILE), { recursive: true });
   const tmp = FILE + '.tmp'; let fh = null;
   try {
-    fh = await fs.promises.open(tmp, 'w'); await fh.writeFile(json); await fh.sync(); await fh.close(); fh = null;
+    fh = await fs.promises.open(tmp, 'w', 0o600); await fh.writeFile(json); await fh.sync(); await fh.close(); fh = null;
     for (let i = 0; ; i++) { try { await fs.promises.rename(tmp, FILE); break; } catch (e) { if (i >= 20 || !['EPERM', 'EACCES', 'EBUSY'].includes(e.code)) throw e; await new Promise(r => setTimeout(r, 50)); } }
   } catch (e) { if (fh) { try { await fh.close(); } catch {} } try { await fs.promises.unlink(tmp); } catch {} throw e; }
 }
@@ -214,7 +214,7 @@ function sanitize(cfg) {
     .map(c => ({ id: c.id.slice(0, 40), name: c.name.replace(/\s+/g, ' ').trim().slice(0, 40) || 'Collection', ids: [...new Set((Array.isArray(c.ids) ? c.ids : []).filter(x => typeof x === 'string' && x && x.length <= 1024))].slice(0, 5000) }));
   // (beta.4) games added by hand: plain paths and names only, a sane number of them
   if (isObj(cfg.pc)) { const s = (v, n) => typeof v === 'string' ? v.trim().slice(0, n) : '';
-    cfg.pc.custom = (Array.isArray(cfg.pc.custom) ? cfg.pc.custom : []).filter(c => isObj(c) && s(c.exe, 1024)).slice(0, 2000).map(c => ({ id: s(c.id, 80) || s(c.title, 80) || s(c.exe, 80), title: s(c.title, 120), exe: s(c.exe, 1024), args: s(c.args, 1000), ...(s(c.src, 20) ? { src: s(c.src, 20) } : {}), ...(s(c.runner, 1024) ? { runner: s(c.runner, 1024) } : {}) })); // (Linux: runner = this game's own Wine / Proton) // (beta.7: src 'playnite' marks an import, for Remove what was imported; up to 2000 games)
+    cfg.pc.custom = (Array.isArray(cfg.pc.custom) ? cfg.pc.custom : []).filter(c => isObj(c) && s(c.exe, 1024)).slice(0, 2000).map(c => ({ id: s(c.id, 80) || s(c.title, 80) || s(c.exe, 80), title: s(c.title, 120), exe: s(c.exe, 1024), args: s(c.args, 1000), ...(s(c.src, 20) ? { src: s(c.src, 20) } : {}), ...(s(c.runner, 1024) ? { runner: s(c.runner, 1024) } : {}), ...(c.shelf === 'pc' ? { shelf: 'pc' } : {}) })); // (Linux: runner = this game's own Wine / Proton) // (beta.7: src 'playnite' marks an import, for Remove what was imported; up to 2000 games) (beta.10: shelf 'pc' = on the PC shelf instead of Custom)
     cfg.pc.pnDirs = isObj(cfg.pc.pnDirs) ? Object.fromEntries(Object.entries(cfg.pc.pnDirs).slice(0, 60).map(([k, v]) => [String(k).slice(0, 20), (Array.isArray(v) ? v : []).filter(x => typeof x === 'string' && x.length <= 1024).slice(0, 50)])) : {}; // (the games folders a Playnite import added)
     for (const k of ['gamesDir', 'userGamesDir', 'runner', 'prefixDir', 'homeDir', 'legendaryPath', 'epicDir']) cfg.pc[k] = s(cfg.pc[k], 1024); // (the PC games folder; Linux: Wine / Proton and Epic)
     const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,80}$/;

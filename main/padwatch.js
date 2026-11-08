@@ -595,7 +595,7 @@ function start(comboName, holdMs, onQuit, opts = {}) {
       if (line === 'CLICK 1' || line === 'CLICK 0') { me.clickHeld = line === 'CLICK 1'; continue; } // (tracked even once replaced: see stop())
       if (proc !== me) continue; // output from a helper that has since been replaced must not act on the new session
       if (line === 'READY') log('padwatch ready:', comboName, 'in', Date.now() - t0, 'ms');
-      if (line === 'QUIT') { log('padwatch: quit combo'); try { onQuit(); } catch (e) { log('padwatch onQuit', e.message); } }
+      if (line === 'QUIT') { me.quit = true; log('padwatch: quit combo'); try { onQuit(); } catch (e) { log('padwatch onQuit', e.message); } }
       if (line === 'FULLSCREEN') log('padwatch: sent fullscreen key');
       if (line === 'GAMEFS' && opts.onFullscreen) { try { opts.onFullscreen(); } catch (e) { log('padwatch onFullscreen', e.message); } }
       if ((line === 'GAMEGONE' || line === 'GAMEBACK') && opts.onWindow) { try { opts.onWindow(line === 'GAMEBACK'); } catch (e) { log('padwatch onWindow', e.message); } }
@@ -608,12 +608,20 @@ function start(comboName, holdMs, onQuit, opts = {}) {
     }
   });
   me.stderr.on('data', d => { const t = require('./paths').psError(d); if (t) log('padwatch:', t.slice(0, 300)); });
-  me.on('exit', code => { if (me.clickHeld) { me.clickHeld = false; releaseClick(); } if (proc === me) proc = null; if (code && code !== 1) log('padwatch exited', code); try { require('fs').unlinkSync(ps1); } catch {} });
+  me.on('exit', code => { if (me.clickHeld) { me.clickHeld = false; releaseClick(); } const mine = proc === me; if (proc === me) proc = null; if (code && code !== 1) log('padwatch exited', code); try { require('fs').unlinkSync(ps1); } catch {}
+    // (beta.10) the helper ended by itself while the game still runs (not the quit combo, not stop()): started again after a
+    // moment, at most twice per game (the Guide button and the quit combo were dead for the rest of it). Without the
+    // fullscreen key: pressed again, it would take the app out of fullscreen.
+    if (!mine || me.quit || typeof opts.keepUp !== 'function' || (opts.restarts || 0) >= 2) return;
+    let up = false; try { up = !!opts.keepUp(); } catch {} if (!up) return;
+    const n = (opts.restarts || 0) + 1, g = stops; log('padwatch: the helper stopped during the game (exit ' + code + '), starting it again (' + n + ' of 2)');
+    setTimeout(() => { let still = false; try { still = !!opts.keepUp(); } catch {} if (stops === g && !proc && still) start(comboName, holdMs, onQuit, { ...opts, fullscreenKey: null, onFullscreen: undefined, restarts: n }); }, 1500); });
   me.on('error', e => { log('padwatch error', e.message); if (proc === me) proc = null; try { require('fs').unlinkSync(ps1); } catch {} }); // e.g. no powershell.exe: no 'exit' follows
   return true;
 }
 // (the script file goes now too: the 'exit' cleanup never runs if Boxshelf itself is quitting)
-function stop() { if (tbWait) { const f = tbWait; tbWait = null; f(false); } if (proc) { const p = proc; proc = null; try { p.kill(); } catch {} if (p.clickHeld) { p.clickHeld = false; releaseClick(); } } if (curPs1) { try { require('fs').unlinkSync(curPs1); } catch {} curPs1 = null; } pendingKeys.clear(); }
+let stops = 0; // (beta.10) counts stop() calls: a restart planned before one is dropped
+function stop() { stops++; if (tbWait) { const f = tbWait; tbWait = null; f(false); } if (proc) { const p = proc; proc = null; try { p.kill(); } catch {} if (p.clickHeld) { p.clickHeld = false; releaseClick(); } } if (curPs1) { try { require('fs').unlinkSync(curPs1); } catch {} curPs1 = null; } pendingKeys.clear(); }
 // A helper killed (game over, Boxshelf quitting) while A held the pointer's left button down can't let it go itself: a
 // one-line PowerShell does it, with the cached helper DLL when there is one (no compile). (Encoded: no quoting trouble.)
 function releaseClick() {

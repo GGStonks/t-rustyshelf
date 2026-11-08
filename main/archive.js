@@ -214,8 +214,10 @@ async function saveCover(id, file, signal) {
   const out = library.coverPath && library.coverPath(file); if (!out || fs.existsSync(out)) return false;
   try { fs.mkdirSync(path.dirname(out), { recursive: true }); } catch { return false; }
   for (const u of [`https://archive.org/download/${encodeURIComponent(id)}/page/n0_w800.jpg`, `https://archive.org/services/img/${encodeURIComponent(id)}`]) {
-    const r = await fetchFile(u, out, null, 0, false, signal).catch(e => ({ ok: false, status: e.message }));
-    if (r.ok) return true; if (r.status === 'cancelled') return false;
+    // (beta.10) into a temp name, kept only if it's a picture: an error page saved as the cover was trusted for good
+    const tmp = `${out}.${process.pid}.dl`, r = await fetchFile(u, tmp, null, 0, false, signal).catch(e => ({ ok: false, status: e.message }));
+    if (r.ok) { let ok = false; try { ok = require('./imgcheck').isImageBuf(await fs.promises.readFile(tmp)); if (ok) await fs.promises.rename(tmp, out); } catch { ok = false; } if (!ok) { await fs.promises.unlink(tmp).catch(() => {}); log('Archive cover: not a picture from', u); } if (ok) return true; continue; }
+    if (r.status === 'cancelled') return false;
   }
   log('Archive cover: none from archive.org for', id, '(it will be drawn from the PDF)');
   return false;

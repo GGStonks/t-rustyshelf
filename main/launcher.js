@@ -18,14 +18,14 @@ function buildArgs(template, rom) {
 function start(exe, args, onExit, env, cwd, logFile) { // env: the emulator's own environment (PS5: the KytyJets preset); else Boxshelf's. cwd: else the program's folder
   exe = exe && expand(String(exe).trim().replace(/^"(.*)"$/, '$1')); // same rules as the Settings check: %VAR%, {app}, pasted "quotes"
   if (!exe || !isFile(exe)) throw new Error(`Can't find ${exe || 'the program'}. Check its path in Settings.`);
-  if (running) throw new Error('Something is already running. Close it first.');
+  if (running) throw new Error(busyMessage());
   // detached: on Windows a normal child sits in Node's kill-on-close job object, so a Boxshelf crash or update restart
   // would take the emulator (and its unsaved game) with it. Not unref'd: the 'exit' event must still reach us.
   // logFile: the program's output goes there (Linux PC games), else nowhere
   let fd = null; if (logFile) { try { fd = require('fs').openSync(logFile, 'w'); } catch { fd = null; } }
   let child; try { child = spawn(exe, args, Object.assign({ cwd: cwd || path.dirname(exe), windowsHide: false, stdio: fd != null ? ['ignore', fd, fd] : 'ignore', detached: true }, env ? { env } : {})); }
   finally { if (fd != null) { try { require('fs').closeSync(fd); } catch {} } }
-  running = child;
+  running = child; child.bsName = path.basename(exe, path.extname(exe)); // (beta.10) its program name, never the path: the "already running" message names it
   const started = Date.now(); let done = false, spawned = false;
   const finish = info => { if (done) return; done = true; running = null; onExit({ ...info, ms: Date.now() - started }); };
   child.on('spawn', () => { spawned = true; });
@@ -53,6 +53,10 @@ function launchSteam(appid) {
 }
 
 function isRunning() { return !!running; }
+// (beta.10) what's running, by name (a game's title once main.js gives it one, else the program's name; no folders)
+function runningName() { return running ? String(running.bsName || '').trim().slice(0, 120) : ''; }
+function setRunningName(n) { if (running && n) running.bsName = String(n); }
+function busyMessage() { const n = runningName(); return n ? `${n} is already running. Close it first.` : 'Something is already running. Close it first.'; }
 function stopRunning() { if (running) { try { running.kill(); } catch {} } }
 // a helper spawn (taskkill) that can't be found or started must not become an uncaught 'error' event
 function quiet(cmd, args) { try { const c = spawn(cmd, args, { windowsHide: true, stdio: 'ignore' }); c.on('error', () => {}); return c; } catch { return null; } }
@@ -82,4 +86,4 @@ function closeRunning(forceAfterMs = 8000, onForce) {
   return true;
 }
 
-module.exports = { buildArgs, launchGame, launchEmulator, launchApp, launchCommand, launchSteam, isRunning, stopRunning, closeRunning };
+module.exports = { buildArgs, launchGame, launchEmulator, launchApp, launchCommand, launchSteam, isRunning, runningName, setRunningName, busyMessage, stopRunning, closeRunning };

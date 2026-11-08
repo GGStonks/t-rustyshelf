@@ -41,7 +41,7 @@ window.Inspect3D = (() => {
   }
   let lost = false;
   function teardown() {
-    try { cancelAnimationFrame(raf); if (renderer) { renderer.dispose(); renderer.forceContextLoss && renderer.forceContextLoss(); } } catch {}
+    try { cancelAnimationFrame(raf); raf = 0; if (renderer) { renderer.dispose(); renderer.forceContextLoss && renderer.forceContextLoss(); } } catch {}
     try { canvas && canvas.remove(); } catch {}
     tex.forEach(t => { try { t.dispose(); } catch {} }); tex = new Map(); mediaSeq++;
     genTex.forEach(t => { try { t.dispose(); } catch {} }); genTex.clear();
@@ -91,15 +91,18 @@ window.Inspect3D = (() => {
   // recessed cartridge cradle with a thumb notch instead, a PSP case an oval UMD well, a GameCube case a little
   // memory-card holder under its mini-disc.
   function interiorTexture(bg, kind, w, h, R, sys) {
-    // willReadFrequently: a canvas this size is drawn by the GPU otherwise, and the grain pass below reads it back
-    // (getImageData): a whole-GPU stall of tens of ms on a phone, the first time each case style is inspected
+    // willReadFrequently (Android): the plate stays a CPU canvas (it used to be read back for the grain; the grain tile below
+    // now has its own read-back canvas, so nothing reads this one back on any platform)
     const THREE = T(), H = 1024, W = Math.round(H * (w || .71) / (h || 1)), c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d', window.bsPlatform && bsPlatform.os === 'android' ? { willReadFrequently: true } : undefined); // Android: read back without a GPU stall
     const px = v => v / (h || 1) * H, cx = W / 2, cy = H / 2 - px(discLift(kind, sys));
     // black / very dark plastic still reads as dark grey under light, so the moulding shows; lift the base a little
     { const cc = new THREE.Color(bg), l = cc.r * .3 + cc.g * .59 + cc.b * .11; if (l < .12) cc.lerp(new THREE.Color(0x2c2d33), .75); bg = '#' + cc.getHexString(); }
     x.fillStyle = bg; x.fillRect(0, 0, W, H);
     // moulded-plastic grain and a soft falloff toward the edges
-    const img = x.getImageData(0, 0, W, H), d = img.data; for (let i = 0; i < d.length; i += 4) { const n = (Math.random() - .5) * 10; d[i] += n; d[i + 1] += n; d[i + 2] += n; } x.putImageData(img, 0, 0);
+    // (beta.10) the grain is a small tile (read back on its own CPU canvas) repeated over the plate: the whole-plate noise loop cost ~13 ms mid-lift
+    { const N = 128, tc = document.createElement('canvas'); tc.width = tc.height = N; const tx = tc.getContext('2d', { willReadFrequently: true }); tx.fillStyle = bg; tx.fillRect(0, 0, N, N);
+      const img = tx.getImageData(0, 0, N, N), d = img.data; for (let i = 0; i < d.length; i += 4) { const n = (Math.random() - .5) * 10; d[i] += n; d[i + 1] += n; d[i + 2] += n; } tx.putImageData(img, 0, 0);
+      const pat = x.createPattern(tc, 'repeat'); if (pat) { x.fillStyle = pat; x.fillRect(0, 0, W, H); } }
     const g = x.createRadialGradient(cx, cy, 40, cx, cy, H * .62); g.addColorStop(0, 'rgba(255,255,255,.05)'); g.addColorStop(1, 'rgba(0,0,0,.3)'); x.fillStyle = g; x.fillRect(0, 0, W, H);
     const emboss = (path, depth) => { x.save(); x.lineWidth = 3; x.strokeStyle = `rgba(255,255,255,${.16 * depth})`; x.translate(-1.5, -1.5); path(); x.stroke(); x.restore(); x.save(); x.lineWidth = 3; x.strokeStyle = `rgba(0,0,0,${.35 * depth})`; x.translate(1.5, 1.5); path(); x.stroke(); x.restore(); };
     if (kind === 'cart') {
@@ -218,7 +221,8 @@ window.Inspect3D = (() => {
     obj.traverse(n => { if (!n.isMesh || !n.geometry) return; for (let q = n; q && q !== obj.parent; q = q.parent) if (q.visible === false) return; if (!n.geometry.boundingBox) n.geometry.computeBoundingBox(); m.multiplyMatrices(inv, n.matrixWorld); box.union(n.geometry.boundingBox.clone().applyMatrix4(m)); });
     return box;
   }
-  function disposeGroup(g) { if (!g) return; g.traverse(n => { if (n.geometry) n.geometry.dispose(); if (n.material) (Array.isArray(n.material) ? n.material : [n.material]).forEach(m => { if (!m) return; if (m.map && !m.map.userData.cached) m.map.dispose(); m.dispose(); }); }); while (g.children.length) g.remove(g.children[0]); }
+  // (beta.10) frees every texture a material holds (a cart.glb brings normal / roughness maps, and the label's original), not only .map; cached art stays
+  function disposeGroup(g) { if (!g) return; g.traverse(n => { if (n.geometry) n.geometry.dispose(); if (n.material) (Array.isArray(n.material) ? n.material : [n.material]).forEach(m => { if (!m) return; for (const k in m) { const v = m[k]; if (v && v.isTexture && !(v.userData && v.userData.cached)) v.dispose(); } const lo = m.userData && m.userData.labelOrig; if (lo && lo.isTexture && !(lo.userData && lo.userData.cached)) lo.dispose(); m.dispose(); }); }); while (g.children.length) g.remove(g.children[0]); }
 
   // Build the case for a game. o = {ratio, depth, caseColor, caseSide, spineInk, front, back, spine, disc, manual, kind:'disc'|'cart'|'umd', size, title, modelUrl}
   function build(o) {
@@ -407,8 +411,9 @@ window.Inspect3D = (() => {
     } catch (e) { if (seq !== mediaSeq) return; console.warn('media model', e); customMedia = null; customUrl = null; }
   }
   function relabel(labelUrl) {
+    if (customMedia) customMedia.userData.want = labelUrl; // (beta.10) a ticket: a late decode of the last game's label mustn't land on this game's cart
     if (!customMedia || !labelUrl) return;
-    const src = loadTex(labelUrl), cm = customMedia; if (!src.userData.ok) { src.userData.p.then(ok => { if (ok && customMedia === cm && renderer) relabel(labelUrl); }); return; } // the copy needs the picture itself
+    const src = loadTex(labelUrl), cm = customMedia; if (!src.userData.ok) { src.userData.p.then(ok => { if (ok && customMedia === cm && cm.userData.want === labelUrl && renderer) relabel(labelUrl); }); return; } // the copy needs the picture itself
     const THREE = T(); const tx = src.clone(); tx.flipY = false; tx.needsUpdate = true; tx.colorSpace = THREE.SRGBColorSpace;
     const prev = customMedia.userData.labelTex; if (prev && prev !== tx) { try { prev.dispose(); } catch {} } customMedia.userData.labelTex = tx;
     customMedia.userData.labels.forEach(mt => { mt.map = tx; mt.needsUpdate = true; });
@@ -421,8 +426,8 @@ window.Inspect3D = (() => {
   const sm = (a, b, k) => a + (b - a) * k;
   let lastT = 0, paused = false;
   function frame(now) {
+    if (!cur || paused) { raf = 0; lastT = 0; return; } // (beta.10) paused (a manual is open) or nothing shown: the loop stops; setPaused(false) / open() start it again
     raf = requestAnimationFrame(frame);
-    if (!cur || paused) { lastT = 0; return; }
     const dt = Math.min(.05, lastT ? (now - lastT) / 1000 : .016); lastT = now;
     // the quick cross-fade: the canvas keeps its last picture, only its opacity moves (no re-render)
     if (fadeT0) {
@@ -571,7 +576,7 @@ window.Inspect3D = (() => {
   function setPose(rx, ry, zoom, px, py, busy, flip, base) { if (busy) lastMove = performance.now(); st.rx = rx; st.ry = ry; st.zoom = zoom; st.px = px; st.py = py; st.flip = flip || 0; st.own = base != null; st.base = base || 0; } // (base null: Windows, the disc turns with the case as before)
   function setState(n) { st.state = n; applyState(false); }
   function bump() { st.bump = .12; }
-  function setPaused(p) { paused = !!p; }
+  function setPaused(p) { paused = !!p; if (!paused && active && !raf && renderer) { lastT = 0; raf = requestAnimationFrame(frame); } }
   addEventListener('resize', () => { if (renderer && active) resize(); });
   // the lid's manual, when it arrives late (Boxshelf's own booklet is drawn after the case opens)
   function setManual(url) { if (!manualPlane || !url || (cur && cur.manual)) return; const m = manualPlane.material, t = loadTex(url); m.map = t; m.color.set(0xffffff); m.needsUpdate = true; if (cur) cur.manual = url; }

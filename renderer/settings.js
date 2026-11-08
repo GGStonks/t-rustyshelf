@@ -417,14 +417,14 @@ function svcPage0(id){const n=SVC_N[id]||id,P=(lead,rows)=>({g:"Library",id:"acc
     X("Key","keys.steamgriddb","Your SteamGridDB API key. Stored encrypted.",{secret:true,ph:"Not set",fan:true,keys:"api key steamgriddb steam grid posters"}),
     test("Test the key","Checks the key."),
     A("Get a free key","Open site","Sign in at steamgriddb.com (a free Steam sign-in), then Preferences → API → copy the key and paste it above.",()=>openLink("https://www.steamgriddb.com/profile/preferences/api"),{keys:"steamgriddb"})]);
-  return P("Box fronts, backs, full wraps (Boxshelf cuts the spine from them) and disc or cartridge art, by region, in Art Studio. Needs a free ScreenScraper account. Optional. ScreenScraper also only answers apps registered with it: if the test says \"Not available yet\", Boxshelf's registration isn't done yet (or enter your own developer login below). Box art still comes from libretro, LaunchBox and SteamGridDB meanwhile.",[
+  return P("Box fronts, backs, full wraps (Boxshelf cuts the spine from them) and disc or cartridge art, by region, in Art Studio. Optional, and needs a free ScreenScraper account. ScreenScraper only answers apps registered with it: until Boxshelf's registration is done, the test says \"Not available yet\" and no account can sign in (unless you have your own developer login, below). Box art still comes from libretro, LaunchBox and SteamGridDB meanwhile.",[
     X("Username","keys.ssUser","Your screenscraper.fr username. Stored encrypted.",{ph:"Not set",fan:true,keys:"screenscraper account user login"}),
     X("Password","keys.ssPass","Your screenscraper.fr password. Stored encrypted, sent only to ScreenScraper.",{secret:true,ph:"Not set",fan:true,keys:"screenscraper password"}),
-    X("Developer ID","keys.ssDevId","Only if ScreenScraper gave you developer access: the developer ID (devid). Boxshelf tries without it first.",{ph:"Optional",fan:true,keys:"screenscraper devid developer"}),
-    X("Developer password","keys.ssDevPass","The developer password (devpassword) that goes with the developer ID. Stored encrypted.",{secret:true,ph:"Optional",fan:true,keys:"screenscraper devpassword developer"}),
+    X("Developer ID","keys.ssDevId","Only if ScreenScraper gave you a developer login of your own (devid). Boxshelf uses its own registration otherwise, once it has one.",{ph:"Only if you have one",fan:true,keys:"screenscraper devid developer"}),
+    X("Developer password","keys.ssDevPass","The developer password (devpassword) that goes with your developer ID. Stored encrypted.",{secret:true,ph:"Only if you have one",fan:true,keys:"screenscraper devpassword developer"}),
     test("Test the account","Signs in and shows how many lookups the account has left today."),
     A("Get a free account","Open site","Opens ScreenScraper's sign-up page. A free account allows a set number of lookups a day; a donation raises it.",()=>openLink("https://www.screenscraper.fr/membreinscription.php"),{keys:"screenscraper sign up register"}),
-    A("Ask for developer access","Open site","Opens ScreenScraper's forum, where developers ask for a developer ID and password. Needed only if the test says the developer login was refused.",()=>openLink("https://www.screenscraper.fr/forumsujets.php?frub=12&numpage=0"),{keys:"screenscraper devid developer"})])}
+    A("Ask for developer access","Open site","Opens ScreenScraper's forum, where developers ask for a developer ID and password. Only for using a developer login of your own.",()=>openLink("https://www.screenscraper.fr/forumsujets.php?frub=12&numpage=0"),{keys:"screenscraper devid developer"})])}
 
 /* Phone companion (main/companion.js): on / off, the pairing card (QR code, address, PIN), paired phones */
 let phone=null,phonePortT=0;
@@ -489,7 +489,7 @@ function conPages(id){
   // the shelf on / off first, with where it stands ("Ready · 13 games", "Needs Dolphin"); then the emulator and games
   // folders by name (the whole path is in the explanation on the right)
   const rows=[T("Show this shelf",p+"enabled",true,"Turn a console off without losing its settings.",{rescan:true,keys:"hide shelf console off",sub:()=>{const st=conState(def);return {text:conStatus(def),cls:st==="ok"?"ok":st==="warn"?"warn":""}}}),
-    F("Emulator",p+"emulator","file",`The ${emu} program this shelf uses.`,{rescan:true,want:"file",short:v=>{const b=progName(v).toLowerCase();return (def.exeNames||[]).some(x=>progName(x).toLowerCase()===b)?emu:progName(v)} /* the usual program: its proper name (PPSSPP, not PPSSPPWindows64) */,filters:[{name:emu,extensions:["exe"]}],pickTitle:`Find ${exe}`,ph:`Point to ${exe}`,more:()=>c.emulator?c.emulator:"Found automatically when it's in your Boxshelf folder or a usual install place. Find emulators again (Consoles) looks once more."})];
+    F("Emulator",p+"emulator","file",id==="sw"?"The Switch emulator this shelf uses: Eden, Citron or Ryujinx. One game can use a different one: Details → Emulator.":`The ${emu} program this shelf uses.`,{rescan:true,want:"file",short:v=>{const b=progName(v).toLowerCase();return ({citron:"Citron",ryujinx:"Ryujinx"})[b]||((def.exeNames||[]).some(x=>progName(x).toLowerCase()===b)?emu:progName(v))} /* the usual program: its proper name (PPSSPP, not PPSSPPWindows64); (beta.10) the Switch's other emulators by their own names */,filters:[{name:emu,extensions:["exe"]}],pickTitle:`Find ${exe}`,ph:`Point to ${exe}`,more:()=>c.emulator?c.emulator:"Found automatically when it's in your Boxshelf folder or a usual install place. Find emulators again (Consoles) looks once more."})];
   // Switch 2 (Windows): which Eglantine build Play starts. "Ask each time" (the default) shows the list at Play; a build
   // picked here becomes the shelf's emulator and Play starts in it straight away. A game's own Details → Emulator wins.
   // (beta.3) a page of its own: every build (the list Play shows), Ask each time, and builds or folders kept elsewhere
@@ -502,11 +502,12 @@ function conPages(id){
   const twin=id==="wii"?"gc":id==="gc"?"wii":null;
   if(twin&&!c.emulator&&sysCfg(twin).emulator)rows.push(A(`Use ${twin==="gc"?"GameCube":"Wii"}'s Dolphin`,"Use","The same Dolphin.exe runs both.",()=>{c.emulator=sysCfg(twin).emulator;changed({rescan:true})},{ns:true}));
   c.romDirs.forEach((dir,i)=>rows.push({t:"folder",label:c.romDirs.length>1?`Games folder ${i+1}`:"Games folder",info:"Where this console's games are. Subfolders are searched too. Select it twice to remove it from this shelf (nothing is deleted).",more:dir,short:folderName,get:()=>dir,ns:true,
-    run:()=>twice("rd:"+id+":"+i,()=>{c.romDirs.splice(i,1);changed({rescan:true});toast("Folder removed from this shelf (nothing was deleted)")},"Press again to remove this folder"),ask:"rd:"+id+":"+i,sub:()=>pathSub(dir,"dir")}));
-  (d&&d.romDirs||[]).filter(x=>!c.romDirs.includes(x)).forEach(x=>rows.push(A("Add the folder found","Add","Boxshelf found games for this console here.",()=>{if(!c.romDirs.includes(x))c.romDirs.push(x);changed({rescan:true})},{sub:()=>({text:x}),ns:true})));
+    // (beta.10) the confirmation is keyed by the folder itself, not its place in the list (removing another one moved it onto this one)
+    run:()=>twice("rd:"+id+":"+dir,()=>{const k=c.romDirs.indexOf(dir);if(k>=0)c.romDirs.splice(k,1);if(window.bsPlatform&&bsPlatform.os==="android")rdGone().add(dir);changed({rescan:true});toast("Folder removed from this shelf (nothing was deleted)")},"Press again to remove this folder"),ask:"rd:"+id+":"+dir,sub:()=>pathSub(dir,"dir")}));
+  (d&&d.romDirs||[]).filter(x=>!c.romDirs.includes(x)&&!rdGone().has(x)).forEach(x=>rows.push(A("Add the folder found","Add","Boxshelf found games for this console here.",()=>{if(!c.romDirs.includes(x))c.romDirs.push(x);changed({rescan:true})},{sub:()=>({text:x}),ns:true})));
   // (beta.7) Set up for me: the emulator set up the way the shelf expects, on a page of its own
   if(esCan(c))rows.push(M(`Set up ${emu} for me`,"emusetup-"+id,`Controller, the Home menu's hotkeys, one BIOS folder and a graphics preset for ${emu}: backed up first, and Undo puts it back.`,`Boxshelf sets ${emu} up the way the shelf works best. Each switch is one kind of change; your files are backed up first, and Undo puts them back.`,[{t:"dyn",fn:()=>emuSetupRows(id)}],{keys:"setup set up configure configuration automatic easy controller pad hotkeys bios graphics resolution preset",sub:()=>(esGet(id),esSub(id)),ns:true}));
-  rows.push(A(c.romDirs.length?"Add another games folder":"Add a games folder","Add",`Another folder to look in for this console's games${def.hint?` (${def.hint})`:def.extensions?` (${def.extensions.slice(0,4).map(e=>"."+e).join(", ")}…)`:""}.` /* def.hint: a console whose games aren't plain files (PS3 / PS4 game folders) says so in systems.js */,async()=>{const r=await pick({kind:"folder",title:`Choose a ${def.name} games folder`});if(r&&!c.romDirs.includes(r)){c.romDirs.push(r);changed({rescan:true})}},{keys:"roms games folder"}),
+  rows.push(A(c.romDirs.length?"Add another games folder":"Add a games folder","Add",`Another folder to look in for this console's games${def.hint?` (${def.hint})`:def.extensions?` (${def.extensions.slice(0,4).map(e=>"."+e).join(", ")}…)`:""}.` /* def.hint: a console whose games aren't plain files (PS3 / PS4 game folders) says so in systems.js */,async()=>{const r=await pick({kind:"folder",title:`Choose a ${def.name} games folder`});if(r)rdGone().delete(r);if(r&&!c.romDirs.includes(r)){c.romDirs.push(r);changed({rescan:true})}},{keys:"roms games folder"}),
     H("When you press Play"),
     // what the two switches do (app.js play()): your boot video, when this console has one, plays first; otherwise the boot
     // screen (the console's look with the game's cover and a progress line) covers the emulator starting. With the boot
@@ -522,7 +523,7 @@ function conPages(id){
   // the real GameCube startup as a short checklist: the switch says whether your IPL.bin is there; "Add your IPL.bin"
   // shows only while it isn't; its two fine-tunings only while the startup is on
   const iplOk=()=>!!(ipl&&ipl.found&&ipl.found.length);
-  if(id==="gc")adv.push(H("GameCube startup"),
+  if(id==="gc"&&iplCap())adv.push(H("GameCube startup"),
     T("Play the real GameCube startup",p+"useIpl",false,"Boots through the console's own startup animation. Needs your GameCube's system file (IPL.bin) in Dolphin's GC\\USA folder (EUR or JAP for those regions). When it's on, your boot video is skipped.",{keys:"ipl bios",sub:()=>ipl?iplOk()?{text:"✓ Your IPL.bin is there ("+ipl.found.map(x=>x.region).join(", ")+")",cls:"ok"}:{text:"Needs your IPL.bin",cls:"warn"}:null}),
     A("Add your IPL.bin","Open folder","Opens Dolphin's GC\\USA folder: put the IPL.bin dumped from your GameCube there (EUR or JAP folders for those regions).",async()=>{await save();try{await api.openIplFolder("gc","USA")}catch(e){toast(errMsg(e))}},{when:()=>!!api.openIplFolder&&!iplOk(),ns:true}),
     T("Skip Dolphin's warning pop-ups",p+"hideDolphinWarnings",false,"Hides Dolphin's warnings (like an unrecognised IPL.bin) that would stop the game from starting.",{when:()=>!!c.useIpl}),
@@ -538,7 +539,7 @@ function conPages(id){
   rows.push(H("More"),
     A("Box art (Art Studio)","Open",`Jumps to ${def.name}'s games in the Art Studio: its shelf style, and every version of any game's art (manuals are a row away).`,()=>{route("artstudio",{systemId:id});render()},{ns:true}),
     A("Customize (3D, logo, boot video)","Open","Its logo, 3D console, controller and disc models and boot video (the Customize screen).",()=>customize(id),{ns:true}),
-    {t:"action",label:"Emulator & advanced",btn:"",open:true,ns:true,info:`Open ${emu} on its own, launch options, the longest loading screen${id==="gc"?" and the real GameCube startup":""}.`,run:()=>openSub({kind:"conadv",id})});
+    {t:"action",label:"Emulator & advanced",btn:"",open:true,ns:true,info:`Open ${emu} on its own, launch options, the longest loading screen${id==="gc"&&iplCap()?" and the real GameCube startup":""}.`,run:()=>openSub({kind:"conadv",id})});
   return {main:{g:"Games",id:"console",sys:id,name:def.name,ic:"games",lead:HELP[id]||`${emu} runs ${def.name} games.`,rows},
     adv:{g:"Games",id:"console",sys:id,name:"Emulator & advanced",lead:`${emu}'s own tools, how Boxshelf starts it, and the rarely-needed settings for ${def.name}.`,rows:adv}};
 }
@@ -548,7 +549,7 @@ function orderList(){const known=[...consoleList().filter(c=>sysCfg(c.id).enable
   const saved=(cfg.ui.shelfOrder||[]).filter(id=>known.some(k=>k[0]===id));return {known,order:[...saved,...known.map(k=>k[0]).filter(id=>!saved.includes(id))]}}
 function orderPage(){const {known,order}=orderList(),nm=id=>(known.find(k=>k[0]===id)||[id,id])[1];
   return {g:"Boxshelf",id:"order",name:"Console order",ic:"shelf",lead:"The order of the shelves along the top. Home always comes first. Pick one up, move it, put it down.",
-    rows:[...order.map((id,i)=>({t:"order",label:nm(id),id,n:i+1,info:"Pick it up, then move it up or down the list.",ns:true})),H(""),A("Reset to default order","Reset","Puts the shelves back in Boxshelf's own order.",()=>{delete cfg.ui.shelfOrder;changed({rescan:true});toast("Default order")},{ns:true})]}}
+    rows:[...order.map((id,i)=>({t:"order",label:nm(id),id,n:i+1,info:"Pick it up, then move it up or down the list.",ns:true})),H(""),A("Reset to default order",()=>asking("ordreset")?"Press again":"Reset","Puts the shelves back in Boxshelf's own order.",()=>twice("ordreset",()=>{delete cfg.ui.shelfOrder;changed({rescan:true});toast("Default order")},"Press again to reset the shelf order"),{ns:true,warnBtn:()=>asking("ordreset"),ask:"ordreset"})]}} // (beta.10) pressed twice, like the other resets
 function moveOrder(d){const {order}=orderList(),i=rowI,j=i+d;if(!grab||j<0||j>=order.length)return;[order[i],order[j]]=[order[j],order[i]];cfg.ui.shelfOrder=order.slice();rowI=j;changed({rescan:true})}
 
 /* ---------- Get box art / Get manuals (1.75): Settings pages, replacing the classic panel's grids ----------
@@ -609,12 +610,17 @@ function artGetRows(){dlHook();
     T("Sharpest scans first","ui.artHD",true,"Takes the sharpest version there is and swaps out low-res pictures you already have. A game with only small scans keeps the best one found, and gets upgraded when a sharper one turns up.",{keys:"hd sharp"}),
     H(""),startRow);
   return L}
+// (beta.10) a download that ends puts the cursor back on the first row only when its own page is the one you're on (not
+// editing, not searching): it used to land on whatever page was open, so the next A pressed the wrong row
+function dlShown(id){return isOpen&&!!sub&&sub.id===id&&focus==="page"&&!edit&&!results}
 async function agStart(){
-  if(AG.busy||MG.busy){toast("A download is already running");return}
+  if(AG.busy||MG.busy||MC.busy){toast("A download is already running");return}
   const pl=agPlan(),ids=(AG.cov||[]).filter(c=>c.total&&(pl[c.id]||[]).length).map(c=>c.id);if(!ids.length)return;
-  await save();Object.assign(AG,{busy:true,prog:{},stage:"Starting…",rep:null,err:null,started:Date.now(),ids});rowI=0;play("open");bump();dlClock();
+  // (beta.10) busy at once, before the settings save: a quick second press used to start a second run
+  Object.assign(AG,{busy:true,prog:{},stage:"Starting…",rep:null,err:null,started:Date.now(),ids});rowI=0;play("open");bump();dlClock();
+  try{await save()}catch(e){AG.busy=false;toast("Box art: "+errMsg(e));if(isOpen)bump();return}
   try{const p={};ids.forEach(id=>{p[id]=pl[id]});AG.rep=await api.downloadCovers(ids,p,gp("ui.artHD")!==false)}catch(e){AG.err=errMsg(e)}
-  AG.busy=false;AG.cov=null;needRescan=true;rowI=0;toast(AG.err?"Box art: "+AG.err:AG.rep&&AG.rep.cancelled?"Box art download cancelled":"Box art download finished");if(isOpen)bump()}
+  AG.busy=false;AG.cov=null;needRescan=true;if(dlShown("art-get"))rowI=0;toast(AG.err?"Box art: "+AG.err:AG.rep&&AG.rep.cancelled?"Box art download cancelled":"Box art download finished");if(isOpen)bump()}
 // Get manuals: the same, one switch per console
 function mgLoad(){if(MG.loading||!api.manualCoverage)return;MG.loading=true;api.manualCoverage().then(c=>{MG.cov=Array.isArray(c)?c:[]}).catch(()=>{MG.cov=[]}).finally(()=>{MG.loading=false;if(isOpen)bump()})}
 function manGetRows(){dlHook();
@@ -669,11 +675,12 @@ async function mcStart(){
   rowI=0;play("open");bump();mcClock();try{await save()}catch{}
   if(MC.stopping)MC.rep={checked:0,moved:0,shrunk:0,got:0,cancelled:true}; // (Cancel while the settings saved: it never starts)
   else{try{MC.rep=await api.checkManuals()||{}}catch(e){MC.err=errMsg(e)}}
-  MC.busy=false;MC.stopping=false;clearTimeout(mcTick);rowI=0;MG.cov=null;const r=MC.rep||{};if(r.moved||r.shrunk)needRescan=true;
+  MC.busy=false;MC.stopping=false;clearTimeout(mcTick);if(dlShown("man-get"))rowI=0;MG.cov=null;const r=MC.rep||{};if(r.moved||r.shrunk)needRescan=true;
   toast(MC.err?"Manuals: "+MC.err:r.cancelled?"Manual check stopped":"Manual check finished");if(isOpen)bump()}
 async function mgStart(){
   if(AG.busy||MG.busy||MC.busy){toast("A download is already running");return}const ids=[...(MG.pick||[])];if(!ids.length||!api.findManuals)return;
-  await save();Object.assign(MG,{busy:true,prog:{},stage:"Starting…",phase:"search",rep:null,err:null,started:Date.now(),ids});rowI=0;play("open");bump();dlClock();
+  Object.assign(MG,{busy:true,prog:{},stage:"Starting…",phase:"search",rep:null,err:null,started:Date.now(),ids});rowI=0;play("open");bump();dlClock(); // (beta.10) busy before the save, like the manual check
+  try{await save()}catch(e){MG.busy=false;toast("Manuals: "+errMsg(e));if(isOpen)bump();return}
   try{const found=await api.findManuals(ids)||[];
     const min=window.BoxshelfManMin||7,pick=[],unsure=[],none=[];
     found.forEach(r=>{if(r.have)return;const c=(r.candidates||[])[0];if(!c){none.push(r);return}if(gp("ui.manualSure")!==false&&!(c.score>=min&&/^(eng|en|english|)$/i.test(c.language||""))){unsure.push(r);return}pick.push({r,c})});
@@ -683,7 +690,7 @@ async function mgStart(){
     MG.rep={systems:ids.map(id=>{const cc=(MG.cov||[]).find(c=>c.id===id),mine=found.filter(r=>r.systemId===id),ok=p=>p.r.systemId===id&&(byFile.get(p.r.file)||{}).pages;
       return {id,name:cc?cc.name:id,had:mine.filter(r=>r.have).length,added:pick.filter(ok).map(p=>p.r.title),failed:pick.filter(p=>p.r.systemId===id&&!ok(p)).map(p=>p.r.title),unsure:unsure.filter(r=>r.systemId===id).map(r=>r.title),none:none.filter(r=>r.systemId===id).map(r=>r.title)}})};
   }catch(e){MG.err=errMsg(e)}
-  MG.busy=false;MG.cov=null;needRescan=true;rowI=0;toast(MG.err?"Manuals: "+MG.err:"Manual download finished");if(isOpen)bump()}
+  MG.busy=false;MG.cov=null;needRescan=true;if(dlShown("man-get"))rowI=0;toast(MG.err?"Manuals: "+MG.err:"Manual download finished");if(isOpen)bump()}
 
 /* ---------- pages & navigation ---------- */
 // (beta.9) one build of the page's rows per moment: the input, the info card, the hints and the page itself all asked for
@@ -710,7 +717,7 @@ function goSecId(id){let i=SECTIONS.findIndex(s=>s.id===id);if(i<0)i=SECTIONS.fi
 // sub-pages nest (a console → its Emulator & advanced): each one keeps the page under it (up) and that page's own return row
 function openSub(s){secDrop();s.up=sub;s.upRet=subRet;subRet=rowI;sub=s;rowI=0;focus="page";grab=null;play("open");render()}
 function leaveSub(){if(artAcct&&sub&&sub===artAcct.page){artBackTo();return}secDrop();const was=sub;sub=was&&was.up||null;grab=null;rowI=subRet||0;subRet=was&&was.upRet||0;if(was&&was.kind==="console"){const k=tileList().findIndex(c=>c.id===was.id);if(k>=0)ci=k}}
-function openConsole(id){if(sub){openSub({kind:"console",id})}else{subRet=rowI;sub={kind:"console",id};rowI=0;focus="page";play("open");render()} /* from inside a sub-page (RetroAchievements' emulator rows): nested, so B comes back to it */if(id==="gc"&&!ipl&&api.findIpl)Promise.resolve(save()).then(()=>api.findIpl("gc")).then(r=>{ipl=r;bump()}).catch(()=>{});if(id==="sw2"&&sw2Row())Promise.resolve(save()).then(()=>api.sw2Builds("")).then(r=>{sw2b=r&&r.builds||[];bump()}).catch(()=>{sw2b=[];bump()})} /* Switch 2: the Eglantine builds for its Build row, looked for again each time the page opens */
+function openConsole(id){if(sub){openSub({kind:"console",id})}else{subRet=rowI;sub={kind:"console",id};rowI=0;focus="page";play("open");render()} /* from inside a sub-page (RetroAchievements' emulator rows): nested, so B comes back to it */if(id==="gc"&&!ipl&&api.findIpl&&iplCap())Promise.resolve(save()).then(()=>api.findIpl("gc")).then(r=>{ipl=r;bump()}).catch(()=>{});if(id==="sw2"&&sw2Row())Promise.resolve(save()).then(()=>api.sw2Builds("")).then(r=>{sw2b=r&&r.builds||[];bump()}).catch(()=>{sw2b=[];bump()})} /* Switch 2: the Eglantine builds for its Build row, looked for again each time the page opens */
 const sw2Row=()=>!!api.sw2Builds&&!(window.bsPlatform&&bsPlatform.os==="android");
 // (beta.3) Settings → Switch 2 → Builds. One choice among "Ask each time" and every build (the shelf's emulator is the
 // build Play starts in, or offers first when it asks); builds and folders of builds kept elsewhere can be added and removed
@@ -750,7 +757,9 @@ function customRows(){if(!pcSt)setTimeout(pcStatus,0);cfg.pc=cfg.pc||{epic:true,
     // (beta.5) the name row is kept per game (the text editor finds its row by identity: a new object each draw never edited)
     let nr=customNameRows.get(c);if(!nr){nr=X(c.title||"Game","",`Its name on the shelf. Program: ${c.exe}`,{get:()=>c.title||"",set:v=>{c.title=String(v||"").slice(0,120);nr.label=c.title||"Game"},rescan:true,ns:true,keys:"rename custom game",sub:()=>({text:folderName(c.exe)})});customNameRows.set(c,nr)}
     rows.push(nr);
-    rows.push(A("Remove "+(c.title||"this game"),"Remove","Takes it off the Custom shelf. Nothing is deleted.",()=>twice("pcx:"+i,()=>{pc.custom.splice(i,1);changed({rescan:true});toast("Removed from the Custom shelf (nothing was deleted)")},"Press again to remove it"),{ns:true,ask:"pcx:"+i}))});
+    // (beta.10) which shelf it sits on: Custom, or the PC shelf beside the store games
+    rows.push(A("Shelf",()=>c.shelf==="pc"?"PC":"Custom","Which shelf this game is on: Custom (games you added) or PC (with your Steam and store games). Press to move it.",()=>{if(c.shelf==="pc")delete c.shelf;else c.shelf="pc";changed({rescan:true});toast(`${c.title||"The game"} is on the ${c.shelf==="pc"?"PC":"Custom"} shelf now`)},{ns:true,keys:"shelf move pc custom shelf"}));
+    rows.push(A("Remove "+(c.title||"this game"),"Remove","Takes it off its shelf. Nothing is deleted.",()=>twice("pcx:"+c.exe+"|"+(c.title||""),()=>{const k=pc.custom.indexOf(c);if(k>=0)pc.custom.splice(k,1);changed({rescan:true});toast("Removed from the Custom shelf (nothing was deleted)")},"Press again to remove it"),{ns:true,ask:"pcx:"+c.exe+"|"+(c.title||"")}))}); // (beta.10) keyed by the game, not its place in the list
   return rows}
 // Settings → PC games → PC games folder (main/pcfolder.js): every folder in it is a game. pcf: its games as main sees them,
 // with the programs each could start with (a folder holding several gets a choice)
@@ -834,9 +843,10 @@ function sw2BuildRows(){sw2Want();const c=sysCfg("sw2"),fx=sw2Fixed(),L=sw2b||[]
     const a=Array.isArray(c.buildDirs)?c.buildDirs:[];if(a.some(x=>sw2Low(x)===sw2Low(d)))return toast("That folder is already in the list");c.buildDirs=[...a,d].slice(0,20);changed(null);sw2Reload();toast("Looking for builds in "+folderName(d))}));
   rows.push(A("Add a build","Browse…","One build's program (eglantine.exe, lichii.exe, orchid.exe…, or an AppImage on Linux), wherever it is.",async()=>{const f=await pick({kind:"file",title:"Choose a Switch 2 emulator build",filters:[{name:"Programs",extensions:["exe"]}]}),x=typeof f==="string"?f:f&&f.path;if(!x)return;
     const a=Array.isArray(c.buildExes)?c.buildExes:[];if(a.some(y=>sw2Low(y)===sw2Low(x))||L.some(b=>sw2Low(b.exe)===sw2Low(x)))return toast("That build is already in the list");c.buildExes=[...a,x].slice(0,20);changed(null);sw2Reload();toast("Build added")}));
-  const drop=(k,i,what)=>{const a=(c[k]||[]).slice();a.splice(i,1);c[k]=a;changed(null);sw2Reload();toast(what+" removed from the list (nothing was deleted)")};
-  (Array.isArray(c.buildDirs)?c.buildDirs:[]).forEach((d,i)=>rows.push(A("Folder · "+folderName(d),"Remove",`Builds in this folder are listed. Remove takes it off the list; nothing is deleted.\n${d}`,()=>twice("sw2d:"+i,()=>drop("buildDirs",i,"Folder"),"Press again to remove this folder"),{ns:true,ask:"sw2d:"+i})));
-  (Array.isArray(c.buildExes)?c.buildExes:[]).forEach((x,i)=>rows.push(A("Build · "+progName(x),"Remove",`Remove takes it off the list; nothing is deleted.\n${x}`,()=>twice("sw2x:"+i,()=>drop("buildExes",i,"Build"),"Press again to remove this build"),{ns:true,ask:"sw2x:"+i})));
+  // (beta.10) by path, not by place in the list: removing one shifted an armed confirmation onto the next
+  const drop=(k,v,what)=>{const a=(c[k]||[]).slice(),j=a.indexOf(v);if(j>=0)a.splice(j,1);c[k]=a;changed(null);sw2Reload();toast(what+" removed from the list (nothing was deleted)")};
+  (Array.isArray(c.buildDirs)?c.buildDirs:[]).forEach(d=>rows.push(A("Folder · "+folderName(d),"Remove",`Builds in this folder are listed. Remove takes it off the list; nothing is deleted.\n${d}`,()=>twice("sw2d:"+d,()=>drop("buildDirs",d,"Folder"),"Press again to remove this folder"),{ns:true,ask:"sw2d:"+d})));
+  (Array.isArray(c.buildExes)?c.buildExes:[]).forEach(x=>rows.push(A("Build · "+progName(x),"Remove",`Remove takes it off the list; nothing is deleted.\n${x}`,()=>twice("sw2x:"+x,()=>drop("buildExes",x,"Build"),"Press again to remove this build"),{ns:true,ask:"sw2x:"+x})));
   return rows}
 
 /* ---------- search ---------- */
@@ -862,6 +872,11 @@ function runSearch(){secDrop();const q=query.trim().toLowerCase();if(!q){results
   resultTotal=scored.length;results=scored.slice(0,40).map(e=>({t:"result",label:e.label,where:e.where,go:e,info:e.row?e.row.info:"Opens this console's page.",row:e.row}));rowI=0}
 function hi(label){const ws=query.trim().split(/\s+/).filter(Boolean).map(w=>w.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"));if(!ws.length)return esc(label);
   const re=new RegExp("("+ws.sort((a,b)=>b.length-a.length).join("|")+")","ig");return String(label).split(re).map((p,j)=>j%2?`<mark>${esc(p)}</mark>`:esc(p)).join("")}
+// (beta.10) the real GameCube startup (IPL.bin) needs Dolphin's Windows folders: Linux and Android say dolphinIpl:false
+function iplCap(){return !window.bsPlatform||bsPlatform.has("dolphinIpl")}
+// (beta.10) Android: games folders removed this session. Android's permission for one is given back at once, so the
+// folders found earlier (det) never offer it again: added back that way it couldn't be read. Picking it again works
+function rdGone(){return rdGone.s||(rdGone.s=new Set())}
 function openSearch(viaPad){searchIdx=null;if(edit)cancelEdit();grab=null;if(!results)preSearch={secI,rowI,sub,subRet,focus,studio,stack,sRet};studio=null;stack=[];sSig="";runSearch();focus="search";if(viaPad)openOsk("search");render()}
 function closeSearch(){searchIdx=null;secDrop();results=null;query="";closeOsk();if(preSearch){({secI,rowI,sub,subRet}=preSearch);if(preSearch.studio){studio=preSearch.studio;stack=preSearch.stack||[];sRet=preSearch.sRet||0;sSig=""}focus=preSearch.focus==="search"||preSearch.focus==="osk"?"side":preSearch.focus}else focus="side";preSearch=null;render()}
 function typeChar(c){if(edit){edit.value+=c;paintEdit();return}query+=c;runSearch();if(focus!=="osk")focus="search";render()}
@@ -870,7 +885,7 @@ function goResult(r){const e=r.go;results=null;closeOsk();preSearch=null;query="
   secI=e.sec;sub=null;
   if(e.console){const k=tileList().findIndex(c=>c.id===e.console);if(k>=0)ci=k;subRet=0;
     if(e.i===undefined){rowI=0;openConsole(e.console);return}
-    sub={kind:"console",id:e.console};if(e.adv){subRet=Math.max(0,rowsOf(consolePage(e.console)).findIndex(r=>r.label==="Emulator & advanced"));sub={kind:"conadv",id:e.console,up:sub,upRet:0}}if(e.console==="gc"&&!ipl&&api.findIpl)Promise.resolve(save()).then(()=>api.findIpl("gc")).then(r=>{ipl=r;bump()}).catch(()=>{})} // the IPL row's Found / No IPL.bin line, as openConsole loads it
+    sub={kind:"console",id:e.console};if(e.adv){subRet=Math.max(0,rowsOf(consolePage(e.console)).findIndex(r=>r.label==="Emulator & advanced"));sub={kind:"conadv",id:e.console,up:sub,upRet:0}}if(e.console==="gc"&&!ipl&&api.findIpl&&iplCap())Promise.resolve(save()).then(()=>api.findIpl("gc")).then(r=>{ipl=r;bump()}).catch(()=>{})} // the IPL row's Found / No IPL.bin line, as openConsole loads it
   if(e.svc){subRet=Math.max(0,rowsOf(expand(SECTIONS[e.sec])).findIndex(r=>r.status===e.svc));sub={kind:"svc",id:e.svc}}
   if(e.more){subRet=e.at||0;sub={kind:"more",id:e.more}}
   rowI=e.i||0;render();flashCur()}
@@ -1016,7 +1031,7 @@ function renameRows(){const s=renameState;if(!s)return [];
   if(!s.resetRow)s.resetRow=A("Use the file's name","Reset",`Back to "${s.file}".`,()=>renameSave(""),{ns:true,sub:()=>({text:s.file})});
   return s.renamed?[s.nameRow,s.resetRow]:[s.nameRow]}
 async function renameSave(v){const s=renameState;if(!s||!api.renameGame)return;v=String(v||"").replace(/\s+/g," ").trim();const back=!v||v===s.file;
-  try{await api.renameGame({...s.ref,title:back?"":v});s.renamed=!back;s.name=back?s.file:v;play("tick",1);toast(back?"Back to its file name":`Renamed to ${v}`);shelf("refresh",true)} /* (true: the shelf stays on this game) */catch(e){toast(errMsg(e));play("error")}bump()}
+  try{await api.renameGame({...s.ref,title:back?"":v});s.renamed=!back;s.name=back?s.file:v;s.saved=s.name;play("tick",1);toast(back?"Back to its file name":`Renamed to ${v}`);shelf("refresh",true)} /* (true: the shelf stays on this game) */catch(e){if(s.saved!=null)s.name=s.saved;toast(errMsg(e));play("error")}bump()} // (beta.10) a failed rename shows the name it still has
 // (beta.5) the cover picker's Search by name: a name typed here (keyboard, or the on-screen one on a controller); Enter
 // closes Settings and the picker opens again with SteamGridDB's covers for that name
 let coverSearch=null;
@@ -1141,7 +1156,7 @@ function pvRows(){pvLoad();if(PVS.rows)return PVS.rows;const c=PVS.c,R=[];if(!c)
   if(!(window.bsPlatform&&bsPlatform.os==="android")){ // (Android: the videos beside the games only)
   R.push(H("Your videos folders"));
   (gp("ui.previewDirs")||[]).forEach((d,i)=>R.push({t:"folder",label:"Videos folder",info:"Videos in here (or in a subfolder named after the console) are matched to your games. Select it twice to stop using it (nothing is deleted).",more:d,short:folderName,get:()=>d,ns:true,
-    run:()=>twice("pvd:"+i,()=>{const L=(gp("ui.previewDirs")||[]).slice();L.splice(i,1);sp("ui.previewDirs",L);changed(null);pvLoad(true);bump()},"Press again to stop using this folder"),ask:"pvd:"+i,sub:()=>pathSub(d,"dir")}));
+    run:()=>twice("pvd:"+d,()=>{const L=(gp("ui.previewDirs")||[]).slice(),k=L.indexOf(d);if(k>=0)L.splice(k,1);sp("ui.previewDirs",L);changed(null);pvLoad(true);bump()},"Press again to stop using this folder"),ask:"pvd:"+d,sub:()=>pathSub(d,"dir")})); // (beta.10) keyed by the folder, not its place
   R.push(A("Add a videos folder","Add","A folder with game videos (named like the games, e.g. Super Mario 64 (USA).mp4), or with a folder per console.",async()=>{const p=await pick({kind:"folder",title:"Choose a folder with game videos"});
       if(p){const L=(gp("ui.previewDirs")||[]).slice();if(!L.includes(p))L.push(p);sp("ui.previewDirs",L);changed(null);await save();pvLoad(true);bump()}},{ns:true}),
     A("Find videos again","Find","Looks through every videos folder again (after you've added videos).",async()=>{await save();pvLoad(true);bump()},{ns:true}));
@@ -1238,7 +1253,7 @@ function route(page,o){if(!page)return;o=o||{};
     goSecId(/^(steam|epic)-/.test(coverSearch.id)?"pc":"custom");focus="page";rowI=0;openSub({kind:"more",id:"coversearch"});return}
   // (beta.9) any page of its own by its id (Android's Ports & custom APKs, Video previews…): opened in the section that holds it
   if(MORE[page]&&!PAGE_MAP[page]){const s=SECTIONS.find(x=>x&&Array.isArray(x.rows)&&x.rows.some(r=>r&&r.pg===page));if(s){goSecId(s.id);focus="page";rowI=0;openSub({kind:"more",id:page});return}}
-  if(page==="rename"&&o.ref){const file=String(o.fileTitle||o.title||""),cur=String(o.title||"");renameState={ref:o.ref,name:cur,file,renamed:!!o.fileTitle&&o.fileTitle!==cur};
+  if(page==="rename"&&o.ref){const file=String(o.fileTitle||o.title||""),cur=String(o.title||"");renameState={ref:o.ref,name:cur,saved:cur,file,renamed:!!o.fileTitle&&o.fileTitle!==cur};
     MORE.rename={id:"rename",name:`Rename ${cur}`.slice(0,60),lead:o.fileTitle&&o.fileTitle!==cur?`Its file's name: ${o.fileTitle}`:"Give this game the name you want on your shelf.",rows:[{t:"dyn",fn:renameRows}]};
     goSecId(o.ref.systemId?"consoles":(/^(steam|epic)-/.test(String(o.ref.id||""))?"pc":"custom"));focus="page";rowI=0;openSub({kind:"more",id:"rename"});return}
   // Details → Box art: straight to that game's mix (B goes up to its console's games, then the Art page)
@@ -1248,7 +1263,7 @@ function route(page,o){if(!page)return;o=o||{};
   if(page==="artgame"||page==="artstudio"){goSecId("art");focus="page";rowI=0;if(!api.artStudio||!o.systemId)return;inMore("art-studio");sRet=-1;stack=[];
     if(page==="artgame"&&o.file){stack=[{v:"games",sys:o.systemId,i:0,y:0,zone:"grid"}];studio={v:"pick",sys:o.systemId,file:o.file,title:o.title||"",part:"front",i:-1,y:0}}
     else studio={v:"games",sys:o.systemId,i:0,y:0};sSig="";return}
-  if(consoleList().some(c=>c.id===page)){goSecId("consoles");ci=tileList().findIndex(c=>c.id===page);subRet=0;sub={kind:"console",id:page};rowI=0;focus="page";if(page==="gc"&&api.findIpl)api.findIpl("gc").then(r=>{ipl=r;bump()}).catch(()=>{});return}
+  if(consoleList().some(c=>c.id===page)){goSecId("consoles");ci=tileList().findIndex(c=>c.id===page);subRet=0;sub={kind:"console",id:page};rowI=0;focus="page";if(page==="gc"&&api.findIpl&&iplCap())api.findIpl("gc").then(r=>{ipl=r;bump()}).catch(()=>{});return}
   const m=PAGE_MAP[page];if(!m)return;if(m.svc){goSecId("acct");focus="page";rowI=0;subRet=Math.max(0,rowsOf(sec()).findIndex(r=>r.status===m.svc));sub={kind:"svc",id:m.svc};return}const [id,label]=Array.isArray(m)?m:[m];goSecId(id);focus="page";rowI=0;if(label){const is=r=>r.label===label||r.was===label; /* (was: a row a platform renamed keeps its old name for links) */let k=rowsOf(sec()).findIndex(is);
     if(k<0){const pg=rowsOf(sec()).map(r=>r.pg).filter(Boolean).find(g=>rowsOf(expand(MORE[g])).some(is));if(pg){inMore(pg);k=rowsOf(sec()).findIndex(is)}} // a row that lives on one of the section's sub-pages
     if(k<0){const j=SECTIONS.findIndex(s=>rowsOf(expand(s)).some(is));if(j>=0){goSec(j);focus="page";k=rowsOf(sec()).findIndex(is)}} // (a row a platform moved to another section)
@@ -1263,10 +1278,13 @@ function prep(inf,opts){opts=opts||{};ensureDom();openId++;info=inf;cfg=clone(in
   applyTint();build();route(opts.page,opts)}
 function show(inf,opts){if(window.Shelf&&Shelf.previewStop)Shelf.previewStop(); /* (beta.7: a playing preview ends when Settings opens) */prep(inf,opts);E.osk.classList.remove("on");root.classList.add("on");root.setAttribute("aria-hidden","false");isOpen=true;active=true;cover(true);fit();render();startPoll();loadAsync();
 }
+// (beta.10) how many games the last library scan found (every console's, from Shelf.gameCounts), for the rescan's "Found N new games"
+function libTotal(){const m=shelf("gameCounts");if(!m||typeof m!=="object")return null;let n=0;for(const k in m)if(typeof m[k]==="number")n+=m[k];return n}
 async function close(){if(closing||!isOpen)return;closing=true;
   try{if(edit)cancelEdit();active=false;stopPoll();cover(false);await save();isOpen=false;root.classList.remove("on");root.setAttribute("aria-hidden","true");E.mus.classList.remove("on");
     shelf("holdInput");shelf("setMode","browse");play("back"); /* (the press that closed Settings, A on a row above all, does nothing on the shelf) */
-    if(needRescan){needRescan=false;try{await shelf("refresh",true)}catch(e){console.warn("settings: refresh",e)}} // a failed rescan must not skip settingsClosed / raReload below
+    // (beta.10) the rescan says what it's doing and what it found (it used to run silently)
+    if(needRescan){needRescan=false;const n0=libTotal();shelf("toast","Looking for games…");try{await shelf("refresh",true);const n1=libTotal();shelf("toast",n0==null||n1==null?"Library updated":n1>n0?`Found ${n1-n0} new game${n1-n0===1?"":"s"}`:"No new games found")}catch(e){console.warn("settings: refresh",e)}} // a failed rescan must not skip settingsClosed / raReload below
     shelf("settingsClosed");
     if(raChanged&&window.Shelf&&Shelf.raReload)shelf("raReload")}
   finally{closing=false}}
@@ -2204,6 +2222,21 @@ function ensureDom(){if(root)return;
   root.addEventListener("mousemove",e=>{if(Math.abs(e.movementX)+Math.abs(e.movementY)>2&&device!=="mouse"){device="mouse";renderHints();renderInfo();renderSearchBox()}},{passive:true});
   root.addEventListener("wheel",e=>{if(!active)return;if(studio&&focus==="page"){if(studio.v==="games"||studio.v==="pick"||studio.v==="mgames"||studio.v==="mpick"){const t=e.target.closest&&e.target.closest(".bsa-vp,.bsa-cvp");if(t)studioInput(e.deltaY>0?"down":"up")}return}if(focus==="page"&&!grab){const n=rowsOf(sec()).length;const r=Math.max(0,Math.min(n-1,rowI+(e.deltaY>0?1:-1)));if(r!==rowI){rowI=r;render()}}},{passive:true});
   root.addEventListener("contextmenu",e=>{e.preventDefault();if(active&&studio&&focus==="page"){device="mouse";input("b")}}); // in the Art Studio a right-click backs out one level, like Esc / B
+  // (beta.10) touch (the Thor): a vertical drag on the list moves the selection, a row per row-height of travel (the list
+  // follows it, as for the pad), so a long page no longer needs a tap per row. A tap still acts on its row; a drag never
+  // does (its click is eaten). Mouse and pen-less Windows use are untouched (the wheel already scrolls there).
+  {let dg=null,eatClick=0;
+    E.scroll.addEventListener("pointerdown",e=>{dg=null;eatClick=0;if(!active||e.pointerType==="mouse"||!e.isPrimary||studio||grab||edit||focus==="osk"||focus==="edit")return;
+      const c=rowEls[rowI],h=c&&c.isConnected?c.getBoundingClientRect().height:0; // (one layout read per touch, none per move)
+      dg={id:e.pointerId,x:e.clientX,y0:e.clientY,on:false,step:Math.max(28,Math.min(90,h||48))}},{passive:true});
+    E.scroll.addEventListener("pointermove",e=>{const g=dg;if(!g||e.pointerId!==g.id||!active)return;
+      if(!g.on){const dy=e.clientY-g.y0,dx=e.clientX-g.x;if(Math.abs(dx)>16&&Math.abs(dx)>Math.abs(dy)){dg=null;return} /* sideways: the back swipe's */if(Math.abs(dy)<12||Math.abs(dy)<Math.abs(dx))return;
+        g.on=true;g.y0=e.clientY;try{E.scroll.setPointerCapture(e.pointerId)}catch{}if(focus!=="page"&&!results){focus="page"}return}
+      const k=Math.trunc((g.y0-e.clientY)/g.step);if(!k)return;g.y0-=k*g.step; // finger up: the rows below come into view
+      const n=rowsOf(sec()).length,r=Math.max(0,Math.min(n-1,rowI+k));if(r!==rowI){rowI=r;focus="page";play("tick",k>0?1:-1);render()}},{passive:true});
+    const end=e=>{const g=dg;if(!g||e.pointerId!==g.id)return;if(g.on)eatClick=performance.now();dg=null};
+    E.scroll.addEventListener("pointerup",end,{passive:true});E.scroll.addEventListener("pointercancel",end,{passive:true});
+    E.scroll.addEventListener("click",e=>{if(eatClick&&performance.now()-eatClick<600){eatClick=0;e.stopPropagation();e.preventDefault()}},true)}
 }
 const TINT={spectrum:"#6a5cff",classic:"#7b4dff",keys:"#4f7dff",arcade:"#e04fd0",aurora:"#22c49a",midnight:"#4c5a8c",
   artwork:"#6a5cff",blur:"#7b6cff",cube:"#5a4fd0",blueshift:"#2f6bff",swirl:"#e8662a",pocket:"#6f9a2a",oled:"#4c5a8c",walnut:"#b07040",forest:"#2f9a62",crt:"#3d8fd6",vhs:"#c23d8a",synth:"#ff4fa8"};
@@ -2220,7 +2253,7 @@ function renderSearchBox(){const sb=E.side.querySelector(".bss-search");if(!sb)r
   const h=(query?`<span class="q">${esc(query)}</span>`:`<span class="ph">Search settings</span>`)+'<span class="caret"></span>'+(device==="pad"?`<span class="kb">${viewWord()}</span>`:'<span class="kb">type</span>');if(sb._h!==h){sb._h=h;sb.innerHTML=svg("search")+h}}
 function renderSide(){
   if(sideSig!==SECTIONS.map(s=>s.id).join()){sideSig=SECTIONS.map(s=>s.id).join();E.side.innerHTML='<div class="bss-brand">SETTINGS</div>';
-    const sb=document.createElement("div");sb.className="bss-search";sb.onclick=()=>{if(edit)commitEdit();openSearch(device==="pad")};E.side.append(sb);
+    const sb=document.createElement("div");sb.className="bss-search";sb.onclick=()=>{if(edit)commitEdit();openSearch(device==="pad"||!!(window.bsPlatform&&bsPlatform.os==="android"))};E.side.append(sb);
     let g="";sideNavs=SECTIONS.map((s,i)=>{if(s.g!==g){g=s.g;E.side.insertAdjacentHTML("beforeend",`<div class="bss-grp">${esc(g)}</div>`)}
       const n=document.createElement("div");n.className="bss-nav";n.innerHTML=svg(s.ic)+`<span>${esc(s.name)}</span><span class="badge"></span>`;
       n.onclick=()=>{if(edit)commitEdit();if(results){results=null;query="";closeOsk();preSearch=null}goSec(i);focus="page";rowI=0;render()};E.side.append(n);return n});
@@ -2383,7 +2416,7 @@ function renderHints(){const r=curRow(),L=[],R2=[];const H=(ks,label,a,cls)=>`<d
   else if(focus==="edit"){L.push(H(kc("Enter"),"Save"),H(kc("Esc"),"Cancel"))}
   else if(focus==="osk"){L.push(H(G("a","Enter"),"Type","a"),H(G("x","Backspace"),"Delete","x"),H(G("y","Space"),"Space","y"),H(device==="pad"?G("start"):kc("Tab"),edit?"Save":"Done","start"),H(G("b","Esc"),edit?"Cancel":"Close keyboard","b"))}
   else if(focus==="search"){if(device==="pad"){L.push(H(G("a"),"Keyboard","a"),H(G("b"),results?"Clear search":"Back","b"));if(results&&results.length)L.push(H(G("ud"),"Results"))}
-    else{L.push(H(kc("A–Z"),"Type"));if(results&&results.length)L.push(H(kc("↓"),"Results"));L.push(H(kc("Esc"),query?"Clear":"Back","b"))}}
+    else{L.push(window.bsPlatform&&bsPlatform.os==="android"?H(kc("A–Z"),"Keyboard","a"):H(kc("A–Z"),"Type"));if(results&&results.length)L.push(H(kc("↓"),"Results"));L.push(H(kc("Esc"),query?"Clear":"Back","b"))}}
   else{let a="Open";if(r){a=r.t==="toggle"?(r.get()?"Turn off":"Turn on"):r.t==="action"?(r.emu?(emuAsk===r.emu?"Open emulator":"How to fix"):r.open?"Open":r.status?"Test":(typeof r.btn==="function"?r.btn():r.btn)):r.t==="folder"?"Remove":({choice:"Next",slider:"Adjust",path:"Change",text:"Edit",theme:"Choose",consoles:"Open",result:"Go to setting",order:grab?"Put down":"Pick up"})[r.t]||"Select"}
     if(r&&!grab&&["choice","slider","theme","consoles"].includes(r.t))L.push(H(device==="pad"?G("lr"):kc("← →"),r.t==="consoles"?"Move":"Change"));
     if(grab)L.push(H(device==="pad"?G("ud"):kc("↑ ↓"),"Move"));
@@ -2424,7 +2457,7 @@ function input(a,rep){
   if(a==="b"&&infoOpen&&focus!=="osk"){infoOpen=false;play("back");render();return} /* (beta.8) B closes the Learn more card first, and only that */
   if(a!=="x"||focus==="osk"){const r0=curRow();if(!(r0&&r0.keepInfo&&a==="a"))infoOpen=false}else{const r0=curRow(),R0=r0&&(r0.t==="result"?r0.row:r0);if(R0&&R0.more)infoOpen=!infoOpen;render();return}
   if(focus==="edit")return;
-  if(a==="search"){if(focus!=="osk")openSearch(device==="pad");return}
+  if(a==="search"){if(focus!=="osk")openSearch(device==="pad"||!!(window.bsPlatform&&bsPlatform.os==="android"));return} /* (beta.10) Android: a tap opens the on-screen keyboard too (no keyboard to type on) */
   if((a==="lb"||a==="rb")&&focus!=="osk"){grab=null;if(results){results=null;query="";closeOsk();preSearch=null}goSec(secI+(a==="rb"?1:-1));focus=focus==="side"||focus==="search"?"side":"page";play("tick",a==="rb"?1:-1);render();return}
   if(focus==="osk"){
     if(["up","down","left","right"].includes(a))oskMove(a);

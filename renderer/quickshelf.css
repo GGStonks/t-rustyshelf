@@ -9,7 +9,10 @@
 #app.qm-open #scene{transform:translateX(-17vw) scale(.92)}
 #app.qm-open .sel-halo{transform:translate(calc(-50% - 17vw),-50%) scale(.92)}
 #app.qm-open .info{transform:translateX(-17vw);opacity:0}
-#app>.hints{transition:left .6s cubic-bezier(.22,.9,.25,1),opacity .25s}
+#app>.hints{transition:transform .6s cubic-bezier(.22,.9,.25,1),opacity .25s}
+/* (beta.10) beside Details the bar moves with a transform (style.css); setup.css's Details rules still say `left`: held at 50% here
+   (this file loads after it) and their offset, half the panel's width, given as the transform instead: the same place as before */
+@media (min-width:761px){#app.details-open .hints{left:50%!important;transform:translateX(calc(-50% - var(--dw,460px) / 2))}}
 #app.qm-open>.hints{opacity:0;pointer-events:none}
 
 /* the game you're on */
@@ -53,8 +56,12 @@
 .qm-act.on svg{color:#10121a}
 .qm-act.faved svg{color:#ff5c8a;fill:#ff5c8a}
 /* an opened row: its options drop open beneath it as pills */
-.qm-sub{overflow:hidden;height:0;flex:none;transition:height .34s cubic-bezier(.3,.9,.25,1)}
-.qm-subin{padding:6px 8px 12px 50px;display:flex;flex-direction:column;gap:12px}
+/* (beta.10) its height is set at once (app.js qsFill); the pills fade and slide in with transform/opacity only (an animated
+   height laid the whole panel out every frame); instant on the handheld level and whenever the menu is repainted in place */
+.qm-sub{overflow:hidden;height:0;flex:none}
+.qm-subin{padding:6px 8px 12px 50px;display:flex;flex-direction:column;gap:12px;opacity:0;transform:translateY(-10px);transition:opacity .26s ease-out,transform .34s cubic-bezier(.3,.9,.25,1)}
+.qm-subin.in{opacity:1;transform:none}
+.qm-subin.now{transition:none}
 .qm-ll{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:rgba(243,245,251,.42);margin:0 0 7px 2px}
 .qm-opts{display:flex;flex-wrap:wrap;gap:6px}
 .qm-opt{position:relative;padding:7px 14px;border-radius:999px;border:1px solid transparent;background:rgba(255,255,255,.06);color:var(--ink-dim);font:inherit;font-size:13px;font-weight:500;cursor:pointer;

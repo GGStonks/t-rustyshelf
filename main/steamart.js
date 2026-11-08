@@ -34,7 +34,9 @@ async function fetchBuf(url, ms = 20000) {
 // 'ok' | 'missing' (really not on the CDN: worth remembering) | 'error' (offline etc.: try again next time, remember nothing)
 async function save(urls, dest) {
   let err = false;
-  for (const u of urls) { try { const b = await fetchBuf(u); if (b) { fs.mkdirSync(dir, { recursive: true }); try { fs.writeFileSync(dest + '.part', b); fs.renameSync(dest + '.part', dest); } catch (e) { try { fs.unlinkSync(dest + '.part'); } catch {} throw e; } return 'ok'; } } catch { err = true; } }
+  // (beta.10) a 200 that isn't a picture (a proxy's block page, a CDN error page) is never saved: a saved cover is trusted for good.
+  // Counted as an error (tried again next launch), never remembered as missing
+  for (const u of urls) { try { const b = await fetchBuf(u); if (b && !require('./imgcheck').isImageBuf(b)) { err = true; continue; } if (b) { fs.mkdirSync(dir, { recursive: true }); try { fs.writeFileSync(dest + '.part', b); fs.renameSync(dest + '.part', dest); } catch (e) { try { fs.unlinkSync(dest + '.part'); } catch {} throw e; } return 'ok'; } } catch { err = true; } }
   return err ? 'error' : 'missing';
 }
 function recentlyMissed(id) { try { return Date.now() - fs.statSync(missFile(id)).mtimeMs < RETRY; } catch { return false; } }

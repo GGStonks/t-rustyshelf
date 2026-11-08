@@ -9,7 +9,7 @@ const path = require('path');
 const { execFile } = require('child_process');
 const { net } = require('electron');
 const https = require('https');
-const { scanSystem, cleanTitle } = require('./scanner');
+const { scanSystem, scanSystemAsync, cleanTitle } = require('./scanner');
 const { isFile, artBase, artDirFor } = require('./paths');
 
 const LIBRETRO = { gc: 'Nintendo - GameCube', wii: 'Nintendo - Wii', psp: 'Sony - PlayStation Portable', wiiu: 'Nintendo - Wii U', sw: 'Nintendo - Switch', ps3: 'Sony - PlayStation 3', ps4: 'Sony - PlayStation 4', ps2: 'Sony - PlayStation 2', x360: 'Microsoft - Xbox 360', n3ds: 'Nintendo - Nintendo 3DS',
@@ -51,7 +51,7 @@ function init(dataDir, logger) {
   if (logger) log = logger;
   cacheDir = path.join(dataDir, 'boxart-cache');
   fs.mkdirSync(cacheDir, { recursive: true });
-  gametdb.init({ dir: cacheDir, log, download: (u, d) => download(u, d), norm });
+  gametdb.init({ dir: cacheDir, log, download: (u, d) => download(u, d, { zip: true }), norm }); // (beta.10: its databases are zips, not pictures)
   try { require('./wikiart').init({ dir: cacheDir, log, norm }); } catch (e) { log('Mario Wiki art unavailable', e.message); }
   { const t = setTimeout(() => { if (isFile(path.join(cacheDir, 'launchbox-index.json')) && !shardMeta()) splitShards(); }, 25000); if (t.unref) t.unref(); } // an older single-file index: split it in the background, before anything needs it
   // Earlier versions used data\\cache, which Chromium also uses. Move a finished download over.
@@ -85,8 +85,8 @@ async function gametdbSpine(sysId, file, dir, base, old, region) {
     try {
       if (!await download(`https://art.gametdb.com/wii/${kind}/${r}/${id}.png`, tmp)) continue;
       const buf = await spineCutter(tmp, sysId);
-      if (buf && buf.length > 1500) { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(inc, buf);
-        if (old) { const a = sizeOf(old), b = sizeOf(inc); if (!b || (a && Math.max(...b) < Math.max(...a) * 1.15)) { fs.unlinkSync(inc); continue; } }
+      if (buf && buf.length > 1500) { await fs.promises.mkdir(dir, { recursive: true }); await fs.promises.writeFile(inc, buf); // (beta.10: async, art on a NAS)
+        if (old) { const a = await sizeOfAsync(old), b = await sizeOfAsync(inc); if (!b || (a && Math.max(...b) < Math.max(...a) * 1.15)) { await fs.promises.unlink(inc).catch(() => {}); continue; } }
         await placeArt(dir, base, '-spine', inc, '.jpg'); log('Spine from GameTDB', id, r, kind, path.basename(file)); return true; }
     } catch (e) { log('GameTDB spine', id, e.message); try { fs.unlinkSync(inc); } catch {} }
     finally { try { fs.unlinkSync(tmp); } catch {} }
@@ -109,19 +109,21 @@ function setOnPlaced(fn) { onPlaced = typeof fn === 'function' ? fn : null; }
 async function placeArt(dir, base, suffix, src, ext, origin = 'auto') {
   const dest = path.join(dir, base + suffix + ext), old = path.join(dir, REPLACED), moved = [], st = artStamp();
   try {
-    for (const e of ART_EXT) {
-      const f = path.join(dir, `${base}${suffix}.${e}`); if (!isFile(f) || samePath(f, src)) continue;
-      let to = path.join(old, `${base}${suffix} (${st}).${e}`); for (let i = 2; fs.existsSync(to); i++) to = path.join(old, `${base}${suffix} (${st}-${i}).${e}`); // two in one millisecond: never over an earlier one
+    for (const e of EXT_FORMS) { // (beta.10: "Game.PNG" too, which is another file on Linux; on Windows the same one, already moved)
+      const f = path.join(dir, `${base}${suffix}.${e}`); if (!await isFileA(f) || samePath(f, src)) continue; // (beta.10: async checks, art on a NAS)
+      let to = path.join(old, `${base}${suffix} (${st}).${e}`); for (let i = 2; await existsA(to); i++) to = path.join(old, `${base}${suffix} (${st}-${i}).${e}`); // two in one millisecond: never over an earlier one
       await fs.promises.mkdir(old, { recursive: true }); await fs.promises.rename(f, to); moved.push([f, to]);
     }
     if (!samePath(src, dest)) await fs.promises.rename(src, dest);
   } catch (e) { for (const [f, to] of moved.reverse()) await fs.promises.rename(to, f).catch(() => {}); throw e; }
   const now = new Date(); try { await fs.promises.utimes(dest, now, now); } catch {} // a fresh date: cached shelf thumbnails of the old one aren't reused
+  for (const t of live) if (t.ls) t.ls.placed(dir, dest, moved.map(m => m[0])); // (beta.10) a running art download's folder listings see it
   if (onPlaced) { try { onPlaced(dest, origin); } catch {} }
   // replaced\ never loses a picture (the user's own covers end up here too). It holds each distinct picture once: when the
   // file just moved there has a byte-identical older copy (restyling back and forth, the same pick twice), the older copy
   // goes, so the stamps keep saying what was in use most recently (Undo restores the newest)
-  if (moved.length) { const others = replacedFor(dir, base, suffix).filter(r => !moved.some(m => samePath(m[1], r.file)));
+  if (moved.length) { let names = null; try { names = await fs.promises.readdir(path.join(dir, REPLACED)); } catch {} // (beta.10: listed async)
+    const others = replacedFor(dir, base, suffix, names || []).filter(r => !moved.some(m => samePath(m[1], r.file)));
     for (const [, to] of moved) { const twin = await identicalIn(to, others); if (twin) await fs.promises.unlink(twin).catch(() => {}); } }
   return { dest, moved: moved.map(m => m[1]) };
 }
@@ -133,9 +135,9 @@ async function identicalIn(f, list) {
   return null;
 }
 // the pictures replaced\ holds for one kind of one game, newest first: [{ file, stamp }]
-function replacedFor(dir, base, suffix) {
+function replacedFor(dir, base, suffix, listed) { // listed: replaced\'s names, already read (placeArt)
   const pre = (base + suffix + ' (').toLowerCase(), out = [];
-  let names = []; try { names = fs.readdirSync(path.join(dir, REPLACED)); } catch { return out; }
+  let names = listed || []; if (!listed) try { names = fs.readdirSync(path.join(dir, REPLACED)); } catch { return out; }
   for (const n of names) { if (!n.toLowerCase().startsWith(pre)) continue; const m = /^(\d{4}(?:-\d+){6}(?:-\d+)?)\)\.(png|jpe?g|webp)$/i.exec(n.slice(pre.length)); if (m) out.push({ file: path.join(dir, REPLACED, n), stamp: m[1] }); }
   const k = s => s.stamp.split('-').map(x => x.padStart(4, '0')).join('-'); // "-2" (same millisecond) sorts after the plain one
   return out.sort((a, b) => k(b) < k(a) ? -1 : k(b) > k(a) ? 1 : 0);
@@ -152,30 +154,48 @@ async function getText(url) {
 }
 // → 'ok' | 'missing' (404 / not a picture: it isn't there) | 'busy' (5xx / 429 twice: try another day). A timeout or a dropped
 // connection, or a 5xx, is tried once more after a moment; a second network error throws (offline), as download() always did
-async function downloadEx(url, dest) {
+async function downloadEx(url, dest, opt) { // opt.zip (beta.10): a .zip is wanted (GameTDB's databases), not a picture
   for (let i = 0; ; i++) {
     let r; try { r = await net.fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(45000), cache: 'no-store' }); } // saved to the covers folder: no second copy in Chromium's cache
     catch (e) { if (i === 0) { await new Promise(z => setTimeout(z, 1200)); continue; } throw e; }
-    if (r.ok) { const s = await saveBody(r, dest); return s === true ? 'ok' : s === 'notimage' ? 'busy' : 'missing'; }
+    if (r.ok) { const s = await saveBody(r, dest, !!(opt && opt.zip)); return s === true ? 'ok' : s === 'notimage' ? 'busy' : 'missing'; }
     if (r.status >= 500 || r.status === 429) { if (i === 0) { await new Promise(z => setTimeout(z, 1200)); continue; } return 'busy'; }
     return r.status === 404 || r.status === 410 ? 'missing' : 'busy'; // (a 403 / 401 is often a CDN's passing block: not remembered as "not there")
   }
 }
-async function download(url, dest) { return (await downloadEx(url, dest)) === 'ok'; }
-async function saveBody(r, dest) {
+async function download(url, dest, opt) { return (await downloadEx(url, dest, opt)) === 'ok'; }
+const { isImageBuf } = require('./imgcheck'); // (beta.8) PNG, JPEG, WebP, GIF, BMP or AVIF/HEIF by its first bytes (beta.10: shared with stremio / archive / pccovers)
+async function saveBody(r, dest, zip) {
   const buf = Buffer.from(await r.arrayBuffer());
   if (buf.length < 1024) return false; // not a real image
   // (beta.8) a 200 that isn't a picture (a Wi-Fi sign-in page, a CDN error page) is never saved as the cover: art that's
-  // there is never fetched again, so it would stay broken. PNG, JPEG, WebP, GIF, BMP or AVIF/HEIF only; asked again later
-  const isImg = (buf[0] === 0x89 && buf[1] === 0x50) || (buf[0] === 0xff && buf[1] === 0xd8) || (buf.toString('latin1', 0, 4) === 'RIFF' && buf.toString('latin1', 8, 12) === 'WEBP') || buf.toString('latin1', 0, 3) === 'GIF' || buf.toString('latin1', 0, 2) === 'BM' || buf.toString('latin1', 4, 8) === 'ftyp';
-  if (!isImg) return 'notimage';
-  fs.mkdirSync(path.dirname(dest), { recursive: true });
-  try { fs.writeFileSync(dest + '.part', buf); fs.renameSync(dest + '.part', dest); } catch (e) { try { fs.unlinkSync(dest + '.part'); } catch {} throw e; } // disk full: no half-written .part left in the covers folder
+  // there is never fetched again, so it would stay broken. Asked again later. (beta.10) zip: a zip's own first bytes instead
+  // (GameTDB's switchtdb.zip / 3dstdb.zip were turned down as "not a picture" every day since beta.8)
+  if (zip ? buf.readUInt32LE(0) !== 0x04034b50 : !isImageBuf(buf)) return 'notimage';
+  await fs.promises.mkdir(path.dirname(dest), { recursive: true }); // (beta.10: async, art on a NAS held the app up)
+  try { await fs.promises.writeFile(dest + '.part', buf); await fs.promises.rename(dest + '.part', dest); } catch (e) { await fs.promises.unlink(dest + '.part').catch(() => {}); throw e; } // disk full: no half-written .part left in the covers folder
   return true;
 }
 function hasArt(dir, base, suffix) {
-  return ART_EXT.some(e => isFile(path.join(dir, `${base}${suffix}.${e}`)));
+  return ART_EXT.some(e => isFile(path.join(dir, `${base}${suffix}.${e}`)) || (process.platform === 'linux' && isFile(path.join(dir, `${base}${suffix}.${e.toUpperCase()}`))));
 }
+const isFileA = p => fs.promises.stat(p).then(s => s.isFile(), () => false), existsA = p => fs.promises.access(p).then(() => true, () => false);
+// (beta.10) a download run's art folders, one listing each (a few thousand games on a NAS were up to 16 file checks each,
+// on the main process). What the run puts in place, and any placeArt while it runs (the Art Studio's too), goes into them
+const CI_FS = process.platform === 'win32' || process.platform === 'darwin', nk = n => CI_FS ? n.toLowerCase() : n;
+function artLister() {
+  const m = new Map(), key = d => nk(path.resolve(d));
+  return {
+    // (beta.10) name as compared → the file's real name (a case-sensitive folder: "Game.PNG" is found as it really is)
+    get(dir) { const k = key(dir); let p = m.get(k); if (!p) { p = fs.promises.readdir(dir).then(ns => new Map(ns.map(n => [nk(n), n])), () => new Map()); m.set(k, p); } return p; },
+    placed(dir, add, gone) { const k = key(dir), p = m.get(k); if (p) m.set(k, p.then(s => { for (const f of gone) s.delete(nk(path.basename(f))); s.set(nk(path.basename(add)), path.basename(add)); return s; })); }
+  };
+}
+// artFile, from the run's listing: the same file (the first type found, named as artFile names it)
+// (beta.10) the type in either case: on Linux "Game.PNG" isn't "Game.png", and the scanner (which ignores case) shows it, so
+// a low-res one named that way was never found here and never replaced by a sharper one
+const EXT_FORMS = ART_EXT.flatMap(e => [e, e.toUpperCase()]);
+async function artFileA(ls, dir, base, suffix) { const s = await ls.get(dir); for (const e of EXT_FORMS) { const real = s.get(nk(`${base}${suffix}.${e}`)); if (real) return path.join(dir, real); } return null; }
 async function pool(items, n, fn) {
   let i = 0;
   const workers = Array.from({ length: Math.min(n, items.length) }, async () => { while (i < items.length) { const k = i++; await fn(items[k], k); } });
@@ -252,7 +272,18 @@ function downloadFile(url, dest, onPct, hops = 0, until = Date.now() + 10 * 60e3
 
 // ---------- LaunchBox ----------
 const cancelled = () => Object.assign(new Error('Refresh cancelled'), { code: 'cancelled' });
+// (beta.10) unpacked into a folder of its own and moved in only when complete: a cut-off unpack (the app closed, the disk
+// full) left a short Metadata.xml in place, later trusted as a fresh one. A failed unpack leaves nothing behind
 function untar(zip, dir, signal) {
+  const tmp = path.join(dir, `.unpack-${process.pid}`), from = path.join(tmp, 'Metadata.xml'), clean = () => fs.promises.rm(tmp, { recursive: true, force: true }).catch(() => {});
+  if (signal && signal.aborted) return Promise.reject(cancelled()); // (execFile with a signal already aborted never calls back)
+  return clean().then(() => fs.promises.mkdir(tmp, { recursive: true })).then(() => untar0(zip, tmp, signal))
+    .then(async () => { if (signal && signal.aborted) throw cancelled(); if (!await isFileA(from)) throw new Error("Couldn't unpack the LaunchBox database."); await fs.promises.rename(from, path.join(dir, 'Metadata.xml')); })
+    .finally(clean);
+}
+// a Metadata.xml that's all there (it ends with </LaunchBox>): one cut off before beta.10's temp folder is never read
+function xmlWhole(xml) { let fd; try { fd = fs.openSync(xml, 'r'); const n = fs.fstatSync(fd).size, b = Buffer.alloc(Math.min(n, 512)); fs.readSync(fd, b, 0, b.length, n - b.length); return /<\/LaunchBox>\s*$/.test(b.toString('latin1')); } catch { return false; } finally { if (fd != null) try { fs.closeSync(fd); } catch {} } }
+function untar0(zip, dir, signal) {
   // (Linux: GNU tar can't read a .zip and there's no PowerShell: bsdtar / unzip / Python, see main/linux.js)
   if (process.platform === 'linux') return require('./linux').unzipAsync(zip, dir, 'Metadata.xml', signal).then(ok => { if (signal && signal.aborted) throw cancelled(); if (!ok) throw new Error("Couldn't unpack LaunchBox's Metadata.zip: install unzip (or bsdtar) and try again."); });
   return new Promise((resolve, reject) => {
@@ -295,30 +326,39 @@ function dropShards() { shardCache = new Map(); shardImages = Object.create(null
 function lazyIndex(m) { return { v: m.v, at: m.at, games: new Proxy({}, { get: (t, p) => typeof p === 'string' ? ((loadShard(p) || {}).games) : undefined }), get images() { return shardImages; }, lazy: true }; }
 // one build at a time: Art Studio's "Build the LaunchBox index" and Download box art now would otherwise both download
 // and unpack the same 110 MB Metadata.zip into the same files (the second caller shares the first one's result)
-let lbFlight = null, lbProgress = [];
-function launchboxIndex(progress) {
+// (beta.10) signal: a download run's Cancel. That caller stops waiting at once (its progress stops too); the build itself
+// stops only when every caller that waits on it has cancelled (a caller without a signal always keeps it going)
+let lbFlight = null, lbProgress = [], lbWait = null;
+function launchboxIndex(progress, signal) {
+  if (signal && signal.aborted) return Promise.reject(cancelled());
   if (progress) lbProgress.push(progress);
-  if (!lbFlight) lbFlight = launchboxIndex0(info => { for (const f of lbProgress) try { f(info); } catch {} }).finally(() => { lbFlight = null; lbProgress = []; });
-  return lbFlight;
+  if (!lbFlight) { const w = lbWait = { n: 0, ac: new AbortController() }; lbFlight = launchboxIndex0(info => { for (const f of lbProgress) try { f(info); } catch {} }, w.ac.signal).finally(() => { lbFlight = null; lbProgress = []; if (lbWait === w) lbWait = null; }); }
+  const w = lbWait; if (!signal || !w) { if (w) w.n = Infinity; return lbFlight; } // (!w: Refresh art database's flight, which keeps going)
+  w.n++; const flight = lbFlight;
+  return new Promise((res, rej) => {
+    const onAbort = () => { const i = lbProgress.indexOf(progress); if (i >= 0) lbProgress.splice(i, 1); if (--w.n <= 0 && !w.ac.signal.aborted) { w.ac.abort(); log('LaunchBox: index build cancelled'); } rej(cancelled()); };
+    signal.addEventListener('abort', onAbort, { once: true });
+    flight.then(v => { signal.removeEventListener('abort', onAbort); res(v); }, e => { signal.removeEventListener('abort', onAbort); rej(e); });
+  });
 }
-async function launchboxIndex0(progress) {
+async function launchboxIndex0(progress, signal) {
   const idxFile = path.join(cacheDir, 'launchbox-index.json');
   { const m = shardMeta() || (isFile(idxFile) ? await splitShards() : null);
     if (m && m.v === IDX_V && Date.now() - m.at < IDX_DAYS * 864e5 && Object.values(LAUNCHBOX).every(p => m.plats.includes(p))) { const x = path.join(cacheDir, 'Metadata.xml'); if (isFile(x)) removeXml(x); return lazyIndex(m); } }
   try { const c = JSON.parse(fs.readFileSync(idxFile, 'utf8')); if (c.v === IDX_V && Date.now() - c.at < IDX_DAYS * 864e5 && Object.values(LAUNCHBOX).every(p => Array.isArray(c.games[p]))) { const x = path.join(cacheDir, 'Metadata.xml'); if (isFile(x)) removeXml(x); return c; } if (c.v === IDX_V) log('LaunchBox: index is missing a platform, rebuilding'); else log('LaunchBox: index format changed, rebuilding'); } catch {}
   const zip = path.join(cacheDir, 'Metadata.zip');
   const xml = path.join(cacheDir, 'Metadata.xml');
-  if (isFile(xml) && Date.now() - fs.statSync(xml).mtimeMs < 30 * 864e5) return finishIndex(xml, idxFile, progress);
+  if (isFile(xml) && Date.now() - fs.statSync(xml).mtimeMs < 30 * 864e5) { if (xmlWhole(xml)) return finishIndex(xml, idxFile, progress, signal); log('LaunchBox: Metadata.xml is cut off, downloading it again'); } // (beta.10: a cut-off one isn't trusted)
   progress({ stage: 'Downloading the LaunchBox game database (one time, about a minute)…' });
   log('LaunchBox: downloading', LB_ZIP);
-  await downloadFile(LB_ZIP, zip, pct => progress({ stage: `Downloading the LaunchBox game database… ${pct}%` }));
+  await downloadFile(LB_ZIP, zip, pct => progress({ stage: `Downloading the LaunchBox game database… ${pct}%` }), 0, Date.now() + 10 * 60e3, signal); // (beta.10: a download run's Cancel stops it)
   log('LaunchBox: downloaded', fs.statSync(zip).size, 'bytes, unpacking');
   progress({ stage: 'Unpacking the game database…' });
-  await untar(zip, cacheDir);
+  try { await untar(zip, cacheDir, signal); } catch (e) { try { fs.unlinkSync(zip); } catch {} throw e; }
   log('LaunchBox: unpacked', isFile(xml) ? fs.statSync(xml).size : 'missing', 'bytes');
   if (!isFile(xml)) throw new Error("Couldn't unpack the LaunchBox database.");
   try { fs.unlinkSync(zip); } catch {}
-  return finishIndex(xml, idxFile, progress);
+  return finishIndex(xml, idxFile, progress, signal);
 }
 // the 500 MB XML is only needed while the index is built; Windows can refuse the delete for a moment after reading
 function removeXml(xml) { let n = 0; const go = () => fs.promises.unlink(xml).then(() => log('LaunchBox: removed', path.basename(xml)), e => { if (e.code !== 'ENOENT' && ++n < 6) setTimeout(go, 2000); else if (e.code !== 'ENOENT') log('LaunchBox: could not remove', xml, e.message); }); go(); }
@@ -554,7 +594,7 @@ async function cutSpine(file, sysId) { if (!spineCutter) return null; const z = 
 // What's there already, and how sharp: an image is "low-res" when its longest side is under these (pixels)
 const HD_MIN = { front: 900, back: 900, spine: 700, disc: 480 };
 const KINDS = [['front', ''], ['back', '-back'], ['spine', '-spine'], ['disc', '-disc']];
-const { sizeOf } = require('./spreads');
+const { sizeOf, sizeOfAsync } = require('./spreads');
 // cut the spine out of LaunchBox's full box wraps; keep it only if it beats what's there (when replacing)
 async function wrapSpine(sysId, imgs, dir, base, old, compare, region) {
   const wraps = pickImages(imgs, 'Box - Full', region).slice(0, 3); if (!wraps.length) return false;
@@ -565,35 +605,49 @@ async function wrapSpine(sysId, imgs, dir, base, old, compare, region) {
       const z = sizeOf(tmp); if (z && z[0] < z[1] * 1.2) continue; // not a wrap (wider than tall is expected)
       const buf = await spineCutter(tmp, sysId); if (!buf || buf.length < 1500) continue;
       const inc = path.join(dir, base + '-spine.incoming.jpg');
-      fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(inc, buf);
-      if (old && compare) { const a = sizeOf(old), b = sizeOf(inc); if (!b || (a && Math.max(...b) < Math.max(...a) * 1.15)) { fs.unlinkSync(inc); return false; } }
+      await fs.promises.mkdir(dir, { recursive: true }); await fs.promises.writeFile(inc, buf); // (beta.10: async, art on a NAS)
+      if (old && compare) { const a = await sizeOfAsync(old), b = await sizeOfAsync(inc); if (!b || (a && Math.max(...b) < Math.max(...a) * 1.15)) { await fs.promises.unlink(inc).catch(() => {}); return false; } }
       try { await placeArt(dir, base, '-spine', inc, '.jpg'); } catch (e) { try { fs.unlinkSync(inc); } catch {} throw e; } // the old spine moves to replaced\, never deleted
       log('Spine from LaunchBox wrap', base, z ? z.join('x') : ''); return true;
     } catch (e) { log('wrap spine', e.message); } finally { try { fs.unlinkSync(tmp); } catch {} }
   }
   return false;
 }
-function artFile(dir, base, suffix) { for (const e of ART_EXT) { const f = path.join(dir, `${base}${suffix}.${e}`); if (isFile(f)) return f; } return null; }
+function artFile(dir, base, suffix) { for (const e of (process.platform === 'linux' ? EXT_FORMS : ART_EXT)) { const f = path.join(dir, `${base}${suffix}.${e}`); if (isFile(f)) return f; } return null; } // (beta.10: Linux, "Game.PNG" too)
 function isLow(file, key) { const z = sizeOf(file); return !!z && Math.max(z[0], z[1]) < HD_MIN[key]; } // unknown formats (webp) count as fine
+async function isLowA(file, key) { const z = await sizeOfAsync(file); return !!z && Math.max(z[0], z[1]) < HD_MIN[key]; } // (beta.10: the download run's)
 // per console: how many games, and for each kind how many have it / how many of those are low-res (header reads only)
-function coverage(systems) {
-  return systems.map(({ def, cfg }) => {
-    const games = scanSystem(def, cfg), r = { id: def.id, name: def.name, total: games.length };
+// (beta.10) async: the art folders listed once (artLister) instead of up to 16 stats per game, header reads with
+// fs.promises, and a breath every 25 ms inside a console (a big library or a NAS held the main process up here)
+async function coverage(systems) {
+  const out = [], ls = artLister(); let t0 = Date.now();
+  for (const { def, cfg } of systems) {
+    const games = await scanSystemAsync(def, cfg), r = { id: def.id, name: def.name, total: games.length };
     KINDS.forEach(([k]) => { r[k] = 0; r[k + 'Low'] = 0; });
-    games.forEach(g => { const dir = artDirFor(cfg, g.file), base = artBase(g.file); KINDS.forEach(([k, suf]) => { const f = artFile(dir, base, suf); if (f) { r[k]++; if (isLow(f, k)) r[k + 'Low']++; } }); });
-    return r;
-  });
+    for (const g of games) { if (Date.now() - t0 > 25) { await new Promise(res => setImmediate(res)); t0 = Date.now(); }
+      const dir = artDirFor(cfg, g.file), base = artBase(g.file);
+      for (const [k, suf] of KINDS) { const f = await artFileA(ls, dir, base, suf); if (f) { r[k]++; if (await isLowA(f, k)) r[k + 'Low']++; } } }
+    out.push(r);
+  }
+  return out;
 }
 let lbOverride = null; // tests hand in an index
 // each run has its own cancel flag: a run ending (the background one) never clears a Cancel meant for another
 const live = new Set();
-function cancel() { for (const t of live) t.c = true; }
+function cancel(tag) { for (const t of live) if (!tag || t.tag === tag) { t.c = true; if (t.ac && !t.ac.signal.aborted) t.ac.abort(); } } // (beta.10) tag 'auto': only the background run (the shelf's art card); ac: its wait for the LaunchBox index
+// (beta.10) Pause / Resume (the shelf's art card): the games being fetched finish, the next ones wait (Cancel still stops
+// a paused run). true when there was a run to pause or resume. Resumed, the run lists its art folders again (pictures
+// dropped in while it was paused are seen, never taken for missing and moved to replaced\)
+function pause(tag, on) { let n = 0; for (const t of live) if (!tag || t.tag === tag) { if (!on && t.p) t.ls = artLister(); t.p = !!on; n++; } return n > 0; }
+// (beta.10) a run (tag 'auto': the background one) is paused right now: main's waiters resume it or don't wait on it
+function isPaused(tag) { for (const t of live) if ((!tag || t.tag === tag) && t.p && !t.c) return true; return false; }
+const held = async tok => { while (tok.p && !tok.c) await new Promise(r => setTimeout(r, 250)); };
 // download into a temp name, keep it only if it's an image and (when replacing) clearly sharper than the old one
 async function fetchInto(url, dir, base, suffix, ext, old, compare, origin = 'auto') {
   const tmp = path.join(dir, `${base}${suffix}.incoming${ext}`);
   try {
     if (!await download(url, tmp)) return false;
-    if (old && compare) { const a = sizeOf(old), b = sizeOf(tmp); if (!b || (a && Math.max(...b) < Math.max(...a) * 1.15)) { try { fs.unlinkSync(tmp); } catch {} return 'same'; } }
+    if (old && compare) { const a = await sizeOfAsync(old), b = await sizeOfAsync(tmp); if (!b || (a && Math.max(...b) < Math.max(...a) * 1.15)) { await fs.promises.unlink(tmp).catch(() => {}); return 'same'; } }
     await placeArt(dir, base, suffix, tmp, ext, origin); // one picture per kind: the one it replaces (any type) moves to replaced\, never deleted
     return true;
   } catch (e) { try { fs.unlinkSync(tmp); } catch {} log('art download', url, e.message); return false; }
@@ -603,7 +657,7 @@ async function fetchInto(url, dir, base, suffix, ext, old, compare, origin = 'au
 // or { <systemId>: [kinds] } per console. opts.hd: look for the sharpest scans first and replace low-res pictures.
 // progress(info) is called often; cancel() stops after the games in flight.
 async function downloadCovers(systems, progress, plan, opts = {}) {
-  const tok = { c: false }; live.add(tok);
+  const tok = { c: false, p: false, tag: opts.tag || '', ls: artLister(), ac: new AbortController() }; live.add(tok); // (beta.10: p paused, tag 'auto' for the background run, ls its art folders' listings, ac aborted by its Cancel)
   try { return await coversRun(systems, progress, plan, opts, tok); } finally { live.delete(tok); }
 }
 async function coversRun(systems, progress, plan, opts, tok) {
@@ -615,17 +669,19 @@ async function coversRun(systems, progress, plan, opts, tok) {
   for (const { def, cfg } of active) {
     if (tok.c) break;
     await new Promise(r => setImmediate(r)); // (beta.9: a breath between consoles)
+    await held(tok); if (tok.c) break; // (beta.10: paused)
     const kinds = kindsFor(def.id), want = k => kinds.includes(k) || kinds.includes('redo-' + k), redo = k => kinds.includes('redo-' + k);
-    const games = opts.only ? scanSystem(def, cfg).filter(g => opts.only.has(g.id)) : scanSystem(def, cfg); // opts.only: just these game ids
+    const scanned = await scanSystemAsync(def, cfg), games = opts.only ? scanned.filter(g => opts.only.has(g.id)) : scanned; // opts.only: just these game ids (beta.10: scanned async)
     const rep = { id: def.id, name: def.name, total: games.length, front: 0, back: 0, spine: 0, disc: 0, upgraded: 0, had: 0, missed: [], missedKinds: {}, got: [], up: [] };
     report.systems.push(rep);
     if (!games.length) continue;
     progress({ system: def.name, systemId: def.id, stage: `Looking up ${def.name} art…`, done: 0, total: games.length });
     const names = want('front') ? await libretroIndex(def.id) : null;
-    if (!lb && !lbError) { try { lb = lbOverride || await launchboxIndex(progress); } catch (e) { lbError = e.message; log('LaunchBox ERROR', e.stack || e); } }
+    if (!lb && !lbError) { try { lb = lbOverride || await launchboxIndex(info => { if (!tok.c) progress(info); }, tok.ac.signal); } catch (e) { if (tok.c) break; lbError = e.message; log('LaunchBox ERROR', e.stack || e); } } // (beta.10: Cancel stops the wait for the index)
+    await held(tok); if (tok.c) break; // (beta.10) paused while the index was built: wait here, not in the first games
     let done = 0;
     await pool(games, 4, async game => {
-      if (tok.c) return;
+      if (tok.c) return; await held(tok); if (tok.c) return; // (beta.10) Pause: the next game waits
       const dir = artDirFor(cfg, game.file), base = artBase(game.file);
       let touched = false, lg, lgDone = false; const missing = [];
       // Switch / 3DS: GameTDB's full cover scan, downloaded once per game for both its back and its spine (deleted after)
@@ -660,10 +716,10 @@ async function coversRun(systems, progress, plan, opts, tok) {
           // "sharper" (the old Prefer HD scans, kept inside the default style) and the HD look both mean: sharpest first, low-res replaced
           const sharp = hd || look === 'hd' || !!(style && style.sharper && look !== 'special' && !/^region:/.test(look || ''));
           const reg = look ? require('./artstudio').regionForLook(style, look, game) : region;
-          const old = artFile(dir, base, suffix);
+          const old = await artFileA(tok.ls, dir, base, suffix); // (beta.10: the run's folder listing, not up to 4 file checks)
           // an HD upgrade replaces only a picture Boxshelf may replace (opts.mayReplace: one it downloaded itself, never one the
           // user put there by hand); a redo is the user's own request for that part
-          const upgrade = !!old && !redo(key) && sharp && isLow(old, key) && (!opts.mayReplace || !!opts.mayReplace(old));
+          const upgrade = !!old && !redo(key) && sharp && await isLowA(old, key) && (!opts.mayReplace || !!opts.mayReplace(old));
           // a SteamGridDB poster standing in for a front no source had: a real scan replaces it whenever one is found
           const posterOld = key === 'front' && !!old && !redo(key) && !upgrade && !!opts.isPoster && opts.isPoster(old);
           if (old && !redo(key) && !upgrade && !posterOld) return;
@@ -704,14 +760,14 @@ async function coversRun(systems, progress, plan, opts, tok) {
           if (!ok && (!old || upgrade) && (key === 'spine' || key === 'back') && gametdb.has(def.id) && !tok.c) {
             const full = await tdbWrap(reg), buf = full ? (key === 'spine' ? await cutSpine(full, def.id) : await cutBack(full, def.id)) : null;
             if (buf) { const inc = path.join(dir, `${base}${suffix}.incoming-tdb.jpg`);
-              try { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(inc, buf);
-                const a = upgrade && old ? sizeOf(old) : null, b = sizeOf(inc);
-                if (!b || (a && Math.max(...b) < Math.max(...a) * 1.15)) fs.unlinkSync(inc);
+              try { await fs.promises.mkdir(dir, { recursive: true }); await fs.promises.writeFile(inc, buf); // (beta.10: async)
+                const a = upgrade && old ? await sizeOfAsync(old) : null, b = await sizeOfAsync(inc);
+                if (!b || (a && Math.max(...b) < Math.max(...a) * 1.15)) await fs.promises.unlink(inc);
                 else { await placeArt(dir, base, suffix, inc, '.jpg'); ok = true; log(key === 'spine' ? 'Spine' : 'Back', 'from GameTDB full cover:', game.title); }
               } catch (e) { log('GameTDB', key, game.title, e.message); try { fs.unlinkSync(inc); } catch {} } }
           }
           // a Switch / 3DS game no source has a cartridge photo of: one drawn from its front cover (1.73.5)
-          if (!ok && !old && key === 'disc' && CART_SYS.has(def.id)) { const fr = artFile(dir, base, ''), buf = fr ? await makeCart(fr, def.id) : null;
+          if (!ok && !old && key === 'disc' && CART_SYS.has(def.id)) { const fr = await artFileA(tok.ls, dir, base, ''), buf = fr ? await makeCart(fr, def.id) : null;
             if (buf) { const tmp = path.join(dir, `${base}${suffix}.incoming.png`); try { await fs.promises.writeFile(tmp, buf); await placeArt(dir, base, suffix, tmp, '.png'); ok = true; } catch (e) { fs.promises.unlink(tmp).catch(() => {}); log('cartridge from cover', game.title, e.message); } } }
           if (ok) { touched = true; if (upgrade) { rep.upgraded++; rep.up.push([game.title, key]); } else { rep[key]++; rep.got.push([game.title, key]); } }
           else if (!old) missing.push(key);
@@ -783,6 +839,6 @@ function hasInfo() { return idxStamp() > 0; } // cheap: never parses the index j
 
 // the index, built (downloaded) if it has to be: Art Studio's "build the LaunchBox index" button
 async function buildIndex(progress) { if (lbOverride) return true; await launchboxIndex(progress || (() => {})); return true; }
-module.exports = { _setIndex: x => { lbOverride = x; }, LAUNCHBOX, init, matchTitle, matchName, lookupNames, sgMatch, setSpineCutter, setCartMaker, makeCart, CART_SYS, discId, downloadCovers, coverage, cancel, HD_MIN, gameInfo, flushInfoCache, hasInfo, invalidateInfo, norm, launchboxMatch, libretroMatch, pickImages,
+module.exports = { _setIndex: x => { lbOverride = x; }, LAUNCHBOX, init, matchTitle, matchName, lookupNames, sgMatch, setSpineCutter, setCartMaker, makeCart, CART_SYS, discId, downloadCovers, coverage, cancel, pause, isPaused, isImageBuf, HD_MIN, gameInfo, flushInfoCache, hasInfo, invalidateInfo, norm, launchboxMatch, libretroMatch, pickImages,
   // Art Studio (main/artstudio.js) reuses these rather than keeping its own copies
   candidates, libretroAll, libretroIndex, readyIndex, indexState, buildIndex, refreshIndex, cancelRefresh, indexInfo, edition, lbRegion, lrRegion, tdbRegion, download, downloadEx, sizeOf, artFile, isLow, placeArt, setOnPlaced, replacedFor, cutSpine, cutBack, canCut: () => !!spineCutter, pool, KINDS, ART_EXT, REPLACED };

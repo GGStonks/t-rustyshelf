@@ -100,7 +100,7 @@ async function image(key, urls, ext) {
   try { await fs.promises.access(f); return f; } catch {}
   const list = (Array.isArray(urls) ? urls : [urls]).filter(u => /^https?:\/\//i.test(u || '')); if (!list.length || !fetchBuf) return null;
   if (imgBusy.has(f)) return imgBusy.get(f);
-  const p = (async () => { for (const u of list) { try { const b = await fetchBuf(u); if (!b || b.length < 1000) continue; await fs.promises.mkdir(artDir, { recursive: true }); await fs.promises.writeFile(f + '.part', b); await fs.promises.rename(f + '.part', f); return f; } catch (e) { log('stremio art', key, e.message); } } return null; })().finally(() => imgBusy.delete(f));
+  const p = (async () => { for (const u of list) { try { const b = await fetchBuf(u); if (!b || b.length < 1000) continue; if (!require('./imgcheck').isImageBuf(b)) { log('stremio art', key, 'not a picture from', u); continue; } /* (beta.10: an error page is never kept as the poster) */ await fs.promises.mkdir(artDir, { recursive: true }); await fs.promises.writeFile(f + '.part', b); await fs.promises.rename(f + '.part', f); return f; } catch (e) { log('stremio art', key, e.message); } } return null; })().finally(() => imgBusy.delete(f));
   imgBusy.set(f, p); return p;
 }
 const imdb = id => /^tt\d+$/.test(String(id));
