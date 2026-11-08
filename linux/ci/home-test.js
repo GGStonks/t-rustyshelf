@@ -36,14 +36,14 @@ const shot = async (p, name) => { try { const r = await p.send('Page.captureScre
 
 (async () => {
   check('the AppImage exists', fs.existsSync(img), img);
-  const app = spawn(img, ['--no-sandbox', '--remote-debugging-port=9335'], { env: { ...process.env, HOME, APPIMAGE_EXTRACT_AND_RUN: '1' }, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+  const app = spawn(img, ['--no-sandbox', '--remote-debugging-port=9340'], { env: { ...process.env, HOME, APPIMAGE_EXTRACT_AND_RUN: '1' }, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
   let appOut = ''; app.stdout.on('data', d => appOut += d); app.stderr.on('data', d => appOut += d);
   let p;
   try {
-    p = await cdp(await pageTarget(9335)); await p.send('Runtime.enable'); await p.send('Page.enable');
+    p = await cdp(await pageTarget(9340)); await p.send('Runtime.enable'); await p.send('Page.enable');
     let ready = false; for (let i = 0; i < 90 && !ready; i++) { ready = await p.ev('!!(window.Shelf && Shelf._qs && Shelf._qs().g)').catch(() => false); if (!ready) await sleep(500); }
     await sleep(2000);
-    const pages = async () => (await (await fetch('http://127.0.0.1:9335/json')).json()).filter(x => x.type === 'page').map(x => x.url.split('/').pop().split('?')[0]);
+    const pages = async () => (await (await fetch('http://127.0.0.1:9340/json')).json()).filter(x => x.type === 'page').map(x => x.url.split('/').pop().split('?')[0]);
     const before = await pages();
     const key = async (k, vk) => { for (const type of ['keyDown', 'keyUp']) await p.send('Input.dispatchKeyEvent', { type, key: k, code: k, windowsVirtualKeyCode: vk }); };
     await key('Home', 36); await sleep(1500);

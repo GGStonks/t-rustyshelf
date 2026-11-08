@@ -36,11 +36,11 @@ const shot = async (p, name) => { try { const r = await p.send('Page.captureScre
 
 (async () => {
   check('the AppImage exists', fs.existsSync(img), img);
-  const app = spawn(img, ['--no-sandbox', '--remote-debugging-port=9335'], { env: { ...process.env, HOME, APPIMAGE_EXTRACT_AND_RUN: '1' }, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+  const app = spawn(img, ['--no-sandbox', '--remote-debugging-port=9341'], { env: { ...process.env, HOME, APPIMAGE_EXTRACT_AND_RUN: '1' }, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
   let appOut = ''; app.stdout.on('data', d => appOut += d); app.stderr.on('data', d => appOut += d);
   let p;
   try {
-    p = await cdp(await pageTarget(9335)); await p.send('Runtime.enable'); await p.send('Page.enable');
+    p = await cdp(await pageTarget(9341)); await p.send('Runtime.enable'); await p.send('Page.enable');
     let ready = false; for (let i = 0; i < 90 && !ready; i++) { ready = await p.ev('!!(window.Shelf && Shelf._qs && Shelf._qs().g)').catch(() => false); if (!ready) await sleep(500); }
     await sleep(2000);
     const det = await p.ev('window.trustyshelf.detect()').catch(e => ({ error: e.message }));
