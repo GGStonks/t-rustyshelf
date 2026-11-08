@@ -682,7 +682,8 @@ async function buildLibrary() {
     if (sh) { sh.games.push(...games); continue; }
     const sc = cfg.systems[def.id], emu = sc.emulator || '';
     shelves.push({ id: def.id, kind: 'console', name: def.name, emulatorName: emuShown(def, emu), hasEmulator: !!emu && paths.isFile(emuPath(emu)), emulator: emu, emulatorIcon: emu ? fileUrl(await iconQuick(emu)) : null, gameArgs: sc.gameArgs, bootOnLaunch: sc.bootOnLaunch !== false, useIpl: def.id === 'gc' && !!sc.useIpl, insertAnim: sc.insertAnim !== false, games }); }
-  const toPc = mine.filter(g => g.shelf === 'pc'), onCustom = mine.filter(g => !g.shelf).concat(back);
+  const toPc = mine.filter(g => g.shelf === 'pc'), onCustom = mine.filter(g => !g.shelf);
+  onCustom.push(...back); // (a program whose console's shelf is switched off; the line above stays self-contained: android-app/ci/issues-test.js runs it on its own)
   if (epic.length || toPc.length) pcShelf = pcShelf.concat([...epic, ...toPc].map(pcGame)).sort((a, b) => String(a.title).localeCompare(String(b.title), undefined, { sensitivity: 'base' }));
   pcShelf.forEach(g => { if (!g.source && g.artFrom == null) g.artFrom = g.art && g.art.front ? (pccovers.cover(g.id) ? 'yours' : 'steam') : ''; }); // (Steam's own games)
   if (pcShelf.length) shelves.push({ id: 'pc', kind: 'steam', name: 'PC', games: pcShelf });
