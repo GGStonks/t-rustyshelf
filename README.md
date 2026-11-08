@@ -343,7 +343,7 @@ publishes them as one release, version `A.B.C.DDDD` (`DDDD` is the build of vers
 | `For build` | the next build of the newest version released (`2.12.4.283` → `2.12.4.284`) |
 | `For build 2.12.4` (or `2.12.4.283`) | the next build of that version |
 
-"For build" counts only as a phrase of its own (followed by a version, punctuation or the end of the line).
+"For build" counts only as a phrase of its own (followed by a version, punctuation or the end of the line). Builds are published as pre-releases (to try out); a new version as the latest release.
 
 ## Licence
 

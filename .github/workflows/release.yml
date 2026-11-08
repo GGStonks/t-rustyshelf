@@ -3,7 +3,8 @@
 #   "For version A.B.C"        → A.B.C.0, a new version (stops with an error if vA.B.C.0 is already released)
 #   "For build"                → the next build of the newest version released (2.12.4.283 → 2.12.4.284)
 #   "For build A.B.C[.DDDD]"   → the next build of that version
-# The version is A.B.C.DDDD (DDDD the build of A.B.C); the release's tag is vA.B.C.DDDD. Desktop builds carry it as
+# The version is A.B.C.DDDD (DDDD the build of A.B.C); the release's tag is vA.B.C.DDDD. A build (DDDD > 0) is published as a
+# pre-release, a new version (A.B.C.0) as the latest release. Desktop builds carry it as
 # A.B.C+DDDD (the form npm and electron-builder take) and show it as A.B.C.DDDD; Android as its versionName, with a
 # versionCode that grows with every build. The rules: scripts/release-version.js (tested by linux/ci/release-version-test.js).
 name: Release
@@ -166,4 +167,6 @@ jobs:
           VERSION: ${{ needs.decide.outputs.version }}
         run: |
           printf '%s\n' "$MSG" > notes.md
-          gh release create "$TAG" out/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "(T)rustyShelf $VERSION" --notes-file notes.md
+          # a build (A.B.C.DDDD, DDDD > 0) is a pre-release, to try out; a new version (A.B.C.0) is the latest release
+          pre=; case "$VERSION" in *.0) ;; *) pre=--prerelease ;; esac
+          gh release create "$TAG" out/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "(T)rustyShelf $VERSION" --notes-file notes.md $pre
