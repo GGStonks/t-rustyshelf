@@ -159,6 +159,8 @@ function build(){
   {g:"Games",id:"pc",name:"PC games",ic:"pc",lead:onLinux()?"Your Steam games, your Epic library and your PC games folder on the PC shelf. Windows games play through Wine / Proton.":"Your installed Steam games, on a shelf of their own.",rows:[
     T("Show installed Steam games","steam.enabled",true,"Adds a PC shelf with every game Steam has installed. Uninstalled games are left out.",{rescan:true,keys:"steam"}),
     T("Hide Steam tools","steam.hideTools",true,"Leaves Proton, Steamworks Common Redistributables and other tools off the shelf.",{rescan:true,keys:"redistributables proton steam"}),
+    // ((T)rustyShelf, asked for in Boxshelf's discussions)
+    T("Console box art","pc.consoleBox",false,"Each PC game shows the box of its newest console release (PS5, Xbox Series X|S, PS4, Xbox One or Switch), with a Steam band where the console's logo was. Made in the background from the box art database (box art downloads build it the first time). A cover you chose always comes first; games with no console release keep their own art.",{rescan:true,keys:"console box physical case ps5 xbox switch steam cover retail"}),
     F("Steam folder","steam.path","folder","The folder that contains steam.exe. Found automatically; change it only if Steam lives somewhere unusual.",{ph:"C:\\Program Files (x86)\\Steam",rescan:true,want:"dir",pickTitle:"Choose your Steam folder"}),
     A("Get Steam","Open site","Opens Steam's download page in your browser.",()=>openLink(OFFICIAL.steam)),
     // (beta.4) Epic's installs join the PC shelf (main/pcgames.js reads its install list; Play goes through its launcher)

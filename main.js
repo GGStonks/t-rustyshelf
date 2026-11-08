@@ -633,6 +633,7 @@ async function buildLibrary() {
     shelves.push({ id: def.id, kind: 'console', name: def.name, emulatorName: emuShown(def, sc.emulator), hasEmulator: !!sc.emulator && paths.isFile(emuPath(sc.emulator)) /* (1.82) an uninstalled one gets no Open tile */, emulator: sc.emulator, emulatorIcon: fileUrl(await iconQuick(sc.emulator)), gameArgs: sc.gameArgs, bootOnLaunch: sc.bootOnLaunch !== false, useIpl: def.id === 'gc' && !!sc.useIpl, insertAnim: sc.insertAnim !== false, games });
   }
   let pcShelf = [];
+  const boxOn = !!(cfg.pc && cfg.pc.consoleBox); // ((T)rustyShelf) Settings → PC games → Console box art: a PC game in its console box (pcConsoleBoxes)
   // (beta.10) Steam was only looked for in the first-run setup: one installed later, moved, or not found then never showed.
   // While Steam is on and its folder is unset or wrong, look again (once per session) and keep what's found
   if (cfg.steam.enabled && !steamRoot(cfg.steam.path) && !steamLooked) { steamLooked = true;
@@ -643,7 +644,7 @@ async function buildLibrary() {
   if (steamGiven && !isMainSteam(steamGiven) && steamMain === undefined) { steamMain = null; try { const p = await findSteam(); if (p && steamRoot(p) && isMainSteam(steamRoot(p))) { steamMain = p; log('Steam: the folder set is a library; using Steam\'s own folder for the list of libraries'); } } catch {} }
   if (cfg.steam.enabled && cfg.steam.path) {
     // Steam's own cached art first, then anything (T)rustyShelf fetched from the Steam store for games Steam has no cover for
-    pcShelf = scanSteam(cfg.steam.path, { hideTools: cfg.steam.hideTools !== false, log, mainPath: steamMain || '' }).map(g => { const l = steamart.local(g.appid); return { ...g, ...(ownTitle(g.id) ? { title: ownTitle(g.id), fileTitle: g.title } : {}), info: steamart.gameInfo(g.appid), art: { front: fileUrl(pccovers.cover(g.id) || g.art.front || l.front), hero: fileUrl(g.art.hero || l.hero) } }; }); // (beta.5: a cover chosen in the picker wins)
+    pcShelf = scanSteam(cfg.steam.path, { hideTools: cfg.steam.hideTools !== false, log, mainPath: steamMain || '' }).map(g => { const l = steamart.local(g.appid); return { ...g, ...(ownTitle(g.id) ? { title: ownTitle(g.id), fileTitle: g.title } : {}), info: steamart.gameInfo(g.appid), art: { front: fileUrl(pccovers.cover(g.id) || (boxOn && pccovers.consoleCover(g.id)) || g.art.front || l.front), hero: fileUrl(g.art.hero || l.hero) } }; }); // (beta.5: a cover chosen in the picker wins)
   }
   // (beta.4) Epic's installs join the PC shelf; Quiver Launcher's apps and games added by hand get the Custom shelf. They
   // are PC games with a source (kind 'steam' keeps every shelf feature); covers come from the Steam app their title
@@ -667,11 +668,11 @@ async function buildLibrary() {
   // (Epic's), Steam's, or none: a made-up case)
   const MINE_SRC = new Set(['custom', 'quiver']); // (supalii) Details shows these games' program and launch options
   const pcGame = g => { const sid = STORE_SRC.has(g.source) ? pcgames.steamIdOf(g.title) : null, l = sid ? steamart.local(sid) : {};
-    const chosen = pccovers.cover(g.id), auto = !chosen && pccovers.autoCover(g.id), front = chosen || auto || l.front;
+    const chosen = pccovers.cover(g.id), box = !chosen && boxOn && pccovers.consoleCover(g.id), auto = !chosen && !box && pccovers.autoCover(g.id), front = chosen || box || auto || l.front; // ((T)rustyShelf: box = its console box, Settings → PC games → Console box art)
     // (its size: its folder as measured in the background, until then what Epic says it installed (a game can download
     // more itself, MTG Arena does); Steam's games bring their own)
     const sizeBytes = g.installed === false ? 0 : (SIZED_SRC.has(g.source) && g.dir ? dirsize.get(g.dir) : 0) || g.installSize || 0;
-    return { kind: 'steam', source: g.source, id: g.id, title: g.title, ...(MINE_SRC.has(g.source) && g.exe ? { exe: g.exe, ...(g.args ? { args: g.args } : {}) } : {}), ...(g.shelf ? { platform: g.shelf } : {}), ...(g.installed === false ? { installed: false } : {}), ...(sizeBytes ? { sizeBytes } : {}), ...(sid ? { info: steamart.gameInfo(sid) } : {}), artFrom: chosen ? 'yours' : auto ? 'store' : l.front ? 'steam' : '', art: { front: fileUrl(front), hero: fileUrl(l.hero), icon: g.icon || undefined } }; };
+    return { kind: 'steam', source: g.source, id: g.id, title: g.title, ...(MINE_SRC.has(g.source) && g.exe ? { exe: g.exe, ...(g.args ? { args: g.args } : {}) } : {}), ...(g.shelf ? { platform: g.shelf } : {}), ...(g.installed === false ? { installed: false } : {}), ...(sizeBytes ? { sizeBytes } : {}), ...(sid ? { info: steamart.gameInfo(sid) } : {}), artFrom: chosen ? 'yours' : box ? 'console' : auto ? 'store' : l.front ? 'steam' : '', art: { front: fileUrl(front), hero: fileUrl(l.hero), icon: g.icon || undefined } }; };
   pcAutoCovers([...epic, ...mine]);
   // (beta.10) a game added by hand can be moved to the PC shelf (Settings → Custom games → the game → Shelf); (supalii's
   // fork) or to a console's shelf, beside its ROMs: it's still started as its own program, not through the emulator. A
@@ -685,9 +686,10 @@ async function buildLibrary() {
   const toPc = mine.filter(g => g.shelf === 'pc'), onCustom = mine.filter(g => !g.shelf);
   onCustom.push(...back); // (a program whose console's shelf is switched off; the line above stays self-contained: android-app/ci/issues-test.js runs it on its own)
   if (epic.length || toPc.length) pcShelf = pcShelf.concat([...epic, ...toPc].map(pcGame)).sort((a, b) => String(a.title).localeCompare(String(b.title), undefined, { sensitivity: 'base' }));
-  pcShelf.forEach(g => { if (!g.source && g.artFrom == null) g.artFrom = g.art && g.art.front ? (pccovers.cover(g.id) ? 'yours' : 'steam') : ''; }); // (Steam's own games)
+  pcShelf.forEach(g => { if (!g.source && g.artFrom == null) g.artFrom = g.art && g.art.front ? (pccovers.cover(g.id) ? 'yours' : boxOn && pccovers.consoleCover(g.id) ? 'console' : 'steam') : ''; }); // (Steam's own games)
   if (pcShelf.length) shelves.push({ id: 'pc', kind: 'steam', name: 'PC', games: pcShelf });
   if (onCustom.length) shelves.push({ id: 'custom', kind: 'steam', name: 'Custom', games: onCustom.map(pcGame).sort((a, b) => String(a.title).localeCompare(String(b.title), undefined, { sensitivity: 'base' })) });
+  if (boxOn) pcConsoleBoxes(shelves.flatMap(x => x.games || []).filter(g => g.kind === 'steam')); // ((T)rustyShelf) the console boxes not made yet, in the background
   const apps = [];
   for (const a of APPS) { const c = cfg.apps[a.id]; if (!c || !c.enabled || !c.path) continue; apps.push({ kind: 'app', id: 'app-' + a.id, appId: a.id, title: a.name, path: c.path, art: { icon: fileUrl(await iconQuick(c.path)) } }); }
   if (apps.length) shelves.push({ id: 'media', kind: 'apps', name: 'Media', games: apps });
@@ -1600,6 +1602,27 @@ handle('launch:pc', async ({ id }) => {
 });
 // the name the Home menu gives a PC game's source
 const PC_SYSTEM = { epic: 'Epic Games', folder: 'PC', quiver: 'Quiver', gog: 'GOG' };
+// ((T)rustyShelf, asked for in Boxshelf's discussions) Settings → PC games → Console box art: each PC game shows the box of its
+// newest console release LaunchBox has (PS5, Xbox Series X|S, PS4, Xbox One, Switch), its console's band at the top painted
+// over with a Steam band (renderer/img-tools.js rebrand). Made once per game, in the background, one at a time, never while a
+// game runs; only from the box art database already built (box art downloads build it). A cover you chose comes first.
+let pcBoxBusy = false; const pcBoxNone = new Set(); // (games with no console release, this session: looked up once)
+async function pcConsoleBoxes(games) {
+  if (pcBoxBusy || !(cfg.pc && cfg.pc.consoleBox) || !covers.readyIndex()) return;
+  const want = games.filter(g => g && g.id && g.title && !pcBoxNone.has(g.id) && !pccovers.cover(g.id) && !pccovers.consoleCover(g.id)); if (!want.length) return;
+  pcBoxBusy = true; let made = 0;
+  try {
+    for (const g of want) {
+      if (launcher.isRunning() || launching || !(cfg.pc && cfg.pc.consoleBox)) break;
+      const box = covers.consoleBox(g.title, cfg.ui.artRegion); if (!box) { pcBoxNone.add(g.id); continue; }
+      const buf = await fetchImage(box.url); if (!buf) continue;
+      const r = await helperJob('img-tools.html', async () => ({ mode: 'rebrand', plat: box.plat, data: new Uint8Array(buf.buffer, buf.byteOffset, buf.length) }), 30000, true);
+      const m = /^data:image\/jpeg;base64,(.+)$/.exec(String((r && r.pages || [])[0] || '')); if (!m) { log('PC console box', g.title, r && r.err || 'not made'); continue; }
+      try { await pccovers.saveConsole(g.id, Buffer.from(m[1], 'base64'), `${box.platform} ${box.url}`); made++; } catch (e) { log('PC console box', g.title, e.message); }
+      await new Promise(res => setTimeout(res, 250));
+    }
+  } finally { pcBoxBusy = false; if (made) { log('PC console boxes made:', made); pcCoverChanged(); } }
+}
 // (Linux) the store covers (Epic's box art) not downloaded yet: fetched in the
 // background, three at a time, then the shelf refreshes once
 let pcAutoBusy = false;

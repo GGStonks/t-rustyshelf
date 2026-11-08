@@ -33,7 +33,7 @@ function defaults() {
     steam: { enabled: true, path: '', hideTools: true },
     // (beta.4) PC games beyond Steam (main/pcgames.js): Epic's installs on the PC shelf; Quiver Launcher's apps and games
     // added by hand ({ id, title, exe, args }) on the Custom shelf. quiverPath: a portable Quiver's folder, chosen or found
-    pc: { epic: true, quiver: true, quiverPath: '', custom: [], gog: true, ubisoft: true, ea: true, xbox: true,
+    pc: { epic: true, quiver: true, quiverPath: '', custom: [], gog: true, ubisoft: true, ea: true, xbox: true, consoleBox: false, // ((T)rustyShelf) PC games in their console box
       // the PC games folder (main/pcfolder.js): gamesDir = every folder in it is a game; userGamesDir = this player's own
       // copies (a folder there wins over the shared one of the same name); programs = { "<folder>": "<program inside it>" }
       // for a folder holding several
@@ -226,7 +226,7 @@ function sanitize(cfg) {
       ...(s(v.runner, 1024) ? { runner: s(v.runner, 1024) } : {}), ...(s(v.prefix, 1024) && path.isAbsolute(s(v.prefix, 1024)) ? { prefix: s(v.prefix, 1024) } : {}),
       ...(isObj(v.env) ? { env: Object.fromEntries(Object.entries(v.env).filter(([k, x]) => ENV_NAME.test(k) && typeof x === 'string' && x.length <= 4096).slice(0, 50)) } : {}) }])) : {};
     cfg.pc.programs = isObj(cfg.pc.programs) ? Object.fromEntries(Object.entries(cfg.pc.programs).filter(([k, v]) => typeof v === 'string' && v && v.length <= 1024 && !path.isAbsolute(v) && !v.split(/[\\/]/).includes('..')).slice(0, 2000).map(([k, v]) => [String(k).slice(0, 200), v])) : {};
-    cfg.pc.quiverPath = s(cfg.pc.quiverPath, 1024); for (const k of ['epic', 'quiver', 'gog', 'ubisoft', 'ea', 'xbox']) if (typeof cfg.pc[k] !== 'boolean') cfg.pc[k] = true; } // (beta.7: the four new stores)
+    cfg.pc.quiverPath = s(cfg.pc.quiverPath, 1024); if (typeof cfg.pc.consoleBox !== 'boolean') cfg.pc.consoleBox = false; for (const k of ['epic', 'quiver', 'gog', 'ubisoft', 'ea', 'xbox']) if (typeof cfg.pc[k] !== 'boolean') cfg.pc[k] = true; } // (beta.7: the four new stores)
   { const e = isObj(cfg.emuSetup) ? cfg.emuSetup : {}; cfg.emuSetup = { auto: e.auto !== false, graphics: ['auto', 'fast', 'balanced', 'pretty'].includes(e.graphics) ? e.graphics : 'auto', resume: e.resume === true,
     pending: [...new Set((Array.isArray(e.pending) ? e.pending : []).filter(x => typeof x === 'string' && x && x.length <= 1024))].slice(0, 40) }; }
   cfg.emuSeen = Array.isArray(cfg.emuSeen) ? [...new Set(cfg.emuSeen.filter(x => typeof x === 'string' && x && x.length <= 1024))].slice(0, 20) : [];

@@ -1234,7 +1234,7 @@ async function cpChoose(){if(!cp||cp.busy)return;const it=cp.items[cp.i],g=cp.g,
    for PC games. A (a click) opens that game's cover picker; when it closes, the gallery comes back */
 let galleryBack=false;
 const pcShelfGames=()=>allShelves.filter(s=>s.id==="pc"||s.id==="custom").flatMap(s=>(s._base||s.items||[]).filter(g=>g.kind==="steam").map(g=>({g,sh:s})));
-const artFromText=g=>g.artFrom==="yours"?"Your pick":g.artFrom==="store"?(g.source==="epic"?"Epic's box art":"The store's box art"):g.artFrom==="steam"?"Steam's art":"Made-up case";
+const artFromText=g=>g.artFrom==="yours"?"Your pick":g.artFrom==="console"?"Its console box":g.artFrom==="store"?(g.source==="epic"?"Epic's box art":"The store's box art"):g.artFrom==="steam"?"Steam's art":"Made-up case";
 function pcArtCount(){const L=pcShelfGames();return {total:L.length,made:L.filter(x=>!x.g.artFrom).length}}
 function pcGallery(){
   if(!api.pcCoverOptions||cp||bp||(mode!=="browse"&&mode!=="details"))return;

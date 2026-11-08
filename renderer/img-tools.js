@@ -1,5 +1,5 @@
-// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
-// renderer/img-tools.js apart from the app's name ((T)rustyShelf).
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): most of this file is Boxshelf's
+// renderer/img-tools.js; modified for (T)rustyShelf (rebrand: a console front made into a PC copy).
 // Hidden window: cuts a two-page scan into its left and right halves (off (T)rustyShelf's main thread, which a large
 // scan used to freeze for up to a couple of seconds). The image arrives as bytes: a canvas holding a file:// image
 // is "tainted" and can't be exported.
@@ -11,6 +11,7 @@ wum.onModel(async job => {
       const c = document.createElement('canvas'); c.width = b.width; c.height = b.height; c.getContext('2d').drawImage(b, 0, 0); b.close();
       const u = c.toDataURL('image/jpeg', 0.9); c.width = c.height = 0; wum.done(null, [u]); return; }
     const bmp = await createImageBitmap(new Blob([job.data]));
+    if (job.mode === 'rebrand') { const r = rebrand(bmp, job); bmp.close(); wum.done(r ? null : 'not rebranded', r ? [r] : []); return; }
     if (job.mode === 'cart') { const r = cart(bmp, job); bmp.close(); wum.done(r ? null : 'no cartridge made', r ? [r] : []); return; }
     if (job.mode === 'back') { const r = await back(bmp, job); bmp.close(); wum.done(r ? null : 'no back made', r ? [r] : []); return; }
     if (job.mode === 'madespine') { const r = await madeSpine(bmp, job); bmp.close(); wum.done(r ? null : 'no spine made', r ? [r] : []); return; }
@@ -189,4 +190,30 @@ function cart(bmp, job) {
   g.fillStyle = sh; g.fillRect(lx, ly, lw, lh); g.restore();
   rr(lx, ly, lw, lh, lr); g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = W * .006; g.stroke();
   return c.toDataURL('image/png');
+}
+
+// ((T)rustyShelf, asked for in Boxshelf's discussions) a console release's front made into a PC (Steam) copy: the console's
+// band across the top is found (its own colour, measured from the scan, until the artwork starts) and painted over with a
+// Steam band of the same height. job.plat: ps5 / xsx / ps4 / xone / sw (the usual band heights, when it can't be measured).
+const BAND_H = { ps5: 0.105, xsx: 0.1, ps4: 0.095, xone: 0.1, sw: 0.1 };
+function bandEnd(ctx, w, h, plat) {
+  const H = Math.round(h * 0.2), d = ctx.getImageData(0, 0, w, H).data, step = Math.max(1, Math.floor(w / 300));
+  const at = (x, y) => { const i = (y * w + x) * 4; return [d[i], d[i + 1], d[i + 2]]; };
+  const y0 = Math.max(2, Math.round(h * 0.02)); let ref = [0, 0, 0], n = 0; // (the band's colour: the row just inside its top edge)
+  for (let x = 0; x < w; x += step) { const c = at(x, y0); ref[0] += c[0]; ref[1] += c[1]; ref[2] += c[2]; n++; } ref = ref.map(v => v / n);
+  const same = y => { let k = 0, m = 0; for (let x = 0; x < w; x += step) { const c = at(x, y); if (Math.abs(c[0] - ref[0]) + Math.abs(c[1] - ref[1]) + Math.abs(c[2] - ref[2]) < 70) k++; m++; } return k / m; };
+  let run = 0;
+  for (let y = Math.round(h * 0.05); y < Math.min(H, Math.round(h * 0.17)); y++) { if (same(y) < 0.45) { if (++run >= 3) return y - 2; } else run = 0; }
+  return Math.round(h * (BAND_H[plat] || 0.1)); // (no clear edge: the usual height for that console's boxes)
+}
+function rebrand(bmp, job) {
+  const w = bmp.width, h = bmp.height; if (w < 64 || h < 64) return null;
+  const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d', { willReadFrequently: true });
+  x.drawImage(bmp, 0, 0);
+  const bh = Math.max(Math.round(h * 0.06), Math.min(Math.round(h * 0.17), bandEnd(x, w, h, job.plat)));
+  const g = x.createLinearGradient(0, 0, w, 0); g.addColorStop(0, '#171a21'); g.addColorStop(1, '#1b2838'); x.fillStyle = g; x.fillRect(0, 0, w, bh);
+  x.fillStyle = '#66c0f4'; x.fillRect(0, bh - Math.max(2, Math.round(bh * 0.05)), w, Math.max(2, Math.round(bh * 0.05))); // (a thin light-blue edge where the artwork starts)
+  const fs = Math.round(bh * 0.46); x.font = `800 ${fs}px "Segoe UI", "Helvetica Neue", Arial, sans-serif`; x.textBaseline = 'middle'; x.fillStyle = '#e5eef5';
+  let tx = Math.round(bh * 0.42); for (const ch of 'STEAM') { x.fillText(ch, tx, bh / 2); tx += x.measureText(ch).width + fs * 0.12; } // (spaced capitals, where the console's logo was)
+  const u = c.toDataURL('image/jpeg', 0.92); c.width = c.height = 0; return u;
 }

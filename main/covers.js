@@ -23,6 +23,10 @@ const LAUNCHBOX = { gc: 'Nintendo GameCube', wii: 'Nintendo Wii', psp: 'Sony PSP
 const IDX_V = 8; // 8: full box wraps (Box - Full) indexed too, to cut spines from
 const LB_ZIP = 'https://gamesdb.launchbox-app.com/Metadata.zip';
 const LB_IMG = 'https://images.launchbox-app.com/';
+// ((T)rustyShelf, asked for in Boxshelf's discussions) PC games in their physical console box: the platforms a PC game's
+// title is looked up in, newest first. Kept in the LaunchBox index too (a platform it doesn't have yet rebuilds it once)
+const PC_BOX_PLATS = [['ps5', 'Sony Playstation 5'], ['xsx', 'Microsoft Xbox Series X/S'], ['ps4', 'Sony Playstation 4'], ['xone', 'Microsoft Xbox One'], ['sw', 'Nintendo Switch']];
+const ALL_PLATS = () => [...new Set([...Object.values(LAUNCHBOX), ...PC_BOX_PLATS.map(p => p[1])])];
 const ART_EXT = ['png', 'jpg', 'jpeg', 'webp'];
 const IDX_DAYS = 60; // the XML is deleted once indexed, so a rebuild means the ~110 MB download again: don't do that every fortnight
 // one descriptive User-Agent for every request from here (GameTDB and the others like to know who's calling)
@@ -346,8 +350,8 @@ function launchboxIndex(progress, signal) {
 async function launchboxIndex0(progress, signal) {
   const idxFile = path.join(cacheDir, 'launchbox-index.json');
   { const m = shardMeta() || (isFile(idxFile) ? await splitShards() : null);
-    if (m && m.v === IDX_V && Date.now() - m.at < IDX_DAYS * 864e5 && Object.values(LAUNCHBOX).every(p => m.plats.includes(p))) { const x = path.join(cacheDir, 'Metadata.xml'); if (isFile(x)) removeXml(x); return lazyIndex(m); } }
-  try { const c = JSON.parse(fs.readFileSync(idxFile, 'utf8')); if (c.v === IDX_V && Date.now() - c.at < IDX_DAYS * 864e5 && Object.values(LAUNCHBOX).every(p => Array.isArray(c.games[p]))) { const x = path.join(cacheDir, 'Metadata.xml'); if (isFile(x)) removeXml(x); return c; } if (c.v === IDX_V) log('LaunchBox: index is missing a platform, rebuilding'); else log('LaunchBox: index format changed, rebuilding'); } catch {}
+    if (m && m.v === IDX_V && Date.now() - m.at < IDX_DAYS * 864e5 && ALL_PLATS().every(p => m.plats.includes(p))) { const x = path.join(cacheDir, 'Metadata.xml'); if (isFile(x)) removeXml(x); return lazyIndex(m); } }
+  try { const c = JSON.parse(fs.readFileSync(idxFile, 'utf8')); if (c.v === IDX_V && Date.now() - c.at < IDX_DAYS * 864e5 && ALL_PLATS().every(p => Array.isArray(c.games[p]))) { const x = path.join(cacheDir, 'Metadata.xml'); if (isFile(x)) removeXml(x); return c; } if (c.v === IDX_V) log('LaunchBox: index is missing a platform, rebuilding'); else log('LaunchBox: index format changed, rebuilding'); } catch {}
   const zip = path.join(cacheDir, 'Metadata.zip');
   const xml = path.join(cacheDir, 'Metadata.xml');
   if (isFile(xml) && Date.now() - fs.statSync(xml).mtimeMs < 30 * 864e5) { if (xmlWhole(xml)) return finishIndex(xml, idxFile, progress, signal); log('LaunchBox: Metadata.xml is cut off, downloading it again'); } // (beta.10: a cut-off one isn't trusted)
@@ -369,14 +373,14 @@ async function finishIndex(xml, idxFile, progress, signal) {
   progress({ stage: 'Reading the game database… 0%', phase: 'read', pct: 0 });
   const onPct = pct => progress({ stage: `Reading the game database… ${pct}%`, phase: 'read', pct });
   let counts;
-  try { counts = await buildInWorker(xml, idxFile, Object.values(LAUNCHBOX), IDX_V, onPct, signal); }
+  try { counts = await buildInWorker(xml, idxFile, ALL_PLATS(), IDX_V, onPct, signal); }
   catch (e) {
     if (e && e.code === 'cancelled') { removeXml(xml); throw e; } // the index file on disk is still the old one: the worker only renames when done
     // only when there's no worker at all (e.g. inside a packed build) is this thread worth a try: after a worker
     // error (out of memory above all) the same job here would take the whole app down with it
     if (!e || !e.workerUnavailable) throw e;
     log('LaunchBox: index worker unavailable (' + e.message + '), reading here');
-    const idx0 = await buildLaunchboxIndex(xml, onPct, Object.values(LAUNCHBOX), IDX_V);
+    const idx0 = await buildLaunchboxIndex(xml, onPct, ALL_PLATS(), IDX_V);
     fs.writeFileSync(idxFile, JSON.stringify(idx0)); counts = Object.entries(idx0.games).map(([k, v]) => `${k}=${v.length}`).join(', ');
   }
   log('LaunchBox: index built', counts);
@@ -489,6 +493,19 @@ function matchTitle(list, title, art = () => 1, exactOnly = false) {
 }
 // Backs: North American boxes print English/French/Spanish side by side, so English-only regions come first for the back.
 const BACK_PREF = ['United Kingdom', 'Australia', 'North America', 'United States', 'World', '', 'Canada', 'Europe', 'Japan'];
+// ((T)rustyShelf) a PC game's physical console box: the front scan of the newest release LaunchBox has of that title, from
+// the index already built (never a download of the index for it): { plat, platform, name, url } or null
+function consoleBox(title, region) {
+  const idx = readyIndex(); if (!idx || !title) return null;
+  for (const [plat, platform] of PC_BOX_PLATS) {
+    const list = idx.games[platform]; if (!list || !list.length) continue;
+    const fronts = g => ((idx.images && idx.images[g.id]) || []).filter(i => i.type === 'Box - Front');
+    const hit = matchName(list, title, g => fronts(g).length); if (!hit) continue;
+    const f = pickImages(fronts(hit), 'Box - Front', region)[0]; if (!f) continue;
+    return { plat, platform, name: hit.name, url: LB_IMG + encodeURI(f.file) };
+  }
+  return null;
+}
 function pickImages(imgs, type, region) {
   const c = (imgs || []).filter(i => i.type === type && i.file);
   const pref = /Back/.test(type) ? BACK_PREF : REGION_PREF;
@@ -841,6 +858,6 @@ function hasInfo() { return idxStamp() > 0; } // cheap: never parses the index j
 
 // the index, built (downloaded) if it has to be: Art Studio's "build the LaunchBox index" button
 async function buildIndex(progress) { if (lbOverride) return true; await launchboxIndex(progress || (() => {})); return true; }
-module.exports = { _setIndex: x => { lbOverride = x; }, LAUNCHBOX, init, matchTitle, matchName, lookupNames, sgMatch, setSpineCutter, setCartMaker, makeCart, CART_SYS, discId, downloadCovers, coverage, cancel, pause, isPaused, isImageBuf, HD_MIN, gameInfo, flushInfoCache, hasInfo, invalidateInfo, norm, launchboxMatch, libretroMatch, pickImages,
+module.exports = { _setIndex: x => { lbOverride = x; }, LAUNCHBOX, PC_BOX_PLATS, consoleBox, init, matchTitle, matchName, lookupNames, sgMatch, setSpineCutter, setCartMaker, makeCart, CART_SYS, discId, downloadCovers, coverage, cancel, pause, isPaused, isImageBuf, HD_MIN, gameInfo, flushInfoCache, hasInfo, invalidateInfo, norm, launchboxMatch, libretroMatch, pickImages,
   // Art Studio (main/artstudio.js) reuses these rather than keeping its own copies
   candidates, libretroAll, libretroIndex, readyIndex, indexState, buildIndex, refreshIndex, cancelRefresh, indexInfo, edition, lbRegion, lrRegion, tdbRegion, download, downloadEx, sizeOf, artFile, isLow, placeArt, setOnPlaced, replacedFor, cutSpine, cutBack, canCut: () => !!spineCutter, pool, KINDS, ART_EXT, REPLACED };

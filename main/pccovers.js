@@ -115,4 +115,14 @@ async function fillMissing(games) {
   return { checked, downloaded };
 }
 
-module.exports = { init, cover, autoCover, fetchAuto, fillMissing, options, use, own, reset: id => clear(String(id)) };
+// ((T)rustyShelf, asked for in Boxshelf's discussions) a PC game's console box made into a PC copy (main.js pcConsoleBoxes):
+// data\pc-console-covers\<game id>.jpg, with where it came from beside it. Used only while Settings → PC games → Console box
+// art is on; a cover you chose comes first
+const boxDir = () => path.join(o.dataDir, 'pc-console-covers');
+function consoleCover(id) { const f = path.join(boxDir(), safeId(id) + '.jpg'); return isFile(f) ? f : null; }
+async function saveConsole(id, buf, from) {
+  fs.mkdirSync(boxDir(), { recursive: true }); const b = path.join(boxDir(), safeId(id));
+  await fs.promises.writeFile(b + '.jpg.tmp', buf); await fs.promises.rename(b + '.jpg.tmp', b + '.jpg'); await fs.promises.writeFile(b + '.from', String(from || '')); return b + '.jpg';
+}
+
+module.exports = { init, cover, autoCover, fetchAuto, fillMissing, consoleCover, saveConsole, options, use, own, reset: id => clear(String(id)) };
