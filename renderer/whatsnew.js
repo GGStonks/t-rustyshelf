@@ -8,6 +8,52 @@
 //   sections: [{ h, items: [[headline, more]] }] }; newest first.
 window.BS_WHATSNEW = [
   {
+    version: '1.1.0.0', android: '1.1.0.0', date: '2026-11-08', title: "Window modes, HoYoPlay, Epic downloads, your own music and saved looks",
+    highlights: [
+      "A window mode for each PC game (borderless or windowed), a HoYoPlay shelf, and a start through Windows' administrator prompt",
+      "Epic downloads on Linux: a queue with Pause and Resume, an installation status, and a Storage view by drive",
+      "Your own music (a Music folder) as the menu music, and saved looks: a whole look in one press",
+      "An original Xbox shelf (xemu), Portuguese (Brasil), a Discord \"Playing\" status and Export / Import everything",
+      "A start script for Linux, and PC games in their console box"
+    ],
+    platforms: [
+      "Windows: the window mode, HoYoPlay and the administrator start (they use Windows itself).",
+      "Linux: the Epic download manager, the installation status and the start script (start-trustyshelf.sh).",
+      "Windows and Linux: your own music, Storage, Export / Import everything and the Discord status.",
+      "Windows, Linux and Android: saved looks, the Installed filter and the language choice."
+    ],
+    sections: [
+      { h: "PC games", items: [
+        ["A window mode for each PC game", "Details → Window, on a PC game the shelf starts itself (Quiver, GOG, HoYoPlay, the PC games folder, programs you added): Borderless takes the frame and title bar off and stretches the game over its screen; Windowed keeps the game a window and leaves the taskbar. Windows only. The idea is from the TyroShelf fork."],
+        ["A HoYoPlay shelf", "Genshin Impact, Honkai: Star Rail, Zenless Zone Zero and Honkai Impact 3rd, as HoYoPlay installed them, are on the PC shelf and start from their own folders. Settings → PC games → Show installed HoYoPlay games. Windows. The idea is from the TyroShelf fork."],
+        ["Administrator rights", "A program that needs administrator rights is started through Windows' own prompt, instead of not starting. Windows."],
+        ["Epic downloads", "Installs and updates run in a queue, one at a time: progress, speed and time left, Pause and Resume (what was downloaded stays, the download goes on from there), Move up and Remove. Settings → PC games → Downloads, and an Epic downloads row in the quick menu. Linux, through legendary as before."],
+        ["Installed or not", "Details → Installation sets an Epic game to installed or not installed by hand (a game that is not installed is greyed, and Play offers to install it); another press goes back to what the shelf finds. Linux."],
+        ["Storage", "Settings → PC games → Storage lists every installed PC game with its size, by drive, and how much room each drive has."],
+        ["An Installed filter", "The Sort panel's filter row has Installed when some of your games are greyed, so the shelf can show only what you can play now."],
+        ["PC games in their console box", "Settings → PC games → Console box art (off by default): each PC game shows the box of its newest console release, with the back and spine too, and a Steam band over the console's logo."]
+      ] },
+      { h: "Look and sound", items: [
+        ["Your own music", "Put music files (mp3, ogg, opus, wav, flac, m4a, aac and more) in the Music folder beside the app, or in Songs; subfolders count. Settings → Sound → Menu music → Your music plays them one after another, never the same twice running. Reload music reads the folder again. Up to 500 files. The idea is from the TyroShelf fork."],
+        ["Saved looks", "Settings → Display → Looks keeps the look you have now (theme, background, interface size, clock, home layout, order, filter, sound and menu music, museum scene) under a name; Apply puts it all back in one press. Rename, Update and Delete are there too. The idea is from the saved workspaces of the 0libote launcher."],
+        ["Português (Brasil)", "Settings → Display → Language. The translation is from Thanks2111's fork; the screen reloads to switch."],
+        ["Discord status", "Settings → Display → Show what I'm playing on Discord: while a game runs, your profile says Playing with its name. Off by default; it needs a free Discord application id and only talks to the Discord app on your computer."],
+        ["Home on Linux", "The Home key, the Guide button and the menu request open the quick menu in the shelf's own window, where the keyboard and controller work."]
+      ] },
+      { h: "Consoles and emulators", items: [
+        ["An original Xbox shelf", "Disc images (.iso, .xiso) from an xbox folder, started in xemu full screen, with box art, manuals and a black Xbox case. xemu needs its BIOS, boot ROM and hard disk set up first."],
+        ["Portable emulators", "Settings → Consoles → Find emulators in a folder looks for every emulator (T)rustyShelf knows in a folder you choose, four folders deep, even on another drive; RetroAchievements shows whether DuckStation, RetroArch and Flycast are signed in, portable or installed."],
+        ["More emulators found", "DeSmuME for the DS, VisualBoyAdvance-M for the Game Boy shelves, and more DuckStation builds are found and started."],
+        ["Switch 2 sizes", "Unpacked Switch 2 games (a folder with exefs and romfs) show their size."]
+      ] },
+      { h: "Your data and the app", items: [
+        ["Export everything, Import everything", "Settings → System: copy your whole collection (settings, favourites, history, art databases, themes, songs, and the art and manuals next to your games) to a folder, and bring it back on another PC. Nothing is deleted on import."],
+        ["A start for Linux", "start-trustyshelf.sh runs (T)rustyShelf from the source on any Linux with Node.js: it installs what it needs on the first run and repairs Electron if its download failed. --windowed starts in a window; the idea is from wouldja's launcher."],
+        ["Versions and updates", "The version reads like the releases (1.1.0.0), the wording says Updates instead of beta, and the update check reads this repository's releases."]
+      ] }
+    ]
+  },
+  {
     version: '1.0.1.0', android: '1.0.1.0', date: '2026-11-08', title: 'Custom games on any shelf, and fixes from Boxshelf\'s reports',
     highlights: [
       'Custom games: each gets its own page, with launch arguments and a Platform: Custom, PC or any console\'s shelf',

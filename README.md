@@ -214,6 +214,12 @@ played, most played, rating or genre, and show all games, favorites, played or n
 shelf and the museum, and is remembered. L1/R1 (Z/C) then jump between sections — letters, years, genres or play-time
 bands — and the museum puts a brass divider tab on the shelf edge where each section starts.
 
+*(new in (T)rustyShelf)* When some of your games are greyed (an Epic game that isn't installed yet), the filter row also has
+**Installed**, to show only what you can play now. Settings → Display → **Looks** saves the look you have now (theme,
+background, interface size, clock, home layout, order, filter, sound and menu music, the museum's scene) under a name; **Apply**
+puts it all back in one press (the screen reloads), and each look can be renamed, updated or deleted. Looks are kept in
+`data/config.json`, so Export everything carries them too.
+
 The speaker beside the clock mutes; hover it for a volume slider. On the keyboard, - and = nudge the volume.
 
 ## PC games without Steam on Linux *(new in (T)rustyShelf)*
@@ -235,6 +241,25 @@ with the Home menu and the quit combo like any game.
   publishes); then sign in with Epic's own page. Every game you own is on the shelf: installed ones play, the others
   are greyed out and Play offers to install them, in the background. The Epic library page installs, updates and
   uninstalls; new games go to the PC games folder unless you choose another.
+- **Epic downloads and storage** *(new in (T)rustyShelf)*. Installs and updates run in a queue, one at a time, kept in
+  `data/epic-downloads.json`: Settings → PC games → **Downloads** shows each one's progress, speed and time left, and can
+  Pause it (what was downloaded stays; Resume goes on from there), move it up or remove it; the quick menu has an Epic
+  downloads row. Details → **Installation** sets an Epic game to installed or not installed by hand when the shelf gets it
+  wrong. Settings → PC games → **Storage** lists every installed PC game with its size, by drive, and each drive's free
+  room (the sizes are the ones already known: Steam's own, or a folder measured in the background).
+
+## PC games on Windows: HoYoPlay, window mode and administrator rights *(new in (T)rustyShelf)*
+
+- **HoYoPlay.** Settings → PC games → *Show installed HoYoPlay games* puts Genshin Impact, Honkai: Star Rail, Zenless Zone
+  Zero and Honkai Impact 3rd (and their China versions) on the PC shelf, found through HoYoPlay's own registry entries
+  and started from their own folders.
+- **Window mode.** Details → **Window**, on a PC game (Quiver, GOG, HoYoPlay, the PC games folder, programs you added): each
+  press goes from *the game's own* to **Borderless** (for a game with no fullscreen of its own: once its window is up, its
+  frame and title bar come off and it covers its screen, kept that way while it runs; a small PowerShell helper does it and
+  stops with the game) to **Windowed** (the game stays a window and the taskbar stays). The choice is kept with the game in
+  `data/config.json`. A game that runs as administrator keeps its own mode: Windows doesn't let another program change its
+  window.
+- **Administrator rights.** A program that asks for them is started through Windows' own prompt instead of not starting.
 
 ## PC (Steam) art
 
@@ -249,6 +274,10 @@ where it comes from (your pick, the store's box art, Steam's art, or a made-up c
 
 Settings → Sound: six voices (Aero is the default), a master volume, and an optional (off by default) ambient bed that follows the
 shelf with its own level slider.
+
+*(new in (T)rustyShelf)* **Your own music**: put music files (mp3, ogg, opus, wav, flac, m4a, aac and more; sub-folders too, up to 500
+files) in the `Music` folder beside the app (the `Songs` folder counts as well), then Settings → Sound → Menu music → **Your
+music**. The tracks play one after another, never the same twice running. *Reload music* reads the folder again. (Windows and Linux.)
 
 ## RetroAchievements
 

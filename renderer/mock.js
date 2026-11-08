@@ -31,6 +31,10 @@ const emu={gc:"Dolphin\\Dolphin.exe",wii:"Dolphin\\Dolphin.exe",wiiu:"Cemu\\Cemu
 const folder={gc:"Gamecube",wii:"Wii",wiiu:"Wii U",sw:"Switch",psp:"PSP",ps3:"PS3",n3ds:"3DS"};
 // ?sw2=1 (beta.3 device test): a Switch 2 shelf with three Eglantine builds, for Settings → Switch 2 → Builds. Off by default,
 // so the other passes keep their console counts
+const curVer=()=>{const e=(window.BS_WHATSNEW||[])[0];return (location.search.match(/[?&]ver=([\w.-]+)/)||[])[1]||(e&&e.version)||"1.0.1.0"};
+const updNewer=()=>{if(!/[?&]update=newer/.test(location.search))return null;const W=window.BS_WHATSNEW||[],a=W[0],b=W[1];if(!a||!b)return null;
+  const md=["## "+a.title,"",...(a.highlights||[]).map(h=>"- "+h),"",...(a.sections||[]).flatMap(x=>["### "+x.h,"",...x.items.map(i=>"- **"+i[0]+"**: "+i[1]),""])].join("\n");
+  return {current:b.version,latest:a.version,newer:true,url:"https://github.com/GGStonks/t-rustyshelf/releases/tag/v"+a.version,notes:md,links:{page:"https://github.com/GGStonks/t-rustyshelf",releases:"https://github.com/GGStonks/t-rustyshelf/releases",issues:"https://github.com/GGStonks/t-rustyshelf/issues/new/choose"},checkedAt:Date.now()}};
 const SW2=/[?&]sw2=1/.test(location.search),PCX=/[?&]pcx=1/.test(location.search);let customPick=0; // (supalii: each "Add one program" picks a new program)
 if(SW2){consoles.push({id:"sw2",name:"Switch 2",emulatorName:"Eglantine",exeNames:["eglantine.exe"],extensions:["nsp","xci","nup"],gameArgs:'-f -g "{rom}"'});titles.sw2=["Glimmer Kart","Hollow Ridge","Tidal Run"];emu.sw2="Switch 2 emu\\Selvet Forks\\performance-6\\eglantine.exe";folder.sw2="Switch 2"}
 // ?retro=1 (beta.6 device test): a few of the retro shelves (RetroArch, DuckStation) with games, for their cases, titles,
@@ -187,8 +191,9 @@ window.trustyshelf={
   restoreSettings:async()=>{config=Object.assign(JSON.parse(JSON.stringify(config)),{ui:Object.assign({},config.ui,{theme:"aurora"})});(apiHooks.lib||[]).forEach(f=>f({restored:1}));(apiHooks.hist||[]).forEach(f=>f({restored:1}));return {ok:true}},
   reportProblem:async()=>({ok:true,file:"C:\\Users\\you\\Desktop\\TrustyShelf problem report.zip"}),
   // (1.82) the beta page: a newer beta is out (tests check the Settings rows and the shelf's notice)
-  updateCheck:async()=>({current:"1.0.1.0",latest:"1.0.1.0",newer:false,url:"https://github.com/GGStonks/t-rustyshelf/releases",notes:""}),
-  onUpdate:cb=>{if(/[?&]update=1/.test(location.search))setTimeout(()=>cb({current:"1.0.1.0",latest:"1.0.1.0",newer:false,url:"https://github.com/GGStonks/t-rustyshelf/releases",notes:""}),400)},
+  // the fork's own versions: up to date, or (?update=1, for the update card) the app one release behind, with the newest release's real notes (renderer/whatsnew.js)
+  updateCheck:async()=>{const n=updNewer();return n||{current:curVer(),latest:curVer(),newer:false,url:"https://github.com/GGStonks/t-rustyshelf/releases",notes:""}},
+  onUpdate:cb=>{if(/[?&]update=(1|newer)/.test(location.search))setTimeout(()=>{const n=updNewer();if(n)cb(n)},400)}, // (?update=newer: the app one release behind; ?update=1: up to date, nothing to show)
   clearHistory:async()=>{(apiHooks.hist||[]).forEach(f=>f({cleared:1}));return {ok:true}},
   onHistoryChanged:fn=>{(apiHooks.hist=apiHooks.hist||[]).push(fn)},
   onLibraryChanged:fn=>{(apiHooks.lib=apiHooks.lib||[]).push(fn)},
@@ -222,9 +227,9 @@ window.trustyshelf={
   getAutostart:async()=>({enabled:false}),setAutostart:async v=>({enabled:!!v,how:"shortcut"}),
   songs:async()=>[],songRead:async()=>{throw new Error("Preview mode")},
   // ((T)rustyShelf) your own menu music: ?music=0 pretends the Music folder is empty; else three short silent WAVs as blob addresses
-  musicList:async()=>{if(/[?&]music=0/.test(location.search))return [];window.__mockTracks=window.__mockTracks||["Track A","Track B","Track C"].map((n,i)=>{const rate=8000,sec=2+i,n16=rate*sec,b=new ArrayBuffer(44+n16*2),v=new DataView(b),w=(o,t)=>{for(let k=0;k<t.length;k++)v.setUint8(o+k,t.charCodeAt(k))};
+  ...((()=>{const q=(location.search.match(/[?&]platform=(\w+)/)||[])[1];return (q||(window.Capacitor?'android':'web'))!=='android'&&!/[?&]fakeNative=1/.test(location.search)})()?{musicList:async()=>{if(/[?&]music=0/.test(location.search))return [];window.__mockTracks=window.__mockTracks||["Track A","Track B","Track C"].map((n,i)=>{const rate=8000,sec=2+i,n16=rate*sec,b=new ArrayBuffer(44+n16*2),v=new DataView(b),w=(o,t)=>{for(let k=0;k<t.length;k++)v.setUint8(o+k,t.charCodeAt(k))};
       w(0,"RIFF");v.setUint32(4,36+n16*2,true);w(8,"WAVEfmt ");v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,rate,true);v.setUint32(28,rate*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,"data");v.setUint32(40,n16*2,true);
-      return {name:n,url:URL.createObjectURL(new Blob([b],{type:"audio/wav"}))}});return window.__mockTracks},openMusicFolder:async()=>true,
+      return {name:n,url:URL.createObjectURL(new Blob([b],{type:"audio/wav"}))}});return window.__mockTracks},openMusicFolder:async()=>true}:{}), // (Android has no Music folder)
   gameWindow:async(id,w)=>{config.games=config.games||{};const o=config.games[id]=config.games[id]||{};if(w)o.window=w;else delete o.window;if(!Object.keys(o).length)delete config.games[id];window.__winCalls=(window.__winCalls||[]).concat({id,w});return {window:w||"",games:config.games}}, // ((T)rustyShelf) a PC game's window mode
   library:async()=>[],libraryCover:async()=>null,libraryPages:async()=>[],stremioLibrary:async()=>[],stremioPoster:async()=>null,stremioDetails:async()=>null,
   tvScan:async()=>true,tvList:async()=>[],tvAdFor:async()=>null,tvLocal:async()=>null,

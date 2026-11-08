@@ -50,8 +50,8 @@ module.exports = async function musicPass({ browser, base, check, newPage, OUT }
       // the quick menu: chips, switching, Off (stops it, hides the volume chips), back on, volume; each saved
       const q = await page.evaluate(QM, { row: 'Customize', act: [['music', 'night'], ['music', 'off'], ['music', 'glow'], ['mvol', '0.7']] });
       const [a, b, c, d] = q.steps;
-      check('Music (Windows): the quick menu\'s Customize offers Menu music (Drift, Night, Glow, Off) and Music volume (Quiet, Soft, Full)',
-        q.music.join() === 'drift,night,glow,off' && q.mvol.join() === '0.2,0.4,0.7', `${q.music.join()} · ${q.mvol.join()}`);
+      check('Music (Windows): the quick menu\'s Customize offers Menu music (Drift, Night, Glow, Your music, Off) and Music volume (Quiet, Soft, Full)',
+        q.music.join() === 'drift,night,glow,own,off' && q.mvol.join() === '0.2,0.4,0.7', `${q.music.join()} · ${q.mvol.join()}`);
       check('Music (Windows): choosing a track switches it, Off stops it (and hides the volume), the volume applies; each is saved',
         !!(a && a.now && a.now.track === 'night' && a.saved === 'night' && b && !b.now && b.saved === 'off' && b.mvolShown === 0 && c && c.now && c.now.track === 'glow' && c.saved === 'glow'
           && d && d.now && Math.abs(d.now.level - .7) < .01 && d.saved === .7), JSON.stringify(q.steps).slice(0, 400));

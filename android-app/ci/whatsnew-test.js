@@ -40,19 +40,21 @@ module.exports = async function whatsNewPass({ browser, base, check, OUT }) {
     check('What\'s new: a fresh install shows no card (it remembers the version for next time)', !fresh.card && fresh.seen === '1.82.0-beta.8', JSON.stringify(fresh));
 
     // a newer version out
-    await ready('?platform=windows&shelf=1&update=1');
+    await ready('?platform=windows&shelf=1&update=newer');
     let u = null; for (let i = 0; i < 60 && !u; i++) { await pause(300); u = await card(); }
     await page.screenshot({ path: path.join(OUT, 'whatsnew-update.png') });
+    // the fork's own releases: the app is one release behind, the newest release's real notes (renderer/whatsnew.js) are the release's text
+    const rel = await page.evaluate(() => ({ v: BS_WHATSNEW[0].version, hl: BS_WHATSNEW[0].highlights })), cut = t => t.length > 140 ? t.slice(0, 137) + '…' : t, vre = rel.v.replace(/\./g, '\\.');
     check('Update: a newer version shows a card with its highlights as plain text (no Markdown or HTML from the release)',
-      !!u && !u.wide && /1\.82\.0-beta\.2 is out/.test(u.title) && u.items.length === 3 && u.items[0] === 'Video previews in Details' && u.items[1] === 'A new Details page' && !/\*\*|&lt;b|<b>/.test(u.html),
+      !!u && !u.wide && new RegExp(vre + ' is out').test(u.title) && u.items.length === 3 && u.items[0] === cut(rel.hl[0]) && u.items[1] === cut(rel.hl[1]) && !/\*\*|&lt;b|<b>/.test(u.html),
       JSON.stringify(u && { title: u.title, items: u.items }));
     await page.keyboard.press('Enter'); await pause(1800);
     const st = await page.evaluate(() => document.body.innerText);
     await page.screenshot({ path: path.join(OUT, 'whatsnew-settings.png') });
     check('Update: See what\'s new opens Settings → System → What\'s new with the new version\'s notes, its download and this version\'s notes',
-      /What.s new/.test(st) && /New: \(T\)rustyShelf 1\.82\.0-beta\.2/i.test(st) && /Get \(T\)rustyShelf 1\.82\.0-beta\.2/i.test(st) && /Video previews in Details/.test(st), st.split('\n').filter(l => /new|\(T\)rustyShelf|Video/i.test(l)).slice(0, 6).join(' | '));
+      /What.s new/.test(st) && new RegExp('New: \\(T\\)rustyShelf ' + vre, 'i').test(st) && new RegExp('Get \\(T\\)rustyShelf ' + vre, 'i').test(st) && st.includes(rel.hl[0].slice(0, 40)), st.split('\n').filter(l => /new|\(T\)rustyShelf|Video/i.test(l)).slice(0, 6).join(' | '));
     await page.evaluate(() => window.Settings && Settings.close && Settings.close()); await pause(600);
-    await ready('?platform=windows&shelf=1&update=1'); await pause(7500);
+    await ready('?platform=windows&shelf=1&update=newer'); await pause(7500);
     check('Update: the same version\'s card isn\'t shown twice', !(await card()));
     // (beta.8) a Steam Deck in Desktop Mode, (T)rustyShelf not started by Steam: a card says once how to get the controller in
     // games (start from Steam), and its button adds (T)rustyShelf to Steam. Started by Steam: no card
