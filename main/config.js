@@ -59,7 +59,7 @@ function defaults() {
     // Art Studio: styles = per console shelf style (a console without one follows defaultArtStyle(ui), i.e. the old Box art
     // region / Prefer HD settings, so nothing changes until a style is chosen); locks = per game parts auto-fetch never touches
     art: { styles: {}, locks: {} },
-    ui: { sound: true, startFullscreen: true, buttons: 'auto', performance: 'auto', quitCombo: true, quitComboKeys: 'l3+r3', soundTheme: 'aero', volume: .7, ambient: false, ambientLevel: .02, music: 'off', musicLevel: .4, rumble: true, soundRev: 4, autoCovers: false, autoManuals: false, artLibrary: '', attract: true, attractMinutes: 3, shuffleAll: true, favorites: [], collections: [], background: 'blur', theme: 'spectrum', sort: 'az', filter: 'all', museumLight: 'gallery', homeMenu: true, homeLayout: 'side', showSize: true, hideTaskbar: true, uiScale: 1, previews: 'off', previewSound: false, previewYoutube: true, previewClips: true, previewDirs: [], previewDelay: 1.5, previewHint: false, clipHint: false, deckHint: false, lastSeenVersion: '', // (beta.7) video previews; lastSeenVersion: the version whose What's new was shown: off / details / shelf (Details and behind the shelf); the first run asks
+    ui: { sound: true, startFullscreen: true, buttons: 'auto', performance: 'auto', quitCombo: true, quitComboKeys: 'l3+r3', soundTheme: 'aero', volume: .7, language: 'en', ambient: false, ambientLevel: .02, music: 'off', musicLevel: .4, rumble: true, soundRev: 4, autoCovers: false, autoManuals: false, artLibrary: '', attract: true, attractMinutes: 3, shuffleAll: true, favorites: [], collections: [], background: 'blur', theme: 'spectrum', sort: 'az', filter: 'all', museumLight: 'gallery', homeMenu: true, homeLayout: 'side', showSize: true, hideTaskbar: true, uiScale: 1, previews: 'off', previewSound: false, previewYoutube: true, previewClips: true, previewDirs: [], previewDelay: 1.5, previewHint: false, clipHint: false, deckHint: false, lastSeenVersion: '', // (beta.7) video previews; lastSeenVersion: the version whose What's new was shown: off / details / shelf (Details and behind the shelf); the first run asks
       // 1.55 Settings
       updateCheck: true, // (1.82) Settings → System → Check for new betas
       openInto: 'last', display: '', safeArea: 100, clock: 'full', clock24: false, reduceMotion: false, dimMinutes: 0, confirmButton: 'auto', scrollSpeed: 'normal', artRegion: 'auto', audioOut: '', hidden: [], museumStyle: { walkIn: true } }
@@ -106,6 +106,7 @@ function upgrade(cfg) {
     const MU = { calm: 'drift', lounge: 'night', chime: 'glow' }; if (MU[cfg.ui.music]) cfg.ui.music = MU[cfg.ui.music];
     if (!['drift', 'night', 'glow', 'off'].includes(cfg.ui.music || 'drift')) cfg.ui.music = 'drift';
     if (!['chime', 'crystal', 'pulse', 'horizon', 'keys'].includes(cfg.ui.bootSound || 'chime')) cfg.ui.bootSound = 'chime';
+    if (!['en', 'pt'].includes(cfg.ui.language)) cfg.ui.language = 'en'; // ((T)rustyShelf) English, or Português (Brasil) (renderer/i18n.js, shared/i18n-main.js)
   }
   for (const s of CONSOLES) {
     const c = cfg.systems[s.id];

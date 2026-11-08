@@ -177,6 +177,7 @@ function build(){
   {g:"Games",id:"custom",name:"Custom games",ic:"pc",lead:"Recomps, PC ports and any other program. Each goes on the Custom shelf, or on PC or a console's shelf if you choose its Platform. Quiver Launcher's games stay on Custom.",rows:[{t:"dyn",fn:customRows}]},
   {g:"Games",id:"apps",name:"Apps",ic:"apps",dot:()=>Object.values(cfg.apps||{}).some(a=>a&&a.enabled!==false&&a.path)?"ok":null,lead:"Stremio and Nuvio, launched from the Media shelf.",rows:appRows},
   {g:"Look & sound",id:"display",name:"Display",ic:"display",lead:"How the shelf looks from the couch.",rows:[
+    C("Language","ui.language",[["en","English"],["pt","Português (Brasil)"]],"en","The language the screen and the system windows (open, save, errors) are shown in. The screen reloads to switch.",{keys:"language idioma portuguese portugues brasil translate english",live:()=>{(async()=>{try{await save()}catch{}location.reload()})()}}),
     C("Interface size","ui.uiScale",[[1,"Standard"],[1.15,"Large"],[1.3,"Extra large"]],1,"Bigger text and buttons for a TV across the room.",{more:"Large suits most 55\" and bigger TVs at 2–3 m. Extra large for very far seating.",live:()=>fit(),keys:"zoom text big small scale"}),
     // (1.78) no peek: the page stays put and takes on the theme's colour at once; the shelf behind switches once you stop on a
     // theme (stepping through them quickly used to fade the page out and in and cross-fade the shelf on every step)

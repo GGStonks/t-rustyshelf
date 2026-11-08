@@ -4051,7 +4051,7 @@ function applyUi_(u){
   if("attractMinutes" in u||"attract" in u){lastInputAt=performance.now();if(attract)wake()} // a new wait starts from now
   if("effects" in u||"performance" in u){if("performance" in u&&window.Perf)Perf.set(u.performance||"auto");applyEffects();if(window.ThemeFx&&ThemeFx.refresh)ThemeFx.refresh()}
 }
-function applyUiAll(){const u=uiNow();applyUi_({safeArea:u.safeArea,reduceMotion:u.reduceMotion,clock:u.clock,clock24:u.clock24,confirmButton:u.confirmButton,scrollSpeed:u.scrollSpeed,audioOut:u.audioOut,dimMinutes:u.dimMinutes})}
+function applyUiAll(){try{if(cfgInfo&&cfgInfo.config)localStorage.setItem("bs.lang",cfgInfo.config.ui.language==="pt"?"pt":"en")}catch{} /* (the translation reads it when the page loads) */const u=uiNow();applyUi_({safeArea:u.safeArea,reduceMotion:u.reduceMotion,clock:u.clock,clock24:u.clock24,confirmButton:u.confirmButton,scrollSpeed:u.scrollSpeed,audioOut:u.audioOut,dimMinutes:u.dimMinutes})}
 function applyUi(partial){if(!partial||typeof partial!=="object")return;try{if(cfgInfo){const ui=cfgInfo.config.ui;for(const k of Object.keys(partial))ui[k]=partial[k]}applyUi_(partial)}catch(e){console.warn("applyUi",e)}}
 // Hidden games: the list for Settings (from the whole scan, hidden ones included) and the switch itself
 function hiddenList(){const hid=hiddenSet();if(!hid.size||!lastLib)return [];const out=[];lastLib.forEach(s=>{
