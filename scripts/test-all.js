@@ -32,7 +32,7 @@ const JOBS = Math.max(1, +arg('jobs') || 8), CAP = arg('cap') && arg('cap') !== 
 // the tests, by kind (the first of each is the slowest: they start first)
 const NODE = ['detect', 'pad', 'portable', 'dataexport', 'release-version', 'presence', 'epicdl', 'storage', 'windowmode', 'hoyoplay', 'music', 'looks', 'artmatch'];
 const DESKTOP = ['app', 'pc', 'xbox', 'home', 'music-app', 'windowmode-app', 'epicdl-app', 'consolebox-app', 'artmatch-app'];
-const DEMO = ['android-artcard', 'android-pc', 'usermusic', 'windowmode', 'looks', 'artmatch'];
+const DEMO = ['android-artcard', 'android-pc', 'usermusic', 'windowmode', 'looks', 'artmatch', 'padnote'];
 const GROUPS = ['screens', 'thor', 'windows'];
 // not tests of their own: run by a device group, or a probe
 const NOT_STANDALONE = new Set(['heat-probe.js', 'web-device-test.js', 'device-test-parallel.js']);
