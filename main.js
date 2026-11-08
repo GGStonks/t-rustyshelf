@@ -880,6 +880,8 @@ function applyCfg(next) { const prev = cfg, hadMenu = cfg.ui.homeMenu !== false;
   try { cfgChanged(prev, cfg); } catch (e) { log('settings change', e.message); }
   return cfg; }
 handle('detect', () => detectAll());
+// ((T)rustyShelf) Settings → Consoles → Find emulators in a folder: the emulator programs in a folder the player picked
+handle('detect:folder', ({ dir } = {}) => require('./main/detect').emulatorsIn(typeof dir === 'string' ? dir.slice(0, 1024) : ''));
 // The last scan is kept on disk so the next launch can show the shelves immediately (as console UIs do) while a fresh
 // scan runs behind them; the renderer only rebuilds if something actually changed.
 // Wii U e-manuals start on their contents page: the box front goes first, so the booklet opens on a cover like a printed one

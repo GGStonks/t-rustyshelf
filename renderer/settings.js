@@ -154,6 +154,7 @@ function build(){
     {t:"consoles",label:"Consoles",info:""},
     H("For every console"),
     A("Find emulators again",()=>detecting?"Searching…":"Search","Looks in the usual install places and your (T)rustyShelf folder for emulators and games folders you haven't set up yet, and fills in any console that has nothing set.",runDetect,{keys:"detect scan auto find"}),
+    ...(api.emulatorsIn?[A("Find emulators in a folder",()=>detecting?"Searching…":"Choose","Portable emulators kept anywhere (another drive, a USB stick): choose the folder they're in and (T)rustyShelf looks through it, four folders deep, for every emulator it knows. Each console with no emulator set gets the one found; the ones already set are left as they are.",runFolderDetect,{keys:"portable emulators folder find search usb drive"})]:[]),
   ]},
   {g:"Games",id:"pc",name:"PC games",ic:"pc",lead:onLinux()?"Your Steam games, your Epic library and your PC games folder on the PC shelf. Windows games play through Wine / Proton.":"Your installed Steam games, on a shelf of their own.",rows:[
     T("Show installed Steam games","steam.enabled",true,"Adds a PC shelf with every game Steam has installed. Uninstalled games are left out.",{rescan:true,keys:"steam"}),
@@ -456,7 +457,11 @@ let raEmu=null,raEmuBusy=false,emuAsk=null;
 const RA_SYS={gc:"GameCube",wii:"Wii",psp:"PSP",ps2:"PS2"};
 const RA_STEPS={Dolphin:"1. Open Dolphin.\n2. Config → Achievements.\n3. Log in with your RetroAchievements username and password, then tick Enable.\n4. Close Dolphin. (T)rustyShelf checks again when you come back.",
   PPSSPP:"1. Open PPSSPP.\n2. Settings → Tools → RetroAchievements.\n3. Log in with your RetroAchievements account.\n4. Close PPSSPP. (T)rustyShelf checks again when you come back.",
-  PCSX2:"1. Open PCSX2.\n2. Settings → Achievements.\n3. Tick Enable Achievements, then press Login.\n4. Close PCSX2. (T)rustyShelf checks again when you come back."};
+  PCSX2:"1. Open PCSX2.\n2. Settings → Achievements.\n3. Tick Enable Achievements, then press Login.\n4. Close PCSX2. (T)rustyShelf checks again when you come back.",
+  // ((T)rustyShelf: portable emulators, asked for in Boxshelf's discussions)
+  DuckStation:"1. Open DuckStation.\n2. Settings → Achievements.\n3. Tick Enable Achievements, then press Login and sign in.\n4. Close DuckStation. (T)rustyShelf checks again when you come back.",
+  RetroArch:"1. Open RetroArch.\n2. Settings → Achievements.\n3. Turn Achievements on and enter your RetroAchievements username and password.\n4. Close RetroArch (it saves on exit). (T)rustyShelf checks again when you come back.",
+  Flycast:"1. Open Flycast.\n2. Settings → Achievements.\n3. Tick Enabled, enter your username and password, then press Login.\n4. Close Flycast. (T)rustyShelf checks again when you come back."};
 function loadRaEmu(manual){if(!api.raEmulators||raEmuBusy)return;raEmuBusy=true;if(isOpen)bump();
   Promise.resolve(api.raEmulators()).then(l=>{raEmu=Array.isArray(l)?l:[];if(manual)toast(raSummary()||"Checked")}).catch(e=>{raEmu=raEmu||[];if(manual)toast(errMsg(e))}).finally(()=>{raEmuBusy=false;if(isOpen)bump()})}
 const emuOf=sys=>(raEmu||[]).find(x=>x.system===sys);
@@ -978,6 +983,16 @@ function play(k,d){if(window.Sound&&Sound.play&&gp("ui.sound")!==false)try{Sound
 let sndT=0;function soundSoon(k){clearTimeout(sndT);sndT=setTimeout(()=>shelf("sound",{preview:k}),260)}
 
 /* ---------- async bits: detection, services, system actions ---------- */
+ // ((T)rustyShelf, asked for in Boxshelf's discussions) portable emulators kept anywhere: the folder you choose
+async function runFolderDetect(){if(detecting||!api.emulatorsIn)return;const p=await pick({kind:"folder",title:"Choose the folder your emulators are in"}),dir=typeof p==="string"?p:p&&p.path;if(!dir)return;
+  detecting=true;bump();const my=openId;
+  try{const r=await api.emulatorsIn(dir);if(my!==openId||!isOpen){detecting=false;return}
+    const found=Object.entries((r&&r.systems)||{}),name=id=>(consoleList().find(c=>c.id===id)||{}).name||id,set=[],had=[];
+    for(const[id,exe]of found){const c=cfg.systems&&cfg.systems[id];if(!c)continue;if(!c.emulator){c.emulator=exe;set.push(name(id))}else if(c.emulator!==exe)had.push(name(id))}
+    const list=a=>a.length>4?a.slice(0,4).join(", ")+` and ${a.length-4} more`:a.join(", ");
+    toast(!found.length?`No emulators found in ${folderName(dir)}`:set.length?`Set up ${list(set)}${had.length?` (${had.length} already had one)`:""}`:`Found emulators for ${list(had)}, which already have one set`);
+    if(set.length)changed({rescan:true})}
+  catch(e){toast(e&&e.message||"Couldn't look through that folder")}finally{detecting=false;bump()}}
 async function runDetect(){if(detecting||!api.detect)return;detecting=true;bump();const my=openId;
   try{const d0=await api.detect();
     // Settings closed (or reopened) while it searched: its config was already saved, so filling it in now would save a stale copy over newer changes

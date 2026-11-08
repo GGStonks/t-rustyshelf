@@ -9,22 +9,25 @@ const { expand, isFile, isDir, readDir, findFile, appRoot } = require('./paths')
 // (1.82) Each folder searched is listed once, two folders deep, and every console and app looks its program names up in
 // that list: the same answer as findFile (the first match, breadth first), without walking the Desktop, Downloads and
 // Documents again for each of a dozen consoles while the setup window waits.
-function makeIndex() {
+// ((T)rustyShelf) maxDepth / maxDirs: a folder the player picks (Find emulators in a folder) is looked through deeper, but
+// never more than maxDirs folders (a whole drive picked by mistake stays quick)
+function makeIndex(maxDepth = 2, maxDirs = Infinity) {
   const cache = new Map();
   return dir => {
     const key = dir.toLowerCase(); let m = cache.get(key); if (m) return m;
-    m = new Map(); let seq = 0; const queue = [[dir, 0]];
-    while (queue.length) {
+    m = new Map(); let seq = 0, dirs = 0; const queue = [[dir, 0]];
+    while (queue.length && dirs++ < maxDirs) {
       const [d, depth] = queue.shift();
       for (const ent of readDir(d)) {
         const full = path.join(d, ent.name);
         if (ent.isFile()) { const k = ent.name.toLowerCase(); if (!m.has(k)) m.set(k, { full, seq: seq++ }); }
-        else if (ent.isDirectory() && depth < 2 && !ent.name.startsWith('.')) queue.push([full, depth + 1]);
+        else if (ent.isDirectory() && depth < maxDepth && !ent.name.startsWith('.') && !SKIP_DIRS.test(ent.name)) queue.push([full, depth + 1]);
       }
     }
     cache.set(key, m); return m;
   };
 }
+const SKIP_DIRS = /^(\$recycle\.bin|system volume information|windows|node_modules)$/i;
 function findIn(index, dir, exeNames) {
   const m = index(dir); let best = null;
   for (const n of exeNames) {
@@ -119,4 +122,13 @@ async function detectAll() {
 // one console's emulator and games folders (a console added in an update, found once as setup would have)
 function detectSystem(id) { const s = CONSOLES.find(c => c.id === id); return s ? { emulator: findExe(s.emulatorFolders, s.exeNames), romDirs: findRomDirs(s) } : null; }
 
-module.exports = { detectAll, detectSystem, findSteam };
+// ((T)rustyShelf, asked for in Boxshelf's discussions) portable emulators kept anywhere: the emulator programs in a folder
+// the player picks (four folders deep), per console: { systems: { <console id>: program } }
+function emulatorsIn(dir) {
+  const systems = {}; if (!dir || !isDir(dir)) return { systems };
+  const index = makeIndex(4, 4000);
+  for (const s of CONSOLES) { if (s.standalone || !(s.exeNames || []).length) continue; const hit = findIn(index, dir, s.exeNames); if (hit) systems[s.id] = hit; }
+  return { systems };
+}
+
+module.exports = { detectAll, detectSystem, findSteam, emulatorsIn };

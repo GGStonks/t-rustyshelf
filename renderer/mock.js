@@ -104,6 +104,7 @@ window.trustyshelf={
       previewCount:async()=>{await wait(300);return {total:23,systems:[{id:"gc",name:"GameCube",n:9,of:13},{id:"wii",name:"Wii",n:5,of:7},{id:"psp",name:"PSP",n:4,of:5},{id:"ps3",name:"PS3",n:5,of:7}],steamBytes:18874368}}}})(),closeTrailer:async()=>true,onTrailerClosed:()=>{},
   getConfig:async()=>({...((location.search.match(/[?&]ver=([\w.-]+)/)||[])[1]?{version:(location.search.match(/[?&]ver=([\w.-]+)/)||[])[1]}:{}) /* (beta.7) ?ver=: the app version, for What's new */,config:JSON.parse(JSON.stringify(config)),consoles,apps:[{id:"stremio",name:"Stremio",exeNames:["stremio.exe"]},{id:"nuvio",name:"Nuvio",exeNames:["Nuvio.exe"]}],appRoot:root}),
   saveConfig:async c=>{config=JSON.parse(JSON.stringify(c));return config},
+  emulatorsIn:async dir=>{await wait(400);return {systems:{wiiu:dir+"\\Cemu Portable\\Cemu.exe",psp:dir+"\\PPSSPP\\PPSSPPWindows64.exe"}}}, // ((T)rustyShelf) Find emulators in a folder
   detect:async()=>{await wait(700);const systems={};consoles.forEach(c=>{if(!c.standalone)systems[c.id]={emulator:root+"\\"+emu[c.id],romDirs:folder[c.id]?[root+"\\ROMS\\"+folder[c.id]]:[]}});return {systems,steam:{path:"C:\\Program Files (x86)\\Steam"},apps:{stremio:{path:"C:\\Users\\you\\AppData\\Local\\Programs\\LNV\\Stremio-4\\stremio.exe"},nuvio:{path:null}},appRoot:root}},
   scan:async()=>{
     const out=[];

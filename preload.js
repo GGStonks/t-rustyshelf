@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('trustyshelf', {
   uiBusy: () => ipcRenderer.send('ui:busy'),
   saveConfig: cfg => call('config:save', cfg),
   detect: () => call('detect'),
+  emulatorsIn: dir => call('detect:folder', { dir }), // ((T)rustyShelf) portable emulators in a folder you pick
   scan: () => call('library:scan'),
   scanIfChanged: () => call('library:scan', { ifChanged: true }),
   cachedLibrary: () => call('library:cached'),
