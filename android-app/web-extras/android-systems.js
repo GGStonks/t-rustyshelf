@@ -1,5 +1,5 @@
-// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
-// android-app/web-extras/android-systems.js apart from the app's name ((T)rustyShelf).
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): most of this file is Boxshelf's
+// android-app/web-extras/android-systems.js; modified for (T)rustyShelf (see the git history).
 // Android: which systems (T)rustyShelf shows and how each emulator app is started with a game.
 // Launch data follows ES-DE's Android rules (es_systems.xml / es_find_rules.xml); newer emulators (Azahar, NetherSX2,
 // Eden, Cemu) are also found by name pattern, and their activity is looked up on the device, so forks and renamed
@@ -11,6 +11,8 @@
 //                       'path' = the plain file path (/storage/emulated/0/…)
 //                 extras: { key: value } where value is '$DOC', '$PATH', '$CORE', '$CFG', or a literal; {bool:true} for booleans
 //                 flags: 'clearTask', 'clearTop'
+//                 ((T)rustyShelf) '$APPID' = a PC game's store id (as a number), '$SOURCE' = its store (STEAM, EPIC, GOG, AMAZON,
+//                 CUSTOM_GAME); stores: the stores an app can start (a game from another store is turned away with a message)
 (function () {
   const VIEW = 'android.intent.action.VIEW', MAIN = 'android.intent.action.MAIN';
   const RA = { id: 'retroarch', name: 'RetroArch', packages: ['com.retroarch.aarch64', 'com.retroarch', 'com.retroarch.ra32'], match: /^com\.retroarch/,
@@ -56,7 +58,16 @@
     pceemu: { name: 'PCE.emu', packages: ['com.PceEmu'], launch: { activity: ['com.imagine.BaseActivity'], data: 'doc' } },
     neoemu: { name: 'NEO.emu', packages: ['com.explusalpha.NeoEmu'], launch: { activity: ['com.imagine.BaseActivity'], data: 'doc' } },
     mame4d: { name: 'MAME4droid', packages: ['com.seleuco.mame4d2024', 'com.seleuco.mame4droid'], launch: { activity: ['com.seleuco.mame4droid.MAME4droid'], action: VIEW, data: 'doc' } },
-    retroarch: RA
+    retroarch: RA,
+    // ((T)rustyShelf) PC games: apps that run Windows / Steam games on Android, each started with the game's store id.
+    // GameNative (github.com/utkarshdalal/GameNative) takes Steam, Epic, GOG and Amazon games and its own custom ones;
+    // DroidDeck (github.com/The412Banner/DroidDeck) takes Steam games. Any other app can be picked in Settings → PC too.
+    gamenative: { name: 'GameNative', packages: ['app.gamenative', 'app.gamenative.gold'], match: /^app\.gamenative/,
+      launch: { activity: ['app.gamenative.MainActivity', '*.MainActivity'], action: 'app.gamenative.LAUNCH_GAME', category: 'android.intent.category.DEFAULT',
+        extras: { app_id: '$APPID', game_source: '$SOURCE' } }, stores: ['STEAM', 'EPIC', 'GOG', 'AMAZON', 'CUSTOM_GAME'] },
+    droiddeck: { name: 'DroidDeck', packages: ['com.droiddeck.launcher'], match: /^com\.droiddeck\.launcher/,
+      launch: { activity: ['*.FrontEndActivity'], action: 'com.droiddeck.launcher.LAUNCH_GAME', category: 'android.intent.category.DEFAULT',
+        extras: { app_id: '$APPID' } }, stores: ['STEAM'] }
   };
   for (const [id, e] of Object.entries(E)) e.id = id;
   // shelves: id (matches the shelf looks), name, emulators in order of preference, RetroArch cores (first = default), file types
@@ -91,9 +102,14 @@
     sys('atari2600', 'Atari 2600', ['retroarch'], ['stella', 'stella2014'], ['a26', 'bin', 'zip', '7z']),
     sys('atarilynx', 'Lynx', ['retroarch'], ['handy', 'mednafen_lynx'], ['lnx', 'zip', '7z']),
     sys('wonderswan', 'WonderSwan', ['retroarch'], ['mednafen_wswan'], ['ws', 'wsc', 'zip', '7z']),
-    sys('dos', 'DOS', ['retroarch'], ['dosbox_pure'], ['zip', 'dosz'])
+    sys('dos', 'DOS', ['retroarch'], ['dosbox_pure'], ['zip', 'dosz']),
+    // ((T)rustyShelf) PC: the files GameNative's Frontend sync writes for every installed game (the format ES-DE reads):
+    // <title>.steam / .epic / .gog / .amazon / .pcgame, each holding the game's id. A name ending in [id] works too.
+    sys('pc', 'PC', ['gamenative', 'droiddeck'], [], ['steam', 'epic', 'gog', 'amazon', 'pcgame'], { storeGames: true })
   ];
+  // ((T)rustyShelf) a PC game's store, from its file's type
+  const STORE_OF = { steam: 'STEAM', epic: 'EPIC', gog: 'GOG', amazon: 'AMAZON', pcgame: 'CUSTOM_GAME' };
   // multi-file games: the .bin/.img tracks are listed by the .cue/.gdi/.m3u that points at them, never as boxes of their own
   const COMPANION = { cue: ['bin', 'img', 'wav', 'ape'], gdi: ['bin', 'raw'], m3u: ['cue', 'chd', 'iso', 'gdi', 'cdi', 'bin', 'img', 'pbp'], ccd: ['img', 'sub'], mds: ['mdf'] };
-  window.BS_ANDROID = { EMULATORS: E, SYSTEMS, COMPANION };
+  window.BS_ANDROID = { EMULATORS: E, SYSTEMS, COMPANION, STORE_OF };
 })();

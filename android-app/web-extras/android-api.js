@@ -1,5 +1,5 @@
-// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
-// android-app/web-extras/android-api.js apart from the app's name ((T)rustyShelf).
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): most of this file is Boxshelf's
+// android-app/web-extras/android-api.js; modified for (T)rustyShelf (see the git history).
 // (T)rustyShelf on Android: the real window.trustyshelf (the Windows build gets it from preload.js).
 // Loaded after mock.js, which provides harmless defaults for everything not listed here; this file replaces the calls
 // that matter on Android: settings, finding emulators, picking folders, scanning, launching and coming back.
@@ -98,6 +98,20 @@
   const ytOff = () => { const f = document.getElementById('bsYt'); if (f) { f.src = 'about:blank'; f.remove(); } };
   const ytPlace = (f, r, show) => { f.style.left = r.x + 'px'; f.style.top = r.y + 'px'; f.style.width = r.w + 'px'; f.style.height = r.h + 'px'; f.style.visibility = show ? 'visible' : 'hidden'; };
   const vkey = n => String(n || '').toLowerCase().replace(/\.[a-z0-9]{2,4}$/, '').replace(/\s*[([][^)\]]*[)\]]/g, '').replace(/-(video|01|02|trailer)$/i, '').replace(/[^a-z0-9]+/g, '');
+  // ((T)rustyShelf) a PC game's store and id: the store from its file's type (.steam, .epic, .gog, .amazon, .pcgame), the id
+  // from a name ending in [id], else from the file itself (GameNative's Frontend sync writes just the id). Kept per file
+  // (its address, size and date), so a rescan doesn't read every file again
+  const storeIdMemo = new Map();
+  async function storeIds(list) {
+    for (const g of list) {
+      g.store = A.STORE_OF[g.ext] || 'CUSTOM_GAME';
+      const base = String(g.file || '').split('/').pop().replace(/\.[^.]+$/, ''), named = /\[(\d{1,10})\]\s*$/.exec(base); // (the file's own name: the title has its [tags] cleaned off)
+      if (named) { g.storeId = +named[1]; g.title = String(g.title || '').replace(/\s*\[\d{1,10}\]\s*$/, ''); continue; }
+      const key = g.uri + '|' + g.sizeBytes + '|' + g.added;
+      if (!storeIdMemo.has(key) && N.readDoc) { let id = 0; try { const m = /\d{1,10}/.exec(String(((await N.readDoc({ uri: g.uri })) || {}).text || '')); id = m ? +m[0] : 0; } catch (e) { log('PC game id', g.file, e && e.message); } storeIdMemo.set(key, id); }
+      g.storeId = storeIdMemo.get(key) || 0;
+    }
+  }
   async function scanSystem(s, c) {
     const files = [], vmap = new Map();
     for (const dir of c.romDirs || []) {
@@ -128,6 +142,7 @@
     // (beta.10) Details → Rename (renameGame): a game's own name, kept as the PC keeps it (config.games["<console>:<file>"].title); fileTitle keeps the scanned one
     const own = (st.config && st.config.games) || {};
     for (const g of games.values()) { const o = own[s.id + ':' + g.file]; if (o && o.title && o.title !== g.title) { g.fileTitle = g.title; g.title = String(o.title); } }
+    if (s.storeGames) await storeIds([...games.values()]);
     return [...games.values()].sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true }));
   }
   async function scanAll() {
@@ -180,7 +195,7 @@
     if (running || Date.now() - justBack < 1500) return;
     try { window.Shelf && Shelf.homeButton && Shelf.homeButton(); } catch (e) { log('home button', e && e.message); }
   })).catch(e => log('home listener', e && e.message));
-  const sub = (v, ctx) => typeof v === 'string' ? v.replace('$DOC', ctx.doc || '').replace('$PATH', ctx.path || '').replace('$CORE', ctx.core || '').replace('$CFG', ctx.cfg || '') : (v && typeof v === 'object' && 'bool' in v ? !!v.bool : v);
+  const sub = (v, ctx) => v === '$APPID' ? Number(ctx.appId) || 0 : typeof v === 'string' ? v.replace('$SOURCE', ctx.source || '').replace('$DOC', ctx.doc || '').replace('$PATH', ctx.path || '').replace('$CORE', ctx.core || '').replace('$CFG', ctx.cfg || '') : (v && typeof v === 'object' && 'bool' in v ? !!v.bool : v);
   async function start(systemId, game) {
     await ready; const s = sysById[systemId], c = st.config.systems[systemId] || {};
     let pkg = pkgOf(c.emulator);
@@ -190,7 +205,12 @@
     // the game's document), which most emulators take; one that doesn't simply opens on its own screen
     const e = emuFor(pkg); if (!e) log('launch: no launch data for', pkg, '- handing it the game as VIEW');
     let spec = e ? Object.assign({}, e.launch, (e.variants || {})[pkg] || {}) : { action: 'android.intent.action.VIEW', data: 'doc' };
-    const ctx = { doc: game && game.uri, path: game && game.file,
+    // ((T)rustyShelf) a PC game is started by its store id: one the app can't start (DroidDeck: Steam only) says so
+    if (s && s.storeGames && game) {
+      if (!game.storeId) throw new Error(`${game.title} has no game id: its ${game.ext} file should hold one (GameNative's Frontend sync writes it), or end its name with [id].`);
+      if (e && e.stores && !e.stores.includes(game.store)) throw new Error(`${e.name} starts ${e.stores.map(x => x[0] + x.slice(1).toLowerCase()).join(', ')} games only. Pick GameNative for this one in Settings → PC.`);
+    }
+    const ctx = { doc: game && game.uri, path: game && game.file, appId: game && game.storeId, source: game && game.store,
       core: s && s.cores.length ? `/data/data/${pkg}/cores/${(c.core || s.cores[0])}_libretro_android.so` : '',
       cfg: `/storage/emulated/0/Android/data/${pkg}/files/retroarch.cfg` };
     const req = { pkg, grant: [] };
@@ -914,6 +934,11 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
   // (unsure: the source couldn't be asked, offline say, so an empty answer doesn't mean "there's none")
   function artGroups(sysId, g, part) {
     const out = [];
+    // ((T)rustyShelf) a Steam game on the PC shelf: Steam's own cover, by its id
+    if (part === 'front' && g.store === 'STEAM' && g.storeId) out.push(async () => ({ urls: [
+      `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${g.storeId}/library_600x900_2x.jpg`,
+      `https://cdn.cloudflare.steamstatic.com/steam/apps/${g.storeId}/library_600x900_2x.jpg`,
+      `https://cdn.cloudflare.steamstatic.com/steam/apps/${g.storeId}/library_600x900.jpg`] }));
     if (TDB_SYS[sysId] && g.uri && (part === 'front' || part === 'disc')) out.push(async () => { const id = await discIdOf(g), urls = [];
       if (id) { const root = 'https://art.gametdb.com/' + TDB_SYS[sysId];
         for (const r of tdbRegs(id).all) { if (part === 'front') urls.push(`${root}/coverHQ/${r}/${id}.png`, `${root}/cover/${r}/${id}.png`); else urls.push(`${root}/disc/${r}/${id}.png`); } }
@@ -950,7 +975,7 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
     n64: 'Nintendo 64', snes: 'Super Nintendo Entertainment System', nes: 'Nintendo Entertainment System', gba: 'Nintendo Game Boy Advance',
     gbc: 'Nintendo Game Boy Color', gb: 'Nintendo Game Boy', megadrive: 'Sega Genesis', saturn: 'Sega Saturn', dreamcast: 'Sega Dreamcast',
     mastersystem: 'Sega Master System', gamegear: 'Sega Game Gear', pcengine: 'NEC TurboGrafx-16', neogeo: 'SNK Neo Geo AES',
-    segacd: 'Sega CD', sega32x: 'Sega 32X', atari2600: 'Atari 2600', atarilynx: 'Atari Lynx', wonderswan: 'WonderSwan', dos: 'MS-DOS' };
+    segacd: 'Sega CD', sega32x: 'Sega 32X', atari2600: 'Atari 2600', atarilynx: 'Atari Lynx', wonderswan: 'WonderSwan', dos: 'MS-DOS', pc: 'Windows' };
   const LB_IMG = 'https://images.launchbox-app.com/', LB_MB = 110, LB_DAYS = 90;
   const lb = { meta: undefined, shards: {}, dropT: 0, job: null, prog: null, L: [] };
   const lbSafe = p => String(p).replace(/[^A-Za-z0-9]+/g, '_');
@@ -1661,6 +1686,7 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
     add('neogeo', 'neogeo', 'neo geo'); add('arcade', 'arcade', 'mame', 'fbneo', 'fba', 'finalburn neo');
     add('segacd', 'segacd', 'sega cd', 'megacd', 'mega cd'); add('sega32x', 'sega32x', '32x', 'sega 32x'); add('atari2600', 'atari2600', 'atari 2600', '2600', 'a2600');
     add('atarilynx', 'atarilynx', 'lynx', 'atari lynx'); add('wonderswan', 'wonderswan', 'wonderswancolor', 'wonderswan color', 'wsc', 'ws'); add('dos', 'dos', 'msdos', 'ms-dos', 'pc dos'); // (beta.9)
+    add('pc', 'pc', 'windows', 'steam', 'gamenative', 'pc games'); // ((T)rustyShelf)
     for (const s of SYS) add(s.id, s.id, s.name, ...(ALIASES[s.id] || []));
     return m; })());
   // "Nintendo GameCube ROMs" → gc; null when the name says nothing (T)rustyShelf knows
@@ -1903,6 +1929,12 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
       'primary:ROMs/Discs': ['Something (USA).iso'], 'primary:ROMs/BIOS': ['scph1001.bin'], 'primary:ROMs/Extras': [] };
     // ?fakeMany=1: a bigger library (tests of the art queue's order and its download limits)
     if (/[?&]fakeMany=1\b/.test(location.search)) for (let i = 1; i <= 30; i++) { lib['primary:ROMs/snes'].push(`Snes Game ${i} (USA).sfc`); lib['primary:ROMs/psx'].push(`Psx Game ${i} (USA).chd`); }
+    // ((T)rustyShelf) ?fakePc=1: a PC folder first (the first folder picked), with GameNative's Frontend sync files (an id
+    // inside each) and one named with its id; GameNative and DroidDeck installed
+    const fakePc = /[?&]fakePc=1\b/.test(location.search);
+    if (fakePc) { const rest = { ...lib }; for (const k of Object.keys(lib)) delete lib[k];
+      Object.assign(lib, { 'primary:ROMs/pc': ['Hollow Knight.steam', 'Celeste.epic', 'Portal 2 [620].steam', 'Readme.txt'] }, rest);
+      window.__fakeDocs = { 'Hollow Knight.steam': '367520', 'Celeste.epic': '9876\n', 'Portal 2 [620].steam': '' }; }
     let pickN = 0; const order = Object.keys(lib).slice(0, 3);
     window.__fakeLaunches = [];
     // box art: "downloads" answer with a few local test pictures (__art/0-3.jpg, served by the device test); folders made
@@ -1947,7 +1979,7 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
     return {
       readText: async ({ name }) => { let t = files[name] || null; try { t = localStorage.getItem('fake:' + name) || t; } catch {} return { text: t }; },
       writeText: async ({ name, text }) => { files[name] = text; try { localStorage.setItem('fake:' + name, text); } catch {} },
-      apps: async () => ({ apps: [{ pkg: 'org.dolphinemu.dolphinemu', label: 'Dolphin' }, { pkg: 'com.retroarch.aarch64', label: 'RetroArch' }, { pkg: 'com.github.stenzek.duckstation', label: 'DuckStation' }, { pkg: 'org.azahar_emu.azahar', label: 'Azahar' }] }),
+      apps: async () => ({ apps: [{ pkg: 'org.dolphinemu.dolphinemu', label: 'Dolphin' }, { pkg: 'com.retroarch.aarch64', label: 'RetroArch' }, { pkg: 'com.github.stenzek.duckstation', label: 'DuckStation' }, { pkg: 'org.azahar_emu.azahar', label: 'Azahar' }, ...(fakePc ? [{ pkg: 'app.gamenative', label: 'GameNative' }, { pkg: 'com.droiddeck.launcher', label: 'DroidDeck' }, { pkg: 'com.winlator', label: 'Winlator' }] : [])] }),
       activities: async ({ pkg }) => ({ activities: pkg.includes('azahar') ? ['org.citra.citra_emu.activities.EmulationActivity', 'org.citra.citra_emu.ui.main.MainActivity'] : [] }),
       folderAccess: async () => ({ uris: [] }),
       pickFolder: async () => { const id = window.__fakePickNext || order[pickN++ % order.length]; window.__fakePickNext = null; const keep = !window.__fakePersistFail; window.__fakePersistFail = false;
@@ -1956,6 +1988,7 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
       openUrl: async ({ url }) => { window.__fakeCalls = (window.__fakeCalls || []).concat(['openUrl:' + url]); }, // (beta.10)
       dropPdf: async ({ path }) => { (__fakeMan.dropped = __fakeMan.dropped || []).push(String(path)); return { removed: true }; }, // (beta.10)
       copyPreview: async ({ uri }) => { window.__copied = (window.__copied || []).concat(String(uri)); return { ok: true, path: window.__previewUrl || '/__test/preview.webm' }; }, // (beta.9: the video played from the app's cache)
+    readDoc: async ({ uri }) => ({ text: (window.__fakeDocs || {})[decodeURIComponent(String(uri)).split('/').pop()] || '' }), // ((T)rustyShelf: a PC game's export file, by its name)
     listFiles: async ({ uri }) => { const id = idOfTree(uri); return { files: (lib[id] || []).map(n => ({ name: n, docId: id + '/' + n, dir: '', ext: n.split('.').pop().toLowerCase(), uri: treeOnly(uri) + '/document/' + encodeURIComponent(id + '/' + n), size: 1e8, mtime: 1.7e12 })) }; },
       listDirs: async ({ uri }) => { const id = idOfTree(uri), kids = new Set();
         for (const k of [...Object.keys(lib), ...Object.keys(dirs)]) if (k.startsWith(id + '/')) kids.add(k.slice(id.length + 1).split('/')[0]);

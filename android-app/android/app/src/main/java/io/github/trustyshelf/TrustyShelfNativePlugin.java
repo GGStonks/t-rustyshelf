@@ -1,5 +1,5 @@
-// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
-// android-app/android/app/src/main/java/io/github/boxshelf/BoxshelfNativePlugin.java apart from the app's name ((T)rustyShelf).
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): most of this file is Boxshelf's
+// android-app/android/app/src/main/java/io/github/boxshelf/BoxshelfNativePlugin.java; modified for (T)rustyShelf (see the git history).
 package io.github.trustyshelf;
 
 import android.content.ActivityNotFoundException;
@@ -185,6 +185,22 @@ public class TrustyShelfNativePlugin extends Plugin {
                 }
                 JSObject r = new JSObject(); r.put("files", out); r.put("dirs", dirs); call.resolve(r);
             } catch (Exception e) { call.reject("Couldn't read that folder: " + e.getMessage()); }
+        });
+    }
+
+    // ((T)rustyShelf) a small text file in a picked folder: a PC game's export file, which holds its store id (GameNative's
+    // Frontend sync writes one per game) { uri } → { text } (its first 4 KB; only content:// documents)
+    @PluginMethod
+    public void readDoc(PluginCall call) {
+        final String u = call.getString("uri");
+        if (u == null || !u.startsWith("content://")) { call.reject("No file given"); return; }
+        io.execute(() -> {
+            try (InputStream in = getContext().getContentResolver().openInputStream(Uri.parse(u))) {
+                if (in == null) { call.reject("Couldn't open that file"); return; }
+                byte[] b = new byte[4096]; int off = 0, n;
+                while (off < b.length && (n = in.read(b, off, b.length - off)) > 0) off += n;
+                JSObject r = new JSObject(); r.put("text", new String(b, 0, off, StandardCharsets.UTF_8)); call.resolve(r);
+            } catch (Exception e) { call.reject("Couldn't read that file: " + e.getMessage()); }
         });
     }
 
