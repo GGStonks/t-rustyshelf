@@ -9,7 +9,7 @@ name: Build/release check
 
 on:
   push:
-    branches: [t-rustyshelf]
+    branches: [t-rustyshelf, t-Rustyshelf]
 
 # the called workflows inherit these: the release job needs to write (create the release)
 permissions:

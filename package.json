@@ -1,12 +1,16 @@
 {
   "name": "trustyshelf",
   "productName": "TrustyShelf",
-  "version": "1.3.0+0",
+  "version": "1.3.0+1",
   "description": "TV-style launcher for emulators, Steam and media apps",
   "license": "GPL-3.0-only",
   "main": "main.js",
   "private": true,
   "scripts": {
+    "build:rust": "node scripts/build-rust.js",
+    "prestart": "node scripts/build-rust.js",
+    "predist": "node scripts/build-rust.js",
+    "predist:linux": "node scripts/build-rust.js",
     "start": "electron .",
     "windowed": "electron . --windowed",
     "dist": "electron-builder --win portable",
@@ -44,7 +48,8 @@
     "artifactBuildStarted": "scripts/linux-wrapper.js",
     "asar": true,
     "asarUnpack": [
-      "main/lbindex.js"
+      "main/lbindex.js",
+      "main/bin/**"
     ],
     "electronFuses": {
       "runAsNode": false,

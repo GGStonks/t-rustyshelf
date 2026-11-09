@@ -29,8 +29,13 @@
 !/THIRD-PARTY-NOTICES.md
 !/*.bat
 !/start-trustyshelf.sh
+!/Cargo.toml
+!/Cargo.lock
+!/crates/
 
 # 3. Never commit these, even inside allowed folders
+target/
+main/bin/
 node_modules/
 dist/
 *.log
