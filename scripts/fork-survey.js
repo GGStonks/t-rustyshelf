@@ -203,8 +203,12 @@ if (argv.includes('--credits')) { // README.md: the people whose work came in, m
   const mine = credits.log(ROOT, BRANCH), integ = readJson(F('integrated.json'), {});
   for (const c of mine) for (const s of credits.sources(c.msg)) {
     const sha = s.sha.length === 40 ? s.sha : tryGit(['rev-parse', '-q', '--verify', s.sha + '^{commit}']); if (!sha) continue;
-    const prev = integ[sha] || {}; if (prev.mine === c.sha) continue;
-    integ[sha] = { ...prev, status: 'integrated', how: s.url ? 'Ported-from' : 'cherry-pick -x', mine: c.sha, mineSubject: c.subject, at: c.date, ...(s.url && !prev.url ? { url: s.url } : {}) };
+    // one change can come in over several commits of yours (a big release ported part by part): each is kept in parts, the
+    // first in mine; a decision marked by hand ("later": the rest of it isn't in yet, "skip") stays as it was
+    const prev = integ[sha] || {}, parts = prev.parts || (prev.mine ? [prev.mine] : []); if (parts.includes(c.sha)) continue;
+    const kept = prev.how === 'marked' && ['later', 'skip'].includes(prev.status);
+    integ[sha] = { ...prev, status: kept ? prev.status : 'integrated', how: kept ? prev.how : s.url ? 'Ported-from' : 'cherry-pick -x', mine: prev.mine || c.sha, mineSubject: prev.mineSubject || c.subject,
+      parts: [...parts, c.sha], at: prev.at || c.date, ...(s.url && !prev.url ? { url: s.url } : {}) };
   }
   for (const f of found.values()) if (f.same && !integ[f.sha]) integ[f.sha] = { status: 'integrated', how: 'same patch (cherry-picked)', mine: '', at };
   for (const [sha, e] of Object.entries(integ)) {
@@ -265,7 +269,7 @@ if (argv.includes('--credits')) { // README.md: the people whose work came in, m
   }
   fs.writeFileSync(F('new.md'), L.join('\n') + '\n');
 
-  const row = ([sha, e]) => `- [\`${sha.slice(0, 9)}\`](${e.url || '#'}) ${esc(e.subject)} · by ${esc(e.author || '?')}${e.repo ? ` · from ${e.repo}` : ''}${e.mine ? ` · yours: \`${e.mine.slice(0, 9)}\` ${esc(e.mineSubject || '')} (${e.release || 'not released yet'})` : ''}${e.how ? ` · ${e.how}` : ''}${e.note ? ` · ${esc(e.note)}` : ''}`;
+  const row = ([sha, e]) => `- [\`${sha.slice(0, 9)}\`](${e.url || '#'}) ${esc(e.subject)} · by ${esc(e.author || '?')}${e.repo ? ` · from ${e.repo}` : ''}${e.mine ? ` · yours: \`${e.mine.slice(0, 9)}\` ${esc(e.mineSubject || '')}${e.parts && e.parts.length > 1 ? ` and ${e.parts.length - 1} more` : ''} (${e.release || 'not released yet'})` : ''}${e.how ? ` · ${e.how}` : ''}${e.note ? ` · ${esc(e.note)}` : ''}`;
   const by = (a, b) => String(b[1].at || '').localeCompare(String(a[1].at || ''));
   const I = ['# What came into (T)rustyShelf from other forks', '', `Made ${when(at)} UTC by scripts/fork-survey.js: found from your commits (\`Ported-from:\` trailers, cherry-pick -x, the same patch) and from \`--mark\`.`, '',
     `## Integrated (${integrated.length})`, '', ...integrated.sort(by).map(row), '', `## Kept for later (${later.length})`, '', ...later.sort(by).map(row), '', `## Decided against (${skip.length})`, '', ...skip.sort(by).map(row), ''];

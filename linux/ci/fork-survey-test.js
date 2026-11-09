@@ -85,6 +85,13 @@ try {
   const range = credits.releaseRange(MINE, '1.1.0.0');
   const th = credits.thanks(credits.log(MINE, range), credits.identity(MINE, 'GGStonks'));
   check('Release thanks: since the release before (v1.0.0.0), the people who aren\'t you', range === 'v1.0.0.0..HEAD' && th.map(t => t.person.login).sort().join(',') === 'forker,up', { range, th: th.map(t => t.person) });
+  // one change brought in over two commits (a big release, part by part); a "later" marked by hand stays
+  put(MINE, 'd2.txt', 'the rest of d\n'); g(MINE, 'me', 'add', '-A');
+  g(MINE, 'me', 'commit', '-q', `--author=${who.forker[0]} <${who.forker[1]}>`, '-m', `Fork feature d, the rest\n\nPorted-from: https://github.com/forker/fork/commit/${D}`);
+  run(...base);
+  check('A change ported in two commits: both are kept, the first stays "yours"', integ()[D].parts.length === 2 && integ()[D].mine === ME_D && integ()[D].status === 'integrated', integ()[D]);
+  run('--root', MINE, '--out', OUT, '--mark', D, 'later', 'one part still to come'); run(...base);
+  check('"later" marked by hand isn\'t overwritten by the next survey', integ()[D].status === 'later' && integ()[D].parts.length === 2, integ()[D]);
 } finally { fs.rmSync(T, { recursive: true, force: true }); }
 
 console.log(fails ? `\n${fails} failed` : '\nAll passed');
