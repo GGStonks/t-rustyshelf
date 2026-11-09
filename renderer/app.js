@@ -32,6 +32,7 @@ const STYLE={
 };
 const WORDMARKS={home:["Home","Continue & favorites"],gc:["GameCube","Home console"],wii:["Wii","Motion console"],wiiu:["Wii U","Home console"],sw:["Switch","Hybrid console"],sw2:["Switch 2","Hybrid console"],psp:["PSP","Handheld"],ps3:["PS3","Home console"],ps4:["PS4","Home console"],ps5:["PS5","Home console"],x360:["Xbox 360","Home console"],xboxone:["Xbox One","Standalone games"],n3ds:["3DS","Handheld"],ps2:["PS2","Home console"],pc:["PC","Steam, Epic & more"],custom:["Custom","PC ports & recomps"],media:["Media","Streaming"]};
 STYLE.xsx=STYLE.xboxone;STYLE.xone=STYLE.xboxone;
+STYLE.all=STYLE.home;WORDMARKS.all=["All Games","Whole library"];
 if(window.BS_SYSTEMS_EXTRA){Object.assign(STYLE,BS_SYSTEMS_EXTRA.style||{});Object.assign(WORDMARKS,BS_SYSTEMS_EXTRA.wordmarks||{})} // extra shelves (renderer/systems-extra.js)
 const APP_HUE={stremio:265,nuvio:200};
 
@@ -114,6 +115,7 @@ function orderShelves(list){
 // Home shelf: the games you played most recently ((T)rustyShelf's own history), then your favorites — across every shelf.
 // Items are the real game objects borrowed from their shelves, so Details, Inspect and art all just work.
 const HOME={id:"home",kind:"home",name:"Home",games:[],items:[],hasEmulator:false};
+const ALL_SHELF={id:"all",kind:"home",name:"All",games:[],items:[],hasEmulator:false};
 const COLS=new Map(); // (beta.7) the collection shelves, kept by id so a rebuild doesn't lose your place on one
 function favSet(){return new Set((cfgInfo&&cfgInfo.config.ui.favorites)||[])}
 let favCache=null,favCacheSrc=null;
@@ -122,9 +124,9 @@ function isFav(g){if(!g)return false;const src=cfgInfo&&cfgInfo.config.ui.favori
    sh._base keeps the scanner's order; sh.items is rebuilt from it: tiles (Surprise me, the emulator) first, then the
    games that pass the filter, in the chosen order. groupOf() names the section a game sits in, for L1/R1 jumps, the
    jump flash and the museum's brass divider tabs. */
-const SORTS=[["az","A–Z"],["year","Release year"],["recent","Last played"],["most","Most played"],["rating","Rating"],["genre","Genre"]];
+const SORTS=[["az","A–Z"],["year","Release year"],["recent","Last played"],["most","Most played"],["rating","Rating"],["genre","Genre"],["custom","Custom"]];
 const FILTERS=[["all","All games"],["fav","Favorites"],["played","Played"],["unplayed","Not played yet"]];
-const SORT_WORD={az:"",year:"by year",recent:"by last played",most:"by play time",rating:"by rating",genre:"by genre"};
+const SORT_WORD={az:"",year:"by year",recent:"by last played",most:"by play time",rating:"by rating",genre:"by genre",custom:"custom order"};
 let sortBy="az",filterBy="all";
 const yearOf=g=>{const i=g.info||{};const y=String(i.release||i.year||"").slice(0,4);return /^\d{4}$/.test(y)?+y:null};
 const genreOf=g=>((g.info&&g.info.genres)||"").split(";")[0].trim()||null;
@@ -168,10 +170,35 @@ function arrange(){
   allShelves.forEach(sh=>{if(sh.kind==="home"||!sh.items)return;if(!sh._base)sh._base=sh.items.slice();
     const idx=new Map(sh._base.map((g,i)=>[g,i])),base=(a,b)=>idx.get(a)-idx.get(b);
     const by=(f,desc)=>(a,b)=>{const x=f(a),y=f(b);if(x==null&&y==null)return base(a,b);if(x==null)return 1;if(y==null)return -1;return (desc?y-x:x-y)||base(a,b)};
-    const cmp={year:by(yearOf),recent:by(g=>histOf(g)&&histOf(g).last||null,true),most:by(g=>histOf(g)&&histOf(g).ms||null,true),rating:by(ratingOf,true),
+    const customList=(cfgInfo&&cfgInfo.config&&cfgInfo.config.ui&&cfgInfo.config.ui.customSort&&cfgInfo.config.ui.customSort[sh.id])||[];
+    const customMap=new Map(customList.map((id,i)=>[String(id),i]));
+    const customCmp=(a,b)=>{const ia=customMap.has(String(a.id))?customMap.get(String(a.id)):999999,ib=customMap.has(String(b.id))?customMap.get(String(b.id)):999999;return (ia-ib)||base(a,b)};
+    const cmp={year:by(yearOf),recent:by(g=>histOf(g)&&histOf(g).last||null,true),most:by(g=>histOf(g)&&histOf(g).ms||null,true),rating:by(ratingOf,true),custom:customCmp,
       genre:(a,b)=>{const x=genreOf(a),y=genreOf(b);if(x===y)return base(a,b);if(!x)return 1;if(!y)return -1;return x.localeCompare(y)}}[sortBy]||base;
     sh.items=[...sh._base.filter(g=>!isGame(g)&&!g.tail),...sh._base.filter(isGame).filter(keep).sort(cmp),...sh._base.filter(g=>g.tail)]; // (beta.7: a tail tile, the Custom shelf's Add games, stays last)
   });
+}
+function moveGameCustom(shelf,game,dir){
+  if(!shelf||!game||!isGame(game)||shelf.kind==="home"||!cfgInfo)return;
+  const ui=cfgInfo.config.ui;ui.customSort=ui.customSort||{};
+  let list=ui.customSort[shelf.id];
+  const games=shelf.items.filter(isGame);
+  if(!list||!list.length)list=games.map(g=>String(g.id));
+  else list=[...list];
+  for(const g of games){if(!list.includes(String(g.id)))list.push(String(g.id))}
+  const idx=list.indexOf(String(game.id));
+  if(idx<0)return;
+  const targetIdx=idx+dir;
+  if(targetIdx<0||targetIdx>=list.length)return;
+  list.splice(idx,1);
+  list.splice(targetIdx,0,String(game.id));
+  ui.customSort[shelf.id]=list;
+  sortBy="custom";
+  ui.sort="custom";
+  api.saveConfig(cfgInfo.config).catch(()=>{});
+  play_("tick",{dir});
+  applyArrange();
+  toast(`Moved ${game.title} ${dir<0?"earlier":"later"}`);
 }
 // re-sort/filter and rebuild, keeping the selected game in view when it's still on the shelf
 function applyArrange(){
@@ -220,6 +247,10 @@ function buildHome(){
   all.filter(g=>HIST[g.id]&&HIST[g.id].count).sort(rank).slice(0,12).forEach(g=>{seen.add(g.id);items.push(g)});
   all.filter(g=>favs.has(g.id)&&!seen.has(g.id)).sort((a,b)=>a.title.localeCompare(b.title)).forEach(g=>items.push(g));
   HOME.items=items;HOME.games=items;
+  const allUni=[],seenUni=new Set();
+  all.forEach(g=>{if(!seenUni.has(g.id)){seenUni.add(g.id);allUni.push(g)}});
+  allUni.sort((a,b)=>(a.title||"").localeCompare(b.title||""));
+  ALL_SHELF.items=allUni;ALL_SHELF.games=allUni;
   // (beta.7) your collections (Details → Collections; cfg.ui.collections [{id,name,ids}]): shelves of your own right after
   // Home, mixing consoles the way Home does (each case keeps its own console's look); the games in the order added
   const cols=[],byId=new Map(all.map(g=>[String(g.id),g]));
@@ -229,11 +260,14 @@ function buildHome(){
     let sh=COLS.get(id);if(!sh){sh={id,kind:"home",col:true,name:"",games:[],items:[],hasEmulator:false};COLS.set(id,sh)}
     sh.name=String(c.name||"Collection");sh.items=its;sh.games=its;cols.push(sh)}
   const keep=cur();
-  let list=allShelves.filter(s=>s!==HOME);
+  let list=allShelves.filter(s=>s!==HOME&&s!==ALL_SHELF);
   // Android: a console set up without any games yet (RetroArch alone can enable a dozen) gets no tab of its own; if that
   // would leave nothing at all, they stay so the shelf can still say what to do next
   if(ON_ANDROID){const full=list.filter(hasGames);if(full.length)list=full}
-  shelves=items.length?[HOME,...cols,...list]:[...cols,...list];
+  const topShelves=[];
+  if(items.length)topShelves.push(HOME);
+  if(cfgInfo&&cfgInfo.config&&cfgInfo.config.ui&&cfgInfo.config.ui.allShelf&&allUni.length)topShelves.push(ALL_SHELF);
+  shelves=[...topShelves,...cols,...list];
   const i=shelves.indexOf(keep);sysIdx=i>=0?i:Math.min(sysIdx,Math.max(0,shelves.length-1));
 }
 function homeLine(g){const h=HIST[g.id];const parts=[shelfFor(g).name];if(h&&h.count)parts.push("played "+fmtDay(h.last/1000));if(isFav(g))parts.push("♥ Favorite");return parts}
@@ -270,7 +304,7 @@ function clock(){clearTimeout(clockT);clockT=0;const el=$("clock");if(!el)return
   clockT=setTimeout(clock,60500-(d.getSeconds()*1000+d.getMilliseconds())%60000)}
 clock();
 // each shelf's musical key: semitones from the voice's root, plus a pentatonic colour (major by default; a softer minor/suspended one for the darker shelves)
-const KEYS={home:{key:0},gc:{key:0},wii:{key:2},wiiu:{key:4,scale:[0,2,4,7,9]},sw:{key:-3,scale:[0,2,5,7,9]},sw2:{key:-1,scale:[0,2,5,7,9]},psp:{key:-5},ps3:{key:-6,scale:[0,2,4,7,9]},ps4:{key:-7,scale:[0,3,5,7,10]},ps5:{key:-8,scale:[0,2,4,7,9]},x360:{key:-2,scale:[0,3,5,7,10]},n3ds:{key:1,scale:[0,2,4,7,9]},ps2:{key:-9},pc:{key:-4},media:{key:3,scale:[0,2,5,7,9]}};
+const KEYS={home:{key:0},all:{key:0},gc:{key:0},wii:{key:2},wiiu:{key:4,scale:[0,2,4,7,9]},sw:{key:-3,scale:[0,2,5,7,9]},sw2:{key:-1,scale:[0,2,5,7,9]},psp:{key:-5},ps3:{key:-6,scale:[0,2,4,7,9]},ps4:{key:-7,scale:[0,3,5,7,10]},ps5:{key:-8,scale:[0,2,4,7,9]},x360:{key:-2,scale:[0,3,5,7,10]},n3ds:{key:1,scale:[0,2,4,7,9]},ps2:{key:-9},pc:{key:-4},media:{key:3,scale:[0,2,5,7,9]}};
 function tuneTo(s){if(window.Sound)Sound.set(s&&KEYS[s.id]?KEYS[s.id]:{key:0})}
 function ambient(on){mmWant=!!on;if(!window.Sound)return;const m=mmPick(),lv=mmVol();
   if(!on||!soundOn||m==="off"||lv<=0||document.hidden){Sound.ambientStop();if(window.UserMusic)UserMusic.stop();return}
@@ -318,7 +352,10 @@ function sampleHueHere(url,cb){
 /* ---------- build & layout ---------- */
 function measure(){
   const s=st(),vw=innerWidth,vh=innerHeight;
-  bh=vw<760?Math.min(vh*.32,vw*.42/s.ratio):Math.min(vh*.4,vw*.22/s.ratio,fxOn?620:520);
+  const uScale=(cfgInfo&&cfgInfo.config&&cfgInfo.config.ui&&cfgInfo.config.ui.boxScale)||1;
+  const sScale=(cfgInfo&&cfgInfo.config&&cfgInfo.config.ui&&cfgInfo.config.ui.shelfScale&&cfgInfo.config.ui.shelfScale[s.id])||1;
+  const bScale=uScale*sScale;
+  bh=(vw<760?Math.min(vh*.32,vw*.42/s.ratio):Math.min(vh*.4,vw*.22/s.ratio,fxOn?620:520))*bScale;
   bw=bh*s.ratio;bd=bw*s.depth;
   const a=app.style;a.setProperty("--bw",bw+"px");a.setProperty("--bh",bh+"px");a.setProperty("--bd",bd+"px");a.setProperty("--edge",(bw*s.edge)+"px");
   // Cases are laid out OS× larger and scaled back down in their transform. Chrome rasterises a layer under
@@ -351,7 +388,21 @@ function mount(s){
   const g=s.g,i=s.i,sh=st();const slot=document.createElement("div");slot.className="slot";
   slot.innerHTML=`<div class="box"><div class="face f-front"><img alt="" draggable="false" decoding="async"><div class="dim"></div><div class="glare"></div><div class="sheen"></div></div><div class="face f-back"></div>
       <div class="face f-left"><div class="spine-band"></div><div class="spine-title"></div></div><div class="face f-right spine2"><div class="spine-band"></div><div class="spine-title"></div></div><div class="face bev bev-fl"></div><div class="face bev bev-fr"></div><div class="face bev bev-bl"></div><div class="face bev bev-br"></div></div>`;
-  const os=stOf(g);if(os!==sh){slot.style.setProperty("--bw",`calc(var(--ch) * ${os.ratio})`);slot.style.setProperty("--bd",`calc(var(--ch) * ${os.ratio*os.depth})`);slot.style.setProperty("--edge",`calc(var(--ch) * ${os.ratio*os.edge})`);slot.style.setProperty("--edge-in",`calc(var(--ch) * ${os.wrap?0:os.ratio*os.edge})`);slot.style.setProperty("--rc",`calc(var(--ch) * ${os.ratio*(os.rc||.03)})`);slot.style.setProperty("--re",`calc(var(--ch) * ${os.ratio*os.depth*(os.re||.3)})`);slot.style.setProperty("--case",os.caseColor);slot.style.setProperty("--case-side",os.caseSide);slot.style.setProperty("--spine-ink",os.spineInk)}
+  const os=stOf(g);
+  const gScale=(cfgInfo&&cfgInfo.config&&cfgInfo.config.ui&&cfgInfo.config.ui.gameScale&&cfgInfo.config.ui.gameScale[g.id])||1;
+  if(os!==sh||gScale!==1){
+    const sc=gScale;
+    slot.style.setProperty("--bw",`calc(var(--ch) * ${os.ratio*sc})`);
+    slot.style.setProperty("--bh",`calc(var(--ch) * ${sc})`);
+    slot.style.setProperty("--bd",`calc(var(--ch) * ${os.ratio*os.depth*sc})`);
+    slot.style.setProperty("--edge",`calc(var(--ch) * ${os.ratio*os.edge*sc})`);
+    slot.style.setProperty("--edge-in",`calc(var(--ch) * ${(os.wrap?0:os.ratio*os.edge)*sc})`);
+    slot.style.setProperty("--rc",`calc(var(--ch) * ${os.ratio*(os.rc||.03)*sc})`);
+    slot.style.setProperty("--re",`calc(var(--ch) * ${os.ratio*os.depth*(os.re||.3)*sc})`);
+    if(os!==sh){
+      slot.style.setProperty("--case",os.caseColor);slot.style.setProperty("--case-side",os.caseSide);slot.style.setProperty("--spine-ink",os.spineInk);
+    }
+  }
   if(isFav(g))slot.classList.add("fav");
   if(g.installed===false)slot.classList.add("notinst"); // (an Epic game the account owns but isn't installed: greyed, Play offers to install it)
   slot.querySelectorAll(".spine-band").forEach(band=>{band.style.background=os.spineBand.bg;band.style.color=os.spineBand.fg;band.textContent=g.kind==="emulator"?"EMU":g.kind==="setup"?"ADD":os.spineBand.label});
@@ -359,6 +410,45 @@ function mount(s){
   // (beta.10) Android: the spine's small copy sized like the front's (thumb), not the 1024 px display copy, on every case made
   if(g.art&&g.art.spine){const su=ANDROID?thumb(g.art.spine,bh*OS):g.art.spine;slot.querySelectorAll(".f-left,.f-right").forEach(face=>{const sp=new Image();sp.className="spine-img";sp.alt="";sp.draggable=false;sp.decoding="async";sp.src=su;sp.onerror=()=>sp.remove();face.appendChild(sp)})}
   slot.style.setProperty("--glow",hsl(g.hue,90,62));
+  if(isGame(g)){
+    slot.setAttribute("draggable","true");
+    slot.addEventListener("dragstart",e=>{
+      if(mode!=="browse")return;
+      e.dataTransfer.setData("text/plain",String(g.id));
+      e.dataTransfer.effectAllowed="move";
+    });
+    slot.addEventListener("dragover",e=>{
+      e.preventDefault();
+      e.dataTransfer.dropEffect="move";
+    });
+    slot.addEventListener("drop",e=>{
+      e.preventDefault();
+      const srcId=e.dataTransfer.getData("text/plain");
+      if(!srcId||srcId===String(g.id))return;
+      const sh=cur();
+      if(!sh||sh.kind==="home"||!cfgInfo)return;
+      const ui=cfgInfo.config.ui;
+      ui.customSort=ui.customSort||{};
+      let list=ui.customSort[sh.id];
+      const games=sh.items.filter(isGame);
+      if(!list||!list.length)list=games.map(x=>String(x.id));
+      else list=[...list];
+      for(const x of games){if(!list.includes(String(x.id)))list.push(String(x.id))}
+      const srcIdx=list.indexOf(srcId);
+      const tgtIdx=list.indexOf(String(g.id));
+      if(srcIdx>=0&&tgtIdx>=0){
+        list.splice(srcIdx,1);
+        list.splice(tgtIdx,0,srcId);
+        ui.customSort[sh.id]=list;
+        sortBy="custom";
+        ui.sort="custom";
+        api.saveConfig(cfgInfo.config).catch(()=>{});
+        play_("tick",{dir:1});
+        applyArrange();
+        toast("Shelf order updated");
+      }
+    });
+  }
   slot.addEventListener("click",()=>{if(dragMoved||(mode!=="browse"&&mode!=="details"))return; /* (beta.8: not under a note card, Sort, Achievements or Customize) */if(i===sel){flip()}else{setInput("pointer");go(i)}});
   // keep DOM order = shelf order so stacking stays predictable
   const next=slots.slice(i+1).find(o=>o.el);track.insertBefore(slot,next?next.el:null);
@@ -530,7 +620,7 @@ function landSel(){
 }
 function metaFor(g){
   const s=shelfFor(g);
-  if(cur()===HOME)return homeLine(g);
+  if(cur()===HOME||cur()===ALL_SHELF)return homeLine(g);
   if(g.kind==="emulator")return ["Emulator","Open settings"];
   if(g.kind==="setup"&&g.addGames)return ["Add games",`${okWord()} adds several at once, a whole folder, or your Playnite library`];
   if(g.kind==="setup")return [`No ${s?s.name+" ":""}games yet`,`${okWord()} opens ${s?s.name:"its"} settings to add a games folder`];
@@ -955,6 +1045,8 @@ function fillDetails(){
   paintArtMatchBtn(g); // (Details → Art match: a console game)
   {const b=$("dChooseManual");if(b){b.hidden=!(g.kind==="rom"&&api.manualStudio&&g.file);b.textContent=hasManual(g)?"Choose manual…":"Find a manual…";b.title=!hasManual(g)&&g.manualMiss?`(T)rustyShelf looked online on ${new Date(g.manualMiss).toLocaleDateString()} and found no manual for this game. Search or add one here.`:""}}
   {const b=$("dGameEmu");if(b){const own=g.kind==="rom"?gameEmu(g):"";b.hidden=!(g.kind==="rom"&&api.gameEmulator);b.textContent=own?(emuLabel(own).length>16?emuLabel(own).slice(0,15)+"…":emuLabel(own)):"Emulator";b.title=own?`Runs in ${own} (just this game). Press to change.`:`Runs in the shelf's ${s.emulatorName||"emulator"}. Press to pick a different build for just this game.`;b.classList.toggle("own",!!own)}}
+  {const b1=$("dMoveEarlier"),b2=$("dMoveLater");if(b1&&b2){const ok=cur()&&cur().kind!=="home"&&isGame(g);b1.hidden=!ok;b2.hidden=!ok;}}
+  {const bs=$("dBoxSize");if(bs){const ok=isGame(g);bs.hidden=!ok;if(ok){const sc=(cfgInfo&&cfgInfo.config.ui.gameScale&&cfgInfo.config.ui.gameScale[g.id])||1;bs.textContent=`Box size: ${Math.round(sc*100)}%`}}}
   renderHints(); // Y's prompt follows this game's trailer / achievements row (updateInfo drew the bar before this fill)
   pvSchedule(); // (beta.7) its video preview, after a rest
 }
@@ -1321,7 +1413,7 @@ function play(){
   const raw=rawItem();if(!raw||sysBusy()||(mode!=="browse"&&mode!=="details"))return;closeDetails(true);
   if(raw.kind==="setup"){const s=shelfFor(raw)||cur();play_("panel");Setup.open({page:raw.addGames?"addgames":s?s.id:"consoles"});return}
   if(raw.kind==="random"){if(raw.pick)playPick(raw);else shuffle();return}
-  if(cur()===HOME){playPick({pick:{shelf:shelves.indexOf(shelfFor(raw)),game:raw}});return}
+  if(cur()===HOME||cur()===ALL_SHELF){playPick({pick:{shelf:shelves.indexOf(shelfFor(raw)),game:raw}});return}
   const g=raw;
   const s=cur().col?(g._sh||shelfFor(g)):cur(); // (beta.10) on a collection shelf: the game's own console (build picker, boot video and slide, its name)
   // Switch 2: which build first (before the boot slide starts); Back on the list leaves you on the shelf
@@ -2525,7 +2617,7 @@ async function shuffle(){
   const sh=cur(),ri=sh.items.findIndex(g=>g.kind==="random");if(ri<0){toast("Nothing to shuffle on this shelf");return}
   if(sel!==ri)go(ri);
   const tileG=sh.items[ri];
-  const pool=[];const srcs=shuffleAll()?shelves.map((x,i)=>i).filter(i=>shelves[i]!==HOME&&!shelves[i].col):[sysIdx]; // (beta.10) not your collections: their games are on their consoles' shelves already
+  const pool=[];const srcs=shuffleAll()?shelves.map((x,i)=>i).filter(i=>shelves[i]!==HOME&&shelves[i]!==ALL_SHELF&&!shelves[i].col):[sysIdx]; // (beta.10) not your collections: their games are on their consoles' shelves already
   srcs.forEach(i=>shelves[i].items.forEach((g,j)=>{if(isGame(g)&&g.installed!==false)pool.push({shelf:i,sh:shelves[i],index:j,game:g})}));
   if(!pool.length)return;
   const rnd=n=>Math.floor(Math.random()*n);
@@ -3246,7 +3338,7 @@ function attractStep(){
   }
   go(sel+attractDir);attractT=setTimeout(attractStep,4200);
 }
-function wake(){lastInputAt=performance.now();if(!attract)return;attract=false;clearTimeout(attractT);app.classList.remove("attract")}
+function wake(){lastInputAt=performance.now();hintsWake();if(!attract)return;attract=false;clearTimeout(attractT);app.classList.remove("attract")}
 setInterval(attractCheck,5000);
 // warm the museum's shaders a few seconds after start, while nothing is happening, so its first open doesn't stutter
 // warm the museum's shaders once you've been idle a few seconds (it's one long task; never mid-scroll)
@@ -3387,15 +3479,25 @@ function renderHints(){pvGuard();
     b.addEventListener("pointerdown",e=>{e.preventDefault();try{b.setPointerCapture(e.pointerId)}catch{}holdExitStart()});
     for(const ev of ["pointerup","pointercancel","lostpointercapture"])b.addEventListener(ev,()=>holdExitCancel());
     h.appendChild(b)}
+  hintsWake();
+}
+let hintsHideT=0;
+function hintsWake(){
+  const h=$("hints");if(!h)return;
+  h.classList.remove("hints-hidden");
+  clearTimeout(hintsHideT);hintsHideT=0;
+  if(cfgInfo&&cfgInfo.config&&cfgInfo.config.ui&&cfgInfo.config.ui.autoHideHints&&mode==="browse"){
+    hintsHideT=setTimeout(()=>{if(mode==="browse"&&$("hints"))$("hints").classList.add("hints-hidden")},4000);
+  }
 }
 let lastInputAt=0,yAt=0;
-addEventListener("pointerdown",()=>{wake()},true);addEventListener("wheel",()=>{lastInputAt=performance.now()},{capture:true,passive:true});
+addEventListener("pointerdown",()=>{wake();hintsWake()},true);addEventListener("wheel",()=>{lastInputAt=performance.now();hintsWake()},{capture:true,passive:true});
 let uiBusySent=0;
 function setInput(m){if(m==="kbd"&&touchBack)m=inputMode; /* a touch Back (sent as Esc) keeps the controller / touch prompts */const was=showPad();{const t=performance.now();if(t-uiBusySent>500&&api.uiBusy){uiBusySent=t;try{api.uiBusy()}catch{}}} // background downloads hold off while you're pressing buttons
-  if(m==="kbd")kbdEver=true;if(attract)wake();lastInputAt=performance.now();if(m!==inputMode){inputMode=m;renderHints();document.body.classList.toggle("pad-input",m==="pad");if(m==="pad"&&mode==="details")dGlide($("details").querySelector(".pad-focus"))}else if(showPad()!==was)renderHints()
+  if(m==="kbd")kbdEver=true;if(attract)wake();lastInputAt=performance.now();hintsWake();if(m!==inputMode){inputMode=m;renderHints();document.body.classList.toggle("pad-input",m==="pad");if(m==="pad"&&mode==="details")dGlide($("details").querySelector(".pad-focus"))}else if(showPad()!==was)renderHints()
   if(showPad()!==was&&(mode==="browse"||mode==="details")){const g=rawItem();if(!g||g.kind==="random")updateInfo()}} // the Shuffle tile's "R / LS rolls again" and the empty-filter note name a key: follow the switch
 // the pointer comes back the moment the mouse moves
-addEventListener("mousemove",e=>{if((Math.abs(e.movementX)+Math.abs(e.movementY))>2&&inputMode==="pad")setInput("pointer")},{passive:true});
+addEventListener("mousemove",e=>{if((Math.abs(e.movementX)+Math.abs(e.movementY))>2&&inputMode==="pad")setInput("pointer");hintsWake()},{passive:true});
 // Controller status beside the clock: lit while a pad is connected, a toast when one connects or drops
 let padSeen=null;
 // What a pad is, from the id Chromium gives it ("DualSense Wireless Controller (STANDARD GAMEPAD Vendor: 054c Product: 0ce6)"):
@@ -3497,6 +3599,7 @@ addEventListener("keydown",e=>{
   else if(k==="i"||k==="I"){if(!e.repeat)(mode==="details"?closeDetails():openDetails())}
   else if((k==="t"||k==="T")&&mode==="details"){if(!e.repeat)openTrailer()}
   else if((k==="["||k==="]")&&mode==="details"&&!$("dShots").hidden)showShot(shotSel+(k==="]"?1:-1));
+  else if((k==="["||k==="]")||((k==="ArrowLeft"||k==="ArrowRight")&&e.shiftKey)){if(!e.repeat&&(mode==="browse"||mode==="details"))moveGameCustom(cur(),curGame(),k==="]"||k==="ArrowRight"?1:-1)}
   else if(k==="v"||k==="V"){if(!e.repeat)openInspect()}
   else if(k==="r"||k==="R"){if(!e.repeat)shuffle()}
   else if(k==="h"||k==="H"){if(!e.repeat&&(mode==="browse"||mode==="details"))toggleFav()}
@@ -3733,6 +3836,7 @@ function pollBody(t){
   if(gp&&document.hasFocus()&&dimPad(gp,t))return; // the press that lifted the dimmed screen does nothing else
   if(smoothTest.on){if(gp&&gp.buttons.some(b=>b&&b.pressed)){smoothTest.stop=true;dimSwallowPad=true}return} // the smoothness test: hands off (any button stops it)
   if(gp&&document.hasFocus()){
+    hintsWake();
     if(gp.id!==padName||padSee.ver!==padSeeVer){padName=gp.id;padSeeVer=padSee.ver;const st=padStyleOf(gp.id);if(st!==padStyle){padStyle=st;padStyleChanged()}else sendShelfInfo()}
     const B=i=>!!(gp.buttons[i]&&gp.buttons[i].pressed),ax=gp.axes||[];
     const h=(B(15)||ax[0]>.55)?1:(B(14)||ax[0]<-.55)?-1:0;
@@ -4135,6 +4239,9 @@ function applyUi_(u){
   if("dimMinutes" in u){if(!(+u.dimMinutes>0))dimWake();dimAt=performance.now()}
   if("attractMinutes" in u||"attract" in u){lastInputAt=performance.now();if(attract)wake()} // a new wait starts from now
   if("effects" in u||"performance" in u){if("performance" in u&&window.Perf)Perf.set(u.performance||"auto");applyEffects();if(window.ThemeFx&&ThemeFx.refresh)ThemeFx.refresh()}
+  if("autoHideHints" in u)hintsWake();
+  if("allShelf" in u){buildHome();renderTabs();build();}
+  if("boxScale" in u||"shelfScale" in u||"gameScale" in u){measure();layout();if(slots&&slots[sel])go(sel);}
 }
 function applyUiAll(){try{if(cfgInfo&&cfgInfo.config)localStorage.setItem("bs.lang",cfgInfo.config.ui.language==="pt"?"pt":"en")}catch{} /* (the translation reads it when the page loads) */const u=uiNow();applyUi_({safeArea:u.safeArea,reduceMotion:u.reduceMotion,clock:u.clock,clock24:u.clock24,confirmButton:u.confirmButton,scrollSpeed:u.scrollSpeed,audioOut:u.audioOut,dimMinutes:u.dimMinutes})}
 function applyUi(partial){if(!partial||typeof partial!=="object")return;try{if(cfgInfo){const ui=cfgInfo.config.ui;for(const k of Object.keys(partial))ui[k]=partial[k]}applyUi_(partial)}catch(e){console.warn("applyUi",e)}}
@@ -4217,6 +4324,26 @@ function paintArtMatchBtn(g){const b=$("dArtMatch");if(!b)return;b.hidden=!artMa
   c.before(b)})();
 // (beta.7) Details → Collections: this game on shelves of your own (a page in Settings: a switch per collection, or a new one)
 (function(){const c=$("dActEnd");if(!c||$("dCols"))return;const b=document.createElement("button");b.className="btn";b.type="button";b.id="dCols";b.textContent="Collections";b.title="Put this game on shelves of your own";b.addEventListener("click",()=>{const g=curGame();if(!g||!isGame(g)||!window.Setup)return;closeDetails(true);Setup.open({page:"collections",id:g.id,title:g.title})});c.before(b)})();
+(function(){const c=$("dActEnd");if(!c||$("dMoveEarlier"))return;
+  const b1=document.createElement("button");b1.className="btn";b1.type="button";b1.id="dMoveEarlier";b1.textContent="Move earlier (←)";b1.title="Move this game earlier on the shelf (shortcut: [ or Shift+Left)";
+  b1.addEventListener("click",()=>{const sh=cur(),g=curGame();if(sh&&g)moveGameCustom(sh,g,-1)});
+  const b2=document.createElement("button");b2.className="btn";b2.type="button";b2.id="dMoveLater";b2.textContent="Move later (→)";b2.title="Move this game later on the shelf (shortcut: ] or Shift+Right)";
+  b2.addEventListener("click",()=>{const sh=cur(),g=curGame();if(sh&&g)moveGameCustom(sh,g,1)});
+  const bs=document.createElement("button");bs.className="btn";bs.type="button";bs.id="dBoxSize";bs.textContent="Box scale";bs.title="Adjust this game's box scale";
+  bs.addEventListener("click",()=>{
+    const g=curGame();if(!g||!cfgInfo)return;
+    const ui=cfgInfo.config.ui;ui.gameScale=ui.gameScale||{};
+    const curSc=ui.gameScale[g.id]||1;
+    const nextSc=curSc>=1.2?0.8:curSc>=1.1?1.2:curSc>=1?1.1:curSc<=0.8?0.9:1;
+    ui.gameScale[g.id]=Math.round(nextSc*100)/100;
+    if(ui.gameScale[g.id]===1)delete ui.gameScale[g.id];
+    api.saveConfig(cfgInfo.config).catch(()=>{});
+    measure();layout();if(slots&&slots[sel])go(sel);
+    toast(`Box scale: ${Math.round(nextSc*100)}%`);
+    fillDetails();
+  });
+  c.before(b1);c.before(b2);c.before(bs);
+})();
 
 // Called by the setup screen.
 window.Shelf={

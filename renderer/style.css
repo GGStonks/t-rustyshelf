@@ -155,7 +155,8 @@ button:focus-visible{outline:2px solid var(--ink);outline-offset:3px;border-radi
 /* hints */
 .hints{position:absolute;left:50%;bottom:max(24px,calc(env(safe-area-inset-bottom,0px) + 12px));transform:translateX(-50%);z-index:6;display:flex;flex-wrap:wrap;justify-content:center;gap:4px 6px;
   max-width:calc(100% - 32px);padding:6px 8px;border-radius:999px;background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(14px)}
-.hints{transition:transform .6s cubic-bezier(.22,.9,.25,1)} /* (beta.10) it steps aside with a transform, not `left` (no layout every frame under its blur) */
+.hints{transition:transform .6s cubic-bezier(.22,.9,.25,1),opacity .45s ease} /* (beta.10) it steps aside with a transform, not `left` (no layout every frame under its blur) */
+.hints.hints-hidden{opacity:0;pointer-events:none}
 @media (min-width:761px){#app.details-open .hints{transform:translateX(calc(-50% - min(230px,50vw)));max-width:calc(100% - min(460px,100%) - 32px)}} /* never under the panel or off the left edge (1280×720) */
 .hint{display:inline-flex;align-items:center;gap:7px;padding:5px 10px;border-radius:999px;font-size:12px;font-weight:500;white-space:nowrap}
 .hint:hover{background:rgba(255,255,255,.1)}
