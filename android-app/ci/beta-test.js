@@ -89,23 +89,80 @@ module.exports = async function betaPass({ browser, base, check, newPage, OUT })
       const row = n => [...document.querySelectorAll('#bss .bss-row')].find(r => ((r.querySelector('.nm') || {}).textContent || '') === n);
       const click = async (n, ms = 500) => { const r = row(n); if (r) r.click(); await w(ms); return !!r; };
       const sw2 = async () => (await window.trustyshelf.getConfig()).config.systems.sw2;
-      Setup.open({ page: 'sw2' }); for (let i = 0; i < 40 && !row('Builds'); i++) await w(150); await w(800);
-      for (let i = 0; i < 20; i++) { out.consoleRow = (rowsNow().find(r => r.nm === 'Builds') || {}).t || ''; if (/builds found/.test(out.consoleRow)) break; await w(200); }
-      await click('Builds', 900); out.page = rowsNow().map(r => r.nm);
+      const EM = 'Emulators (forks)'; // (beta.11, was "Builds")
+      Setup.open({ page: 'sw2' }); for (let i = 0; i < 40 && !row(EM); i++) await w(150); await w(800);
+      for (let i = 0; i < 20; i++) { out.consoleRow = (rowsNow().find(r => r.nm === EM) || {}).t || ''; if (/\d+ emulators? ·/.test(out.consoleRow)) break; await w(200); }
+      await click(EM, 900); out.page = rowsNow().map(r => r.nm); out.head = [...document.querySelectorAll('#bss .bss-head, #bss [class*="head"]')].map(h => h.textContent).join(' | ');
       await click('Orchid v0.7.0', 900); let c = await sw2(); out.fixed = { ask: c.askBuild, emu: c.emulator, row: (rowsNow().find(r => r.nm === 'Orchid v0.7.0') || {}).t };
+      // (beta.11) Remove (pressed twice) on a found emulator hides it, and Play asks again when it was the one always used
+      out.rows = rowsNow().length; await click('Remove an emulator', 400); out.rmBtn = (rowsNow().find(r => r.nm === 'Orchid v0.7.0') || {}).t;
+      await click('Orchid v0.7.0', 200); await click('Orchid v0.7.0', 1500); c = await sw2();
+      out.hid = { hidden: c.buildHidden, ask: c.askBuild, names: rowsNow().map(r => r.nm), play: ((await window.trustyshelf.sw2Builds('')).builds || []).map(b => b.label) };
+      const sh = rowsNow().find(r => /^Show removed emulators/.test(r.nm)); if (sh) await click(sh.nm, 1500); c = await sw2();
+      out.shown = { hidden: c.buildHidden, names: rowsNow().map(r => r.nm) }; await click('Remove an emulator', 400); out.doneBtn = (rowsNow().find(r => r.nm === 'Orchid v0.7.0') || {}).t;
       await click('Ask each time', 900); c = await sw2(); out.ask = c.askBuild;
-      await click('Add a folder of builds', 1500); c = await sw2(); out.added = { dirs: c.buildDirs, names: rowsNow().map(r => r.nm) };
+      await click('Add a folder of emulators', 1500); c = await sw2(); out.added = { dirs: c.buildDirs, names: rowsNow().map(r => r.nm) };
       const f = rowsNow().find(r => /^Folder · /.test(r.nm)); if (f) { await click(f.nm, 200); await click(f.nm, 1500); }
       c = await sw2(); out.removed = { dirs: c.buildDirs, names: rowsNow().map(r => r.nm) };
       if (window.Settings && Settings.isOpen && Settings.isOpen()) { await Settings.close(); await w(800); } return out; });
-    check('Beta (Windows): Settings → Switch 2 has a Builds page listing every build (the list Play shows) with Ask each time and ways to add more',
-      /Builds/.test(b.consoleRow) && /3 builds found/.test(b.consoleRow) && /Ask each time/.test(b.consoleRow)
-        && ['Ask each time', 'Selvet · Performance 6', 'Lichii pgo', 'Orchid v0.7.0', 'Add a folder of builds', 'Add a build'].every(n => b.page.includes(n)), JSON.stringify(b).slice(0, 500));
-    check('Beta (Windows): choosing a build always starts in it; Ask each time goes back to the list at Play',
+    check('Beta (Windows): Settings → Switch 2 → Emulators (forks) lists every emulator (the list Play shows) with Ask each time, + Add an emulator and a Remove for each',
+      /3 emulators ·/.test(b.consoleRow) && /Ask each time/.test(b.consoleRow)
+        && ['Ask each time', '+ Add an emulator', 'Selvet · Performance 6', 'Lichii pgo', 'Orchid v0.7.0', 'Remove an emulator', 'Add a folder of emulators'].every(n => b.page.includes(n))
+        && !b.page.some(n => /^Remove (Orchid|Lichii|Selvet)/.test(n)) /* one row per emulator: the page stays short */
+        && b.page.indexOf('+ Add an emulator') < b.page.indexOf('Selvet · Performance 6'), JSON.stringify(b).slice(0, 600));
+    check('Beta (Windows): choosing an emulator always starts in it; Ask each time goes back to the list at Play',
       b.fixed.ask === false && /orchid\.exe$/i.test(b.fixed.emu || '') && /✓ Always/.test(b.fixed.row || '') && b.ask === true, JSON.stringify({ fixed: b.fixed, ask: b.ask }));
-    check('Beta (Windows): a folder of builds kept elsewhere adds its builds, and Remove (pressed twice) takes it off the list',
+    check('Beta (Windows): Remove an emulator turns the rows\' buttons to Remove; pressed twice it takes a found emulator off both lists, Play asks again, and Show removed brings it back',
+      /Remove/.test(b.rmBtn || '') && /Always use|✓ Always/.test(b.doneBtn || '') && (b.hid.hidden || []).length === 1 && /orchid/i.test(b.hid.hidden[0]) && b.hid.ask === true && !b.hid.names.includes('Orchid v0.7.0') && !b.hid.play.includes('Orchid v0.7.0') && b.hid.play.length === 2
+        && b.hid.names.some(n => /^Show removed emulators \(1\)/.test(n)) && (b.shown.hidden || []).length === 0 && b.shown.names.includes('Orchid v0.7.0'), JSON.stringify({ hid: b.hid, shown: b.shown }).slice(0, 600));
+    check('Beta (Windows): a folder of emulators kept elsewhere adds its emulators, and Remove (pressed twice) takes it off the list',
       (b.added.dirs || []).length === 1 && b.added.names.includes('Fork 1') && b.added.names.some(n => /^Folder · /.test(n))
         && (b.removed.dirs || []).length === 0 && !b.removed.names.includes('Fork 1'), JSON.stringify({ added: b.added, removed: b.removed }).slice(0, 500));
+    // (beta.11) the list Play shows ends with "+ Add another emulator…": it picks a program, and the list comes back with it
+    const bpk = await w3.page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), out = {};
+      const names = () => [...document.querySelectorAll('.buildpick .bp-row b')].map(b => b.textContent);
+      const p = Shelf._pickBuild({ id: 'sw2:test', title: 'Test game', file: 'C:\\Games\\test.nsp', kind: 'rom' });
+      for (let i = 0; i < 30 && !names().length; i++) await w(100); out.first = names();
+      const add = [...document.querySelectorAll('.buildpick .bp-row')].find(r => r.classList.contains('bp-add')); if (add) add.click();
+      for (let i = 0; i < 40 && !names().some(n => /program\.exe/.test(n)); i++) await w(100); await w(300); out.again = names();
+      out.saved = ((await window.trustyshelf.getConfig()).config.systems.sw2 || {}).buildExes || [];
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); out.result = await Promise.race([p, w(3000).then(() => 'timeout')]); await w(400);
+      out.closed = !document.querySelector('.buildpick.on'); return out; });
+    check('Beta (Windows): Play\'s build list ends with "+ Add another emulator…", which adds the program and shows the list again with it',
+      bpk.first[bpk.first.length - 1] === '+ Add another emulator…' && bpk.first.length === 4 && bpk.again.some(n => /program\.exe/.test(n)) && bpk.again[bpk.again.length - 1] === '+ Add another emulator…'
+        && bpk.saved.some(x => /program\.exe$/i.test(x)) && bpk.result === null && bpk.closed, JSON.stringify(bpk).slice(0, 600));
+    // (beta.11) Settings → Shelf → Surprise me: Off takes the Surprise me case off every shelf; From every shelf brings it back
+    const sm = await w3.page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), api = window.trustyshelf;
+      const rnd = () => Shelf._lib.shelves().filter(s => s.random).length;
+      const set = async v => { const c = (await api.getConfig()).config; if (v === 'off') c.ui.surpriseMe = 'off'; else delete c.ui.surpriseMe; await api.saveConfig(c); await Shelf.refresh(true); await w(400); };
+      const before = rnd(); await set('off'); const off = rnd(); await set('on'); return { before, off, back: rnd() }; });
+    check('Beta (Windows): Surprise me can be turned off (no Surprise me case on any shelf) and back on', sm.before > 0 && sm.off === 0 && sm.back === sm.before, JSON.stringify(sm));
+    // (beta.11) a Switch Pro pad: changing Button prompts to Xbox pictures doesn't turn its A (right button) into Back, so
+    // the next A press stays on the page and the choice is saved (it used to swap at once and A left Settings)
+    const pp = await w3.page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), out = {}, api = window.trustyshelf;
+      const btn = () => ({ pressed: false, touched: false, value: 0 });
+      const pad = { id: 'Wireless Gamepad (STANDARD GAMEPAD Vendor: 057e Product: 2009)', index: 0, connected: true, mapping: 'standard', timestamp: 0, axes: [0, 0, 0, 0], buttons: Array.from({ length: 18 }, btn) };
+      Object.defineProperty(navigator, 'getGamepads', { configurable: true, value: () => [pad, null, null, null] }); window.dispatchEvent(Object.assign(new Event('gamepadconnected'), { gamepad: pad }));
+      const press = async (i) => { pad.buttons[i] = { pressed: true, touched: true, value: 1 }; pad.timestamp++; await w(250); pad.buttons[i] = btn(); pad.timestamp++; await w(450); };
+      const cur = () => ((document.querySelector('#bss .bss-row.cur .nm') || {}).textContent || '');
+      await press(12); Setup.open({ page: 'pad' }); for (let i = 0; i < 40 && !document.querySelector('#bss.on .bss-row'); i++) await w(150); await w(800);
+      for (let i = 0; i < 8 && cur() !== 'Button prompts'; i++) await press(13);
+      out.row = cur(); await press(15); out.saved = (await api.getConfig()).config.ui.buttons;
+      await press(1); out.after = cur(); out.open = !!(Settings.isOpen && Settings.isOpen());
+      const c = (await api.getConfig()).config; delete c.ui.buttons; await api.saveConfig(c);
+      if (Settings.isOpen && Settings.isOpen()) { await Settings.close(); await w(800); }
+      try { delete navigator.getGamepads; } catch (e) {} Shelf.setButtons && Shelf.setButtons('auto'); return out; });
+    check('Beta (Windows): on a Switch Pro pad, choosing Xbox button pictures saves at once and A (the right button) still confirms: Settings stays open on the row',
+      pp.row === 'Button prompts' && pp.saved && pp.saved !== 'auto' && pp.after === 'Button prompts' && pp.open, JSON.stringify(pp));
+    // (beta.11) the 3D case in Inspect has its printed spine (a stray comment once left it off every case)
+    const isp = await w3.page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), out = {};
+      const key = k => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+      for (let i = 0; i < 20 && Shelf.getMode() !== 'browse'; i++) { key('Escape'); await w(400); }
+      for (let i = 0; i < 6 && !/^(gc|wii)\d/.test((Shelf._lib.cur() || {}).id || ''); i++) { key('ArrowRight'); await w(400); }
+      key('v'); for (let i = 0; i < 30 && !(window.Inspect3D && Inspect3D.isActive && Inspect3D.isActive()); i++) await w(200); await w(1200);
+      out.gl = !!(window.Inspect3D && Inspect3D.isActive && Inspect3D.isActive()); out.spine = out.gl ? Inspect3D._st().spine : null; out.mode = Shelf.getMode();
+      for (let i = 0; i < 4 && Shelf.getMode() !== 'browse'; i++) { key('Escape'); await w(700); } return out; });
+    check('Beta (Windows): the 3D case in Inspect has its printed spine', isp.mode === 'inspect' && (isp.gl ? isp.spine === true : true), JSON.stringify(isp));
     // A on the theme tiles keeps the highlighted theme (it used to step on to the next one) and puts it on the shelf now
     const th = await w3.page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms));
       const key = k => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));

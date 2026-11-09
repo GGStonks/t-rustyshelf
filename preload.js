@@ -38,6 +38,7 @@ contextBridge.exposeInMainWorld('trustyshelf', {
   customThemeCreate: (file, name) => call('customThemes:create', { file, name }),
   customThemesOpen: () => call('customThemes:open'),
   sw2Builds: file => call('sw2:builds', { file }), // Switch 2: the Eglantine builds to choose from at Play
+  sw2AddBuild: exe => call('sw2:addBuild', { exe }), // (beta.11) "+ Add another emulator" in that list
   onLaunchStatus: cb => ipcRenderer.on('launch:status', (_e, t) => cb(t)),
   launchEmulator: systemId => call('launch:emulator', { systemId }),
   launchApp: (appId, link) => call('launch:app', { appId, link }),

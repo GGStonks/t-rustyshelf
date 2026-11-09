@@ -82,14 +82,14 @@ function argsPreview(tpl,rom){return (tpl||"").replace(/\{rom\}/g,rom||"")}
 // Games and shelf tiles you've hidden (Details → Hide from shelf; Settings → Hidden games & tiles; supalii's fork: the Open
 // emulator and Surprise me tiles too) never reach a shelf, so Home, the museum,
 // Shuffle, attract mode and letter jumps all skip them; the scan itself stays whole (lastLib) for the Settings list.
-let lastLib=null;
+let lastLib=null,reshelfWanted=false;
 function hiddenSet(){const h=cfgInfo&&cfgInfo.config.ui.hidden;return new Set(Array.isArray(h)?h.map(String):[])}
 function prepare(list){
   const hid=hiddenSet();
   const out=list.map(s0=>{
     const all=s0.games||[],games=hid.size?all.filter(g=>!hid.has(String(g.id))):all,s={...s0,games,_hiddenN:all.length-games.length};
     const items=games.map(g=>{const seed=hash(g.title);return {...g,seed,hue:g.kind==="app"?(APP_HUE[g.appId]||seed%360):seed%360,scene:g.kind==="app"?"media":undefined}});
-    if(s.kind==="console"&&s.hasEmulator&&!hid.has("emu-"+s.id)){ // (supalii: the tile can be hidden too)
+    if(s.kind==="console"&&s.hasEmulator&&!hid.has("emu-"+s.id)&&!(cfgInfo&&cfgInfo.config.ui.emuCase===false)){ // (beta.11) Settings → Shelf → Emulator case off: no "Open <emulator>" case
       const t=`Open ${s.emulatorName}`;const seed=hash(t+s.id);
       items.unshift({kind:"emulator",id:"emu-"+s.id,title:t,seed,hue:seed%360,scene:"media",art:{icon:s.emulatorIcon||null}});
     }
@@ -97,8 +97,8 @@ function prepare(list){
     if(s.kind==="console"&&!all.length){const seed=hash("setup"+s.id);items.unshift({kind:"setup",id:"setup-"+s.id,title:"Add games",seed,hue:210,scene:"media",art:{front:Covers.setupFront(STYLE[s.id]||STYLE.media)}})}
     // (beta.7) the Custom shelf ends in an "Add games" tile: Settings → Custom games → Add games (several at once, a folder, Playnite)
     if(s.id==="custom"&&!ANDROID){const seed=hash("setup-custom");items.push({kind:"setup",addGames:true,tail:true,id:"setup-custom",title:"Add games",seed,hue:210,scene:"media",art:{front:Covers.setupFront(STYLE.custom||STYLE.media)}})}
-    // "Surprise me" tile at the front of every shelf that has games on it
-    if((s.kind==="console"||s.kind==="steam")&&s.games.length>1&&!hid.has("rnd-"+s.id)){
+    // "Surprise me" tile at the front of every shelf that has games on it ((beta.11) unless Settings → Shelf → Surprise me is Off)
+    if((s.kind==="console"||s.kind==="steam")&&s.games.length>1&&!hid.has("rnd-"+s.id)&&!(cfgInfo&&cfgInfo.config.ui.surpriseMe==="off")){
       const seed=hash("random"+s.id),style=STYLE[s.id]||STYLE.media;
       items.unshift({kind:"random",id:"rnd-"+s.id,title:"Surprise me",seed,hue:300,scene:"media",art:{front:Covers.randomFront(style)}});
     }
@@ -1258,10 +1258,17 @@ async function pickBuild(g){
   if(bp||(mode!=="browse"&&mode!=="details"))return null;
   // (1.82) a .nup game and no build that opens .nup: say so, instead of a picker where every row is greyed out
   if(r.nup&&!r.builds.some(b=>b.nup)){play_("error");toast("None of your Switch 2 builds can open .nup games. Add a newer build of your Switch 2 emulator.");return null}
+  // (beta.11) one more build without going to Settings: the last row picks its program, then the list comes back with it
+  const opts=r.builds.map(b=>{const off=r.nup&&!b.nup;return {value:b.exe,label:b.label,detail:off?"can't open .nup games":new Date(b.date).toLocaleDateString(undefined,{month:"short",day:"numeric"}),disabled:off}});
+  if(api.sw2AddBuild&&api.pick)opts.push({value:BP_ADD,label:"+ Add another emulator…",detail:"eglantine.exe, lichii.exe…",cls:"bp-add"});
   // (1.82) start on the suggested build, or else the first that isn't greyed out (row 0 could be)
-  return chooseOne({title:"Start in which build?",label:"Choose a build",sub:g.title,foot:`${btnWord("a")} start · ${btnWord("back")} back`,first:r.first,
-    options:r.builds.map(b=>{const off=r.nup&&!b.nup;return {value:b.exe,label:b.label,detail:off?"can't open .nup games":new Date(b.date).toLocaleDateString(undefined,{month:"short",day:"numeric"}),disabled:off}})});
+  const v=await chooseOne({title:"Start in which build?",label:"Choose a build",sub:g.title,foot:`${btnWord("a")} start · ${btnWord("back")} back`,first:r.first,options:opts});
+  if(v===BP_ADD){await bpAdd();return pickBuild(g)}
+  return v;
 }
+const BP_ADD="\u0000add";
+async function bpAdd(){const f=await api.pick({kind:"file",title:"Choose a Switch 2 emulator (eglantine.exe, lichii.exe, orchid.exe…)",filters:/Win/.test(navigator.platform)?[{name:"Programs",extensions:["exe"]}]:undefined}).catch(()=>null),x=typeof f==="string"?f:f&&f.path;
+  if(!x)return;try{await api.sw2AddBuild(x);toast("Emulator added")}catch(e){toast(String(e&&e.message||e).replace(/^Error invoking remote method '[^']+': (Error: )?/,""))}}
 // A card in the middle of the screen with a few choices, one per row (the build picker, Install on an Epic game that isn't
 // installed). Pad (up / down, A, B), keys (arrows, Enter, Esc), mouse and touch. Resolves to the chosen option's value, or
 // null for Back. options: [{ value, label, detail, disabled }]; first: the value to start on
@@ -1272,7 +1279,7 @@ function chooseOne({title,label,sub,foot,options,first}){
     const card=document.createElement("div");card.className="bp-card";card.setAttribute("role","dialog");card.setAttribute("aria-label",label||title);
     const t=document.createElement("div");t.className="bp-title";t.textContent=title;card.append(t);
     if(sub){const d=document.createElement("div");d.className="bp-game";d.textContent=sub;card.append(d)}
-    const rows=options.map((o,j)=>{const row=document.createElement("button");row.type="button";row.className="bp-row";row.disabled=!!o.disabled;
+    const rows=options.map((o,j)=>{const row=document.createElement("button");row.type="button";row.className="bp-row"+(o.cls?" "+o.cls:"");row.disabled=!!o.disabled;
       const n=document.createElement("b");n.textContent=o.label;const d=document.createElement("span");d.textContent=o.detail||"";row.append(n,d);
       row.addEventListener("click",()=>{if(!o.disabled&&bp){bp.i=j;bpChoose()}});row.addEventListener("pointerenter",()=>{if(!o.disabled&&bp&&inputMode==="pointer"){bp.i=j;bpRender()}});card.append(row);return row});
     const f=document.createElement("div");f.className="bp-foot";f.textContent=foot||`${btnWord("a")} choose · ${btnWord("back")} back`;card.append(f);
@@ -4234,6 +4241,8 @@ function dimPad(gp,t){let act=false;const bs=gp.buttons;for(let i=0;i<bs.length;
 function applyUi_(u){
   if("safeArea" in u)applySafeArea(u.safeArea);
   if("reduceMotion" in u)applyReduceMotion(u.reduceMotion===true);
+  // (beta.11) the light that sweeps over a box when it lands: on (default), less (only once you stay on a box a moment), off
+  if("boxShine" in u){const v=u.boxShine==="off"||u.boxShine==="less"?u.boxShine:"on";document.body.classList.toggle("shine-off",v==="off");document.body.classList.toggle("shine-less",v==="less")}
   if("clock" in u||"clock24" in u)clock();
   if("confirmButton" in u)applyConfirm(u.confirmButton);
   if("scrollSpeed" in u)scrollCfg=SCROLL[u.scrollSpeed]||SCROLL.normal;
@@ -4245,7 +4254,7 @@ function applyUi_(u){
   if("allShelf" in u){buildHome();renderTabs();build();}
   if("boxScale" in u||"shelfScale" in u||"gameScale" in u){measure();layout();if(slots&&slots[sel])go(sel);}
 }
-function applyUiAll(){try{if(cfgInfo&&cfgInfo.config)localStorage.setItem("bs.lang",cfgInfo.config.ui.language==="pt"?"pt":"en")}catch{} /* (the translation reads it when the page loads) */const u=uiNow();applyUi_({safeArea:u.safeArea,reduceMotion:u.reduceMotion,clock:u.clock,clock24:u.clock24,confirmButton:u.confirmButton,scrollSpeed:u.scrollSpeed,audioOut:u.audioOut,dimMinutes:u.dimMinutes})}
+function applyUiAll(){try{if(cfgInfo&&cfgInfo.config)localStorage.setItem("bs.lang",cfgInfo.config.ui.language==="pt"?"pt":"en")}catch{} /* (the translation reads it when the page loads) */const u=uiNow();applyUi_({safeArea:u.safeArea,reduceMotion:u.reduceMotion,boxShine:u.boxShine,clock:u.clock,clock24:u.clock24,confirmButton:u.confirmButton,scrollSpeed:u.scrollSpeed,audioOut:u.audioOut,dimMinutes:u.dimMinutes})}
 function applyUi(partial){if(!partial||typeof partial!=="object")return;try{if(cfgInfo){const ui=cfgInfo.config.ui;for(const k of Object.keys(partial))ui[k]=partial[k]}applyUi_(partial)}catch(e){console.warn("applyUi",e)}}
 // Hidden games: the list for Settings (from the whole scan, hidden ones included) and the switch itself
 function hiddenList(){const hid=hiddenSet();if(!hid.size||!lastLib)return [];const out=[];lastLib.forEach(s=>{
@@ -4276,7 +4285,7 @@ async function chooseGameEmu(g){if(!g||g.kind!=="rom"||!api.gameEmulator)return;
 // the Details panel's "Box art" button (1.67): opens Settings → Art & manuals straight at this game's mix (front, back,
 // spine and disc looks, Pick exact for any part); B there goes up to the console's games, then the Art page
 (function(){const c=$("dActEnd");if(!c||$("dBoxArt"))return;const b=document.createElement("button");b.className="btn";b.type="button";b.id="dBoxArt";b.textContent="Box art";b.title="Choose this game's box art: front, back, spine and disc";
-  b.addEventListener("click",()=>{const g=curGame();if(g&&g.kind==="steam"&&api.pcCoverOptions){closeDetails(true);pcCoverOpen(g);return}if(!g||g.kind!=="rom"||!api.artStudio)return;artStudioFor(g)});c.before(b);
+  b.addEventListener("click",()=>{const g=curGame();if(g&&g.kind==="steam"&&api.pcCoverOptions){closeDetails(true);pcCoverOpen(g);return}if(!g||g.kind!=="rom"||!api.artStudio)return;if(!ANDROID)closeDetails(true);artStudioFor(g)});c.before(b); /* (beta.11, Windows: Details closes first, so one B from the box art lands on the shelf with the new case in view) */
   // (beta.9) PC games: the same picker from a button in the main row, beside Play (consoles keep theirs in More)
   const m=$("dMoreBtn");if(m&&!$("dBoxArtPc")){const p=document.createElement("button");p.className="btn d-ico";p.type="button";p.id="dBoxArtPc";p.hidden=true;p.title="Choose this game's cover";
     p.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4zM4 16l5-5 4 4 3-3 4 4"/><path d="M14.5 8.5h.01"/></svg><span>Box art</span>';
@@ -4363,9 +4372,10 @@ window.Shelf={
   _exit:{start:()=>holdExitStart(),cancel:()=>holdExitCancel(),open:()=>!!hx}, // (tests)
   _play:id=>{const g=allShelves.flatMap(x=>x.items||x.games||[]).find(x=>x&&x.id===id);if(g)launchNow(g);return !!g}, // (tests: Play on a game by id)
   pcCoverAuto:()=>pcCoverAuto(),pcCoverUndo:()=>pcCoverUndo(),coverUndoCount:()=>coverUndo.length,
+  reshelf:()=>{reshelfWanted=true}, // (beta.11) Settings → Surprise me / Emulator case: the shelves are rebuilt the moment Settings closes (settingsClosed)
   // (beta.7) test hooks for the library pass: the filters on offer, picking one, the shelf's games and the one in view
   _lib:{filters:()=>filterList(),filter:v=>pickSort(1,v),select:id=>{const i=cur()?cur().items.findIndex(g=>g.id===id):-1;if(i<0)return false;go(i);return true},cur:()=>{const g=curGame();return g?{id:g.id,title:g.title,kind:g.kind}:null},
-    games:()=>(cur()?cur().items.filter(isGame):[]).map(g=>({id:g.id,year:yearOf(g),genres:genresOf(g)})),shelves:()=>shelves.map(s=>({id:s.id,name:s.name,col:!!s.col,ids:(s.items||[]).filter(isGame).map(g=>g.id),tiles:(s.items||[]).filter(g=>g.kind==="random"||g.kind==="emulator").map(g=>({id:g.id,kind:g.kind,title:g.title})),last:((s.items||[])[(s.items||[]).length-1]||{}).id||null}))},
+    games:()=>(cur()?cur().items.filter(isGame):[]).map(g=>({id:g.id,year:yearOf(g),genres:genresOf(g)})),shelves:()=>shelves.map(s=>({id:s.id,name:s.name,col:!!s.col,ids:(s.items||[]).filter(isGame).map(g=>g.id),tiles:(s.items||[]).filter(g=>g.kind==="random"||g.kind==="emulator").map(g=>({id:g.id,kind:g.kind,title:g.title})),last:((s.items||[])[(s.items||[]).length-1]||{}).id||null,random:(s.items||[]).some(i=>i&&i.kind==="random")}))},
   // (beta.7) Settings changed your collections: their shelves are made again (the one you're on stays, if it still has games)
   previewStop:()=>{if(PV){pvStop();pvBackStop()}},setCollections:list=>{if(!cfgInfo||!Array.isArray(list))return;cfgInfo.config.ui.collections=list;const was=cur();buildHome();
     // (beta.10) the shelf you were on is gone (buildHome keeps the index, so another shelf slid into it): show that shelf's own cases, from its first game
@@ -4376,7 +4386,8 @@ window.Shelf={
   refresh,flushSaves,toast,shuffle,cleanLogo,attractNow:()=>{lastInputAt=-1e9;attractCheck()},sound:(o)=>{if(o&&o.enabled!=null){soundOn=!!o.enabled;musTvVol()}if(o&&o.volume!=null&&cfgInfo){cfgInfo.config.ui.volume=+o.volume;paintVol()}if(window.Sound){Sound.set(o);if(o.preview)Sound.play(o.preview);if(o.music!=null||o.musicLevel!=null){if(o.music!=null)mmTrack=String(o.music);if(o.musicLevel!=null)mmLevel=+o.musicLevel;ambient(mmWant)}else if(o.enabled===true)ambient(mmWant)}},raReload:()=>{RA.shelf={};RA.game.clear();raInit()},
   // Settings closed without a rescan: pick up what refresh() used to re-read (sound on/off, the volume icon, prompts)
   settingsClosed:()=>{if(cpReturn){const x=cpReturn;cpReturn=null;const g=allShelves.flatMap(s=>s.items||[]).find(y=>y&&y.id===x.id);if(g)setTimeout(()=>pcCoverOpen(g,x.term),350)} /* (beta.9) back from the SteamGridDB key's page: the cover picker again */
-    if(!cfgInfo)return;const u=cfgInfo.config.ui;soundOn=u.sound!==false;paintVol();buttonsPref=u.buttons||"auto";applyUiAll();renderHints.sig="";renderHints();updateInfo() /* (Show game sizes) */;updateSkipText();lastInputAt=performance.now()},
+    if(!cfgInfo)return;const u=cfgInfo.config.ui;soundOn=u.sound!==false;paintVol();buttonsPref=u.buttons||"auto";applyUiAll();renderHints.sig="";renderHints();updateInfo() /* (Show game sizes) */;updateSkipText();lastInputAt=performance.now();
+    if(reshelfWanted&&lastLib){reshelfWanted=false;pendingLib=null;refresh(true,lastLib)}}, // (beta.11) Surprise me / Emulator case changed: the shelves without the case at once (it lingered a few seconds)
   // Settings reads the controller itself: its presses count as activity (attract, dimming), and none of them act while
   // the dimmed screen is up or the press that woke it is still held
   _wake:()=>{lastInputAt=dimAt=performance.now()},padBlocked:()=>dimOn||dimSwallowPad,

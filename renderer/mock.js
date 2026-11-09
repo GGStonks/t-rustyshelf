@@ -60,7 +60,8 @@ if(WAVE2){Object.assign(titles,{saturn:["Astral Knights","Panzer Skies"],arcade:
 function mockSw2Builds(){const s=config.systems.sw2||{},B=[["Switch 2 emu\\Selvet Forks\\performance-6\\eglantine.exe","Selvet · Performance 6",false],["Switch 2 emu\\Lichii\\pgo\\lichii.exe","Lichii pgo",true],["Switch 2 emu\\Orchid v0.7.0\\orchid.exe","Orchid v0.7.0",false]].map(([e,label,nup],i)=>({exe:root+"\\"+e,group:"",name:label,label,date:Date.UTC(2026,9,20+i),nup}));
   (Array.isArray(s.buildDirs)?s.buildDirs:[]).forEach((d,i)=>B.push({exe:d+"\\fork-"+i+"\\eglantine.exe",group:"",name:"Fork "+(i+1),label:"Fork "+(i+1),date:Date.UTC(2026,10,1),nup:false}));
   (Array.isArray(s.buildExes)?s.buildExes:[]).forEach(x=>B.push({exe:x,group:"",name:x.split("\\").pop(),label:"Added · "+x.split("\\").pop(),date:Date.UTC(2026,10,2),nup:false}));
-  return B}
+  const hid=new Set((Array.isArray(s.buildHidden)?s.buildHidden:[]).map(x=>String(x).toLowerCase())); // (beta.11) removed in Settings, as main.js does
+  return B.filter(b=>!hid.has(b.exe.toLowerCase()))}
 let config={version:1,setupDone:false,systems:{},steam:{enabled:true,path:""},apps:{stremio:{enabled:true,path:""},nuvio:{enabled:true,path:""}},ui:{sound:true,startFullscreen:true}};
 {const q=(location.search.match(/[?&]previews=(\w+)/)||[])[1];if(q)Object.assign(config.ui,{previews:q,previewDelay:1})} // (beta.7) ?previews=details|shelf: video previews on
 consoles.forEach(c=>config.systems[c.id]={enabled:true,emulator:"",gameArgs:c.gameArgs||"",emulatorArgs:"",romDirs:[],artDir:"",bootOnLaunch:true});
@@ -152,7 +153,8 @@ window.trustyshelf={
     // (beta.9) the Custom shelf's games without a cover chosen yet (the batch cover finder)
     pcCoverMissing:async()=>{await wait(80);const s=(window.Shelf&&Shelf._lib?Shelf._lib.shelves():[]).find(x=>x.id==="custom");return (s?s.ids:[]).filter(id=>!(window.__pcCovers||{})[id]).map(id=>({id,title:id,source:"custom"}))},
     launchPc:async id=>{window.__pcLaunched=(window.__pcLaunched||[]).concat(id);const c=((config.pc||{}).custom||[]).find(x=>"custom-"+x.id===id);if(c)window.__pcLaunches=(window.__pcLaunches||[]).concat({id,platform:c.shelf||"",args:c.args||""});await wait(100);if(/^(epic|ubisoft|ea|xbox)-/.test(id))return {external:true};setTimeout(()=>onExit({code:0}),3000);return {pid:4242,cover:3}},pcStatus:async()=>({quiver:root+"\\Quiver",epic:1,gog:1,ubisoft:1,ea:1,xbox:1}),findQuiver:async()=>root+"\\Quiver"}:{}),
-  ...(SW2?{sw2Builds:async()=>{await wait(120);const b=mockSw2Builds();return {builds:b,nup:false,first:b[0].exe}}}:{}),
+  ...(SW2?{sw2Builds:async()=>{await wait(120);const b=mockSw2Builds();return {builds:b,nup:false,first:b[0]&&b[0].exe}},
+    sw2AddBuild:async exe=>{const s=config.systems.sw2=config.systems.sw2||{},low=String(exe).toLowerCase();s.buildHidden=(s.buildHidden||[]).filter(x=>String(x).toLowerCase()!==low);if(!(s.buildExes||[]).some(x=>String(x).toLowerCase()===low))s.buildExes=[...(s.buildExes||[]),exe];return {ok:true}}}:{}),
   downloadCovers:async ids=>({systems:ids.map(id=>({id,name:id,total:10,front:8,back:6,spine:5,had:0,missed:["Example Game"]}))}),
   onCoversProgress:fn=>{(window.__mockCov=window.__mockCov||[]).push(fn)},
   findManuals:async ids=>{await wait(800);return ["Aether Drift","Bramblewood Tales","Cinder Circuit","Coral Kingdom","Echo Hollow","Ferrous Fist","Gale Riders","Kettle Knight","Lumen Isle","Moonmallow","Orbit Odyssey","Sky Harbor"].map((t,i)=>({systemId:"gc",system:"GameCube",title:t,file:root+"\\ROMS\\Gamecube\\"+t+" (USA).rvz",have:i===2,candidates:i===2?[]:[{id:"demo-"+i,title:t+" GameCube Manual",language:"eng",pages:24,score:8,thumb:"",url:"#"},{id:"demo-fr-"+i,title:t+" mode d'emploi",language:"fre",pages:24,score:4.5,thumb:"",url:"#"}]}))},

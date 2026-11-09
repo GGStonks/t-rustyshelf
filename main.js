@@ -1509,14 +1509,27 @@ function sw2Roots() {
 }
 // (1.82) the builds in the build folders, plus this game's own choice and the shelf's build when they sit elsewhere (the
 // picker used to leave them out, and Play then turned them down); (beta.3) and the single builds added in Settings
+// (beta.11) builds removed in Settings (sw2.buildHidden: their exes) are left out, wherever they were found; adding one
+// again brings it back
 async function sw2BuildList(file) {
-  const list = await nx2.builds(sw2Roots()), low = p => path.resolve(p || '.').toLowerCase();
-  for (const [exe, hint] of [[file ? gameEmuOverride('sw2', file) : '', "this game's choice"], [emuPath((cfg.systems.sw2 || {}).emulator || ''), "the shelf's build"], ...sw2Added('buildExes').map(x => [x, ''])]) {
-    if (!exe || list.some(b => low(b.exe) === low(exe)) || !paths.isFile(exe)) continue;
+  const low = p => path.resolve(p || '.').toLowerCase(), hidden = new Set(sw2Added('buildHidden').map(low));
+  const list = (await nx2.builds(sw2Roots())).filter(b => !hidden.has(low(b.exe)));
+  for (const [exe, hint] of [[file ? gameEmuOverride('sw2', file) : '', "This game's"], [emuPath((cfg.systems.sw2 || {}).emulator || ''), 'Shelf'], ...sw2Added('buildExes').map(x => [x, 'Added'])]) {
+    if (!exe || hidden.has(low(exe)) || list.some(b => low(b.exe) === low(exe)) || !paths.isFile(exe)) continue;
     const b = await nx2.buildOf(exe, hint); if (b) list.push(b);
   }
   return list;
 }
+// (beta.11) "+ Add another emulator" at Play: one more Switch 2 build, kept with the ones added in Settings
+handle('sw2:addBuild', async ({ exe } = {}) => {
+  if (typeof exe !== 'string' || !exe || exe.length > 1024 || !paths.isFile(exe)) throw new Error('That file was not found.');
+  if (process.platform === 'win32' && !/\.exe$/i.test(exe)) throw new Error('Choose the emulator\'s program (.exe).');
+  const low = p => path.resolve(p).toLowerCase(), s = { ...(cfg.systems.sw2 || {}) };
+  s.buildHidden = sw2Added('buildHidden').filter(x => low(x) !== low(exe));
+  const added = sw2Added('buildExes'); if (!added.some(x => low(x) === low(exe))) s.buildExes = [...added, exe].slice(0, 20);
+  cfg = persistCfg(config.normalize({ ...cfg, systems: { ...cfg.systems, sw2: s } }));
+  return { ok: true };
+});
 handle('sw2:builds', async ({ file }) => {
   const list = await sw2BuildList(file), id = 'sw2:' + file, low = p => path.resolve(p || '.').toLowerCase();
   const nup = /\.nup$/i.test(String(file || '')), ok = b => !nup || b.nup;
@@ -1587,11 +1600,15 @@ async function launchGameNow(systemId, file, sc) {
   // (beta.8) Switch through Ryujinx (EmuDeck's usual pick): its own options, not Eden's / Citron's "-f -g" (an edited
   // command line is left as it is)
   if (systemId === 'sw' && /ryujinx|ryubing/i.test(path.basename(sc.emulator || '')) && /^\s*-f\s+-g\s+"\{rom\}"\s*$/.test(sc.gameArgs || '')) { sc = { ...sc, gameArgs: '--fullscreen "{rom}"' }; log('Switch launch: Ryujinx options'); }
-  // ((T)rustyShelf, Boxshelf's issue 17) DeSmuME (DS) and VisualBoyAdvance-M (the Game Boys) get their own options while the
-  // shelf's are still its default (melonDS's / mGBA's / RetroArch's): DeSmuME --windowed-fullscreen, VBA-M -f (both checked
-  // against their sources)
-  { const d0 = CONSOLES.find(c => c.id === systemId), b = path.basename(sc.emulator || ''), alt = /desmume/i.test(b) ? '--windowed-fullscreen "{rom}"' : /visualboyadvance|^vbam/i.test(b) ? '-f "{rom}"' : null;
-    if (alt && d0 && String(sc.gameArgs || '').trim() === String(d0.gameArgs || '').trim()) { sc = { ...sc, gameArgs: alt }; log(`${d0.name} launch: ${emuName.knownName(b) || b}'s own options`); } }
+// (beta.11) the standalone emulators a retro shelf can use, by program name, and the options each one takes (DeSmuME and
+// VisualBoyAdvance-M have no reliable fullscreen option: they open the game in their own window, fullscreen per their settings)
+const ALT_ARGS = [[/desmume/i, '"{rom}"'], [/visualboyadvance|vbam/i, '"{rom}"'], [/mgba/i, '-f "{rom}"'], [/melonds/i, '-f "{rom}"'], [/duckstation/i, '-fullscreen -batch -nogui -- "{rom}"']];
+  // (beta.11) a retro shelf started in another standalone emulator than the one its options are for (DeSmuME on the DS
+  // shelf was handed melonDS's -f, which it refuses; mGBA or VisualBoyAdvance-M on a Game Boy shelf): that emulator's own
+  // options, as long as the shelf's options are still the default ones (an edited command line is left as it is)
+  { const def0 = CONSOLES.find(c => c.id === systemId), b = path.basename(sc.emulator || '');
+    if (def0 && def0.retro && !/retroarch/i.test(b) && (!sc.gameArgs || sc.gameArgs === def0.gameArgs)) { const alt = ALT_ARGS.find(([re]) => re.test(b));
+      if (alt && alt[1] !== sc.gameArgs) { sc = { ...sc, gameArgs: alt[1] }; log('Launch options for', b); } } }
   // (beta.6) RetroArch: this console's core from RetroArch's cores folder, fullscreen; a core that isn't downloaded yet is
   // said plainly (RetroArch itself would just open its menu)
   { const def = CONSOLES.find(c => c.id === systemId);
