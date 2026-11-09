@@ -1409,7 +1409,7 @@ handle('dialog:pick', async ({ kind, title, defaultPath, filters, multi }) => {
   return r.canceled ? null : multi ? r.filePaths : r.filePaths[0];
 });
 // ---------- (beta.7) Add games (main/addgames.js): a folder of games scanned; Playnite's library read (experimental) ----------
-handle('games:scanFolder', ({ root }) => { const r = addgames.scanFolder(String(root || '')); return { ...r, games: r.games.map(g => ({ ...g, title: g.title })) }; });
+handle('games:scanFolder', async ({ root }) => { const r = await addgames.scanFolderAsync(String(root || '')); return { ...r, games: r.games.map(g => ({ ...g, title: g.title })) }; });
 handle('games:titleFor', ({ exes }) => (Array.isArray(exes) ? exes : []).slice(0, 500).map(e => ({ exe: String(e), title: addgames.titleFor(String(e)) })));
 let pnPlan = null;
 handle('playnite:find', ({ dir } = {}) => process.platform === 'win32' ? addgames.find(dir ? String(dir) : '') : null);

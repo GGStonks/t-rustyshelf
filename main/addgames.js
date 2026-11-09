@@ -63,6 +63,44 @@ function scanFolder(root, limit = 400) {
   return { root, games };
 }
 
+// The same scan without holding the main process up (the folder-scan freeze: a big folder, or one on a NAS, made the
+// synchronous walk above block the window for minutes). Every folder listing and file check is awaited, and the event
+// loop gets a turn every few dozen steps, so the window keeps answering while the scan runs.
+const turn = () => new Promise(r => setImmediate(r));
+async function statOr(f, fn) { try { return await fn(await fs.promises.stat(f)); } catch { return null; } }
+async function mainExeAsync(dir, depth = 3) {
+  const want = key(path.basename(dir)), found = [];
+  let steps = 0;
+  const walk = async (d, left) => {
+    let ents = []; try { ents = await fs.promises.readdir(d, { withFileTypes: true }); } catch { return; }
+    for (const e of ents) {
+      if (++steps % 40 === 0) await turn();
+      const p = path.join(d, e.name);
+      if (e.isFile() && /\.exe$/i.test(e.name) && !HELPER.test(e.name)) { const s = await statOr(p, st => st.size); if (s == null) continue; found.push({ p, s, k: key(e.name), deep: depth - left }); }
+      else if (e.isDirectory() && left > 0 && !SKIP_DIR.test(e.name)) await walk(p, left - 1);
+    }
+  };
+  await walk(dir, depth);
+  if (!found.length) return null;
+  const score = x => (x.k && want && (x.k === want ? 3 : want.includes(x.k) || x.k.includes(want) ? 2 : 0)) * 1e12 + x.s - x.deep * 1e6;
+  found.sort((a, b) => score(b) - score(a));
+  return { exe: found[0].p, others: found.slice(1, 4).map(x => x.p) };
+}
+async function scanFolderAsync(root, limit = 400) {
+  if (!(await statOr(root, st => st.isDirectory()))) return { root, games: [], error: 'That folder isn\'t there' };
+  const games = []; let ents = [];
+  try { ents = await fs.promises.readdir(root, { withFileTypes: true }); } catch (e) { return { root, games, error: e.code || e.message }; }
+  for (const e of ents) {
+    if (games.length >= limit) break;
+    await turn();
+    if (e.isDirectory() && !SKIP_DIR.test(e.name)) { const m = await mainExeAsync(path.join(root, e.name)); if (m) games.push({ folder: path.join(root, e.name), title: clean(e.name) || titleFor(m.exe, root), exe: m.exe, others: m.others }); }
+  }
+  const loose = ents.filter(e => e.isFile() && /\.exe$/i.test(e.name) && !HELPER.test(e.name));
+  for (const e of loose) games.push({ folder: root, title: clean(path.basename(e.name, '.exe')), exe: path.join(root, e.name), others: [] });
+  games.sort((a, b) => a.title.localeCompare(b.title));
+  return { root, games };
+}
+
 // ---------- Playnite ----------
 const appData = () => process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
 const localData = () => process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
@@ -143,4 +181,4 @@ function plan(lib, found) {
   return out;
 }
 
-module.exports = { init, scanFolder, mainExe, titleFor, clean, find, read, plan, SPEC, HELPER };
+module.exports = { init, scanFolder, scanFolderAsync, mainExe, titleFor, clean, find, read, plan, SPEC, HELPER };
