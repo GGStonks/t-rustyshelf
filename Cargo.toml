@@ -1,0 +1,5 @@
+[workspace]
+members = [
+    "crates/img-tools",
+]
+resolver = "2"

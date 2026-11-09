@@ -70,6 +70,7 @@ const padsense = require('./main/padsense'); // which real controllers are plugg
 const modelfind = require('./main/modelfind');
 const icons = require('./main/icons');
 const dolphin = require('./main/dolphin');
+const imgtools = require('./main/imgtools'); // (Rust image manipulation and spine-cutting engine)
 const covers = require('./main/covers');
 const artstudio = require('./main/artstudio');
 const manuals = require('./main/manuals');
@@ -280,8 +281,15 @@ function thumbFor(file, stat, h) {
     // (beta.10) no shell thumbnailer (Linux): scaled in a hidden image window of its own (img-tools 'shrink', its own queue,
     // never behind a manual), off this thread; the decode here below is only what's left when that fails
     let buf = null;
-    if (process.platform !== 'win32' && sz && sz[1] > 0 && thumbHelperFails < 3) { const r = await helperJob('img-tools.html', async () => { const b = await fs.promises.readFile(file); return { data: new Uint8Array(b.buffer, b.byteOffset, b.length), mode: 'shrink', w: Math.max(1, Math.round(sz[0] * h / sz[1])) }; }, 15000, false, 'thumbs');
-      const m = !r.err && /^data:image\/jpeg;base64,(.+)$/.exec(String((r.pages || [])[0] || '')); if (m) buf = Buffer.from(m[1], 'base64'); else if (r.err && /timed out|gone|did not load/.test(r.err) && ++thumbHelperFails >= 3) log('thumbnails: the image window keeps failing (' + r.err + '), scaling them here from now on'); }
+    if (process.platform !== 'win32' && sz && sz[1] > 0) {
+      if (imgtools.isAvailable()) {
+        try { buf = await imgtools.shrink(file, Math.max(1, Math.round(sz[0] * h / sz[1]))); } catch {}
+      }
+      if (!buf && thumbHelperFails < 3) {
+        const r = await helperJob('img-tools.html', async () => { const b = await fs.promises.readFile(file); return { data: new Uint8Array(b.buffer, b.byteOffset, b.length), mode: 'shrink', w: Math.max(1, Math.round(sz[0] * h / sz[1])) }; }, 15000, false, 'thumbs');
+        const m = !r.err && /^data:image\/jpeg;base64,(.+)$/.exec(String((r.pages || [])[0] || '')); if (m) buf = Buffer.from(m[1], 'base64'); else if (r.err && /timed out|gone|did not load/.test(r.err) && ++thumbHelperFails >= 3) log('thumbnails: the image window keeps failing (' + r.err + '), scaling them here from now on');
+      }
+    }
     if (!buf) {
     if (!img || img.isEmpty()) await thumbTurn(); // decoding here blocks the app: one at a time, with a breath in between (a burst of new art used to hold it up)
     if (!img || img.isEmpty()) { img = nativeImage.createFromPath(file); const s2 = img.isEmpty() ? null : img.getSize(); if (!s2 || s2.height <= h * 1.2) { if (thumbOriginal.size > 5000) thumbOriginal.clear(); thumbOriginal.add(key); return null; } /* undecodable: serve the original from now on */ img = img.resize({ height: h, quality: 'best' }); }
@@ -1011,12 +1019,28 @@ const spreads = require('./main/spreads');
 // cut a scan into halves in a hidden window (decoding big scans here on the main thread froze the shelf)
 // (beta.9) a manual page too big to show, made `w` pixels wide in the same hidden image window (never decoded here)
 async function shrinkPage(file, w) {
+  if (imgtools.isAvailable()) {
+    try {
+      const b = await imgtools.shrink(file, w);
+      if (b) return b;
+    } catch (e) {
+      log('shrink page (native fallback)', path.basename(file), e.message);
+    }
+  }
   const r = await helperJob('img-tools.html', async () => { const b = await fs.promises.readFile(file); return { data: new Uint8Array(b.buffer, b.byteOffset, b.length), mode: 'shrink', w }; }, 60000, true);
   if (r.err) { log('shrink page', path.basename(file), r.err); return null; }
   const m = /^data:image\/jpeg;base64,(.+)$/.exec(String((r.pages || [])[0] || ''));
   return m ? Buffer.from(m[1], 'base64') : null;
 }
 async function cropBoth(file) {
+  if (imgtools.isAvailable()) {
+    try {
+      const halves = await imgtools.crop(file);
+      if (halves && halves.left && halves.right) return halves;
+    } catch (e) {
+      log('crop (native fallback)', path.basename(file), e.message);
+    }
+  }
   const r = await helperJob('img-tools.html', async () => { const b = await fs.promises.readFile(file); return { data: new Uint8Array(b.buffer, b.byteOffset, b.length) }; }, 60000, true);
   if (r.err) log('crop', path.basename(file), r.err);
   const b = r.pages.map(d => { const m = /^data:image\/jpeg;base64,(.+)$/.exec(String(d)); return m ? Buffer.from(m[1], 'base64') : null; });
@@ -1028,6 +1052,14 @@ async function cropBoth(file) {
 const CASE = { gc: [.711, .074], wii: [.711, .074], ps2: [.711, .074], x360: [.711, .074], xbox: [.711, .074], wiiu: [.711, .058], ps3: [.789, .07], ps4: [.789, .07], ps5: [.789, .07], sw: [.618, .059], sw2: [.618, .059], psp: [.578, .078], n3ds: [1.127, .112] };
 async function spineCut(file, sysId, part) { // part 'back' (1.71): the back panel left of the spine, from the same fold search
   const [front, spine] = CASE[sysId] || CASE.gc;
+  if (imgtools.isAvailable()) {
+    try {
+      const b = await imgtools.spine(file, { front, spine, part: part === 'back' ? 'back' : 'spine' });
+      if (b) return b;
+    } catch (e) {
+      log(part === 'back' ? 'back cut (native fallback)' : 'spine (native fallback)', path.basename(file), e.message);
+    }
+  }
   const r = await helperJob('img-tools.html', async () => { const b = await fs.promises.readFile(file); return { data: new Uint8Array(b.buffer, b.byteOffset, b.length), mode: 'spine', front, spine, part: part === 'back' ? 'back' : 'spine' }; }, 30000, true);
   if (r.err) log(part === 'back' ? 'back cut' : 'spine', path.basename(file), r.err);
   const m = /^data:image\/jpeg;base64,(.+)$/.exec(String(r.pages[0] || '')); return m ? Buffer.from(m[1], 'base64') : null;
@@ -1036,6 +1068,14 @@ covers.setSpineCutter(spineCut);
 // a cartridge picture made from a Switch / 3DS game's front cover (1.73.5), in the same hidden image window: for the games no
 // source has a cartridge photo of (Art Studio offers it last; automatic fetching uses it when nothing else was found)
 async function cartMake(front, sysId) {
+  if (imgtools.isAvailable()) {
+    try {
+      const b = await imgtools.cart(front, sysId);
+      if (b) return b;
+    } catch (e) {
+      log('cartridge from cover (native fallback)', path.basename(front), e.message);
+    }
+  }
   const r = await helperJob('img-tools.html', async () => { const b = await fs.promises.readFile(front); return { data: new Uint8Array(b.buffer, b.byteOffset, b.length), mode: 'cart', sys: sysId }; }, 30000, true);
   if (r.err) log('cartridge from cover', path.basename(front), r.err);
   const m = /^data:image\/png;base64,(.+)$/.exec(String(r.pages[0] || '')); return m ? Buffer.from(m[1], 'base64') : null;
@@ -1652,9 +1692,16 @@ async function pcConsoleBoxes(games) {
       // the back and spine first (when that release's are scanned), the front last: the front is what says the game is done
       for (const [part, url] of [['back', box.back], ['spine', box.spine], ['', box.url]]) {
         if (!url) continue; const buf = await fetchImage(url); if (!buf) continue;
-        const r = await helperJob('img-tools.html', async () => ({ mode: 'rebrand', plat: box.plat, part, data: new Uint8Array(buf.buffer, buf.byteOffset, buf.length) }), 30000, true);
-        const m = /^data:image\/jpeg;base64,(.+)$/.exec(String((r && r.pages || [])[0] || '')); if (!m) { log('PC console box', g.title, part || 'front', r && r.err || 'not made'); continue; }
-        try { await pccovers.saveConsole(g.id, Buffer.from(m[1], 'base64'), `${box.platform} ${box.url}`, part); if (!part) made++; } catch (e) { log('PC console box', g.title, e.message); }
+        let mBuf = null;
+        if (imgtools.isAvailable()) {
+          try { mBuf = await imgtools.rebrand(buf, { plat: box.plat, part }); } catch {}
+        }
+        if (!mBuf) {
+          const r = await helperJob('img-tools.html', async () => ({ mode: 'rebrand', plat: box.plat, part, data: new Uint8Array(buf.buffer, buf.byteOffset, buf.length) }), 30000, true);
+          const m = /^data:image\/jpeg;base64,(.+)$/.exec(String((r && r.pages || [])[0] || '')); if (!m) { log('PC console box', g.title, part || 'front', r && r.err || 'not made'); continue; }
+          mBuf = Buffer.from(m[1], 'base64');
+        }
+        try { await pccovers.saveConsole(g.id, mBuf, `${box.platform} ${box.url}`, part); if (!part) made++; } catch (e) { log('PC console box', g.title, e.message); }
       }
       await new Promise(res => setTimeout(res, 250));
     }
