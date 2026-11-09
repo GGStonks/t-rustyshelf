@@ -282,6 +282,10 @@ body:not(.fx) .sel-halo{animation:none}
 .ia-meta{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
 .ia-title{font-weight:600;font-size:13px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .ia-sub{font-size:12px;color:var(--ink-dim)}
+/* (beta.11) a big download says so on its card; a very big one in stronger amber, and its Download asks once more */
+.ia-warn{font-size:12px;line-height:1.35;color:#f3c86b;padding:3px 8px;border-radius:7px;background:rgba(243,200,107,.1);box-shadow:inset 0 0 0 1px rgba(243,200,107,.22);align-self:flex-start}
+.ia-warn.huge{color:#ffb066;background:rgba(255,150,70,.12);box-shadow:inset 0 0 0 1px rgba(255,150,70,.3)}
+.ia-act .btn.small.warn{background:rgba(255,170,80,.2);box-shadow:inset 0 0 0 1px rgba(255,170,80,.55);color:#ffd9a8}
 .ia-act{margin-top:auto;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .ia-act .art-bar{flex-basis:100%;margin:2px 0}
 /* the finder's on-screen keyboard (museum, controller): plain buttons the panel's D-pad navigation reaches */

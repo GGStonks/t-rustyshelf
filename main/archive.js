@@ -122,12 +122,14 @@ const pickFile = files => { const p = plan({ files }); return p && (p.type === '
 // ---------- file transfer ----------
 // Downloads go through Chromium's network stack (redirects to the archive's storage servers, proxies, HTTP/2), streamed
 // to <dest>.part and renamed when complete. Resolves { ok, status }.
-let fetchImpl = null; // tests swap this
+let fetchImpl = null, netImpl = null; // tests swap these
 const UA = `TrustyShelf/${(() => { try { return require('../package.json').version; } catch { return '0'; } })()}`;
-async function fetchFile(url, dest, onBytes, expect, resume, signal) {
+let SLOW_BPS = 1.5 * 1048576, SLOW_MS = 8000; const SLOW_LEFT = 8 * 1048576; // (tests change the first two)
+async function fetchFile(url, dest, onBytes, expect, resume, signal, slowOk) {
   if (signal && signal.aborted) return { ok: false, status: 'cancelled' };
-  if (fetchImpl) return fetchImpl(url, dest, onBytes, expect, resume, signal);
-  const { net } = require('electron');
+  if (fetchImpl) return fetchImpl(url, dest, onBytes, expect, resume, signal, slowOk);
+  let slow = false;
+  const net = netImpl || require('electron').net; // (tests: Node's own fetch against a local server)
   const ac = new AbortController(); let idle = setTimeout(() => ac.abort(), 60000);
   const onCancel = () => ac.abort(); if (signal) signal.addEventListener('abort', onCancel, { once: true });
   const part = dest + '.part';
@@ -152,12 +154,20 @@ async function fetchFile(url, dest, onBytes, expect, resume, signal) {
     // a write failing (disk full, path too long) must end the download, not crash or leave it waiting for 'drain' forever
     out.on('error', e => { if (!werr) { werr = e; ac.abort(); } });
     const reader = r.body.getReader();
+    // (beta.11) archive.org's speed swings from one connection to the next (0.6 to 12 MB/s on the same file a minute
+    // apart): a big file crawling under SLOW_BPS for SLOW_MS is dropped and picked up again from where it got to on a
+    // fresh connection (fetchRetry), which usually lands on a faster one. Not near the end, not for small files.
+    let winT = Date.now(), winN = n;
     try {
       for (;;) {
         const { done, value } = await reader.read(); if (done) break;
         clearTimeout(idle); idle = setTimeout(() => ac.abort(), 60000);
         if (werr) throw werr;
         n += value.length;
+        const now = Date.now();
+        if (now - winT >= SLOW_MS) { const bps = (n - winN) * 1000 / (now - winT), left = (expect || total) - n;
+          if (slowOk && bps < SLOW_BPS && left > SLOW_LEFT) { slow = true; log('Archive file: slow (' + (bps / 1048576).toFixed(1) + ' MB/s), reconnecting at', Math.round(n / 1048576), 'MB'); ac.abort(); }
+          winT = now; winN = n; }
         if (!out.write(Buffer.from(value))) await new Promise((res, rej) => { const ok = () => { off(); res(); }, bad = e => { off(); rej(e); }, off = () => { out.off('drain', ok); out.off('close', ok); out.off('error', bad); }; out.on('drain', ok); out.on('close', ok); out.on('error', bad); });
         if (werr) throw werr;
         if (onBytes) onBytes(n, expect || total);
@@ -171,6 +181,7 @@ async function fetchFile(url, dest, onBytes, expect, resume, signal) {
     fs.renameSync(part, dest); return { ok: true };
   } catch (e) {
     if (signal && signal.aborted) { try { fs.rmSync(part, { force: true }); } catch {} return { ok: false, status: 'cancelled' }; }
+    if (slow && !werr) return { ok: false, status: 'slow' }; // (what came in stays in .part: the next connection carries on)
     if (werr) { log('Archive file could not be saved', dest, werr.message); try { fs.rmSync(part, { force: true }); } catch {} return { ok: false, status: 'write' }; }
     log('Archive file failed', url, e.message, n ? `(${Math.round(n / 1048576)} MB kept to resume)` : ''); return { ok: false, status: e.name === 'AbortError' ? 'stalled' : 'network' }; }
   finally { clearTimeout(idle); if (signal) signal.removeEventListener('abort', onCancel); }
@@ -179,12 +190,17 @@ async function fetchFile(url, dest, onBytes, expect, resume, signal) {
 // left half-done when it gives up is removed.
 // 429 / 503 (the archive asking us to slow down) holds back every request for its Retry-After (up to a minute)
 const slowWait = signal => { const ms = slowUntil - Date.now(); return ms > 0 ? sleep(ms, signal) : null; };
+// (beta.11) a crawling connection ('slow') is picked up again at once from where it got to, up to MAX_SLOW times per file
+// (not counted as a failed try); only files of at least 20 MB are watched
+const MAX_SLOW = 4;
 async function fetchRetry(url, dest, onBytes, expect, signal, tries = 4) {
-  let r = { ok: false, status: 'network' }, resume = false;
+  let r = { ok: false, status: 'network' }, resume = false, slows = 0;
   try {
     for (let t = 0; t < tries; t++) {
       await slowWait(signal);
-      r = await fetchFile(url, dest, onBytes, expect, resume, signal); if (r.ok || [401, 403, 404, 410, 451, 'write', 'cancelled'].includes(r.status)) break;
+      r = await fetchFile(url, dest, onBytes, expect, resume, signal, slows < MAX_SLOW && (expect || 0) >= 20 * 1048576);
+      if (r.status === 'slow') { slows++; t--; resume = true; continue; }
+      if (r.ok || [401, 403, 404, 410, 451, 'write', 'cancelled'].includes(r.status)) break;
       if (t === tries - 1) break;
       let wait = 1500 * (t + 1) * RETRY_MS / 1000;
       if ((r.status === 429 || r.status === 503)) { wait = Math.max(wait, Math.min(60, r.retryAfter > 0 ? r.retryAfter : 5 * (t + 1)) * 1000 * RETRY_MS / 1000); slowUntil = Math.max(slowUntil, Date.now() + wait); }
@@ -351,7 +367,8 @@ async function checkOne(id) {
       const pl = plan(meta);
       if (!pl) res = { ok: false, why: 'no usable files' };
       else {
-        const size = pl.type === 'pages' ? 0 : pl.files.reduce((a, f) => a + (+f.size || 0), 0);
+        // (beta.11) a single file: the one that's downloaded (the others are only fallbacks), not all of them added up
+        const size = pl.type === 'pages' ? 0 : pl.type === 'file' ? +(pl.files.find(f => +f.size <= MAX_BYTES) || pl.files[0]).size || 0 : pl.files.reduce((a, f) => a + (+f.size || 0), 0); // (take() skips a file over 2 GB for the next)
         res = { ok: true, type: pl.type, size, files: pl.type === 'bundle' || pl.type === 'images' ? pl.files.length : 1, pages: pl.pages || 0 };
       }
     }
@@ -367,4 +384,4 @@ async function check(ids) {
   return out;
 }
 
-module.exports = { init, search, check, download, cancel, running, _query: query, _terms: terms, _pickFile: pickFile, _plan: plan, _setFetch: f => { fetchImpl = f; }, _setRetry: ms => { RETRY_MS = ms; slowUntil = 0; }, _reset: () => { checked.clear(); owned = null; slowUntil = 0; } };
+module.exports = { init, search, check, download, cancel, running, _query: query, _terms: terms, _pickFile: pickFile, _plan: plan, _setFetch: f => { fetchImpl = f; }, _setRetry: ms => { RETRY_MS = ms; slowUntil = 0; }, _setSlow: (bps, ms) => { SLOW_BPS = bps; SLOW_MS = ms; }, _setNet: n => { netImpl = n; }, _fetchRetry: (...a) => fetchRetry(...a), _reset: () => { checked.clear(); owned = null; slowUntil = 0; } };

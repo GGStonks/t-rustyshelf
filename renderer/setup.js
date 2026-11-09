@@ -818,7 +818,17 @@ const IA_CHIPS={magazine:["Game Informer","Nintendo Power","Electronic Gaming Mo
 // pending: results archive.org was too busy to check (kept and asked again a little later, never dropped as "not downloadable")
 const iaState={kind:"magazine",text:"",page:0,next:1,total:0,rows:36,plain:false,items:[],backlog:[],pending:[],seen:new Set(),busy:false,err:"",series:"",jobs:new Map(),checking:0,skipped:0,gen:0,recheckT:0,rechecks:0,osk:false};
 const IA_PAR=2; // downloads at once: a big one never holds up the rest
-if(api.onArchiveProgress)api.onArchiveProgress(p=>{const j=iaState.jobs.get(p.id);if(j&&j.state==="run"){j.pct=p.total?Math.round(p.bytes/p.total*100):0;j.mb=p.unit==='pages'?`page ${p.bytes} of ${p.total}`:(p.bytes/1048576).toFixed(1)+' MB';iaPaintJob(p.id)}});
+// (beta.11) sizes in words, and how big a download will be (the archive's own page scans: about 0.45 MB a page, an
+// estimate); a big one is flagged on its card, and a very big one asks to be confirmed (a second press within 5 s)
+const iaSizeTxt=b=>b>=1073741824?(b/1073741824).toFixed(1)+" GB":Math.max(1,Math.round(b/1048576))+" MB";
+const iaBytes=it=>{const c=it&&it.check;if(!c||!c.ok)return 0;if(c.size)return c.size;return c.type==="pages"?(c.pages||it.pages||0)*.45*1048576:0};
+const IA_BIG=300*1048576,IA_HUGE=1073741824,IA_CONFIRM=500*1048576;
+// progress: how much of how much, the speed (smoothed) and the time left
+if(api.onArchiveProgress)api.onArchiveProgress(p=>{const j=iaState.jobs.get(p.id);if(!j||j.state!=="run")return;j.pct=p.total?Math.round(p.bytes/p.total*100):0;
+  if(p.unit==='pages'){j.mb=`page ${p.bytes} of ${p.total}`;iaPaintJob(p.id);return}
+  const now=performance.now();if(j.lt&&now-j.lt>150&&p.bytes>=j.lb){const r=(p.bytes-j.lb)*1000/(now-j.lt);j.rate=j.rate?j.rate*.75+r*.25:r}if(!j.lt||now-j.lt>150){j.lt=now;j.lb=p.bytes}
+  const left=j.rate>1024&&p.total>p.bytes?(p.total-p.bytes)/j.rate:0,eta=left?left<60?`${Math.max(1,Math.round(left))} s left`:`about ${Math.round(left/60)} min left`:"";
+  j.mb=(p.total?`${iaSizeTxt(p.bytes)} of ${iaSizeTxt(p.total)}`:iaSizeTxt(p.bytes))+(j.rate>1024?` · ${(j.rate/1048576).toFixed(1)} MB/s`:"")+(eta?` · ${eta}`:"");iaPaintJob(p.id)});
 let iaBox=null;
 // "Game Informer Issue 150", "GamePro_June_1995", "Xbox The Official Magazine Xmas 2015" → the magazine's name (its series
 // sub-folder): cut at the issue / volume / number, a month or season, or a year
@@ -871,7 +881,8 @@ function iaPaint0(){
     const grid=el("div",{class:"ia-grid"});
     S.items.forEach(it=>{const img=el("img",{class:"ia-thumb",alt:"",loading:"lazy",src:it.thumb});img.onerror=()=>{img.style.visibility="hidden"};
       const job=S.jobs.get(it.id),act=el("div",{class:"ia-act","data-id":it.id});
-      grid.append(el("div",{class:"ia-card"},img,el("div",{class:"ia-meta"},el("div",{class:"ia-title",text:it.title}),el("div",{class:"ia-sub",text:[it.date&&it.date.slice(0,7),it.pages?it.pages+" pages":"",it.check&&it.check.size?(it.check.size/1048576).toFixed(0)+" MB":"",it.check&&it.check.type==="bundle"?it.check.files+" issues":"",it.check&&(it.check.type==="pages"||it.check.type==="images")?"page scans":""].filter(Boolean).join(" · ")}),act)));
+      const B=iaBytes(it),warn=B>=IA_BIG&&!(it.check&&it.check.owned)?el("div",{class:"ia-warn"+(B>=IA_HUGE?" huge":""),text:B>=IA_HUGE?`Very large: ${iaSizeTxt(B)}. Takes a while and needs that much free space.`:`Large download: ${iaSizeTxt(B)}`}):null;
+      grid.append(el("div",{class:"ia-card"},img,el("div",{class:"ia-meta"},el("div",{class:"ia-title",text:it.title}),el("div",{class:"ia-sub",text:[it.date&&it.date.slice(0,7),it.pages?it.pages+" pages":"",B?(it.check.size?"":"≈ ")+iaSizeTxt(B):"",it.check&&it.check.type==="bundle"?it.check.files+" issues":"",it.check&&(it.check.type==="pages"||it.check.type==="images")?"page scans":""].filter(Boolean).join(" · ")}),warn,act)));
       iaFillAct(act,it,job)});
     iaBox.append(grid);
     if(S.checking)iaBox.append(el("div",{class:"hint-text"},el("span",{class:"scanning"}),` Checking which of ${S.checking} more can be downloaded…`));
@@ -884,7 +895,10 @@ function iaPaint0(){
 const iaMore=()=>{const S=iaState;return S.backlog.length>0||(S.next<=20&&(S.next-1)*S.rows<S.total)};
 function iaFillAct(act,it,job){act.innerHTML="";
   const cancel=el("button",{type:"button",class:"btn small ghost","aria-label":`Cancel ${it.title}`,onclick:()=>iaCancel(it.id)},"Cancel");
-  if(!job){if(it.check&&it.check.owned)act.append(el("span",{class:"badge ok",text:"In your folder"}));else act.append(el("button",{type:"button",class:"btn small","aria-label":`Download ${it.title}`,onclick:()=>iaQueue(it)},"Download"));act.append(el("button",{type:"button",class:"btn small ghost","aria-label":`View ${it.title}`,onclick:()=>openLink(it.page)},"View"))}
+  // (beta.11) a very big download asks once more: the button says how big, a second press within 5 s starts it
+  const B=iaBytes(it),big=B>=IA_CONFIRM,armed=big&&it.armAt&&Date.now()-it.armAt<5000;
+  const go=()=>{if(big&&!armed){it.armAt=Date.now();iaPaintJob(it.id);setTimeout(()=>{if(it.armAt&&Date.now()-it.armAt>=5000){it.armAt=0;iaPaintJob(it.id)}},5100);return}it.armAt=0;iaQueue(it)};
+  if(!job){if(it.check&&it.check.owned)act.append(el("span",{class:"badge ok",text:"In your folder"}));else act.append(el("button",{type:"button",class:"btn small"+(armed?" warn":""),"aria-label":armed?`Yes, download ${it.title} (${iaSizeTxt(B)})`:`Download ${it.title}`,onclick:go},armed?`Yes, download ${iaSizeTxt(B)}`:"Download"));act.append(el("button",{type:"button",class:"btn small ghost","aria-label":`View ${it.title}`,onclick:()=>openLink(it.page)},"View"))}
   else if(job.state==="queued")act.append(el("span",{class:"ia-state",text:"Waiting…"}),cancel);
   else if(job.state==="run")act.append(el("div",{class:"art-bar"},el("div",{class:"art-fill",style:`width:${job.pct||0}%`})),el("span",{class:"ia-state",text:job.stopping?"Stopping…":job.pct?`${job.pct}% · ${job.mb}`:"Starting…"}),api.archiveCancel&&!job.stopping?cancel:null);
   else if(job.state==="done")act.append(el("span",{class:"badge ok",text:job.existed?"Already in your folder":"Saved"}),el("span",{class:"ia-state",text:" "+job.name}));

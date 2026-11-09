@@ -131,6 +131,22 @@ module.exports = async function betaPass({ browser, base, check, newPage, OUT })
       if (window.Settings && Settings.isOpen && Settings.isOpen()) { await Settings.close(); await w(800); } return out; });
     check('Beta (Windows): a box art games page that gets no list says so after 20 s and then loads by itself (no endless "Loading…")',
       /Couldn't load the games/.test(lg.said) && lg.asks >= 2 && lg.tiles > 0, JSON.stringify(lg));
+    // (beta.11) the magazine finder says how big each download is, flags a big one and asks once more before a very big one
+    const iaw = await w3.page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), out = {};
+      Setup.open({ page: 'reading' }); for (let i = 0; i < 30 && !document.querySelector('#bss.on .bss-row'); i++) await w(150); await w(600);
+      const row = [...document.querySelectorAll('#bss .bss-row')].find(r => /Find on the Internet Archive/.test(r.textContent)); if (row) row.click();
+      for (let i = 0; i < 30 && !document.querySelector('.ia-input'); i++) await w(150);
+      const inp = document.querySelector('.ia-input'); if (inp) { inp.value = 'big issue'; inp.dispatchEvent(new Event('input', { bubbles: true })); inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); }
+      const card = () => document.querySelector('.ia-card'); for (let i = 0; i < 40 && !card(); i++) await w(200); await w(500);
+      out.text = card() ? card().innerText.replace(/\s+/g, ' ').slice(0, 160) : '';
+      const b1 = card() && [...card().querySelectorAll('button')].find(x => x.textContent === 'Download'); if (b1) b1.click(); await w(250);
+      out.armed = card() ? [...card().querySelectorAll('button')].map(x => x.textContent).join(' | ') : '';
+      const b2 = card() && [...card().querySelectorAll('button')].find(x => /^Yes, download/.test(x.textContent)); if (b2) b2.click(); await w(500);
+      out.started = card() ? [...card().querySelectorAll('button,.ia-state,.badge')].map(x => x.textContent).join(' | ') : '';
+      const c2 = document.querySelectorAll('.ia-card')[1]; out.small = c2 ? c2.innerText.replace(/\s+/g, ' ').slice(0, 120) : '';
+      if (Settings.isOpen && Settings.isOpen()) { await Settings.close(); await w(600); } return out; });
+    check('Beta (Windows): the magazine finder shows each download\'s size, flags a big one, and a very big one asks "Yes, download 753 MB" before it starts',
+      /753 MB/.test(iaw.text) && /Large download: 753 MB/.test(iaw.text) && /Yes, download 753 MB/.test(iaw.armed) && !/Yes, download/.test(iaw.started) && /Starting|Cancel|%/.test(iaw.started) && /40 MB/.test(iaw.small) && !/Large download/.test(iaw.small), JSON.stringify(iaw));
     // (beta.4) Quick menu → Updates: A checks now (the release check answers with this build's own version, so nothing is offered)
     const qu = await w3.page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), api = window.trustyshelf;
       const key = k => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
