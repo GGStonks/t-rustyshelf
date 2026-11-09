@@ -303,7 +303,11 @@ module.exports = async function pcGamesPass({ browser, base, check, newPage }) {
       for (let i = 0; i < 40 && Shelf.getMode() !== 'browse'; i++) await w(250);
       window.__pcCovers = {}; const missing = await window.trustyshelf.pcCoverMissing(); out.n = missing.length; out.titles = [];
       Shelf.pcCoverBatch();
-      for (let k = 0; k < out.n; k++) { let t = ''; for (let i = 0; i < 80; i++) { await w(250); const el = document.querySelector('.coverpick.on .bp-title'); if (el && /of \d/.test(el.textContent) && !out.titles.includes(el.textContent) && document.querySelector('.coverpick.on .cp-tile.on')) { t = el.textContent; break; } } // (slow build machines: up to 20 s)
+      // (beta.11) the newest picker is judged (a closing one may still be fading out ahead of it), and on a miss the check
+      // records what was on screen: GitHub's runner missed the title twice while A still picked the cover
+      const last = sel => { const a = document.querySelectorAll(sel); return a[a.length - 1] || null; };
+      for (let k = 0; k < out.n; k++) { let t = ''; for (let i = 0; i < 80; i++) { await w(250); const pk = last('.coverpick'), el = pk && pk.querySelector('.bp-title'); if (el && /of \d/.test(el.textContent) && !out.titles.includes(el.textContent) && pk.querySelector('.cp-tile.on')) { t = el.textContent; break; } } // (slow build machines: up to 20 s)
+        if (!t) out.seen = { mode: Shelf.getMode(), pickers: [...document.querySelectorAll('.coverpick')].map(p => p.className + ' · ' + ((p.querySelector('.bp-title') || {}).textContent || '') + ' · tiles ' + p.querySelectorAll('.cp-tile').length + ' · on ' + p.querySelectorAll('.cp-tile.on').length), note: ((last('.coverpick .cp-note') || {}).textContent || '').slice(0, 80) };
         out.titles.push(t); key('Enter'); await w(700); }
       for (let i = 0; i < 20 && Shelf.getMode() !== 'browse'; i++) await w(200);
       out.chosen = Object.keys(window.__pcCovers || {}).length; out.modeAfter = Shelf.getMode();

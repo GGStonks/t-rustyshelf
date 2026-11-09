@@ -1962,7 +1962,9 @@ handle('archive:search', ({ text, kind, page, plain }) => archive.search(text, k
 handle('archive:check', ({ ids }) => archive.check(ids));
 handle('archive:download', async ({ id, kind, title, series }) => {
   const k = kind === 'guide' ? 'guide' : 'magazine';
-  const r = await archive.download(id, k, { title: typeof title === 'string' ? title : '', series: typeof series === 'string' ? series : '' }, (n, t, unit) => { if (alive()) win.webContents.send('archive:progress', { id, bytes: n, total: t, unit: unit || 'bytes' }); });
+  // (beta.11) progress at most five times a second (it was every network chunk: ~1,000 messages per 50 MB), the last always
+  let at = 0, tail = null; const send = (n, t, unit) => { if (alive()) win.webContents.send('archive:progress', { id, bytes: n, total: t, unit: unit || 'bytes' }); };
+  const r = await archive.download(id, k, { title: typeof title === 'string' ? title : '', series: typeof series === 'string' ? series : '' }, (n, t, unit) => { const now = Date.now(); clearTimeout(tail); if (now - at >= 200 || (t && n >= t)) { at = now; send(n, t, unit); } else tail = setTimeout(() => { at = Date.now(); send(n, t, unit); }, 200); }).finally(() => clearTimeout(tail));
   return { existed: r.existed, name: path.basename(r.file), count: r.count || 0 };
 });
 handle('archive:cancel', ({ id }) => archive.cancel(String(id || ''))); // the download rejects with "Cancelled." and removes its half file

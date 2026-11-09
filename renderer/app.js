@@ -2299,7 +2299,8 @@ const qm={open:false,r:1,sub:null,sr:0,sc:0,ac:0,rows:[],pv:null,outs:null};
 const ARTC={el:null,on:false,paused:false,stopping:false,done:0,total:0,t:0}; // (beta.10) the background box art run (artCardOn, under misc)
 const QM_THEMES=[["spectrum","Spectrum"],["classic","Classic"],["keys","Keys"],["arcade","Arcade"],["aurora","Aurora"],["midnight","Midnight"],["artwork","Artwork"],["blur","Blur"]];
 QM_THEMES.push(...XTHEMES.map(t=>[t.id,t.name])); // (the extra themes, after the original six)
-const QM_SOUNDS=[["aero","Aero"],["melody","Melody"],["musicbox","Music box"]];
+const QM_SOUNDS=[["aero","Aero"],["melody","Melody"],["musicbox","Music box"],["off","Off"]]; // (beta.11) Off: people didn't find the switch in Settings
+const qsSndNow=ui=>ui.sound===false?"off":ui.soundTheme||"aero";
 // ((T)rustyShelf) the Epic download manager's list, as main.js tells it (epic:queue): the quick menu shows a row while one is live
 const EPDL=(()=>{let list=[];const live=()=>list.filter(i=>["queued","installing","paused"].includes(i.state)),running=()=>live().find(i=>i.state==="installing");
   const text=()=>{const r=running(),n=live().length;if(r)return`${r.update?"Updating":"Installing"} ${r.title} · ${(+r.pct||0).toFixed(0)}%${n>1?` (+${n-1})`:""}`;const p=live()[0];return p?`${p.state==="paused"?"Paused":"Waiting"}: ${p.title}${n>1?` (+${n-1})`:""}`:""};
@@ -2358,9 +2359,9 @@ function qsRows(){const ui=qsUi(),r=qsAch(),g=qsGame(),out=[];
   // Android: the Art Studio one press away (the quick menu needs a shortcut); Windows keeps its Box art button only
   if(ANDROID&&g&&g.kind==="rom"&&g.file&&api.artStudio)out.push({id:"studio",icon:QS_I.image,lbl:"Art Studio",val:()=>(shelfFor(g).name||"This console")+" · every game",go:1});
   out.push({id:"vol",icon:QS_I.vol,lbl:"Volume"});
-  out.push({id:"cust",icon:QS_I.brush,lbl:"Customize",val:()=>`${qsName(QM_THEMES,qsThemeNow())} · ${qsName(QM_SOUNDS,ui.soundTheme||"aero")}`,lines:()=>[
-    {k:"theme",l:"Theme",sw:1,opts:QM_THEMES,cur:qsThemeNow()},{k:"snd",l:"Sounds",opts:QM_SOUNDS,cur:ui.soundTheme||"aero"},
-    ...((ui.soundTheme||"aero")==="melody"&&window.Sound&&Sound.song?[{k:"song",l:"Song",opts:[["next",`${(Sound.song()||{}).name||"This song"} · Next ›`]]}]:[]),
+  out.push({id:"cust",icon:QS_I.brush,lbl:"Customize",val:()=>`${qsName(QM_THEMES,qsThemeNow())} · ${qsSndNow(ui)==="off"?"Sounds off":qsName(QM_SOUNDS,qsSndNow(ui))}`,lines:()=>[
+    {k:"theme",l:"Theme",sw:1,opts:QM_THEMES,cur:qsThemeNow()},{k:"snd",l:"Sounds",opts:QM_SOUNDS,cur:qsSndNow(ui)},
+    ...(qsSndNow(ui)==="melody"&&window.Sound&&Sound.song?[{k:"song",l:"Song",opts:[["next",`${(Sound.song()||{}).name||"This song"} · Next ›`]]}]:[]),
     {k:"music",l:"Menu music",opts:QM_MUSIC,cur:mmPick()},...(mmPick()!=="off"?[{k:"mvol",l:"Music volume",opts:QM_MVOL,cur:qsMvolNow()}]:[]),
     {k:"boot",l:"Boot sound",opts:QM_BOOTS,cur:ui.bootSound||"chime"},{k:"intro",l:"Startup",opts:QM_INTROS,cur:introStyle()}]});
   // the shelf's own look (its logo, 3D console, boot video): straight into Customize on this shelf (it replaced the link that sat at the foot of Customize's chips)
@@ -2385,7 +2386,7 @@ function qsRows(){const ui=qsUi(),r=qsAch(),g=qsGame(),out=[];
 // lines as on Windows, only regrouped: the sound choices move out of Customize into Sounds
 function qsAndroidOrder(out,ui){const by=id=>out.find(x=>x.id===id),cust=by("cust"),cz=by("cz3d"),acts=out.filter(x=>x.id==="acts");
   if(cust){const all=cust.lines;cust.lines=()=>all().filter(l=>!/^(snd|song|music|mvol|boot)$/.test(l.k));cust.val=()=>qsName(QM_THEMES,qsThemeNow());
-    out.push({id:"snds",icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 17.5V6l10-2v11.5"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="15.5" r="2.5"/></svg>',lbl:"Sounds",val:()=>qsName(QM_SOUNDS,ui.soundTheme||"aero")+" · Music: "+qsName(QM_MUSIC,mmPick()),lines:()=>all().filter(l=>/^(snd|song|music|mvol|boot)$/.test(l.k))})}
+    out.push({id:"snds",icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 17.5V6l10-2v11.5"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="15.5" r="2.5"/></svg>',lbl:"Sounds",val:()=>qsSndNow(ui)==="off"?"Sounds off":qsName(QM_SOUNDS,qsSndNow(ui))+" · Music: "+qsName(QM_MUSIC,mmPick()),lines:()=>all().filter(l=>/^(snd|song|music|mvol|boot)$/.test(l.k))})}
   if(cz)cz.lbl="Assets";
   const order=["mus","studio","ach",null,"cust","cz3d","snds","vol","sort"],rows=[...acts];
   for(const id of order){if(id===null){rows.push({sep:1});continue}const x=by(id);if(x)rows.push(x)}
@@ -2397,7 +2398,7 @@ function qsRenderGame(){const box=qsEl.querySelector(".qm-game"),g=qsGame();box.
 function qsRender(){const L=qsEl.querySelector(".qm-list");[...L.children].forEach(e=>{if(!e.classList.contains("qm-hl"))e.remove()});qm.rows=[];qsRenderGame();const g=qsGame();
   qsRows().forEach(r=>{
     if(r.sep){L.appendChild(Object.assign(document.createElement("div"),{className:"qm-sep"}));return}
-    if(r.id==="acts"){const a=document.createElement("div");a.className="qm-acts";const fav=isFav(g),canArt=g.kind==="rom"&&!!(api.artStudio||api.chooseArt);
+    if(r.id==="acts"){const a=document.createElement("div");a.className="qm-acts";const fav=isFav(g),canArt=(g.kind==="rom"&&!!(api.artStudio||api.chooseArt))||(g.kind==="steam"&&!!api.pcCoverOptions); /* (beta.10) Steam and custom games too: their cover picker */
       [["fav",fav?"Favorited":"Favorite",QS_I.heart],["det","Details",QS_I.info],...(canArt?[["art","Box art",QS_I.image]]:[]),["hide","Hide",QS_I.hide]].forEach(([k,l,ic],i)=>{
         const b=document.createElement("button");b.type="button";b.className="qm-act"+(k==="fav"&&fav?" faved":"");b.dataset.k=k;b.innerHTML=ic+`<span>${qsEsc(l)}</span>`;
         b.addEventListener("pointerenter",()=>{if(qm.sub!=null)return;qm.r=0;qm.ac=i;qsPaint()});b.addEventListener("click",()=>{setInput("pointer");if(qm.sub!=null)qsCollapse(true);qm.r=0;qm.ac=i;qsPaint();qsAct(k)});a.appendChild(b)});
@@ -2453,6 +2454,13 @@ function qsHints(){if(!qsEl)return;const pad=showPad(),G=(p,k)=>pad?glyph(p):`<s
   else{const x=qm.rows[qm.r],id=x&&x.r.id;out.push([pad?glyph("↕"):`<span class="g">↑↓</span>`,"Move"]);if(id==="vol")out.push([pad?glyph("↔"):`<span class="g">←→</span>`,"Volume"]);
     out.push([G("x","Enter"),x&&x.r.lines?"Open":"Select"],[G("o","Esc"),"Close"])}
   qsEl.querySelector(".qm-hints").innerHTML=out.map(([k,l])=>`<span class="hint">${k}<span>${qsEsc(l)}</span></span>`).join("")}
+// (beta.10) the quick menu drawn once, unseen, while nothing else is going on: its first drawing by the graphics card
+// (the panel is hidden until opened) froze the first open for ~130 ms. Rows built for the game in front, shown at 0.4%
+// opacity for three frames, then hidden again. Never while the shelf moves; retried a few times if it's busy
+function qmPrewarm(n=0){if(qmPrewarm.done||/[?&]noqmwarm\b/.test(location.search)||window.__bisectNoQmWarm)return;const busy=qm.open||mode!=="browse"||sysBusy()||(window.BS_BUSY&&BS_BUSY())||document.hidden;
+  if(busy){if(n<6)setTimeout(()=>qmPrewarm(n+1),2000);return}qmPrewarm.done=true;
+  try{qsBuild();qm.sub=null;qm.pv=null;qsRender()}catch(e){return}app.classList.add("qm-warm");
+  requestAnimationFrame(()=>requestAnimationFrame(()=>requestAnimationFrame(()=>app.classList.remove("qm-warm"))))}
 function qmOpen(){if(qm.open||(mode!=="browse"&&mode!=="details")||sysBusy())return;uiCrumb("Quick menu");qsBuild();raPrefetch(curGame());detailsBack=mode==="details"?curGame():null;if(mode==="details")closeDetails(true); /* (beta.10) back out of the menu: Details again */
   qm.open=true;qm.sub=null;qm.pv=null;qm.ac=0;qsEl.querySelector(".qm-scroll").scrollTop=0;if(!ANDROID||qm.sig!==qsSig())qsRender(); /* Android: rows already built for this game and these settings (qsFreshSoon) are kept: the press only moves the highlight and slides the panel in */qm.r=qm.rows.findIndex(x=>x.r.id===(ANDROID?"mus":"vol"));if(qm.r<0)qm.r=0; /* (Android 0.3.2: the highlight starts on the top three) */
   // Android: the menu's own rows are measured (qsPaint reads their offsetTop) before the page-wide qm-open class goes on.
@@ -2534,7 +2542,7 @@ function qsChoose(){const f=qsFocusEl();if(!f)return;const k=f.dataset.k,v=f.dat
   if(k==="song"){if(window.Sound&&Sound.nextSong){Sound.nextSong("shelf");play_("tick",{dir:1})}qsSoft();return}
   if(k==="theme"){clearTimeout(qsThemeT);qsThemeT=0;ui.theme=v;themeOverride=null;qm.pv=null;applyTheme();updateBg();play_("open")}
   else if(k==="bg"){ui.background=v;bgOverride=null;qm.pv=null;updateBg();play_("open")}
-  else if(k==="snd"){ui.soundTheme=v;if(window.Sound){Sound.set({theme:v});Sound.play("open")}}
+  else if(k==="snd"){if(v==="off"){ui.sound=false;soundOn=false;if(window.Sound)Sound.set({enabled:false})}else{ui.sound=true;soundOn=true;ui.soundTheme=v;if(window.Sound){Sound.set({enabled:true,theme:v});Sound.play("open")}}musTvVol()} /* (beta.11) Off: the interface sounds (Settings → Sound → Interface sounds) */
   else if(k==="music"){ui.music=v;mmTrack=null;ambient(mmWant);play_(v==="off"?"back":"open")}
   else if(k==="mvol"){ui.musicLevel=+v;mmLevel=null;ambient(mmWant);play_("tick",{dir:1})}
   else if(k==="boot"){ui.bootSound=v;if(window.Sound){Sound.set({boot:v});Sound.play("boot")}}
@@ -2545,7 +2553,7 @@ function qsAct(k){const g=qsGame();if(!g)return;
   if(k==="fav"){toggleFav().then(()=>qsSoft());return}
   if(k==="det"){qmClose(true);openDetails();return}
   if(k==="hide"){qmClose(true);hideGame(g);return}
-  if(k==="art"){qmClose(true);if(api.artStudio&&g.kind==="rom"&&g.file)artStudioFor(g);else qsChooseArt(g)}} /* Box art: straight to this game in the Art Studio picker (My picture… is there for a file of your own) */
+  if(k==="art"){qmClose(true);if(g.kind==="steam"&&api.pcCoverOptions)pcCoverOpen(g);else if(api.artStudio&&g.kind==="rom"&&g.file)artStudioFor(g);else qsChooseArt(g)}} /* (beta.10: a PC game: its cover picker, to choose a front) */ /* Box art: straight to this game in the Art Studio picker (My picture… is there for a file of your own) */
 // Box art: pick an image for this game's front cover (the old one is kept in a "replaced" folder beside the art)
 // One game's Art Studio. The Android build brings its own handheld-sized studio (web-extras/android-studio.js: a row per
 // part, big pictures, the bottom screen as a touch companion); everywhere else it's the Settings picker, as before.
@@ -2572,7 +2580,7 @@ addEventListener("keydown",e=>{if(!qm.open||(window.BS_TOUR&&BS_TOUR.on()))retur
   else if(k==="Enter"||k===" "){eat();if(!e.repeat)qmPick()}else if(k==="Escape"||k==="Backspace"){eat();qmBack()}else if(k==="Tab"){eat();qmClose()}else if(k.length===1||/^F\d/.test(k)||/^(PageUp|PageDown|Home|End)$/.test(k))qmClose()},true); // a shortcut (M, G, S…) closes the Quick Shelf and does its thing
 addEventListener("keyup",e=>{if(e.key==="Enter"||e.key===" ")qsHoldStop()},true);
 addEventListener("pointerup",()=>{if(qsHr)qsHoldStop()},true);addEventListener("pointercancel",()=>{if(qsHr)qsHoldStop()},true); // letting go of the mouse early cancels a held Restart / Shut down
-let qmEatClick=0;addEventListener("pointerdown",e=>{if(qm.open&&!e.target.closest("#quickMenu,#menuBtn,#toast")){qmEatClick=performance.now();qmClose()}},true);
+let qmEatClick=0;addEventListener("pointerdown",e=>{if(qm.open&&!e.target.closest("#quickMenu,#menuBtn,#toast,#bsTour")){qmEatClick=performance.now();qmClose()}},true);
 addEventListener("click",e=>{if(qmEatClick&&performance.now()-qmEatClick<600){qmEatClick=0;e.stopImmediatePropagation();e.preventDefault()}},true); // the click that closes the menu doesn't also pick a case behind it
 // "LB / RB switch system" on an Xbox pad, "L1 / R1" on PlayStation, "L / R" on Nintendo, "Q / E" on the keyboard
 function custSwitchText(){const el=$("czSwitch");if(el)el.textContent=(showPad()?`${padWord("L1")} / ${padWord("R1")}`:"Q / E")+" switch system."}
@@ -2771,6 +2779,8 @@ function musRoomRender(){const el=musRoomEl(),st=musStyle(),L=musRoomRows(st);mu
   // the buttons, in the pad's own pictures (Xbox, PlayStation or Nintendo, with the confirm swap) or the keys
   const f=document.createElement("div");f.className="mr-foot";const pad=inputMode==="pad",K=k=>`<span class="g">${k}</span>`;
   f.innerHTML=(pad?[[glyph("↕"),"Choose"],[glyph("↔"),"Change"],[glyph("x"),"Switch"],[glyph("o")+glyph("tri"),"Done"]]:[[K("↑")+K("↓"),"Choose"],[K("←")+K("→"),"Change"],[K("Enter"),"Switch"],[K("Esc")+K("Tab"),"Done"]]).map(([k,t])=>`<span class="mr-k">${k}<em>${t}</em></span>`).join("");dock.appendChild(f);el.appendChild(dock);
+  // (beta.11) the row you're on scrolls clear of the dock (it stays stuck to the bottom: the last rows used to end up under it)
+  el.style.scrollPaddingBottom=(dock.offsetHeight+10)+"px";el.style.scrollPaddingTop="10px";
   const on=el.querySelector(".mr-row.on");if(on)on.scrollIntoView({block:"nearest"})}
 function musRoomOpen(){if(mode!=="museum"||musAdd.open||musHand().tv||tvS.guide||musHand().delivery||musHand().held||Museum.isHolding())return;musRoom.open=true;Museum.setRoomView&&Museum.setRoomView(true);musRoomEl().classList.add("on");musRoomRender();play_("panel")}
 function musRoomClose(){musRoom.open=false;Museum.setRoomView&&Museum.setRoomView(false);const el=document.getElementById("musRoom");if(el)el.classList.remove("on");play_("back")}
@@ -2880,14 +2890,20 @@ async function libOpen(d,insert){
   if(d&&d.kind==="movie"&&!insert){museumWatch(d);return}
   if(rdr.open)return;const el=rdrEl();rdr.open=true;rdr.item=d;rdr.s=0;rdr.zoom=1;rdr.px=rdr.py=0;rdr.n=0;rdr.cache.clear();const gen=++rdr.gen;
   el.querySelector(".lr-title").textContent=d.title+(d.kind==="movie"?" · Insert":d.series?` · ${d.series}`:"");el.querySelector(".lr-page").textContent="";el.querySelector(".lr-pages").innerHTML="";el.querySelector(".lr-wait").textContent="Opening…";el.classList.add("on","waiting");el.setAttribute("aria-hidden","false");
-  rdrHints();play_("flip");Museum.setPaused&&Museum.setPaused(true,"reader");
+  rdrHints();play_("flip");Museum.setPaused&&Museum.setPaused(true,"reader");el.classList.remove("has-ph");
+  // (beta.11) its saved cover shows at once as the first page while the file opens (a big PDF takes a second or two);
+  // the real page replaces it (rdrBook writes over .lr-pages)
+  if(d.kind!=="movie")libCover(d).then(u=>{if(!u||gen!==rdr.gen||rdr.failed===gen||!el.classList.contains("waiting")||rdr.s>0)return;const box=el.querySelector(".lr-pages");if(box.querySelector(".lr-book"))return;
+    const im=new Image();im.className="lr-ph";im.alt="";im.decoding="async";im.src=u;im.decode().then(()=>{if(gen!==rdr.gen||rdr.failed===gen||!el.classList.contains("waiting")||box.querySelector(".lr-book"))return;box.textContent="";box.appendChild(im);el.classList.add("has-ph")}).catch(()=>{})});
   try{const src=d.kind==="movie"?{type:"images",urls:await movieInsert(d)}:await api.libraryPages(d.id);if(gen!==rdr.gen)return;rdr.src=src;
-    if(src.type==="pdf"){await loadPdfJs();if(!window.pdfjsLib)throw new Error("PDF support didn't load");pdfjsLib.GlobalWorkerOptions.workerSrc="vendor/pdf.worker.min.js";const doc=await pdfjsLib.getDocument({url:src.url,isEvalSupported:false}).promise;if(gen!==rdr.gen){doc.destroy();return}rdr.doc=doc;rdr.n=doc.numPages}
+    // (beta.11) a local PDF (bsfile://) opens in range mode: pdf.js reads only the parts it needs instead of streaming the
+    // whole file (a 758 MB magazine opened in ~0.5 s instead of ~0.8, page 1 in ~1.4 s instead of ~1.8)
+    if(src.type==="pdf"){await loadPdfJs();if(!window.pdfjsLib)throw new Error("PDF support didn't load");pdfjsLib.GlobalWorkerOptions.workerSrc="vendor/pdf.worker.min.js";const ranged=/^bsfile:/i.test(String(src.url||""));const doc=await pdfjsLib.getDocument(ranged?{url:src.url,isEvalSupported:false,disableAutoFetch:true,disableStream:true,rangeChunkSize:262144}:{url:src.url,isEvalSupported:false}).promise;if(gen!==rdr.gen){doc.destroy();return}rdr.doc=doc;rdr.n=doc.numPages}
     else{rdr.n=(src.urls||[]).length}
     if(!rdr.n)throw new Error("No pages found");
     rdrLayout();rdrShow()}
-  catch(e){if(gen!==rdr.gen)return;el.querySelector(".lr-wait").textContent="Couldn't open this one: "+(e&&e.message||e);api.log&&api.log("reader: "+(e&&e.message))}}
-function libClose(){if(!rdr.open)return;rdr.open=false;rdr.gen++;clearTimeout(rdrZoomT);if(rdr.anim)rdr.anim.forEach(x=>{try{x.finish()}catch{}});rdr.turning=false;rdr.queued=null;const el=rdrEl();el.classList.remove("on","waiting");el.setAttribute("aria-hidden","true");el.querySelector(".lr-pages").innerHTML="";rdr.cache.forEach(c=>{c.width=c.height=0});rdr.cache.clear();if(rdr.doc){try{rdr.doc.destroy()}catch{}rdr.doc=null}rdr.src=null;Museum.setPaused&&Museum.setPaused(false,"reader");play_("back");renderMusHints()}
+  catch(e){if(gen!==rdr.gen)return;rdr.failed=gen;el.classList.remove("has-ph");{const bx=el.querySelector(".lr-pages");if(bx&&!bx.querySelector(".lr-book"))bx.textContent=""} /* (beta.11: the stand-in cover goes, so it doesn't look opened) */el.querySelector(".lr-wait").textContent="Couldn't open this one: "+(e&&e.message||e);api.log&&api.log("reader: "+(e&&e.message))}}
+function libClose(){if(!rdr.open)return;rdr.open=false;rdr.gen++;clearTimeout(rdrZoomT);if(rdr.anim)rdr.anim.forEach(x=>{try{x.finish()}catch{}});rdr.turning=false;rdr.queued=null;const el=rdrEl();el.classList.remove("on","waiting","has-ph");el.setAttribute("aria-hidden","true");el.querySelector(".lr-pages").innerHTML="";rdr.cache.forEach(c=>{c.width=c.height=0});rdr.cache.clear();if(rdr.doc){try{rdr.doc.destroy()}catch{}rdr.doc=null}rdr.src=null;Museum.setPaused&&Museum.setPaused(false,"reader");play_("back");renderMusHints()}
 function rdrLayout(){const was=rdrSpread(rdr.s)[0];rdr.dual=innerWidth/innerHeight>1.15;if(rdr.dual){rdr.s=was<=0?0:Math.ceil(was/2)}else rdr.s=Math.max(0,was)}
 // one page drawn at height h (CSS px × devicePixelRatio, capped); kept by "index@height", the last 8 only
 const rdrLoading=new Map();
@@ -3909,9 +3925,14 @@ function pollBody(t){
     }else{
       // Details and Customize: the D-pad moves a highlight between the panel's buttons, A presses it, B closes
       const panel=mode==="details"?($("dMenu").hidden?$("details"):$("dMenu")):mode==="customize"?$("customize"):null; // (beta.7: the More menu, while open, is all the D-pad moves through)
-      if(panel){held.dir=0;if(h&&!prevBtn.h){setInput("pad");padNav(panel,h>0?"right":"left")}
+      if(panel){held.dir=0;
+        // (beta.11) one way at a time (a diagonal goes the stick's stronger way), and held it repeats like the quick menu:
+        // a step at once, then every 130 ms after 380 ms (it used to take one step per press, so holding did nothing)
+        let hh=h,vv=v;if(hh&&vv){if(Math.abs(ax[0]||0)>=Math.abs(ax[1]||0))vv=0;else hh=0}
+        const pd=hh?(hh>0?"right":"left"):vv?(vv>0?"down":"up"):null;
         // up / down with nothing further that way: page through the text instead (the top of Details has no buttons)
-        if(v&&!prevBtn.v){setInput("pad");if(!padNav(panel,v>0?"down":"up"))panelScroll(panel,v)}
+        const step=d=>{if(!padNav(panel,d)&&(d==="up"||d==="down"))panelScroll(panel,d==="down"?1:-1)};
+        if(pd){setInput("pad");if(pd!==prevBtn.pd){prevBtn.pd=pd;prevBtn.pdT=t+380;step(pd)}else if(t>prevBtn.pdT){prevBtn.pdT=t+130;step(pd)}}else prevBtn.pd=null;
         // right stick: scroll the panel freely, faster the further it's pushed
         {const ry=ax[3]||0;if(Math.abs(ry)>.22){setInput("pad");panel.scrollTop+=ry*Math.abs(ry)*26*padF}}if(mode==="customize"){edge(gp,4,()=>custStep(-1));edge(gp,5,()=>custStep(1))}}
       else{
@@ -3955,8 +3976,9 @@ function padItems(root){return [...root.querySelectorAll("button,input[type=chec
 // of jumping just far enough to show it
 function shotCentre(el){const s=el.parentElement;if(!s)return;const to=Math.max(0,Math.min(s.scrollWidth-s.clientWidth,el.offsetLeft-(s.clientWidth-el.offsetWidth)/2));
   if(Math.abs(to-s.scrollLeft)>1)s.scrollTo({left:to,behavior:document.body.classList.contains("reduce-motion")?"auto":"smooth"})}
-function revealIn(el){const shot=!ANDROID&&el.classList&&el.classList.contains("d-shot")&&el.closest(".details.d-one");if(shot)shotCentre(el);
-  for(let p=el.parentElement;p&&p!==document.body;p=p.parentElement){const cs=getComputedStyle(p),sy=/(auto|scroll)/.test(cs.overflowY)&&p.scrollHeight>p.clientHeight,sx=!(shot&&p===el.parentElement)&&/(auto|scroll)/.test(cs.overflowX)&&p.scrollWidth>p.clientWidth;if(!sy&&!sx)continue;
+// (beta.11) skip: a panel that scrolls on its own (padSet's Details glide): left alone here
+function revealIn(el,skip){const shot=!ANDROID&&el.classList&&el.classList.contains("d-shot")&&el.closest(".details.d-one");if(shot)shotCentre(el);
+  for(let p=el.parentElement;p&&p!==document.body;p=p.parentElement){if(p===skip)continue;const cs=getComputedStyle(p),sy=/(auto|scroll)/.test(cs.overflowY)&&p.scrollHeight>p.clientHeight,sx=!(shot&&p===el.parentElement)&&/(auto|scroll)/.test(cs.overflowX)&&p.scrollWidth>p.clientWidth;if(!sy&&!sx)continue;
   const r=el.getBoundingClientRect(),q=p.getBoundingClientRect();if(sy){if(r.top<q.top+8)p.scrollTop-=q.top+8-r.top;else if(r.bottom>q.bottom-8)p.scrollTop+=r.bottom-q.bottom+8}if(sx){if(r.left<q.left+8)p.scrollLeft-=q.left+8-r.left;else if(r.right>q.right-8)p.scrollLeft+=r.right-q.right+8}}}
 // (beta.9) Details buttons (Windows): Settings' highlight glides to the button you're on: one layer behind the row, moved with a
 // transform (setup.css .d-hl). Measured once per move, after the label opens; never on the Thor, which keeps its own look
@@ -3968,10 +3990,20 @@ function dGlide(el){if(ANDROID)return;const bar=$("details").querySelector(".d-a
   if(first)requestAnimationFrame(()=>{hl.style.transition=""})}
 function padSet(root,el){root.querySelectorAll(".pad-focus").forEach(e=>e.classList.remove("pad-focus"));if(!el){if(root.id==="details")dGlide(null);return}el.classList.add("pad-focus");try{el.focus({preventScroll:true})}catch{}if(root.id==="details")dGlide(el); // (after the focus moves: the button left behind closes first)
   // the Details buttons sit in a bar pinned to the bottom: always in view, so moving onto them never scrolls the text
-  if(el.closest(".d-actions"))return;revealIn(el);
+  if(el.closest(".d-actions"))return;
   // scroll only the panel itself (scrollIntoView also scrolled the whole app sideways and dragged a hidden panel into view);
   // what's under the pinned button bar counts as out of view
-  const sc=el.closest(".settings,.details,.d-scroll")||root,pr=sc.getBoundingClientRect(),er=el.getBoundingClientRect(),bar=sc.querySelector(":scope>.d-actions"),bot=bar?Math.min(pr.bottom,bar.getBoundingClientRect().top):pr.bottom;
+  const sc=el.closest(".settings,.details,.d-scroll")||root;
+  // (beta.11, Windows / Linux) Details glides to the item in one smooth scroll, counted from where a glide already on its
+  // way will end (it used to jump there in two steps, which read as choppy); the Thor keeps its instant scroll
+  /* (beta.11) the button bar only hides what's under it while it's pinned to the panel's bottom: sitting in its place
+     below the header (Windows), the More menu right under it counted as hidden, so every step scrolled the panel on */
+  const barTop=(bar,pr)=>{if(!bar)return pr.bottom;const b=bar.getBoundingClientRect();return b.bottom>=pr.bottom-2?Math.min(pr.bottom,b.top):pr.bottom};
+  if(!ANDROID&&(root.id==="details"||root.id==="dMenu")&&sc.classList.contains("details")){revealIn(el,sc);const pr=sc.getBoundingClientRect(),er=el.getBoundingClientRect(),bot=barTop(sc.querySelector(":scope>.d-actions"),pr);
+    const cur=sc.scrollTop,T0=sc._gT!=null&&performance.now()-(sc._gAt||0)<700?sc._gT:cur,top=er.top-pr.top+cur,btm=er.bottom-pr.top+cur,vis=bot-pr.top;let T=T0;
+    if(btm>T+vis-12)T=btm-vis+24;else if(top<T+12)T=top-24;T=Math.max(0,Math.min(sc.scrollHeight-sc.clientHeight,T));
+    if(Math.abs(T-T0)>.5||Math.abs(T-cur)>.5){sc._gT=T;sc._gAt=performance.now();sc.scrollTo({top:T,behavior:document.body.classList.contains("reduce-motion")?"auto":"smooth"})}return}
+  revealIn(el);const pr=sc.getBoundingClientRect(),er=el.getBoundingClientRect(),bot=barTop(sc.querySelector(":scope>.d-actions"),pr);
   if(er.bottom>bot-12)sc.scrollTop+=er.bottom-bot+24;else if(er.top<pr.top+12)sc.scrollTop-=pr.top-er.top+24}
 // moves to the nearest item in that direction (left/right fall back to the previous/next item in reading order)
 function padNav(root,dir){
@@ -4088,7 +4120,7 @@ function introStyle(){const v=cfgInfo&&cfgInfo.config.ui.bootIntro||(document.do
 // right after the start-up logo; B from it lands on the shelf as usual). Read once, at the first start-up build.
 let openInto=null,musBootSplash=null;
 function startIntoMuseum(){return openInto==="museum"&&!!(cfgInfo&&cfgInfo.config.setupDone)&&!!(window.Museum&&Museum.available())}
-function prewarmSettings(){setTimeout(()=>{const go=()=>{if((mode==="browse")&&cfgInfo&&cfgInfo.config.setupDone&&window.Settings&&Settings.prewarm&&!document.hidden){Settings.prewarm(cfgInfo);if(window.Sound&&Sound.warm)setTimeout(()=>window.requestIdleCallback?requestIdleCallback(()=>Sound.warm(),{timeout:5000}):Sound.warm(),400) /* building the sound buffers waits for a quiet moment (not mid-scroll) */}else if(!prewarmSettings.n||prewarmSettings.n<5){prewarmSettings.n=(prewarmSettings.n||0)+1;prewarmSettings()}};
+function prewarmSettings(){setTimeout(()=>{const go=()=>{if((mode==="browse")&&cfgInfo&&cfgInfo.config.setupDone&&window.Settings&&Settings.prewarm&&!document.hidden){Settings.prewarm(cfgInfo);setTimeout(()=>window.requestIdleCallback?requestIdleCallback(()=>qmPrewarm(),{timeout:4000}):qmPrewarm(),1200) /* (beta.10) the quick menu too, a moment later */;if(window.Sound&&Sound.warm)setTimeout(()=>window.requestIdleCallback?requestIdleCallback(()=>Sound.warm(),{timeout:5000}):Sound.warm(),400) /* building the sound buffers waits for a quiet moment (not mid-scroll) */}else if(!prewarmSettings.n||prewarmSettings.n<5){prewarmSettings.n=(prewarmSettings.n||0)+1;prewarmSettings()}};
   if(window.requestIdleCallback)requestIdleCallback(go,{timeout:3000});else go()},2500)} // a few seconds after start-up, when nothing else is going on
 function afterReveal(){prewarmSettings();if(!startIntoMuseum())return;openInto="done";if(mode==="browse"&&!sysBusy())openMuseum()}
 function revealShelf(){

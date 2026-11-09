@@ -156,6 +156,23 @@ module.exports = async function artUiPass({ browser, base, check, newPage, OUT }
       out.before = crumb(); key('Escape'); await w(900); out.after = crumb(); return out; });
     check('Manual Studio: choosing an earlier manual back and forth never adds cards; one B goes straight back to the game\'s art page',
       ms.counts.length >= 3 && ms.counts.every(n => n === ms.counts[0]) && /› Manual/.test(ms.before) && !/› Manual/.test(ms.after) && /Aether Drift|›/.test(ms.after), JSON.stringify(ms));
+    // (beta.11) opened straight onto a game's box art or manuals (Details / the quick menu's Box art, Choose manual…): one
+    // B closes Settings, back to the shelf (it stepped up through the console's games and the Art page first)
+    const dx = await page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), out = {};
+      const key = k => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+      const until = async (ok, ms = 5000) => { for (let t = 0; t < ms && !ok(); t += 100) await w(100); await w(150); };
+      if (window.Settings && Settings.isOpen && Settings.isOpen()) { await Settings.close(); await w(900); }
+      const g = (await window.trustyshelf.artGames({ systemId: 'gc' }))[0];
+      for (const page of ['artgame', 'manualgame']) {
+        Setup.open({ page, systemId: 'gc', file: g.file, title: g.title }); await until(() => Settings.isOpen() && document.querySelectorAll('.bsa-card').length > 0); await w(600);
+        out[page + 'Open'] = Settings.isOpen(); key('Escape'); await until(() => !Settings.isOpen(), 3000); out[page + 'Closed'] = !Settings.isOpen(); await w(700); }
+      // opened the ordinary way (Settings → Art Studio → a console → a game), B still steps back to the console's games
+      Setup.open({ page: 'artstudio', systemId: 'gc' }); await until(() => Settings.isOpen() && document.querySelectorAll('.bsa-g, .bsa-card, [data-file]').length > 0); await w(600);
+      out.crumb0 = ((document.querySelector('#bss .bss-crumb') || {}).textContent || '').replace(/\s+/g, ' ');
+      key('Escape'); await w(900); out.plainStillOpen = Settings.isOpen(); if (Settings.isOpen()) { await Settings.close(); await w(700); }
+      return out; });
+    check('Box art (Windows): opened straight onto a game\'s box art or manuals, one B closes Settings; opened the usual way, B steps back inside',
+      dx.artgameOpen && dx.artgameClosed && dx.manualgameOpen && dx.manualgameClosed && dx.plainStillOpen, JSON.stringify(dx));
     check('Box art pass (Windows page): no script errors', !errors.length, errors.slice(0, 3).join(' | '));
   } catch (e) { check('Box art pass (Windows page) ran to the end', false, e && e.stack ? e.stack.split('\n').slice(0, 2).join(' ') : e); }
   await ctx.close();

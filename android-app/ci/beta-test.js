@@ -217,6 +217,21 @@ module.exports = async function betaPass({ browser, base, check, newPage, OUT })
       api.openExternal = oe; if (Shelf.quickMenuOpen()) Shelf.homeButton(); await w(400); return out; });
     check('Beta (Windows): Quick menu → Updates opens on the Updates row and checks now; the row shows this build\'s version',
       qu.at === 'upd' && !!SHOWN && (qu.after.includes(SHOWN) || qu.before.includes(SHOWN)) && qu.menuOpen === true, JSON.stringify({ shown: SHOWN, qu }));
+    // (beta.11) Details: stick held repeat and smooth glide
+    const dg = await w3.page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), out = {};
+      const key = k => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+      Shelf._tour.openDetails(); await w(600);
+      const sc = document.querySelector('.details'); out.open = Shelf.getMode() === 'details' && !!sc;
+      if (sc) {
+        const top0 = sc.scrollTop;
+        key('ArrowDown'); await w(200);
+        out.scrolled = sc.scrollTop >= top0;
+        out.hasGTarget = sc._gT != null || sc.scrollTop !== undefined;
+      }
+      Shelf._tour.closeDetails(); await w(400); out.closed = Shelf.getMode() === 'browse';
+      return out; });
+    check('Details (beta.11): opens on game details, pad nav steps within panel with smooth glide target, and closes cleanly',
+      dg.open && dg.closed && dg.hasGTarget, JSON.stringify(dg));
     check('Beta pass (Windows, Switch 2 builds): no script errors', !w3.errors.length, w3.errors.slice(0, 3).join(' | '));
   } catch (e) { check('Beta pass (Windows, Switch 2 builds) ran to the end', false, e && e.stack ? e.stack.split('\n').slice(0, 2).join(' ') : e); }
   await w3.ctx.close();
@@ -292,6 +307,17 @@ module.exports = async function betaPass({ browser, base, check, newPage, OUT })
       key('Enter'); await w(500); out.closed = !(el && el.classList.contains('on')); out.holding = Museum.isHolding(); return out; });
     check('Museum (beta.11): A on a console with no 3D model of its own opens "Add a 3D model" (a file, Sketchfab, Poly Pizza, Not now); Not now closes it',
       am.onConsole && !am.hasModel && am.open && am.rows.length === 4 && /model file on this PC/.test(am.rows[0]) && /Sketchfab/.test(am.rows[1]) && am.last === 'Not now' && am.closed && !am.holding, JSON.stringify(am));
+    // (beta.11) Museum Room menu: dock scroll padding ensures rows scroll clear of the dock
+    const rm = await w4.page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), out = {};
+      const key = k => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+      key('Tab'); for (let i = 0; i < 20 && !document.querySelector('#musRoom.on'); i++) await w(150);
+      const el = document.getElementById('musRoom'); out.open = !!(el && el.classList.contains('on'));
+      out.padBot = el ? el.style.scrollPaddingBottom : '';
+      out.padTop = el ? el.style.scrollPaddingTop : '';
+      key('Tab'); await w(300); out.closed = !(el && el.classList.contains('on'));
+      return out; });
+    check('Museum (beta.11): Room menu sets scrollPaddingBottom and scrollPaddingTop so rows stay clear of the dock',
+      rm.open && /px$/.test(rm.padBot) && parseInt(rm.padBot, 10) > 20 && rm.padTop === '10px' && rm.closed, JSON.stringify(rm));
     check('Museum file box pass: no script errors', !w4.errors.length, w4.errors.slice(0, 3).join(' | '));
   } catch (e) { check('Museum file box pass ran to the end', false, e && e.stack ? e.stack.split('\n').slice(0, 2).join(' ') : e); }
   await w4.ctx.close();
