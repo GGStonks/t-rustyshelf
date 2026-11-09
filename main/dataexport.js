@@ -15,16 +15,50 @@
 'use strict';
 const fs = require('fs'), fsp = fs.promises, path = require('path');
 
-const SKIP = /^(cache|code cache|gpucache|dawngraphitecache|dawnwebgpucache|grshadercache|shadercache|blob_storage|crashpad|logs|session storage|shared dictionary|sharedstorage|dictionaries|dips|trust tokens.*|cookies.*|network persistent state|transportsecurity|preferences|local state|devtoolsactiveport|padwatch|legendary|companion\.json|.*\.log|.*\.tmp|singleton.*|lockfile)$/i;
+const SKIP = /^(cache|code cache|gpucache|dawngraphitecache|dawnwebgpucache|grshadercache|shadercache|blob_storage|crashpad|logs|session storage|shared dictionary|sharedstorage|dictionaries|dips|trust tokens.*|cookies.*|network persistent state|transportsecurity|preferences|local state|devtoolsactiveport|padwatch|legendary|companion\.json|.*\.log|.*\.tmp|singleton.*|lockfile|.*\.lock|lock)$/i;
 const APP_DIRS = ['Library', 'themes', 'Custom themes', 'Guides', 'Magazines', 'Songs'];
 const isDir = p => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
 const inside = (p, root) => { const a = path.resolve(p).toLowerCase(), b = path.resolve(root).toLowerCase(); return a === b || a.startsWith(b + path.sep); };
 // what's left out is decided at the data folder's top level only (inside Local Storage, *.log files are its data)
 const topSkip = root => { const r = path.resolve(root); return src => path.resolve(path.dirname(src)) !== r || !SKIP.test(path.basename(src)); };
-const stamp = () => new Date().toISOString().slice(0, 16).replace('T', ' ').replace(':', '-');
+const stamp = () => new Date().toISOString().slice(0, 16).replace('T', ' ').replace(/:/g, '-');
+
+async function ensureDir(d) {
+  if (!d) return;
+  if (/^([a-zA-Z]:[\\/]?|[\\/])$/.test(d)) return;
+  if (isDir(d)) return;
+  try { await fsp.mkdir(d, { recursive: true }); } catch (e) { if (e.code !== 'EEXIST' && !isDir(d)) throw e; }
+}
 
 async function size(p) { let n = 0, files = 0; const walk = async d => { let ents; try { ents = await fsp.readdir(d, { withFileTypes: true }); } catch { return; } for (const e of ents) { const f = path.join(d, e.name); if (e.isDirectory()) await walk(f); else if (e.isFile()) { try { n += (await fsp.stat(f)).size; files++; } catch {} } } }; if (isDir(p)) await walk(p); else { try { n = (await fsp.stat(p)).size; files = 1; } catch {} } return { bytes: n, files }; }
-async function copy(src, dst, filter) { await fsp.mkdir(path.dirname(dst), { recursive: true }); await fsp.cp(src, dst, { recursive: true, force: true, errorOnExist: false, preserveTimestamps: true, filter: filter || (() => true) }); }
+async function copy(src, dst, filter = () => true) {
+  const st = await fsp.stat(src).catch(() => null);
+  if (!st || !filter(src)) return;
+  if (st.isFile()) {
+    await ensureDir(path.dirname(dst));
+    try { await fsp.copyFile(src, dst); } catch (e) {
+      if (['EBUSY', 'EPERM', 'EACCES', 'ETXTBSY'].includes(e.code)) return;
+      throw e;
+    }
+    return;
+  }
+  if (st.isDirectory()) {
+    await ensureDir(dst);
+    let ents; try { ents = await fsp.readdir(src, { withFileTypes: true }); } catch { return; }
+    for (const ent of ents) {
+      const srcChild = path.join(src, ent.name), dstChild = path.join(dst, ent.name);
+      if (!filter(srcChild)) continue;
+      if (ent.isDirectory()) {
+        await copy(srcChild, dstChild, filter);
+      } else if (ent.isFile()) {
+        try { await fsp.copyFile(srcChild, dstChild); } catch (e) {
+          if (['EBUSY', 'EPERM', 'EACCES', 'ETXTBSY'].includes(e.code)) continue;
+          throw e;
+        }
+      }
+    }
+  }
+}
 
 // the art kept next to each console's games: [{ console, n, path }] (not what's already inside the app folder or the library)
 function romArt(cfg, artDirsFor, appRoot, artLib) {
@@ -42,7 +76,7 @@ function romArt(cfg, artDirsFor, appRoot, artLib) {
 // → { dir, bytes, files, parts }
 async function exportAll({ dest, appRoot, dataDir, cfg, artDirsFor, artLib, version, onStep = () => {} }) {
   if (!dest || !isDir(dest)) throw new Error('Choose a folder to export to.');
-  const dir = path.join(dest, `(T)rustyShelf export ${stamp()}`); await fsp.mkdir(dir, { recursive: true });
+  const dir = path.join(dest, `(T)rustyShelf export ${stamp()}`); await ensureDir(dir);
   const manifest = { app: '(T)rustyShelf', version: version || '', at: new Date().toISOString(), from: { appRoot, dataDir }, parts: [], romArt: [] };
   const steps = [], art = romArt(cfg, artDirsFor, appRoot, artLib);
   steps.push(['Settings and downloads', async () => { await copy(dataDir, path.join(dir, 'data'), topSkip(dataDir)); manifest.parts.push('data'); }]);
@@ -60,7 +94,10 @@ async function importAll({ src, appRoot, dataDir, artDirsFor, artLib, readCfg, o
   if (manifest.app !== '(T)rustyShelf' && manifest.app !== 'Boxshelf') throw new Error('That folder isn\'t a (T)rustyShelf export.');
   const steps = [], skipped = [];
   if (isDir(path.join(src, 'data'))) steps.push(['Settings and downloads', async () => {
-    const cfgNow = path.join(dataDir, 'config.json'); if (fs.existsSync(cfgNow)) await fsp.copyFile(cfgNow, path.join(dataDir, `config-before-import-${stamp()}.json`));
+    const cfgNow = path.join(dataDir, 'config.json');
+    if (fs.existsSync(cfgNow)) {
+      try { await fsp.copyFile(cfgNow, path.join(dataDir, `config-before-import-${stamp()}.json`)); } catch {}
+    }
     await copy(path.join(src, 'data'), dataDir, topSkip(path.join(src, 'data'))); }]);
   for (const name of APP_DIRS) { const p = path.join(src, 'app', name); if (isDir(p)) steps.push([name, () => copy(p, path.join(appRoot, name))]); }
   const elsewhere = path.join(src, 'app', 'Library-elsewhere');

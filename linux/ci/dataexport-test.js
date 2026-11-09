@@ -41,6 +41,25 @@ const has = p => fs.existsSync(path.join(tmp, p)), read = p => fs.readFileSync(p
     // a folder that isn't an export
     let err = ''; try { await dx.importAll({ src: path.join(tmp, 'Games'), appRoot: path.join(tmp, 'B'), dataDir: path.join(tmp, 'B', 'data'), artDirsFor: paths.artDirsFor }); } catch (e) { err = e.message; }
     check('Import: a folder that isn\'t an export is turned away with a message (nothing copied)', /isn't a \(T\)rustyShelf export/.test(err), err);
+
+    // busy/locked file tolerance during import
+    const origCopy = fs.promises.copyFile;
+    let lockedHit = false;
+    fs.promises.copyFile = async (s, d, ...args) => {
+      if (d.includes('Local Storage') && !lockedHit) {
+        lockedHit = true;
+        const e = new Error('resource busy or locked');
+        e.code = 'EBUSY';
+        throw e;
+      }
+      return origCopy(s, d, ...args);
+    };
+    try {
+      const im2 = await dx.importAll({ src: r.dir, appRoot: path.join(tmp, 'B'), dataDir: path.join(tmp, 'B', 'data'), artDirsFor: paths.artDirsFor, artLib: '', readCfg: () => ({}) });
+      check('Import: busy or locked file is skipped without crashing the import', lockedHit && im2.parts > 0);
+    } finally {
+      fs.promises.copyFile = origCopy;
+    }
   } catch (e) { check('the test ran to the end', false, e && e.stack); }
   finally { try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {} }
   console.log(fails ? `${fails} failed` : 'all passed');
