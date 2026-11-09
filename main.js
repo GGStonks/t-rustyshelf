@@ -664,7 +664,12 @@ async function buildLibrary() {
   if (steamGiven && !isMainSteam(steamGiven) && steamMain === undefined) { steamMain = null; try { const p = await findSteam(); if (p && steamRoot(p) && isMainSteam(steamRoot(p))) { steamMain = p; log('Steam: the folder set is a library; using Steam\'s own folder for the list of libraries'); } } catch {} }
   if (cfg.steam.enabled && cfg.steam.path) {
     // Steam's own cached art first, then anything (T)rustyShelf fetched from the Steam store for games Steam has no cover for
-    pcShelf = scanSteam(cfg.steam.path, { hideTools: cfg.steam.hideTools !== false, log, mainPath: steamMain || '' }).map(g => { const l = steamart.local(g.appid); return { ...g, ...(ownTitle(g.id) ? { title: ownTitle(g.id), fileTitle: g.title } : {}), info: steamart.gameInfo(g.appid), art: { front: fileUrl(pccovers.cover(g.id) || (boxOn && pccovers.consoleCover(g.id)) || g.art.front || l.front), hero: fileUrl(g.art.hero || l.hero), ...boxParts(boxOn && !pccovers.cover(g.id) && pccovers.consoleCover(g.id) && g.id) } }; }); // (beta.5: a cover chosen in the picker wins)
+    pcShelf = scanSteam(cfg.steam.path, { hideTools: cfg.steam.hideTools !== false, log, mainPath: steamMain || '' }).map(g => {
+      const l = steamart.local(g.appid);
+      const chosen = pccovers.cover(g.id), box = !chosen && boxOn && pccovers.consoleCover(g.id);
+      const cPlat = (box || chosen) ? pccovers.consolePlat(g.id) : null;
+      return { ...g, ...(ownTitle(g.id) ? { title: ownTitle(g.id), fileTitle: g.title } : {}), info: steamart.gameInfo(g.appid), ...(cPlat ? { boxPlat: cPlat } : {}), art: { front: fileUrl(chosen || box || g.art.front || l.front), hero: fileUrl(g.art.hero || l.hero), ...boxParts((box || (chosen && cPlat)) && g.id) } };
+    });
   }
   // (beta.4) Epic's installs join the PC shelf; Quiver Launcher's apps and games added by hand get the Custom shelf. They
   // are PC games with a source (kind 'steam' keeps every shelf feature); covers come from the Steam app their title
@@ -690,11 +695,14 @@ async function buildLibrary() {
   // (Epic's), Steam's, or none: a made-up case)
   const MINE_SRC = new Set(['custom', 'quiver']); // (supalii) Details shows these games' program and launch options
   const pcGame = g => { const sid = STORE_SRC.has(g.source) ? pcgames.steamIdOf(g.title) : null, l = sid ? steamart.local(sid) : {};
-    const chosen = pccovers.cover(g.id), box = !chosen && boxOn && pccovers.consoleCover(g.id), auto = !chosen && !box && pccovers.autoCover(g.id), front = chosen || box || auto || l.front; // ((T)rustyShelf: box = its console box, Settings → PC games → Console box art)
+    const chosen = pccovers.cover(g.id), box = !chosen && boxOn && pccovers.consoleCover(g.id), auto = !chosen && !box && pccovers.autoCover(g.id);
+    const fCover = (!chosen && !box && !auto && g.exe) ? pccovers.folderCover(g.exe) : null;
+    const cPlat = (box || chosen) ? pccovers.consolePlat(g.id) : null;
+    const front = chosen || box || auto || fCover || l.front; // ((T)rustyShelf: box = its console box, Settings → PC games → Console box art)
     // (its size: its folder as measured in the background, until then what Epic says it installed (a game can download
     // more itself, MTG Arena does); Steam's games bring their own)
     const sizeBytes = g.installed === false ? 0 : (SIZED_SRC.has(g.source) && g.dir ? dirsize.get(g.dir) : 0) || g.installSize || 0;
-    return { kind: 'steam', source: g.source, id: g.id, title: g.title, ...(MINE_SRC.has(g.source) && g.exe ? { exe: g.exe, ...(g.args ? { args: g.args } : {}) } : {}), ...(g.shelf ? { platform: g.shelf } : {}), ...(g.installed === false ? { installed: false } : {}), ...(sizeBytes ? { sizeBytes } : {}), ...(sid ? { info: steamart.gameInfo(sid) } : {}), artFrom: chosen ? 'yours' : box ? 'console' : auto ? 'store' : l.front ? 'steam' : '', art: { front: fileUrl(front), hero: fileUrl(l.hero), icon: g.icon || undefined, ...boxParts(box && g.id) } }; };
+    return { kind: 'steam', source: g.source, id: g.id, title: g.title, ...(MINE_SRC.has(g.source) && g.exe ? { exe: g.exe, ...(g.args ? { args: g.args } : {}) } : {}), ...(g.shelf ? { platform: g.shelf } : {}), ...(g.installed === false ? { installed: false } : {}), ...(sizeBytes ? { sizeBytes } : {}), ...(sid ? { info: steamart.gameInfo(sid) } : {}), ...(cPlat ? { boxPlat: cPlat } : {}), artFrom: (cPlat || box) ? 'console' : chosen ? 'yours' : auto ? 'store' : fCover ? 'folder' : l.front ? 'steam' : '', art: { front: fileUrl(front), hero: fileUrl(l.hero), icon: g.icon || undefined, ...boxParts((box || (chosen && cPlat)) && g.id) } }; };
   pcAutoCovers([...epic, ...mine]);
   // (beta.10) a game added by hand can be moved to the PC shelf (Settings → Custom games → the game → Shelf); (supalii's
   // fork) or to a console's shelf, beside its ROMs: it's still started as its own program, not through the emulator. A
@@ -708,7 +716,7 @@ async function buildLibrary() {
   const toPc = mine.filter(g => g.shelf === 'pc'), onCustom = mine.filter(g => !g.shelf);
   onCustom.push(...back); // (a program whose console's shelf is switched off; the line above stays self-contained: android-app/ci/issues-test.js runs it on its own)
   if (epic.length || toPc.length) pcShelf = pcShelf.concat([...epic, ...toPc].map(pcGame)).sort((a, b) => String(a.title).localeCompare(String(b.title), undefined, { sensitivity: 'base' }));
-  pcShelf.forEach(g => { if (!g.source && g.artFrom == null) g.artFrom = g.art && g.art.front ? (pccovers.cover(g.id) ? 'yours' : boxOn && pccovers.consoleCover(g.id) ? 'console' : 'steam') : ''; }); // (Steam's own games)
+  pcShelf.forEach(g => { if (!g.source && g.artFrom == null) { const chosen = pccovers.cover(g.id), box = !chosen && boxOn && pccovers.consoleCover(g.id), cPlat = (box || chosen) ? pccovers.consolePlat(g.id) : null; if (cPlat && !g.boxPlat) g.boxPlat = cPlat; g.artFrom = g.art && g.art.front ? (cPlat ? 'console' : chosen ? 'yours' : box ? 'console' : 'steam') : ''; } }); // (Steam's own games)
   if (pcShelf.length) shelves.push({ id: 'pc', kind: 'steam', name: 'PC', games: pcShelf });
   if (onCustom.length) shelves.push({ id: 'custom', kind: 'steam', name: 'Custom', games: onCustom.map(pcGame).sort((a, b) => String(a.title).localeCompare(String(b.title), undefined, { sensitivity: 'base' })) });
   if (boxOn) pcConsoleBoxes(shelves.flatMap(x => x.games || []).filter(g => g.kind === 'steam')); // ((T)rustyShelf) the console boxes not made yet, in the background
@@ -1409,7 +1417,12 @@ handle('dialog:pick', async ({ kind, title, defaultPath, filters, multi }) => {
   return r.canceled ? null : multi ? r.filePaths : r.filePaths[0];
 });
 // ---------- (beta.7) Add games (main/addgames.js): a folder of games scanned; Playnite's library read (experimental) ----------
-handle('games:scanFolder', async ({ root }) => { const r = await addgames.scanFolderAsync(String(root || '')); return { ...r, games: r.games.map(g => ({ ...g, title: g.title })) }; });
+let lastScannedCovers = new Set();
+handle('games:scanFolder', async ({ root }) => {
+  const r = await addgames.scanFolderAsync(String(root || ''));
+  lastScannedCovers = new Set((r.games || []).map(g => g.cover).filter(Boolean).map(f => path.resolve(f).toLowerCase()));
+  return { ...r, games: (r.games || []).map(g => ({ ...g, title: g.title, ...(g.cover ? { cover: g.cover } : {}) })) };
+});
 handle('games:titleFor', ({ exes }) => (Array.isArray(exes) ? exes : []).slice(0, 500).map(e => ({ exe: String(e), title: addgames.titleFor(String(e)) })));
 let pnPlan = null;
 handle('playnite:find', ({ dir } = {}) => process.platform === 'win32' ? addgames.find(dir ? String(dir) : '') : null);
@@ -1424,9 +1437,9 @@ handle('games:emuIn', ({ dir, systemId }) => {
     for (const e of ents) { if (hit) return; const p = path.join(d, e.name); if (e.isFile() && names.has(e.name.toLowerCase())) hit = p; else if (e.isDirectory() && left > 0) walk(p, left - 1); } };
   walk(String(dir), 2); return hit;
 });
-// covers for games just added: a Playnite cover picked from the last summary only (never any file the page names)
+// covers for games just added: a Playnite cover or scanned folder cover picked from the last summary only (never any file the page names)
 handle('games:covers', async ({ items }) => {
-  const ok = new Set(pnPlan ? pnPlan.pc.flatMap(g => [g.cover, g.bg]).filter(Boolean).map(f => path.resolve(f).toLowerCase()) : []); let n = 0;
+  const ok = new Set([...(pnPlan ? pnPlan.pc.flatMap(g => [g.cover, g.bg]).filter(Boolean) : []), ...(lastScannedCovers || [])].map(f => path.resolve(f).toLowerCase())); let n = 0;
   const slug = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'game';
   for (const it of (Array.isArray(items) ? items : []).slice(0, 2000)) { const f = it && String(it.file || ''); if (!f || !ok.has(path.resolve(f).toLowerCase())) continue;
     try { await pccovers.own('custom-' + slug(it.id), f); n++; } catch (e) { log('Imported cover', e.message); } }
@@ -1701,7 +1714,7 @@ async function pcConsoleBoxes(games) {
           const m = /^data:image\/jpeg;base64,(.+)$/.exec(String((r && r.pages || [])[0] || '')); if (!m) { log('PC console box', g.title, part || 'front', r && r.err || 'not made'); continue; }
           mBuf = Buffer.from(m[1], 'base64');
         }
-        try { await pccovers.saveConsole(g.id, mBuf, `${box.platform} ${box.url}`, part); if (!part) made++; } catch (e) { log('PC console box', g.title, e.message); }
+        try { await pccovers.saveConsole(g.id, mBuf, `${box.platform} ${box.url}`, part, box.plat); if (!part) made++; } catch (e) { log('PC console box', g.title, e.message); }
       }
       await new Promise(res => setTimeout(res, 250));
     }
@@ -2869,7 +2882,7 @@ function startUp() {
   stremio.init({ log, fanartKey: () => (cfg && cfg.keys && cfg.keys.fanart) || '', artDir: path.join(app.getPath('userData'), 'stremio-art'), fetchBuf: async url => { const r = await net.fetch(url, { signal: AbortSignal.timeout(30000) }); /* (beta.10: a stalled answer gives up) */ if (r.status === 404) return null; if (!r.ok) throw new Error('HTTP ' + r.status); return Buffer.from(await r.arrayBuffer()); } }); // null = really not there; other failures throw, so nothing "missing" is cached for them
   icons.init(app.getPath('userData'), log);
   x360.init(app.getPath('userData'), log); scanSetLog(log); // (beta.10: games folders that can't be read go in the log)
-  steamart.init(app.getPath('userData'), log); dirsize.init({ dataDir: app.getPath('userData'), log, onMeasured: () => { scanForget(); /* (the Switch 2 folders' sizes: the next scan reads them afresh) */ if (alive()) win.webContents.send('library:changed', { sizes: 1 }); } }); pcgames.init(app.getPath('userData'), log); if (linux.isLinux) linuxpc.init({ dataDir: app.getPath('userData'), appRoot: paths.appRoot(), log, fetchBuf: async u => { const r = await net.fetch(u); return r.ok ? Buffer.from(await r.arrayBuffer()) : null; } }); pccovers.init({ dataDir: app.getPath('userData'), log, fileUrl, fetchImage, steamgrid: require('./main/steamgrid'), steamCover: id => steamart.local(id).front, match: covers.sgMatch, steamSearch: (t, exact) => pcgames.steamSearch(t, exact) });
+  steamart.init(app.getPath('userData'), log); dirsize.init({ dataDir: app.getPath('userData'), log, onMeasured: () => { scanForget(); /* (the Switch 2 folders' sizes: the next scan reads them afresh) */ if (alive()) win.webContents.send('library:changed', { sizes: 1 }); } }); pcgames.init(app.getPath('userData'), log); if (linux.isLinux) linuxpc.init({ dataDir: app.getPath('userData'), appRoot: paths.appRoot(), log, fetchBuf: async u => { const r = await net.fetch(u); return r.ok ? Buffer.from(await r.arrayBuffer()) : null; } }); pccovers.init({ dataDir: app.getPath('userData'), log, fileUrl, fetchImage, steamgrid: require('./main/steamgrid'), steamCover: id => steamart.local(id).front, match: covers.sgMatch, steamSearch: (t, exact) => pcgames.steamSearch(t, exact), consoleBoxes: (t, r) => covers.consoleBoxes ? covers.consoleBoxes(t, r) : (covers.consoleBox(t, r) ? [covers.consoleBox(t, r)] : []), artRegion: () => cfg.ui && cfg.ui.artRegion, rebrand: async (buf, { plat, part }) => { if (imgtools.isAvailable()) { try { const b = await imgtools.rebrand(buf, { plat, part }); if (b) return b; } catch {} } const r = await helperJob('img-tools.html', async () => ({ mode: 'rebrand', plat, part, data: new Uint8Array(buf.buffer, buf.byteOffset, buf.length) }), 30000, true); const m = /^data:image\/jpeg;base64,(.+)$/.exec(String((r && r.pages || [])[0] || '')); return m ? Buffer.from(m[1], 'base64') : null; } });
   wiiumanual.init(app.getPath('userData'), log);
   ra.init(app.getPath('userData'), log); ra.setCredentials(cfg.ra && cfg.ra.enabled !== false ? cfg.ra.user : '', cfg.ra && cfg.ra.key);
   manuals.init(log); archive.init(log); manuals.setStore(path.join(app.getPath('userData'), 'manual-auto.json')); manuals.setRejectStore(path.join(app.getPath('userData'), 'manual-rejects.json'));

@@ -31,6 +31,7 @@ const STYLE={
   media:{id:"media",rc:0.03,re:0.18,hue:285,ratio:.71,depth:.06,edge:.02,caseColor:"#1a1c24",caseSide:"#0e0f14",spineInk:"#e8e8f0",band:{bg:"#1a1c24",fg:"#9aa3b8",label:"APP"},spineBand:{bg:"#2a2d38",fg:"#c8cede",label:"APP"},tint:["#2a3550","#0a0d16"],glow:"#b9a6ff"}
 };
 const WORDMARKS={home:["Home","Continue & favorites"],gc:["GameCube","Home console"],wii:["Wii","Motion console"],wiiu:["Wii U","Home console"],sw:["Switch","Hybrid console"],sw2:["Switch 2","Hybrid console"],psp:["PSP","Handheld"],ps3:["PS3","Home console"],ps4:["PS4","Home console"],ps5:["PS5","Home console"],x360:["Xbox 360","Home console"],xboxone:["Xbox One","Standalone games"],n3ds:["3DS","Handheld"],ps2:["PS2","Home console"],pc:["PC","Steam, Epic & more"],custom:["Custom","PC ports & recomps"],media:["Media","Streaming"]};
+STYLE.xsx=STYLE.xboxone;STYLE.xone=STYLE.xboxone;
 if(window.BS_SYSTEMS_EXTRA){Object.assign(STYLE,BS_SYSTEMS_EXTRA.style||{});Object.assign(WORDMARKS,BS_SYSTEMS_EXTRA.wordmarks||{})} // extra shelves (renderer/systems-extra.js)
 const APP_HUE={stremio:265,nuvio:200};
 
@@ -49,7 +50,7 @@ let slots=[],bw=240,bh=340,bd=24,OS=1,themes={},cfgInfo=null;
 const cur=()=>shelves[sysIdx];
 const st=()=>STYLE[(cur()||{}).id]||STYLE.media; // no shelves yet (empty library): the neutral look, never a TypeError
 const shelfFor=g=>(g&&g._shelf!=null&&allShelves[g._shelf])||cur();
-const stOf=g=>STYLE[shelfFor(g).id]||STYLE.media;
+const stOf=g=>(g&&g.artFrom==='console'&&g.boxPlat&&STYLE[g.boxPlat])||STYLE[shelfFor(g).id]||STYLE.media;
 let allShelves=[];
 // Android (the Thor's small screen): the console bar only lists shelves that have games (plus Home and Apps), with short
 // names, and glides with a transform instead of scrolling (see placePill). Windows keeps every shelf as before.
@@ -350,7 +351,7 @@ function mount(s){
   const g=s.g,i=s.i,sh=st();const slot=document.createElement("div");slot.className="slot";
   slot.innerHTML=`<div class="box"><div class="face f-front"><img alt="" draggable="false" decoding="async"><div class="dim"></div><div class="glare"></div><div class="sheen"></div></div><div class="face f-back"></div>
       <div class="face f-left"><div class="spine-band"></div><div class="spine-title"></div></div><div class="face f-right spine2"><div class="spine-band"></div><div class="spine-title"></div></div><div class="face bev bev-fl"></div><div class="face bev bev-fr"></div><div class="face bev bev-bl"></div><div class="face bev bev-br"></div></div>`;
-  const os=cur()===HOME?stOf(g):sh;if(os!==sh){slot.style.setProperty("--bw",`calc(var(--ch) * ${os.ratio})`);slot.style.setProperty("--bd",`calc(var(--ch) * ${os.ratio*os.depth})`);slot.style.setProperty("--edge",`calc(var(--ch) * ${os.ratio*os.edge})`);slot.style.setProperty("--edge-in",`calc(var(--ch) * ${os.wrap?0:os.ratio*os.edge})`);slot.style.setProperty("--rc",`calc(var(--ch) * ${os.ratio*(os.rc||.03)})`);slot.style.setProperty("--re",`calc(var(--ch) * ${os.ratio*os.depth*(os.re||.3)})`);slot.style.setProperty("--case",os.caseColor);slot.style.setProperty("--case-side",os.caseSide);slot.style.setProperty("--spine-ink",os.spineInk)}
+  const os=stOf(g);if(os!==sh){slot.style.setProperty("--bw",`calc(var(--ch) * ${os.ratio})`);slot.style.setProperty("--bd",`calc(var(--ch) * ${os.ratio*os.depth})`);slot.style.setProperty("--edge",`calc(var(--ch) * ${os.ratio*os.edge})`);slot.style.setProperty("--edge-in",`calc(var(--ch) * ${os.wrap?0:os.ratio*os.edge})`);slot.style.setProperty("--rc",`calc(var(--ch) * ${os.ratio*(os.rc||.03)})`);slot.style.setProperty("--re",`calc(var(--ch) * ${os.ratio*os.depth*(os.re||.3)})`);slot.style.setProperty("--case",os.caseColor);slot.style.setProperty("--case-side",os.caseSide);slot.style.setProperty("--spine-ink",os.spineInk)}
   if(isFav(g))slot.classList.add("fav");
   if(g.installed===false)slot.classList.add("notinst"); // (an Epic game the account owns but isn't installed: greyed, Play offers to install it)
   slot.querySelectorAll(".spine-band").forEach(band=>{band.style.background=os.spineBand.bg;band.style.color=os.spineBand.fg;band.textContent=g.kind==="emulator"?"EMU":g.kind==="setup"?"ADD":os.spineBand.label});
@@ -905,7 +906,7 @@ function fillDetails(){
   const desc=descFor(g)||"";const dd0=$("dDesc");dd0.textContent=desc;dd0.hidden=!desc;dd0.classList.add("clamp");{const sa=$("dSecAbout");if(sa)sa.hidden=!desc||g.kind!=="rom"&&g.kind!=="steam"} /* (beta.7: section labels, only over a section with something in it) */
   const more=$("dMore");more.hidden=true;more.textContent="Read more";requestAnimationFrame(()=>{more.hidden=!desc||dd0.scrollHeight<=dd0.clientHeight+4});
   // hero: cover + blurred backdrop; chips for the glanceable facts
-  const front=frontUrl(g);$("dCover").src=thumb(front,420);{const hb=$("dHeroBg"),hsrc=(g.art&&(g.art.hero||g.art.front))||front;hb.style.backgroundImage=`url("${thumb(hsrc,g.art&&g.art.hero?768:256)}")`;if(window.bsPlatform&&bsPlatform.os==="android"&&hsrc)tinyBlur(hsrc,d=>{if(d&&curGame()===g&&!hb.closest(".shot"))hb.style.backgroundImage=`url("${d}")`})} /* Android: the 18×24 soft copy the shelf background already uses, so no live 28 px blur filter (android.css) */
+  const front=frontUrl(g);$("dCover").src=thumb(front,420);$("dCover").style.aspectRatio=String(stOf(g).ratio||.71);{const hb=$("dHeroBg"),hsrc=(g.art&&(g.art.hero||g.art.front))||front;hb.style.backgroundImage=`url("${thumb(hsrc,g.art&&g.art.hero?768:256)}")`;if(window.bsPlatform&&bsPlatform.os==="android"&&hsrc)tinyBlur(hsrc,d=>{if(d&&curGame()===g&&!hb.closest(".shot"))hb.style.backgroundImage=`url("${d}")`})} /* Android: the 18×24 soft copy the shelf background already uses, so no live 28 px blur filter (android.css) */
   const i=g.info||{},chips=$("dChips");chips.innerHTML="";
   const chip=(t,cls)=>{if(!t)return;const c=document.createElement("span");c.className="chipx"+(cls?" "+cls:"");c.textContent=t;chips.append(c)};
   if(g.kind==="rom"){chip(i.release?String(i.release).slice(0,4):i.year);chip(i.genres&&i.genres.split(";")[0].trim());chip(i.players?(i.players==="1"?"1 player":`${i.players} players`):null);chip(i.esrb?i.esrb.replace(/ - .*$/,""):null,"esrb");chip(i.rating?`★ ${(+i.rating).toFixed(1)}`:null,"score");chip(i.metacritic?`Metacritic ${i.metacritic}`:null,"score");if(g.compat)chip(`Xenia: ${g.compat}`,/playable|gameplay/i.test(g.compat)?"score":"esrb")}

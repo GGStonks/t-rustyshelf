@@ -25,11 +25,47 @@ function init(opts) { o = Object.assign(o, opts || {}); }
 
 // the chosen cover of a game, or null
 function cover(id) { const b = path.join(dir(), safeId(id)); for (const e of EXTS) if (isFile(b + '.' + e)) return b + '.' + e; return null; }
-function clear(id) { const b = path.join(dir(), safeId(id)); for (const e of EXTS) { try { fs.unlinkSync(b + '.' + e); } catch {} } }
+function clear(id) { const b = path.join(dir(), safeId(id)); for (const e of EXTS) { try { fs.unlinkSync(b + '.' + e); } catch {} } try { fs.unlinkSync(b + '.plat'); } catch {} try { fs.unlinkSync(b + '.from'); } catch {} }
 async function save(id, buf, ext) {
   fs.mkdirSync(dir(), { recursive: true });
   const dest = path.join(dir(), safeId(id) + '.' + ext), tmp = dest + '.tmp';
   await fs.promises.writeFile(tmp, buf); clear(id); await fs.promises.rename(tmp, dest); return dest;
+}
+
+// ((T)rustyShelf) custom PC game art found directly inside the game's directory or subdirectories
+function folderCover(dirOrExe) {
+  if (!dirOrExe) return null;
+  let d = dirOrExe, base = '';
+  try {
+    const st = fs.statSync(dirOrExe);
+    if (st.isFile()) {
+      d = path.dirname(dirOrExe);
+      base = path.basename(dirOrExe, path.extname(dirOrExe)).toLowerCase();
+    }
+  } catch {
+    return null;
+  }
+  const folderName = path.basename(d).toLowerCase();
+  const names = ['cover', 'folder', 'box', 'front', 'poster', 'artwork', 'default'];
+  if (base && !names.includes(base)) names.push(base);
+  if (folderName && !names.includes(folderName)) names.push(folderName);
+
+  const subdirs = [d, path.join(d, 'covers'), path.join(d, 'art'), path.join(d, 'media')];
+  for (const s of subdirs) {
+    let ents;
+    try { ents = fs.readdirSync(s, { withFileTypes: true }); } catch { continue; }
+    for (const name of names) {
+      const match = ents.find(e => {
+        if (!e.isFile()) return false;
+        const ext = path.extname(e.name).toLowerCase();
+        if (!['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) return false;
+        const b = path.basename(e.name, ext).toLowerCase();
+        return b === name;
+      });
+      if (match) return path.join(s, match.name);
+    }
+  }
+  return null;
 }
 
 // (Linux) the store's own cover of a game, downloaded once and used while no cover was chosen: Epic's box art (legendary's
@@ -73,6 +109,18 @@ async function options(game) {
     for (const { a, i, t } of got) { if (!t) continue; const k = 'st' + i; keys[k] = { urls: [...steamArt(a.id, 'library_600x900_2x.jpg'), ...steamArt(a.id, 'library_600x900.jpg')] };
       list.push({ key: k, thumb: o.fileUrl(t), source: 'steamstore', label: "Steam's cover", sub: a.name ? `${a.name} on Steam` : "From Steam's store" }); }
   } catch (e) { o.log('PC cover: Steam store', e.message); }
+  // ((T)rustyShelf) console release boxes (PS5, Xbox Series X|S, PS4, Xbox One, Switch)
+  if (o.consoleBoxes && game.title) {
+    try {
+      const reg = o.artRegion ? o.artRegion() : '';
+      const boxes = o.consoleBoxes(game.title, reg) || [];
+      const cgot = await Promise.all(boxes.map(async (cb, i) => ({ cb, i, t: await thumb(cb.url) })));
+      for (const { cb, i, t } of cgot) {
+        if (!t) continue; const k = 'cb' + i; keys[k] = { consoleBox: cb };
+        list.push({ key: k, thumb: o.fileUrl(t), source: 'console', label: `${cb.platform} box`, sub: 'Physical console release' });
+      }
+    } catch (e) { o.log('PC cover: console boxes', e.message); }
+  }
   const sgdb = !!(o.steamgrid && o.steamgrid.enabled && o.steamgrid.enabled());
   if (sgdb) {
     let posters = [];
@@ -87,6 +135,35 @@ async function options(game) {
 async function use(id, key) {
   id = String(id); const k = (last.get(id) || {})[String(key || '')]; if (!k) throw new Error('That cover isn\'t in the list any more. Open the picker again.');
   let buf = null, ext = 'jpg';
+  if (k.consoleBox) {
+    const cb = k.consoleBox;
+    const buf0 = await o.fetchImage(cb.url);
+    if (!buf0 || !isImg(buf0)) throw new Error("Couldn't download that cover. Check the connection and try again.");
+    let mBuf = null;
+    if (o.rebrand) {
+      try { mBuf = await o.rebrand(buf0, { plat: cb.plat, part: '' }); } catch (e) { o.log('rebrand failed', e.message); }
+    }
+    const finalBuf = mBuf || buf0;
+    const dest = await save(id, finalBuf, 'jpg');
+    const b = path.join(dir(), safeId(id));
+    await fs.promises.writeFile(b + '.plat', cb.plat);
+    await fs.promises.writeFile(b + '.from', `${cb.platform} ${cb.url}`);
+    try {
+      await saveConsole(id, finalBuf, `${cb.platform} ${cb.url}`, '', cb.plat);
+      for (const [part, url] of [['back', cb.back], ['spine', cb.spine]]) {
+        if (!url) continue;
+        const pbuf = await o.fetchImage(url);
+        if (!pbuf || !isImg(pbuf)) continue;
+        let pmBuf = null;
+        if (o.rebrand) {
+          try { pmBuf = await o.rebrand(pbuf, { plat: cb.plat, part }); } catch {}
+        }
+        await saveConsole(id, pmBuf || pbuf, `${cb.platform} ${url}`, part, cb.plat);
+      }
+    } catch {}
+    o.log('PC cover chosen:', id, `${cb.platform} box`);
+    return dest;
+  }
   if (k.file) { buf = await fs.promises.readFile(k.file); ext = extOf(k.file, buf); }
   else if (k.url || k.urls) { const us = k.urls || [k.url]; let u = null; for (const x of us) { buf = await o.fetchImage(x); if (buf && isImg(buf)) { u = x; break; } buf = null; } // (the sharpest first: Steam's 2x cover, then its 1x; beta.10: an error page is never the cover)
     if (!buf) throw new Error("Couldn't download that cover. Check the connection and try again."); ext = extOf(u, buf); }
@@ -121,9 +198,36 @@ async function fillMissing(games) {
 const boxDir = () => path.join(o.dataDir, 'pc-console-covers');
 // part: '' (the front), 'back' or 'spine' (<game id>-back.jpg / -spine.jpg, when that release's are scanned)
 function consoleCover(id, part = '') { const f = path.join(boxDir(), safeId(id) + (part ? '-' + part : '') + '.jpg'); return isFile(f) ? f : null; }
-async function saveConsole(id, buf, from, part = '') {
+async function saveConsole(id, buf, from, part = '', plat = '') {
   fs.mkdirSync(boxDir(), { recursive: true }); const b = path.join(boxDir(), safeId(id)), f = b + (part ? '-' + part : '') + '.jpg';
-  await fs.promises.writeFile(f + '.tmp', buf); await fs.promises.rename(f + '.tmp', f); if (!part) await fs.promises.writeFile(b + '.from', String(from || '')); return f;
+  await fs.promises.writeFile(f + '.tmp', buf); await fs.promises.rename(f + '.tmp', f);
+  if (!part) {
+    await fs.promises.writeFile(b + '.from', String(from || ''));
+    if (plat) await fs.promises.writeFile(b + '.plat', String(plat));
+  }
+  return f;
+}
+function consolePlat(id) {
+  const sid = safeId(id);
+  const dirs = [dir(), boxDir()];
+  for (const d of dirs) {
+    const p = path.join(d, sid + '.plat');
+    if (isFile(p)) {
+      try { return fs.readFileSync(p, 'utf8').trim(); } catch {}
+    }
+    const fromFile = path.join(d, sid + '.from');
+    if (isFile(fromFile)) {
+      try {
+        const from = fs.readFileSync(fromFile, 'utf8').toLowerCase();
+        if (from.includes('playstation 5') || from.includes('ps5')) return 'ps5';
+        if (from.includes('series x') || from.includes('xsx')) return 'xsx';
+        if (from.includes('playstation 4') || from.includes('ps4')) return 'ps4';
+        if (from.includes('xbox one') || from.includes('xone')) return 'xboxone';
+        if (from.includes('switch') || from.includes('sw')) return 'sw';
+      } catch {}
+    }
+  }
+  return null;
 }
 
-module.exports = { init, cover, autoCover, fetchAuto, fillMissing, consoleCover, saveConsole, options, use, own, reset: id => clear(String(id)) };
+module.exports = { init, cover, autoCover, fetchAuto, fillMissing, consoleCover, saveConsole, consolePlat, folderCover, options, use, own, reset: id => clear(String(id)) };

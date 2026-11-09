@@ -232,6 +232,6 @@ function rebrand(bmp, job) {
   if (w < bh * 2.2) { // a spine: the band is taller than wide, so the word runs down it, as the console's logo did
     const size = Math.round(Math.min(w * 0.5, bh * 0.2)); x.save(); x.translate(w / 2, bh * 0.08); x.rotate(Math.PI / 2); x.globalAlpha = 0; const len = word(size, 0); x.globalAlpha = 1;
     x.translate(Math.max(0, (bh * 0.84 - len) / 2), 0); word(size, 0); x.restore();
-  } else { const size = Math.round(bh * 0.46); x.save(); x.translate(0, bh / 2); word(size, Math.round(bh * 0.42)); x.restore(); } // (spaced capitals, where the console's logo was)
+  } else { const size = Math.round(bh * 0.46); x.save(); x.translate(0, bh / 2); word(size, Math.round(Math.max(bh * 0.42, w * 0.04))); x.restore(); } // (spaced capitals, where the console's logo was)
   const u = c.toDataURL('image/jpeg', 0.92); c.width = c.height = 0; return u;
 }

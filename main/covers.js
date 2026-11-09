@@ -494,18 +494,23 @@ function matchTitle(list, title, art = () => 1, exactOnly = false) {
 // Backs: North American boxes print English/French/Spanish side by side, so English-only regions come first for the back.
 const BACK_PREF = ['United Kingdom', 'Australia', 'North America', 'United States', 'World', '', 'Canada', 'Europe', 'Japan'];
 // ((T)rustyShelf) a PC game's physical console box: the front scan of the newest release LaunchBox has of that title, from
-// the index already built (never a download of the index for it): { plat, platform, name, url, back, spine } or null
-function consoleBox(title, region) {
-  const idx = readyIndex(); if (!idx || !title) return null;
+// the index already built (never a download of the index for it): { plat, platform, name, url, back, spine } or null.
+// consoleBoxes returns all matching releases across platforms (newest first).
+function consoleBoxes(title, region) {
+  const idx = readyIndex(); if (!idx || !title) return [];
+  const results = [];
   for (const [plat, platform] of PC_BOX_PLATS) {
     const list = idx.games[platform]; if (!list || !list.length) continue;
     const fronts = g => ((idx.images && idx.images[g.id]) || []).filter(i => i.type === 'Box - Front');
     const hit = matchName(list, title, g => fronts(g).length); if (!hit) continue;
     const f = pickImages(fronts(hit), 'Box - Front', region)[0]; if (!f) continue;
     const all = (idx.images && idx.images[hit.id]) || [], one = type => { const x = pickImages(all, type, region)[0]; return x ? LB_IMG + encodeURI(x.file) : ''; };
-    return { plat, platform, name: hit.name, url: LB_IMG + encodeURI(f.file), back: one('Box - Back'), spine: one('Box - Spine') }; // (its back and spine too, when scanned)
+    results.push({ plat, platform, name: hit.name, url: LB_IMG + encodeURI(f.file), back: one('Box - Back'), spine: one('Box - Spine') });
   }
-  return null;
+  return results;
+}
+function consoleBox(title, region) {
+  return consoleBoxes(title, region)[0] || null;
 }
 function pickImages(imgs, type, region) {
   const c = (imgs || []).filter(i => i.type === type && i.file);
@@ -888,6 +893,6 @@ function hasInfo() { return idxStamp() > 0; } // cheap: never parses the index j
 
 // the index, built (downloaded) if it has to be: Art Studio's "build the LaunchBox index" button
 async function buildIndex(progress) { if (lbOverride) return true; await launchboxIndex(progress || (() => {})); return true; }
-module.exports = { _setIndex: x => { lbOverride = x; }, LAUNCHBOX, PC_BOX_PLATS, consoleBox, setArtName, artGame, artMatches, init, matchTitle, matchName, lookupNames, sgMatch, setSpineCutter, setCartMaker, makeCart, CART_SYS, discId, downloadCovers, coverage, cancel, pause, isPaused, isImageBuf, HD_MIN, gameInfo, flushInfoCache, hasInfo, invalidateInfo, norm, launchboxMatch, libretroMatch, pickImages,
+module.exports = { _setIndex: x => { lbOverride = x; }, LAUNCHBOX, PC_BOX_PLATS, consoleBox, consoleBoxes, setArtName, artGame, artMatches, init, matchTitle, matchName, lookupNames, sgMatch, setSpineCutter, setCartMaker, makeCart, CART_SYS, discId, downloadCovers, coverage, cancel, pause, isPaused, isImageBuf, HD_MIN, gameInfo, flushInfoCache, hasInfo, invalidateInfo, norm, launchboxMatch, libretroMatch, pickImages,
   // Art Studio (main/artstudio.js) reuses these rather than keeping its own copies
   candidates, libretroAll, libretroIndex, readyIndex, indexState, buildIndex, refreshIndex, cancelRefresh, indexInfo, edition, lbRegion, lrRegion, tdbRegion, download, downloadEx, sizeOf, artFile, isLow, placeArt, setOnPlaced, replacedFor, cutSpine, cutBack, canCut: () => !!spineCutter, pool, KINDS, ART_EXT, REPLACED };

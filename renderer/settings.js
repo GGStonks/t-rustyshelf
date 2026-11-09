@@ -1178,8 +1178,8 @@ function addReset(){ADD.rows=null;bump()}
 function addFound(items){const have=new Set(pcCfg().custom.map(c=>String(c.exe).toLowerCase()));ADD.pn=null;
   ADD.list=items.map(x=>{const h=have.has(String(x.exe).toLowerCase());return {title:String(x.title||"Game").slice(0,120),exe:String(x.exe),on:!h,have:h}});
   if(!ADD.list.length)toast("No games found there");addReset()}
-function addCommit(){const pc=pcCfg();let n=0;for(const x of (ADD.list||[]).filter(x=>x.on&&!x.have)){if(pc.custom.some(c=>String(c.exe).toLowerCase()===x.exe.toLowerCase()))continue;pc.custom.push({id:Date.now().toString(36)+"-"+n,title:x.title,exe:x.exe,args:""});n++}
-  ADD.list=null;changed({rescan:true});play("open");toast(n?`Added ${n} game${n===1?"":"s"} to the Custom shelf`:"Nothing new to add");addReset()}
+function addCommit(){const pc=pcCfg(),covers=[];let n=0;for(const x of (ADD.list||[]).filter(x=>x.on&&!x.have)){if(pc.custom.some(c=>String(c.exe).toLowerCase()===x.exe.toLowerCase()))continue;const id=Date.now().toString(36)+"-"+n;pc.custom.push({id,title:x.title,exe:x.exe,args:""});if(x.cover)covers.push({id,file:x.cover});n++}
+  ADD.list=null;changed({rescan:true});if(covers.length&&api.gameCovers)api.gameCovers(covers).catch(()=>{});play("open");toast(n?`Added ${n} game${n===1?"":"s"} to the Custom shelf`:"Nothing new to add");addReset()}
 async function addSeveral(){const p=await pick({kind:"file",multi:true,title:"Choose the games' programs (hold Ctrl to pick several)",filters:[{name:"Programs",extensions:["exe"]}]});const L=(Array.isArray(p)?p:p?[p]:[]).map(x=>typeof x==="string"?x:x&&x.path).filter(Boolean);if(!L.length)return;
   const named=await Promise.resolve(api.gameTitles?api.gameTitles(L):L.map(e=>({exe:e,title:e.split(/[\\/]/).pop().replace(/\.exe$/i,"")}))).catch(()=>L.map(e=>({exe:e,title:e.split(/[\\/]/).pop().replace(/\.exe$/i,"")})));addFound(named)}
 async function addScan(){const p=await pick({kind:"folder",title:"Choose the folder your games are in (like D:\\Games)"}),root=typeof p==="string"?p:p&&p.path;if(!root||!api.scanGameFolder)return;
@@ -1217,6 +1217,9 @@ function addRows(){if(ADD.rows)return ADD.rows;const R=[],win=!window.bsPlatform
   R.push(A("Add one program","Browse…","Any program: a recomp, a PC port, a game from another launcher. It gets a case on the Custom shelf and starts from its own folder.",addOne,{ns:true,keys:"add custom game recomp port program exe one"}));
   if(ADD.busy)R.push(infoRow("Looking…","",{text:""}));
   if(ADD.list&&ADD.list.length){const L=ADD.list;R.push(H(`Found ${L.length} game${L.length===1?"":"s"}`,{em:()=>`${L.filter(x=>x.on&&!x.have).length} ticked`}));
+    const anyUnticked=L.some(x=>!x.on&&!x.have);
+    R.push(A(anyUnticked?"Select all":"Deselect all",anyUnticked?"All":"None","Ticks or unticks every game found that isn't already on the shelf.",()=>{const v=anyUnticked;L.forEach(x=>{if(!x.have)x.on=v});addReset()},{ns:true}));
+    R.push(A("Add the ticked games",()=>{const n=L.filter(x=>x.on&&!x.have).length;return n?`Add ${n}`:"Add"},"Puts the ticked games on the Custom shelf. Covers are found for them like for any PC game, and each can be renamed or given another cover from its Details.",addCommit,{ns:true}));
     L.forEach(x=>R.push({t:"toggle",label:x.title,info:x.exe,ns:true,nosave:true,get:()=>x.on&&!x.have,set:v=>{if(!x.have)x.on=!!v},sub:()=>({text:x.have?"Already on the Custom shelf":x.exe.split(/[\\/]/).pop()})}));
     R.push(A("Add the ticked games",()=>{const n=L.filter(x=>x.on&&!x.have).length;return n?`Add ${n}`:"Add"},"Puts the ticked games on the Custom shelf. Covers are found for them like for any PC game, and each can be renamed or given another cover from its Details.",addCommit,{ns:true}),
       A("Clear this list","Clear","Forgets this list without adding anything.",()=>{ADD.list=null;addReset()},{ns:true}))}

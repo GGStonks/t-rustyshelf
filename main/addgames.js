@@ -19,20 +19,27 @@ let log = () => {};
 function init(o) { if (o && o.log) log = o.log; }
 const isFile = f => { try { return fs.statSync(f).isFile(); } catch { return false; } };
 const isDir = f => { try { return fs.statSync(f).isDirectory(); } catch { return false; } };
+const { folderCover } = require('./pccovers');
 const HELPER = /^(unins.*|uninstall.*|setup.*|install.*|vc_?redist.*|dxsetup.*|dotnet.*|crash.*|.*crashhandler.*|.*crashreport.*|.*updater.*|update\.exe|unitycrashhandler.*|ue4prereq.*|ueprereq.*|easyanticheat.*|beservice.*|.*_launcher_setup.*|7z.*|cmd\.exe|notification_helper.*|cefsharp.*|.*webhelper.*|quicksfv.*|dxwebsetup.*|oalinst.*|physx.*)$/i;
 const SKIP_DIR = /^(redist|_commonredist|commonredist|directx|vcredist|support|tools?|mods?|saves?|config|logs?|__installer|_redist|prereqs?|dotnet|easyanticheat|battleye)$/i;
-const key = s => String(s || '').toLowerCase().replace(/\.[a-z0-9]{2,4}$/, '').replace(/[^a-z0-9]+/g, '');
-const clean = s => String(s || '').replace(/[_.]+/g, ' ').replace(/\s*[([](gog|repack|www\.[^)\]]*|v?\d[\d.]*[a-z]?)[)\]]\s*/gi, ' ').replace(/\s+/g, ' ').trim();
+const key = (s, isFolder = false) => isFolder ? String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '') : String(s || '').toLowerCase().replace(/\.[a-z0-9]{2,4}$/, '').replace(/[^a-z0-9]+/g, '');
+const clean = s => String(s || '').replace(/[-_.]+/g, ' ')
+  .replace(/\s*[([](gog|repack|www\.[^)\]]*|v?\d[\d.]*[a-z]?)[)\]]\s*/gi, ' ')
+  .replace(/\b(v?\d+(\.\d+)+[a-z]?|build\s*\d+|repack|gog)\b/gi, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
 const GENERIC = /^(bin|binaries|win32|win64|x64|x86|game|release|retail|shipping|windows(noeditor)?|app|exe)$/i;
+const isLinux = process.platform === 'linux';
+const isExe = n => /\.exe$/i.test(n) || (isLinux && /\.(sh|x86_64|bin|x86)$/i.test(n));
 
 // the main program of one game's folder: named like the folder wins, then the biggest
 function mainExe(dir, depth = 3) {
-  const want = key(path.basename(dir)), found = [];
+  const want = key(path.basename(dir), true), found = [];
   const walk = (d, left) => {
     let ents = []; try { ents = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
     for (const e of ents) {
       const p = path.join(d, e.name);
-      if (e.isFile() && /\.exe$/i.test(e.name) && !HELPER.test(e.name)) { let s = 0; try { s = fs.statSync(p).size; } catch { continue; } found.push({ p, s, k: key(e.name), deep: depth - left }); }
+      if (e.isFile() && isExe(e.name) && !HELPER.test(e.name)) { let s = 0; try { s = fs.statSync(p).size; } catch { continue; } found.push({ p, s, k: key(e.name), deep: depth - left }); }
       else if (e.isDirectory() && left > 0 && !SKIP_DIR.test(e.name)) walk(p, left - 1);
     }
   };
@@ -55,10 +62,20 @@ function scanFolder(root, limit = 400) {
   const games = []; let ents = []; try { ents = fs.readdirSync(root, { withFileTypes: true }); } catch (e) { return { root, games, error: e.code || e.message }; }
   for (const e of ents) {
     if (games.length >= limit) break;
-    if (e.isDirectory() && !SKIP_DIR.test(e.name)) { const m = mainExe(path.join(root, e.name)); if (m) games.push({ folder: path.join(root, e.name), title: clean(e.name) || titleFor(m.exe, root), exe: m.exe, others: m.others }); }
+    if (e.isDirectory() && !SKIP_DIR.test(e.name)) {
+      const gDir = path.join(root, e.name);
+      const m = mainExe(gDir);
+      if (m) {
+        const cov = folderCover(gDir) || (m.exe ? folderCover(m.exe) : null);
+        games.push({ folder: gDir, title: clean(e.name) || titleFor(m.exe, root), exe: m.exe, others: m.others, ...(cov ? { cover: cov } : {}) });
+      }
+    }
   }
-  const loose = ents.filter(e => e.isFile() && /\.exe$/i.test(e.name) && !HELPER.test(e.name));
-  for (const e of loose) games.push({ folder: root, title: clean(path.basename(e.name, '.exe')), exe: path.join(root, e.name), others: [] });
+  const loose = ents.filter(e => e.isFile() && isExe(e.name) && !HELPER.test(e.name));
+  for (const e of loose) {
+    const lPath = path.join(root, e.name), cov = folderCover(lPath);
+    games.push({ folder: root, title: clean(path.basename(e.name, path.extname(e.name))), exe: lPath, others: [], ...(cov ? { cover: cov } : {}) });
+  }
   games.sort((a, b) => a.title.localeCompare(b.title));
   return { root, games };
 }
@@ -69,14 +86,14 @@ function scanFolder(root, limit = 400) {
 const turn = () => new Promise(r => setImmediate(r));
 async function statOr(f, fn) { try { return await fn(await fs.promises.stat(f)); } catch { return null; } }
 async function mainExeAsync(dir, depth = 3) {
-  const want = key(path.basename(dir)), found = [];
+  const want = key(path.basename(dir), true), found = [];
   let steps = 0;
   const walk = async (d, left) => {
     let ents = []; try { ents = await fs.promises.readdir(d, { withFileTypes: true }); } catch { return; }
     for (const e of ents) {
       if (++steps % 40 === 0) await turn();
       const p = path.join(d, e.name);
-      if (e.isFile() && /\.exe$/i.test(e.name) && !HELPER.test(e.name)) { const s = await statOr(p, st => st.size); if (s == null) continue; found.push({ p, s, k: key(e.name), deep: depth - left }); }
+      if (e.isFile() && isExe(e.name) && !HELPER.test(e.name)) { const s = await statOr(p, st => st.size); if (s == null) continue; found.push({ p, s, k: key(e.name), deep: depth - left }); }
       else if (e.isDirectory() && left > 0 && !SKIP_DIR.test(e.name)) await walk(p, left - 1);
     }
   };
@@ -93,10 +110,20 @@ async function scanFolderAsync(root, limit = 400) {
   for (const e of ents) {
     if (games.length >= limit) break;
     await turn();
-    if (e.isDirectory() && !SKIP_DIR.test(e.name)) { const m = await mainExeAsync(path.join(root, e.name)); if (m) games.push({ folder: path.join(root, e.name), title: clean(e.name) || titleFor(m.exe, root), exe: m.exe, others: m.others }); }
+    if (e.isDirectory() && !SKIP_DIR.test(e.name)) {
+      const gDir = path.join(root, e.name);
+      const m = await mainExeAsync(gDir);
+      if (m) {
+        const cov = folderCover(gDir) || (m.exe ? folderCover(m.exe) : null);
+        games.push({ folder: gDir, title: clean(e.name) || titleFor(m.exe, root), exe: m.exe, others: m.others, ...(cov ? { cover: cov } : {}) });
+      }
+    }
   }
-  const loose = ents.filter(e => e.isFile() && /\.exe$/i.test(e.name) && !HELPER.test(e.name));
-  for (const e of loose) games.push({ folder: root, title: clean(path.basename(e.name, '.exe')), exe: path.join(root, e.name), others: [] });
+  const loose = ents.filter(e => e.isFile() && isExe(e.name) && !HELPER.test(e.name));
+  for (const e of loose) {
+    const lPath = path.join(root, e.name), cov = folderCover(lPath);
+    games.push({ folder: root, title: clean(path.basename(e.name, path.extname(e.name))), exe: lPath, others: [], ...(cov ? { cover: cov } : {}) });
+  }
   games.sort((a, b) => a.title.localeCompare(b.title));
   return { root, games };
 }

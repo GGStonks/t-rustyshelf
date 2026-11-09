@@ -223,7 +223,7 @@ fn render_text_horizontal(
     let scale = PxScale::from(size);
     let scaled_font = font.as_scaled(scale);
 
-    let start_x = (bh as f32 * 0.42).round();
+    let start_x = (bh as f32 * 0.42).max(w as f32 * 0.04).round();
     let center_y = (bh as f32 / 2.0).round();
 
     let mut cursor_x = start_x;

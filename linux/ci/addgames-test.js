@@ -17,12 +17,19 @@ const mk = (p, body) => { const f = path.join(tmp, p); fs.mkdirSync(path.dirname
     mk('Games/Alpha-Game.v1.2/Alpha.exe', 'a'.repeat(900)); mk('Games/Alpha-Game.v1.2/UnityCrashHandler64.exe', 'c'.repeat(9000)); mk('Games/Alpha-Game.v1.2/unins000.exe');
     mk('Games/Beta.Two/bin/x64/Launcher.exe', 'b'.repeat(500)); mk('Games/Beta.Two/bin/x64/Beta_Two_Main.exe', 'b'.repeat(5000));
     mk('Games/Gamma/redist/vcredist.exe'); mk('Games/Gamma/Gamma.exe', 'g'.repeat(300));
+    mk('Games/Dangerous-Dave/DangerousDave.exe', 'd'.repeat(400)); mk('Games/Dangerous-Dave/cover.jpg', 'img');
+    mk('Games/Native-Runner/run.sh', '#!/bin/sh');
     mk('Games/loose-tool.exe', 't'); mk('Games/readme.txt', 'r');
     const sync = ag.scanFolder(path.join(tmp, 'Games')), asyn = await ag.scanFolderAsync(path.join(tmp, 'Games'));
     const shape = r => r.games.map(g => [g.title, path.relative(tmp, g.exe), g.others.map(o => path.basename(o))]);
     check('Same games as the synchronous scan', JSON.stringify(shape(sync)) === JSON.stringify(shape(asyn)), JSON.stringify([shape(sync), shape(asyn)]));
     check('Main program is the one named like its folder, nested bin folders included', shape(asyn).some(([t, exe]) => t === 'Beta Two' && exe.endsWith('Beta_Two_Main.exe')), JSON.stringify(shape(asyn)));
     check('Helpers and folders to skip are left out', !shape(asyn).some(([, exe]) => /unins|vcredist|Crash/i.test(exe)) && !shape(asyn).some(([t]) => t === 'redist'));
+    const dd = asyn.games.find(g => g.title === 'Dangerous Dave');
+    check('Hyphens and dots in folder names cleaned nicely', !!dd, JSON.stringify(asyn.games.map(g => g.title)));
+    check('Local folder cover detected during scan', dd && dd.cover && dd.cover.endsWith('cover.jpg'), JSON.stringify(dd));
+    const nr = asyn.games.find(g => g.title === 'Native Runner');
+    check('Linux script executable detected on Linux', !!nr && nr.exe.endsWith('run.sh'), JSON.stringify(nr));
     const gone = await ag.scanFolderAsync(path.join(tmp, 'nope'));
     check('A missing folder is reported, not thrown', gone.error && gone.games.length === 0, JSON.stringify(gone));
 
