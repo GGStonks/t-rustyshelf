@@ -251,6 +251,7 @@ body.aside *,body.aside *::before,body.aside *::after{animation-play-state:pause
 .wm-wonderswan{--wm-grad:linear-gradient(180deg,#f3ecff 10%,#7c4fd6 95%);--wm-glow:rgba(124,79,214,.42);--wm-tagc:#c4adee}
 .wm-dos{--wm-grad:linear-gradient(180deg,#e9ffe9 10%,#2fbf4a 95%);--wm-glow:rgba(47,191,74,.4);--wm-tagc:#a3e3ae}
 .wm-ngp{--wm-grad:linear-gradient(180deg,#e8ecff 10%,#3a4fb8 95%);--wm-glow:rgba(58,79,184,.42);--wm-tagc:#aab6ee}
+.wm-gamecom{--wm-grad:linear-gradient(180deg,#fff7c2 10%,#e0b400 95%);--wm-glow:rgba(224,180,0,.42);--wm-tagc:#f0dc8a}
 .wm-ngpc{--wm-grad:linear-gradient(180deg,#ffffff 10%,#2f6ce0 95%);--wm-glow:rgba(47,108,224,.42);--wm-tagc:#a9c3f3}
 .wm-home .wm-main{font-family:'Lexend',var(--ui);font-weight:800;letter-spacing:.1em;font-size:clamp(22px,2.4vw,34px)}
 /* favorite heart on the box corner */

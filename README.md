@@ -85,7 +85,9 @@ is fine: (T)rustyShelf launches the Canary build from its `Emulators` folder. Wi
 
 *(new in (T)rustyShelf)* The **Neo Geo Pocket** and **Neo Geo Pocket Color** have a shelf each (`.ngp` games in an `ngp` or
 `Neo Geo Pocket` folder, `.ngc` games in an `ngpc` or `Neo Geo Pocket Color` folder), played in RetroArch's Beetle NeoPop
-core, with their own box art, manuals and cases; on Android too.
+core, with their own box art, manuals and cases; on Android too. Tiger's **Game.com** has a shelf too (`.tgc` or `.bin`
+games in a `gamecom` or `Game.com` folder), played in MAME (`mame gamecom -cart1 <game>`); MAME needs the Game.com's own system
+file, `gamecom.zip` from a MAME BIOS set, in its `roms` folder first. (Windows and Linux.)
 
 ## Art, manuals and game info
 

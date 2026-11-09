@@ -199,6 +199,19 @@ const CONSOLES = [
     ['ngp', 'Neo Geo Pocket', 'RetroArch', [], [], ['ngp', 'neogeopocket', 'neo geo pocket', 'neo-geo pocket'], ['ngp', 'zip', '7z'], '', 'mednafen_ngp'],
     ['ngpc', 'Neo Geo Pocket Color', 'RetroArch', [], [], ['ngpc', 'neogeopocketcolor', 'neo geo pocket color', 'neo-geo pocket color'], ['ngc', 'ngpc', 'npc', 'zip', '7z'], '', 'mednafen_ngp'],
   ]),
+  {
+    // ((T)rustyShelf, asked on Boxshelf's issue 11) Tiger's Game.com, in MAME (the emulator that runs it): `mame gamecom -cart1 <game>`.
+    // MAME needs the Game.com's own system file (gamecom.zip, from a MAME BIOS set) in its roms folder first; it's started from its
+    // own folder (the launcher's way), where it finds that folder and mame.ini
+    id: 'gamecom', name: 'Game.com', emulatorName: 'MAME',
+    exeNames: ['mame.exe', 'mame64.exe'],
+    emulatorFolders: ['{app}\\MAME', '{app}\\mame', '{app}\\Emulators\\MAME', 'C:\\MAME', '%ProgramFiles%\\MAME', '%LOCALAPPDATA%\\Programs\\MAME'],
+    romFolderNames: ['gamecom', 'game.com', 'tiger game.com', 'tiger gamecom'],
+    extensions: ['tgc', 'bin', 'zip'],
+    gameArgs: 'gamecom -cart1 "{rom}" -skip_gameinfo',
+    emulatorArgs: '',
+    coverSeconds: 4
+  },
   // (supalii's fork) a standalone shelf: Xbox One ports and recompilations that run as PC programs. No emulator and no
   // games folder: its games are the programs put on it in Settings → Custom games (→ the game → Platform)
   { id: 'xboxone', name: 'Xbox One', emulatorName: '', standalone: true, exeNames: [], emulatorFolders: [], romFolderNames: [], extensions: [], gameArgs: '', emulatorArgs: '', coverSeconds: 0 },
@@ -265,6 +278,7 @@ const LINUX_EMU = {
   ps4: ['shadps4', 'net.shadps4.shadPS4', 're:^shadps4.*\\.appimage$'],
   ps5: [], x360: [], // (Kyty and Xenia: Windows only)
   xbox: ['xemu', 'app.xemu.xemu', 're:^xemu.*\\.appimage$'], // (xemu: its AppImage, Flatpak or package)
+  gamecom: ['mame', 'org.mamedev.MAME', 're:^mame.*\\.appimage$'], // ((T)rustyShelf: MAME, its package, Flatpak or AppImage)
   n3ds: ['azahar', 'org.azahar_emu.Azahar', 're:^azahar.*\\.appimage$', 'lime3ds', 'citra-qt'],
   psx: ['duckstation-qt', 'org.duckstation.DuckStation', 're:^duckstation.*\\.appimage$'],
   n64: ['RMG', 'com.github.Rosalie241.RMG', 're:^rmg.*\\.appimage$'],
