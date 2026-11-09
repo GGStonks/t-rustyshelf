@@ -21,7 +21,12 @@ const PAGE = `(() => {
   window.__row = n => [...document.querySelectorAll('#bss .bss-row')].find(r => ((r.querySelector('.nm') || {}).textContent || '') === n);
   window.__btn = () => document.getElementById('dArtMatch');
   window.__closeSettings = async () => { if (window.Settings && Settings.isOpen && Settings.isOpen()) { await Settings.close(); await __w(900); } };
-  window.__toRom = async () => { for (let i = 0; i < 8; i++) { const g = Shelf._lib.cur(); if (g && g.kind === 'rom') return g; __key('ArrowRight'); await __w(500); } return Shelf._lib.cur(); };
+  window.__toRom = async () => {
+    const tab = [...document.querySelectorAll('#tabs .tab')].find(x => x.textContent.trim() === 'GameCube');
+    if (tab && !tab.classList.contains('active')) { tab.click(); await __w(1500); }
+    for (let i = 0; i < 20; i++) { const g = Shelf._lib.cur(); if (g && g.kind === 'rom') return g; __key('ArrowRight'); await __w(400); }
+    return Shelf._lib.cur();
+  };
   window.__details = async () => { __key('i'); await __w(1000); };
 })()`;
 server.listen(0, async () => {
@@ -29,7 +34,8 @@ server.listen(0, async () => {
   const base = `http://localhost:${server.address().port}/index.html`;
   try {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } }), page = await ctx.newPage(), errors = [];
-    page.on('pageerror', e => errors.push(e.message)); await page.goto(base + '?platform=windows&shelf=1&pcx=1'); await page.waitForTimeout(6000);
+    page.on('pageerror', e => errors.push(e.message)); await page.goto(base + '?platform=windows&shelf=1&pcx=1');
+    await page.waitForFunction(() => window.Shelf && Shelf._qs && Shelf._qs().g, null, { timeout: 60000, polling: 250 }); await page.waitForTimeout(2000);
     await page.evaluate(PAGE);
     const a = await page.evaluate(async () => {
       const g = await __toRom(); await __details(); const out = { title: g && g.title, id: g && g.id, visible: !!__btn() && !__btn().hidden, text: __btn() ? __btn().textContent : '' };

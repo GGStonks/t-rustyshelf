@@ -20,7 +20,8 @@ server.listen(0, async () => {
   try {
     // ---- the Installed filter ----
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } }), page = await ctx.newPage(), errors = [];
-    page.on('pageerror', e => errors.push(e.message)); await page.goto(base + '&notinst=1'); await page.waitForTimeout(6000);
+    page.on('pageerror', e => errors.push(e.message)); await page.goto(base + '&notinst=1');
+    await page.waitForFunction(() => window.Shelf && Shelf._qs && Shelf._qs().g, null, { timeout: 60000, polling: 250 }); await page.waitForTimeout(2000);
     const f = await page.evaluate(async () => { const w = ms => new Promise(res => setTimeout(res, ms)), key = k => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
       const t = [...document.querySelectorAll('#tabs .tab')].find(x => x.textContent.trim() === 'PC'); if (t) t.click(); await w(1500);
       const opts = () => [...document.querySelectorAll('#spFilter .sp-opt')].map(x => x.textContent), foot = () => document.getElementById('spFoot').textContent, num = () => +(/^(\d+) game/.exec(foot()) || [])[1];
@@ -32,20 +33,22 @@ server.listen(0, async () => {
     check('choosing it hides the greyed game (one game fewer) and is saved with the filter', f.on === 'Installed' && f.after === f.before - 1 && f.saved === 'installed', JSON.stringify(f));
     await page.screenshot({ path: path.join(OUT, 'installed-filter.png') });
     await ctx.close();
-    const ctx0 = await browser.newContext({ viewport: { width: 1280, height: 720 } }), p0 = await ctx0.newPage(); await p0.goto(base); await p0.waitForTimeout(6000);
+    const ctx0 = await browser.newContext({ viewport: { width: 1280, height: 720 } }), p0 = await ctx0.newPage(); await p0.goto(base);
+    await p0.waitForFunction(() => window.Shelf && Shelf._qs && Shelf._qs().g, null, { timeout: 60000, polling: 250 }); await p0.waitForTimeout(2000);
     const none = await p0.evaluate(async () => { const w = ms => new Promise(res => setTimeout(res, ms)); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', bubbles: true })); await w(900); return [...document.querySelectorAll('#spFilter .sp-opt')].map(x => x.textContent); });
     check('with every game installed there is no "Installed" filter to clutter the list', !none.includes('Installed') && none.includes('Favorites'), JSON.stringify(none));
     await ctx0.close();
 
     // ---- Looks ----
     const ctx2 = await browser.newContext({ viewport: { width: 1280, height: 720 } }), p2 = await ctx2.newPage(), errs2 = [];
-    p2.on('pageerror', e => errs2.push(e.message)); await p2.goto(base); await p2.waitForTimeout(6000);
+    p2.on('pageerror', e => errs2.push(e.message)); await p2.goto(base);
+    await p2.waitForFunction(() => window.Shelf && Shelf._qs && Shelf._qs().g, null, { timeout: 60000, polling: 250 }); await p2.waitForTimeout(2000);
     // record every config the Settings screen saves (the reload at the end of Apply wipes the demo's memory)
     await p2.evaluate(() => { const o = trustyshelf.saveConfig; trustyshelf.saveConfig = async c => { try { sessionStorage.setItem('lastSaved', JSON.stringify(c)); } catch (e) {} return o(c); }; });
     const L1 = await p2.evaluate(async () => { const w = ms => new Promise(res => setTimeout(res, ms));
       const rowsOf = () => [...document.querySelectorAll('#bss .bss-row, #bss .bss-head')].map(r => r.textContent.replace(/\s+/g, ' ').trim());
       const row = n => [...document.querySelectorAll('#bss .bss-row')].find(r => ((r.querySelector('.nm') || {}).textContent || '') === n);
-      const open = async () => { Setup.open({ page: 'looks' }); for (let i = 0; i < 40 && !document.querySelector('#bss .bss-row'); i++) await w(150); await w(1000); Setup.key(new KeyboardEvent('keydown', { key: 'Enter', cancelable: true })); await w(1200); };
+      const open = async () => { Setup.open({ page: 'looks' }); for (let i = 0; i < 40 && !document.querySelector('#bss .bss-row'); i++) await w(150); await w(1000); Setup.key(new KeyboardEvent('keydown', { key: 'Enter', cancelable: true })); for (let i = 0; i < 40 && !row('Save the current look'); i++) await w(150); await w(1000); };
       const close = async () => { if (window.Settings && Settings.isOpen && Settings.isOpen()) { await Settings.close(); await w(800); } };
       const out = {};
       const c = (await trustyshelf.getConfig()).config; Object.assign(c.ui, { theme: 'oled', uiScale: 1.15, clock: 'time', sort: 'year', filter: 'fav', music: 'night' }); await trustyshelf.saveConfig(c);
