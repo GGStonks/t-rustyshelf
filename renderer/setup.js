@@ -984,6 +984,10 @@ async function doneSection(b){
   if(!grid.isConnected)return; // left this page while it was scanning
   grid.innerHTML="";
   if(!shelves.length)grid.append(el("div",{class:"sum"},el("b",{text:"0"}),el("span",{text:"Nothing found yet. Go back and add an emulator or a games folder."})));
+  if(winWizard()){grid.classList.add("wz-tiles"); // (beta.11) Settings' console tiles: the shelf, what runs it, a dot and its games
+    shelves.forEach(s=>{const n=s.games.length,w=s.kind==="apps"?"app":"game",def=info.consoles.find(c=>c.id===s.id),sc=def&&cfg.systems[s.id],ok=!def||!!(sc&&sc.emulator),emu=def?def.emulatorName||"Emulator":s.kind==="apps"?"Media shelf":"PC games";
+      grid.append(el("div",{class:"sum wz-tile"},el("span",{class:"wz2-name",text:s.name}),el("span",{class:"wz2-emu",text:emu}),
+        el("span",{class:"wz2-st"},el("span",{class:"wz-dot "+(ok?"ok":"warn"),"aria-hidden":"true"}),`${ok?"Ready":`${emu} not set`} · ${n} ${w}${n===1?"":"s"}`)))});return}
   shelves.forEach(s=>grid.append(el("div",{class:"sum"},el("b",{text:String(s.games.length)}),el("span",{text:`${s.name} ${s.kind==="apps"?"apps":"games"}`}))));
 }
 async function finish(){pickInit();const hd=applyLook();cfg.setupDone=true;wizard=false;

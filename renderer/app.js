@@ -1175,7 +1175,7 @@ function pvBackPlay(k,url){if(PV.bkey!==k||mode!=="browse")return;if(window.BS_B
 // test saved since: saving that whole copy would undo them)
 async function uiSet(k,v){if(cfgInfo&&cfgInfo.config)cfgInfo.config.ui[k]=v;try{const c=(await api.getConfig()).config;c.ui[k]=v;await api.saveConfig(c)}catch{}}
 function pvHint(n=0){const ui=cfgInfo&&cfgInfo.config&&cfgInfo.config.ui;if(!ui||!api.previewFind||ANDROID)return;if(!cfgInfo.config.setupDone||ui.previewHint||(ui.previews||"off")!=="off")return;
-  if(mode!=="browse"||sysBusy()){if(n<20)setTimeout(()=>pvHint(n+1),15000);return}
+  if(mode!=="browse"||sysBusy()||(window.BS_TOUR&&BS_TOUR.on())){if(n<20)setTimeout(()=>pvHint(n+1),15000);return} /* (beta.11: not over the shelf tour) */
   uiSet("previewHint",true);toast("New: video previews. Turn them on in Settings → Video previews.")}
 setTimeout(()=>pvHint(),9000);
 // (beta.8) previews and console trailers on, but the trailer helper (main/ytclips.js) isn't there yet: say so once on the
@@ -1215,7 +1215,7 @@ const wnEntry=v=>WN().find(e=>ANDROID?e.android===v:e.version===v)||null;
 function mdBullets(md){return String(md||"").split(/\r?\n/).map(l=>/^\s*[-*•]\s+(.+)$/.exec(l)).filter(Boolean).map(m=>m[1].replace(/\[([^\]]+)\]\([^)]*\)/g,"$1").replace(/\*\*|__|`/g,"").replace(/<[^>]*>/g,"").trim()).filter(Boolean).map(s=>s.length>140?s.slice(0,137)+"…":s)}
 const NOTE={el:null,btns:[],i:0,queue:[],t:0};
 function noteShow(o){
-  if(NOTE.el||mode!=="browse"||(typeof qm!=="undefined"&&qm.open)/* (beta.8: never over the open quick menu) */||sysBusy()||(window.BS_BUSY&&BS_BUSY())||document.querySelector("#setup.on, #settings.on")){o.tries=(o.tries||0)+1;if(o.tries<40){NOTE.queue.push(o);clearTimeout(NOTE.t);NOTE.t=setTimeout(noteNext,6000)}return}
+  if(NOTE.el||mode!=="browse"||(typeof qm!=="undefined"&&qm.open)/* (beta.8: never over the open quick menu) */||(window.BS_TOUR&&BS_TOUR.on())/* (beta.11: nor over the shelf tour; it waits its turn) */||sysBusy()||(window.BS_BUSY&&BS_BUSY())||document.querySelector("#setup.on, #settings.on")){o.tries=(o.tries||0)+1;if(o.tries<40){NOTE.queue.push(o);clearTimeout(NOTE.t);NOTE.t=setTimeout(noteNext,6000)}return}
   const el=document.createElement("div");el.className="note-card"+(o.wide?" wide":"");el.setAttribute("role","dialog");el.setAttribute("aria-label",o.title);
   const add=(tag,cls,text)=>{const e=document.createElement(tag);e.className=cls;e.textContent=text;el.append(e);return e};
   add("div","nc-kick",o.kick);add("div","nc-title",o.title);if(o.sub)add("div","nc-sub",o.sub);
@@ -2560,7 +2560,7 @@ function qmPick(){if(!qm.open)return;if(qm.sub!=null)qsChoose();else qsPick()}
 function qmBack(){if(!qm.open)return;if(qm.sub!=null)qsCollapse();else qmClose()}
 function paintMenuGlyph(){const g=$("menuGlyph");if(!g)return;const h=showPad()?glyph("☰"):'<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>';if(g.dataset.h!==h){g.dataset.h=h;g.innerHTML=h}} // only when it changes: this runs with the hints on every shelf step
 $("menuBtn").addEventListener("click",e=>{e.stopPropagation();setInput("pointer");qm.open?qmClose():qmOpen()});
-addEventListener("keydown",e=>{if(!qm.open)return;if(mode!=="browse"&&mode!=="details"){qmClose(true);return} /* something else took over (Settings, a launch): the menu goes, the key is theirs */const k=e.key;const eat=()=>{e.preventDefault();e.stopImmediatePropagation()};setInput("kbd");
+addEventListener("keydown",e=>{if(!qm.open||(window.BS_TOUR&&BS_TOUR.on()))return;if(mode!=="browse"&&mode!=="details"){qmClose(true);return} /* something else took over (Settings, a launch): the menu goes, the key is theirs */const k=e.key;const eat=()=>{e.preventDefault();e.stopImmediatePropagation()};setInput("kbd");
   if(k==="ArrowLeft"||k==="ArrowRight"){eat();qmSide(k==="ArrowRight"?1:-1)}else if(k==="ArrowDown"||k==="ArrowUp"){eat();qmMove(k==="ArrowDown"?1:-1)}
   else if(k==="Enter"||k===" "){eat();if(!e.repeat)qmPick()}else if(k==="Escape"||k==="Backspace"){eat();qmBack()}else if(k==="Tab"){eat();qmClose()}else if(k.length===1||/^F\d/.test(k)||/^(PageUp|PageDown|Home|End)$/.test(k))qmClose()},true); // a shortcut (M, G, S…) closes the Quick Shelf and does its thing
 addEventListener("keyup",e=>{if(e.key==="Enter"||e.key===" ")qsHoldStop()},true);
@@ -3323,7 +3323,7 @@ function museumPad(gp,t,B,ax){
 let attract=false,attractT=0,attractDir=1;
 function attractOn(){return !(cfgInfo&&cfgInfo.config.ui.attract===false)}
 function attractCheck(){
-  if(attract||dimOn||qm.open||!attractOn()||mode!=="browse"||slots.length<2||document.hidden)return;
+  if(attract||dimOn||qm.open||!attractOn()||mode!=="browse"||slots.length<2||document.hidden||(window.BS_TOUR&&BS_TOUR.on()))return; /* (beta.11: never under the shelf tour) */
   const mins=(cfgInfo&&+cfgInfo.config.ui.attractMinutes)||3;
   if(performance.now()-lastInputAt>mins*60000){attract=true;app.classList.add("attract");attractT=setTimeout(attractStep,2200)}
 }
@@ -3832,6 +3832,8 @@ function pollBody(t){
   // a screen of the Android build's own that reads the pad itself while it's up (the handheld Art Studio): the shelf's
   // edges are kept in step with what's held, so the press that closes it doesn't land on the shelf too
   if(gp&&window.BS_MODAL){const vg=viewOf(gp);if(BS_MODAL(vg,t)){for(let i=0;i<vg.buttons.length;i++)prevBtn[i]=!!(vg.buttons[i]&&vg.buttons[i].pressed);prevBtn.v=prevBtn.h=true;held.dir=0;return}}
+  /* (beta.11, Windows) the shelf tour (tour.js) has the controller while it's up; edges kept in step as above */
+  if(gp&&window.BS_TOUR&&BS_TOUR.on()){const vg=viewOf(gp);if(document.hasFocus()){if(vg.buttons.some(b=>b&&b.pressed))setInput("pad");BS_TOUR.pad(vg,t)}for(let i=0;i<vg.buttons.length;i++)prevBtn[i]=!!(vg.buttons[i]&&vg.buttons[i].pressed);prevBtn.v=prevBtn.h=true;held.dir=0;return}
   gp=viewOf(gp); // A/B swapped here when the confirm button is B (Settings → Controller), for every screen below
   if(gp&&document.hasFocus()&&dimPad(gp,t))return; // the press that lifted the dimmed screen does nothing else
   if(smoothTest.on){if(gp&&gp.buttons.some(b=>b&&b.pressed)){smoothTest.stop=true;dimSwallowPad=true}return} // the smoothness test: hands off (any button stops it)
@@ -4348,6 +4350,11 @@ function paintArtMatchBtn(g){const b=$("dArtMatch");if(!b)return;b.hidden=!artMa
 // Called by the setup screen.
 window.Shelf={
   reloadCustomThemes:()=>loadCustomThemes(), // (Settings → Display: Find themes again / Make a theme from a picture)
+  // (beta.11, Windows) what the shelf tour (tour.js) needs: the screens it opens and closes, and the hint bar's glyphs
+  _tour:{cfg:()=>cfgInfo&&cfgInfo.config,mode:()=>mode,game:()=>curGame(),busy:()=>sysBusy()||!!(window.BS_BUSY&&BS_BUSY()),
+    openDetails:()=>{if(mode==="browse"&&curGame())openDetails()},closeDetails:()=>closeDetails(true),openInspect:()=>{if(mode==="browse"&&curGame())openInspect()},closeInspect:()=>{if(mode==="inspect")closeInspect()},inspectTurn:()=>{if(mode==="inspect"){ispTurn(90,0,true);ispSnap()}},
+    qmOpen:()=>{if(mode==="browse"&&!qm.open)qmOpen()},qmClose:()=>{if(qm.open)qmClose(true)},qmOn:()=>!!qm.open,artStudio:()=>{const g=curGame();if(g&&g.kind==="rom"&&g.file&&api.artStudio)artStudioFor(g)},
+    glyph:k=>glyph(k),pad:()=>showPad(),uiSet:(k,v)=>uiSet(k,v),poke:()=>{lastInputAt=performance.now()}},
   companionPlay,smoothTest,holdInput,
   // (beta.5) Settings → Search for a cover: the picker again for that game, with SteamGridDB's covers for the typed name
   pcCoverSearch:(id,term)=>{const g=allShelves.flatMap(s=>s.items||[]).find(x=>x&&x.id===id);if(g)setTimeout(()=>pcCoverOpen(g,term),350)},

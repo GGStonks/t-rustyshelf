@@ -1609,6 +1609,9 @@ server.listen(0, async () => {
     mark('pass 24');
     // ---------- pass 24: beta testers' reports (beta.10): 8BitDo prompts, ARMSX2 and unknown emulator apps on Android, custom games on the PC shelf, the Switch's emulator name (ci/issues-test.js) ----------
     await require('./issues-test')({ browser, base, check, newPage, OUT });
+    mark('pass 26');
+    // ---------- pass 26 (beta.11): the shelf tour on Windows, from Settings → Shelf; never on Android (ci/tour-test.js) ----------
+    await require('./tour-test')({ browser, base, check, newPage, OUT });
     } // ===== end of group windows2 =====
     check('Every file the page loads is in the APK', !missing.size, [...missing].join(', '));
   } catch (e) { check('Test ran to the end', false, e && e.stack ? e.stack.split('\n').slice(0, 2).join(' ') : e); }

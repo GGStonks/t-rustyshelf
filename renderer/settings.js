@@ -249,6 +249,8 @@ function build(){
     ]),
   ]},
   {g:"(T)rustyShelf",id:"shelf",name:"Shelf",ic:"shelf",lead:"How the shelf behaves: console order, shuffle and the idle show.",rows:[
+    /* (beta.11, Windows and Linux) the first-run tour again (tour.js): Settings closes, then it starts on the shelf */
+    ...(window.bsPlatform&&bsPlatform.os==="android"?[]:[A("Show the tour","Start","A one-minute look at the basics: consoles, Details, Inspect, the quick menu, the Art Studio and where to add games.",()=>{Promise.resolve(close()).then(()=>setTimeout(()=>{if(window.BS_TOUR)BS_TOUR.start()},450))},{keys:"tour tutorial intro help guide basics how learn"})]),
     A("Console order","Reorder","The order of the consoles along the top. Home always comes first.",()=>openSub({kind:"order"}),{keys:"shelf order arrange tabs move"}),
     // (beta.7) your own shelves (Details → Collections adds games to them): renamed and deleted here
     M("Collections","shelf-cols","Shelves of your own, mixing games from any console (Details → Collections adds a game). Rename or delete them here.","Each one is a shelf beside Home.",[{t:"dyn",fn:colManageRows}],{keys:"collections lists playlists own shelves"}),
@@ -2675,6 +2677,7 @@ function poll(t){rafId=0;if(!active)return;rafId=requestAnimationFrame(poll);
   // another window in front (an emulator opened from here, a file dialog): its controller presses aren't for Settings; back
   // in front, whatever is still held from there doesn't act either
   if(!document.hasFocus()){primed=false;return}
+  if(window.BS_TOUR&&BS_TOUR.on()){primed=false;return} /* (beta.11) the shelf tour has the controller while it shows a Settings page */
   let gpd=null;try{if(window.BS_activePad)gpd=window.BS_activePad();else for(const g of navigator.getGamepads?navigator.getGamepads():[])if(g&&g.connected){gpd=g;break}}catch{} /* the pad last used, as on the shelf */
   if(!gpd){primed=true;return}
   if(window.Shelf&&Shelf.padBlocked&&Shelf.padBlocked()){for(const k in held)held[k]=Infinity;for(const b of [0,1,2,3,4,5,6,7,8,9,12,13,14,15])if(gpd.buttons[b]&&gpd.buttons[b].pressed)held[b===0?"p0":b===1?"p1":b===6?"lt":b===7?"rt":BTN[b]]=Infinity;held.up=held.down=held.left=held.right=Infinity;return}

@@ -819,3 +819,126 @@ body:not(.pad-input) .details.d-one .d-pane #dTrailer:hover{color:#fff;backgroun
 .details.d-one .d-pane .d-shot{width:clamp(96px,7vw,132px);transition:transform .22s cubic-bezier(.2,.8,.2,1),opacity .22s,box-shadow .22s}
 html.reduce-motion .details.d-one .d-pane .d-shots,body.reduce-motion .details.d-one .d-pane .d-shots{scroll-behavior:auto}
 .su-logo{display:flex;flex-direction:column;align-items:flex-start;gap:4px}.su-logo img{width:100%;max-width:190px;height:auto;display:block}.su-logo span{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-dim)}
+
+/* ---------- (beta.11) the Windows first run, full screen in Settings' layout (setup.js wzLayout) ----------
+   #setup.wz-win is set only while the Windows wizard is up (never on Android, never on the classic pages Settings opens).
+   The card is a 1600 x 900 canvas scaled to the window (setup.js wzFit), so every size here is px at a 1600-wide window.
+   Settings' tokens, its highlight (gradient fill, 2 px inner ring, glow) and its 4 px marker. No new transitions but
+   transform / opacity. */
+#setup.wz-win{display:block;--ink2:#d5d9e6;--dim:#a4abbf;--faint:#7c8399;
+  --hlRing:inset 0 0 0 2px color-mix(in srgb,var(--acc2) 80%,transparent);--hlGlow:0 10px 34px -10px color-mix(in srgb,var(--acc) 70%,transparent),0 0 0 1px rgba(0,0,0,.25)}
+#setup.wz-win .su-card{position:absolute;left:0;top:0;width:1600px;height:900px;transform-origin:0 0;grid-template-columns:330px minmax(0,1fr);grid-template-rows:minmax(0,1fr);
+  border:0;border-radius:0;background:transparent;box-shadow:none;backdrop-filter:none}
+/* the sidebar */
+#setup.wz-win .su-nav{flex-direction:column;overflow-x:hidden;overflow-y:auto;scrollbar-width:none;gap:6px;padding:38px 26px 30px;background:rgba(0,0,0,.28);border-right:1px solid var(--line);border-bottom:0}
+#setup.wz-win .su-brand{display:block;margin:0 0 22px 12px;padding:0;font-size:12.5px;font-weight:600;letter-spacing:.22em;color:var(--faint)}
+#setup.wz-win .su-step{position:relative;display:flex;align-items:center;gap:14px;width:100%;padding:11px 14px;border:0;border-radius:12px;background:none;
+  font:500 17px/1.25 var(--ui,'Lexend',system-ui,sans-serif);color:var(--dim);white-space:nowrap;cursor:pointer}
+#setup.wz-win .wz-sico{display:inline-flex;flex:none;width:20px;height:20px}
+#setup.wz-win .wz-sico svg{width:20px;height:20px}
+#setup.wz-win .su-step::after{content:attr(data-st);flex:none;margin-left:auto;padding-left:10px;font-size:13px;font-weight:500;color:var(--faint)}
+#setup.wz-win .su-step[data-tone="ok"]::after{color:var(--ok)}
+#setup.wz-win .su-step[data-tone="warn"]::after{color:var(--warn)}
+#setup.wz-win .su-step:hover{color:var(--ink);background:rgba(255,255,255,.04)}
+#setup.wz-win .su-step.on{color:var(--ink);background:var(--hl);box-shadow:var(--hlRing)}
+#setup.wz-win .su-step.on::before{content:"";position:absolute;left:-16px;top:22%;bottom:22%;width:4px;border-radius:4px;background:var(--acc)}
+#setup.wz-win .su-step:focus-visible,body.pad-input #setup.wz-win .su-step:focus{outline:none;color:#fff;background:var(--hl);box-shadow:var(--hlRing),var(--hlGlow)}
+#setup.wz-win .su-ver{margin-top:auto;padding:16px 0 0 12px;font-size:13px;letter-spacing:0;color:var(--faint)}
+/* the page */
+#setup.wz-win .su-main{position:relative}
+#setup.wz-win .su-body{padding:40px 48px 28px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.18) transparent}
+#setup.wz-win .su-body.wz-split{display:grid;grid-template-columns:minmax(0,1fr) 330px;column-gap:40px;align-items:start}
+#setup.wz-win .wz-col{min-width:0}
+#setup.wz-win .su-kicker{font-size:12.5px;font-weight:600;letter-spacing:.22em;color:var(--faint)}
+#setup.wz-win .su-title{margin:8px 0 10px;font-size:40px;font-weight:700;line-height:1.12;letter-spacing:-.01em;color:#fff}
+#setup.wz-win .su-lead{margin:0 0 26px;max-width:62ch;font-size:17.5px;line-height:1.5;color:var(--dim)}
+#setup.wz-win .wz2-foot{margin-top:18px;font-size:14.5px;color:var(--faint)}
+/* the info card: what the choice in focus does (setup.js wzInfo) */
+#setup.wz-win .wz-info{position:sticky;top:0;margin-top:118px;padding:26px;border-radius:20px;background:rgba(255,255,255,.04);border:1px solid var(--line);min-width:0}
+#setup.wz-win .wz-info h4{margin:0 0 12px;font-size:22px;font-weight:700;line-height:1.2;color:#fff}
+#setup.wz-win .wz-info p{margin:0 0 14px;font-size:15px;line-height:1.5;color:var(--dim)}
+#setup.wz-win .wz-info ul{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px;font-size:14.5px;line-height:1.45;color:var(--dim)}
+/* a choice as a Settings row (setup.js wzRow): an icon tile, a bold title, one line on what happens, a chevron */
+#setup.wz-win .wz-row{position:relative;display:flex;align-items:center;gap:18px;width:100%;margin-bottom:12px;padding:18px 22px;border-radius:16px;
+  border:1px solid var(--line);background:rgba(255,255,255,.035);color:var(--ink);text-align:left;cursor:pointer;
+  transition:background .18s,border-color .18s,transform .18s,box-shadow .18s}
+#setup.wz-win .wz-row:hover{background:rgba(255,255,255,.065);border-color:color-mix(in srgb,var(--acc) 40%,transparent)}
+#setup.wz-win .wz-row:focus-visible,body.pad-input #setup.wz-win .wz-row:focus{outline:none;border-color:transparent;background:var(--hl);box-shadow:var(--hlRing),var(--hlGlow)}
+#setup.wz-win .wz-row .wz-ic{display:inline-grid;place-items:center;flex:none;width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--acc2)}
+#setup.wz-win .wz-row .wz-ic svg{width:22px;height:22px}
+#setup.wz-win .wz-row .wz-tx{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
+#setup.wz-win .wz-row .wz-t{display:inline-flex;align-items:center;gap:10px;font-size:17.5px;font-weight:600;color:#fff}
+#setup.wz-win .wz-row .wz-chip{display:inline-block;padding:2px 8px;border-radius:99px;background:color-mix(in srgb,var(--acc) 22%,transparent);border:1px solid color-mix(in srgb,var(--acc) 45%,transparent);font-size:11.5px;font-weight:600;color:var(--acc2)}
+#setup.wz-win .wz-row small{font-size:14.5px;color:var(--dim);line-height:1.4}
+#setup.wz-win .wz-row .wz-chev{flex:none;font-size:24px;font-weight:300;color:var(--faint);margin-left:4px}
+#setup.wz-win .wz-row:hover .wz-chev{color:var(--acc2)}
+/* console tiles on the Pick and Done pages */
+#setup.wz-win .wz-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;margin-top:14px}
+#setup.wz-win .wz-tile{position:relative;display:flex;flex-direction:column;align-items:flex-start;text-align:left;padding:16px 18px;border-radius:14px;
+  border:1px solid var(--line);background:rgba(255,255,255,.035);cursor:pointer;transition:background .18s,border-color .18s,box-shadow .18s}
+#setup.wz-win .wz-tile:hover{background:rgba(255,255,255,.065);border-color:color-mix(in srgb,var(--acc) 40%,transparent)}
+#setup.wz-win .wz-tile.on{border-color:color-mix(in srgb,var(--acc) 65%,transparent);background:color-mix(in srgb,var(--acc) 10%,transparent)}
+#setup.wz-win .wz-tile.on::before{content:"";position:absolute;right:14px;top:14px;width:18px;height:18px;border-radius:50%;background:var(--acc);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-6'/%3E%3C/svg%3E");background-size:12px;background-repeat:no-repeat;background-position:center}
+#setup.wz-win .wz-tile:focus-visible,body.pad-input #setup.wz-win .wz-tile:focus{outline:none;border-color:transparent;background:var(--hl);box-shadow:var(--hlRing),var(--hlGlow)}
+#setup.wz-win .wz-tile .wz2-name{font-size:16.5px;font-weight:600;color:#fff;margin-bottom:2px}
+#setup.wz-win .wz-tile .wz2-emu{font-size:13.5px;color:var(--dim)}
+#setup.wz-win .wz-tile .wz2-st{display:inline-flex;align-items:center;gap:7px;margin-top:10px;font-size:13px;color:var(--faint)}
+#setup.wz-win .wz-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--faint)}
+#setup.wz-win .wz-dot.ok{background:var(--ok)}
+#setup.wz-win .wz-dot.warn{background:var(--warn)}
+/* the search summary pill */
+#setup.wz-win .wz2-chips{gap:10px;margin-bottom:20px}
+#setup.wz-win .wz2-chip{padding:10px 18px;border-radius:99px;font-size:15px;background:rgba(255,255,255,.035);border-color:var(--line)}
+#setup.wz-win .wz2-chip:not(.on){opacity:.6}
+#setup.wz-win .wz2-chip:focus-visible,body.pad-input #setup.wz-win .wz2-chip:focus{opacity:1;outline:none;border-color:transparent;background:var(--hl);box-shadow:var(--hlRing),var(--hlGlow)}
+#setup.wz-win .wz2-more-note{font-size:14.5px;color:var(--dim)}
+/* Finish setting up: each console a Settings group of rows */
+#setup.wz-win .wz2-fix{margin-top:12px;padding:6px 22px 10px;border-radius:16px;border:1px solid var(--line);background:rgba(255,255,255,.035)}
+#setup.wz-win .wz2-fname{font-size:19px;font-weight:600}
+#setup.wz-win .wz2-row{padding:12px 0;border-top-color:var(--line)}
+#setup.wz-win .wz2-rl b{font-size:16px;font-weight:600}
+#setup.wz-win .wz2-rl .wz2-st{font-size:14px;color:var(--dim)}
+#setup.wz-win .wz2-rl .wz2-st.ok{color:var(--ok)}
+#setup.wz-win .wz2-auto .hint-text{font-size:14px;color:var(--dim)}
+/* Settings' rows (cards, switches, the Accounts boxes) and the page's own small buttons at the canvas' size */
+#setup.wz-win .su-body .grp-t{font-size:16.5px;font-weight:600}
+#setup.wz-win .su-body .grp-d,#setup.wz-win .su-body .hint-text{font-size:14px;line-height:1.45;color:var(--dim)}
+#setup.wz-win .su-body .grp-box{background:rgba(255,255,255,.035);border-color:var(--line)}
+#setup.wz-win .su-body .switch{font-size:15px}
+#setup.wz-win .wz2-acct .grp-title{font-size:19px;font-weight:600}
+#setup.wz-win .su-body .btn.small{padding:8px 14px;border-radius:10px;font-size:13.5px}
+#setup.wz-win .su-body .text{font-size:14px}
+#setup.wz-win details.adv summary{font-size:15px}
+#setup.wz-win .wz2-artdone,#setup.wz-win .wz2-emudone{margin-top:14px;padding:18px 22px;border-radius:16px;border:1px solid var(--line);background:rgba(255,255,255,.035)}
+#setup.wz-win .wz2-prog{font-size:16px}
+#setup.wz-win .wz2-emudone .wz2-pt{font-size:14.5px;color:var(--ink2)}
+/* Box art: the three looks; the one chosen wears the accent ring, the focus Settings' highlight */
+#setup.wz-win .wz2-looks{grid-template-columns:repeat(3,minmax(0,1fr))} /* (the canvas is always 1600 wide: never the phone-width single column) */
+#setup.wz-win .wz2-look{border-radius:16px;border:1px solid var(--line);background:rgba(255,255,255,.035)}
+#setup.wz-win .wz2-look.on{background:rgba(255,255,255,.035);border-color:transparent;box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--acc) 75%,transparent)}
+#setup.wz-win .wz2-look:not([disabled]):hover{background:rgba(255,255,255,.06)}
+#setup.wz-win .wz2-look:focus-visible,body.pad-input #setup.wz-win .wz2-look:focus{outline:none;border-color:transparent;background:var(--hl);box-shadow:var(--hlRing),var(--hlGlow)}
+#setup.wz-win .wz2-look .wz2-name{font-size:17px}
+#setup.wz-win .wz2-look .wz2-st{font-size:13.5px;color:var(--dim)}
+/* the footer: Back on the left, Search again / Next on the right, the hint pill in the middle */
+#setup.wz-win .su-foot{position:relative;padding:18px 48px 26px;border-top:0}
+#setup.wz-win .su-foot .btn{padding:11px 20px;border-radius:12px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.06);color:var(--ink);font-size:15px;font-weight:600}
+#setup.wz-win .su-foot .btn:hover{background:rgba(255,255,255,.1)}
+#setup.wz-win .su-foot .btn.primary{border-color:transparent;background:var(--acc);color:#fff}
+#setup.wz-win .su-foot .btn.primary:hover{background:color-mix(in srgb,var(--acc) 85%,#fff)}
+#setup.wz-win .su-foot .btn:focus-visible,body.pad-input #setup.wz-win .su-foot .btn:focus{outline:none;box-shadow:inset 0 0 0 2px #fff,var(--hlGlow)}
+#setup.wz-win .su-foot .btn[disabled]{opacity:.35}
+#setup.wz-win .wz2-fix .btn.primary,#setup.wz-win .wz2-regions .btn.primary,#setup.wz-win .wz2-artdone .btn{border-color:transparent;background:var(--acc);color:#fff}
+/* Settings' hint pill (setup.js wzHints): the pad's buttons while a controller is in use, the keys otherwise */
+#setup.wz-win .wz-hints{position:absolute;left:50%;top:calc(50% - 4px);transform:translate(-50%,-50%);display:inline-flex;align-items:center;gap:4px;padding:6px 8px;border-radius:999px;
+  background:rgba(14,16,28,.82);box-shadow:inset 0 0 0 1px rgba(255,255,255,.12),0 12px 30px -10px rgba(0,0,0,.6);pointer-events:none;white-space:nowrap}
+#setup.wz-win .wz-h{display:inline-flex;align-items:center;gap:9px;padding:5px 12px;font-size:15.5px;font-weight:500;color:#dfe3ee}
+#setup.wz-win .wz-pad,#setup.wz-win .wz-key{display:inline-flex}
+#setup.wz-win .wz-pad{display:none}
+body.pad-input #setup.wz-win .wz-pad{display:inline-flex}
+body.pad-input #setup.wz-win .wz-key{display:none}
+#setup.wz-win .wz-g{display:inline-grid;place-items:center;flex:none}
+#setup.wz-win .wz-g svg{display:block;width:26px;height:26px}
+#setup.wz-win .wz-kc{display:inline-grid;place-items:center;flex:none;min-width:28px;height:26px;padding:0 8px;border-radius:7px;border:1.5px solid rgba(255,255,255,.55);font-size:12.5px;font-weight:600;line-height:1;color:#fff}
+

@@ -58,6 +58,9 @@ module.exports = async function whatsNewPass({ browser, base, check, OUT }) {
     check('Update: the same version\'s card isn\'t shown twice', !(await card()));
     // (beta.8) a Steam Deck in Desktop Mode, (T)rustyShelf not started by Steam: a card says once how to get the controller in
     // games (start from Steam), and its button adds (T)rustyShelf to Steam. Started by Steam: no card
+    // (beta.11) each page here is a separate pretend install, but they share the browser's storage: the shelf tour owed by
+    // an earlier first run (tour.js, bs-tour-pending) isn't this one's
+    await page.evaluate(() => { try { localStorage.removeItem('bs-tour-pending'); } catch (e) {} });
     await ready('?platform=windows&shelf=1&deck=desktop'); let dk = null; for (let w = 0; w < 40 && !dk; w++) { await pause(400); dk = await card(); }
     if (dk) { await page.screenshot({ path: path.join(OUT, 'whatsnew-deck.png') }); await page.keyboard.press('Enter'); await pause(900); }
     const added = await page.evaluate(() => window.__added || 0);
