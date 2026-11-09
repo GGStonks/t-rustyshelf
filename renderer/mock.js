@@ -31,7 +31,7 @@ const emu={gc:"Dolphin\\Dolphin.exe",wii:"Dolphin\\Dolphin.exe",wiiu:"Cemu\\Cemu
 const folder={gc:"Gamecube",wii:"Wii",wiiu:"Wii U",sw:"Switch",psp:"PSP",ps3:"PS3",n3ds:"3DS"};
 // ?sw2=1 (beta.3 device test): a Switch 2 shelf with three Eglantine builds, for Settings → Switch 2 → Builds. Off by default,
 // so the other passes keep their console counts
-const curVer=()=>{const e=(window.BS_WHATSNEW||[])[0];return (location.search.match(/[?&]ver=([\w.-]+)/)||[])[1]||(e&&e.version)||"1.0.1.0"};
+const curVer=()=>{const e=(window.BS_WHATSNEW||[])[0];return (location.search.match(/[?&]ver=([\w.-]+)/)||[])[1]||window.__BS_APP_VER||(e&&e.version)||"1.0.1.0"};
 const updNewer=()=>{if(!/[?&]update=newer/.test(location.search))return null;const W=window.BS_WHATSNEW||[],a=W[0],b=W[1];if(!a||!b)return null;
   const md=["## "+a.title,"",...(a.highlights||[]).map(h=>"- "+h),"",...(a.sections||[]).flatMap(x=>["### "+x.h,"",...x.items.map(i=>"- **"+i[0]+"**: "+i[1]),""])].join("\n");
   return {current:b.version,latest:a.version,newer:true,url:"https://github.com/GGStonks/t-rustyshelf/releases/tag/v"+a.version,notes:md,links:{page:"https://github.com/GGStonks/t-rustyshelf",releases:"https://github.com/GGStonks/t-rustyshelf/releases",issues:"https://github.com/GGStonks/t-rustyshelf/issues/new/choose"},checkedAt:Date.now()}};

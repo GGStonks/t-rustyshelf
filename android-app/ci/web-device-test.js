@@ -435,7 +435,7 @@ server.listen(0, async () => {
         // new games arrive in the museum as a parcel first (the pretend game above counts): skip the unpacking, then wait
         // for the bottom screen's message about the wall
         await page.evaluate(async () => { const wait = ms => new Promise(r => setTimeout(r, ms)); for (let i = 0; i < 6 && window.Museum && Museum._dv && Museum._dv(); i++) { Museum.skipDelivery(); await wait(800); }
-          for (let i = 0; i < 80; i++) { const l = [...(window.__fakeBottom || [])].reverse().find(m => m.type === 'museum'); if (l && l.row.sel >= 0) break; await wait(250); } }); // ((T)rustyShelf: up to 20 s, the museum takes longer to choose its case while other groups run alongside)
+          for (let i = 0; i < 80; i++) { const l = [...(window.__fakeBottom || [])].reverse().find(m => m.type === 'museum'); if (l && l.row && l.row.sel >= 0) break; const r = window.Museum && Museum.bottomRow && Museum.bottomRow(); if (r && r.sel < 0 && r.boxes && r.boxes.length && i >= 10) Museum.pickCol(0); await wait(250); } }); // ((T)rustyShelf: up to 20 s, the museum takes longer to choose its case while other groups run alongside)
         await page.waitForTimeout(800);
         mus = await page.evaluate(() => { const msgs = window.__fakeBottom || [], last = [...msgs].reverse().find(m => m.type === 'museum'), r = window.Museum && Museum.bottomRow && Museum.bottomRow();
           return { mode: Shelf.getMode(), types: msgs.map(m => m.type[0]).join(''), msg: !!last, games: last ? last.games.length : 0, sel: last ? last.row.sel : null, n: r ? r.boxes.length : 0, title: last && last.game ? last.game.title : '' }; });

@@ -976,7 +976,14 @@ const pvUi=k=>cfgInfo&&cfgInfo.config&&cfgInfo.config.ui?cfgInfo.config.ui[k]:un
 const pvMode=()=>pvUi("previews")||"off";
 const pvDelay=()=>Math.max(.5,+pvUi("previewDelay")||1.5)*1000;
 const pvCan=g=>!!(g&&api.previewFind&&(g.kind==="rom"||g.kind==="steam"));
-function pvAsk(g){return api.previewFind({systemId:g.kind==="rom"?(shelfFor(g)||{}).id:null,file:g.kind==="rom"?g.file:null,title:g.fileTitle||g.title,id:g.id,youtube:g.info&&g.info.video||null}).catch(()=>null)}
+const pvReq=g=>({systemId:g.kind==="rom"?(shelfFor(g)||{}).id:null,file:g.kind==="rom"?g.file:null,title:g.fileTitle||g.title,id:g.id,youtube:g.info&&g.info.video||null});
+function pvAsk(g){pvNear(g);return api.previewFind(pvReq(g)).catch(()=>null)}
+/* (beta.11, Windows) 1.5 s after the game you're on asks for its trailer, the ones either side (and the next but one) are
+   made ahead in the background (main: preview:warm, behind any clip asked for now), so they play at once when you get
+   there. Only while that game is still the one you're on; never while the shelf moves */
+function pvNear(g){clearTimeout(PV.nt);if(ANDROID||!api.previewWarm||pvMode()==="off")return;
+  PV.nt=setTimeout(()=>{if(curGame()!==g)return;if(window.BS_BUSY&&BS_BUSY()){pvNear(g);return}const s=cur(),L=(s&&s.items)||[],out=[];
+    for(const d of [1,-1,2]){const x=L[sel+d];if(x!==g&&pvCan(x))out.push(pvReq(x))}if(out.length)api.previewWarm(out).catch(()=>{})},1500)}
 function pvRect(){const b=$("dMediaIn"),d=$("details");if(!b||!d)return null;const r=b.getBoundingClientRect(),p=d.getBoundingClientRect();
   if(r.width<20||r.height<20||r.top<p.top-1||r.bottom>p.bottom+1)return null;return {x:r.left,y:r.top,w:r.width,h:r.height}}
 // (beta.7, Details redone) a video file or Steam clip fills the background behind the case (#pvBack, faded out toward the
@@ -1042,7 +1049,10 @@ if(api.onPreviewYt)api.onPreviewYt(d=>{if(!d||d.id!==PV.yt)return;if(d.state==="
 // (beta.8) a console trailer clip is ready (main/ytclips.js): if you're still on that game it plays like a Steam clip,
 // behind the case in Details or behind the shelf. YouTube's player already playing in the Media tab is left alone (the
 // clip takes over next time the tab opens).
-if(api.onPreviewClip)api.onPreviewClip(d=>{if(!d||!d.id||!d.url)return;
+if(api.onPreviewClip)api.onPreviewClip(d=>{if(!d||!d.id)return;
+  // (beta.11) no clip coming (the trailer is gone and nothing else fits): the waiting box closes now, not after 45 s
+  if(d.none){if(mode==="details"&&PV.key&&PV.r&&PV.r.id===d.id&&(PV.r.type==="pending"||d.gone&&PV.r.type==="youtube")){pvBoxStop();if(d.gone){PV.r=null;$("dTabMedia").classList.remove("has")}} /* (a dead video: YouTube's player would only show its error) */if(PV.bwait&&PV.bwait.id===d.id)PV.bwait=null;return}
+  if(!d.url)return;
   if(mode==="details"&&PV.key&&PV.r&&PV.r.id===d.id&&(PV.r.type==="youtube"||PV.r.type==="pending")){const k=PV.key,ytOn=!!PV.yt;PV.r={type:"file",url:d.url,yt:d.id};
     $("dTabMedia").classList.add("has");$("dNoMedia").hidden=true;
     if(dTabNow()===MEDIA_TAB){if(!ytOn)pvBoxStart(k)}else pvVid($("pvBack"),d.url,k,()=>app.classList.add("pv-det"))}

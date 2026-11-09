@@ -142,7 +142,7 @@ contextBridge.exposeInMainWorld('trustyshelf', {
   // (beta.7) Add games
   scanGameFolder: (root) => call('games:scanFolder', { root }), gameTitles: (exes) => call('games:titleFor', { exes }), gameCovers: (items) => call('games:covers', { items }),
   playniteFind: (dir) => call('playnite:find', { dir }), emulatorIn: (dir, systemId) => call('games:emuIn', { dir, systemId }), playnitePlan: (dir) => call('playnite:plan', { dir }),
-  previewFind: (o) => call('preview:find', o || {}), previewYt: (id, rect, muted) => call('preview:yt', { id, rect, muted }), previewYtMove: (rect, show) => call('preview:ytMove', { rect, show }),
+  previewFind: (o) => call('preview:find', o || {}), previewWarm: (list) => call('preview:warm', Array.isArray(list) ? list : []) /* (upstream beta.11) the neighbours' trailers made ahead */, previewYt: (id, rect, muted) => call('preview:yt', { id, rect, muted }), previewYtMove: (rect, show) => call('preview:ytMove', { rect, show }),
   previewYtStop: () => call('preview:ytStop'), previewCount: () => call('preview:count'), previewClearSteam: () => call('preview:clearSteam'),
   onPreviewYt: (fn) => { const h = (_e, d) => fn(d); ipcRenderer.on('preview:yt', h); return () => ipcRenderer.removeListener('preview:yt', h); },
   // (beta.8) console trailers: a clip became ready; the helper's status, download and progress; clearing the clips

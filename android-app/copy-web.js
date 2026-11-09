@@ -18,7 +18,8 @@ fs.copyFileSync(require.resolve('@capacitor/core/dist/capacitor.js'), path.join(
 const mockTag = '<script src="mock.js"></script>';
 if (!html.includes(mockTag)) throw new Error('index.html has no mock.js tag');
 const build = require('./package.json').version + (process.env.GITHUB_SHA ? ' (' + process.env.GITHUB_SHA.slice(0, 7) + ')' : ' (local)');
-fs.writeFileSync(path.join(dst, 'build-info.js'), `window.BS_BUILD = ${JSON.stringify(build)};\n`);
+const appVer = (() => { try { return require('../package.json').version.replace('+', '.'); } catch { return ''; } })();
+fs.writeFileSync(path.join(dst, 'build-info.js'), `window.BS_BUILD = ${JSON.stringify(build)};\nwindow.__BS_APP_VER = ${JSON.stringify(appVer)};\n`);
 const androidTags = ['build-info.js', 'capacitor.js', 'shared/titles.js', 'android-systems.js', 'android-api.js', 'android-bottom.js', 'android-studio.js', 'android-wizard.js'].map(f => `<script src="${f}"></script>`).join('\n');
 const VIEWPORT = '<meta name="viewport" content="width=device-width,initial-scale=1">';
 if (!html.includes(VIEWPORT)) throw new Error('index.html viewport tag changed; update copy-web.js');

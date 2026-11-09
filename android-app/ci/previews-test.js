@@ -55,7 +55,7 @@ module.exports = async function previewsPass({ browser, base, check, OUT }) {
       !!pl && pl.headEnd === head.length && pl.from === head.length + sidxBox.length && pl.to - pl.from === want && pl.seconds === 21, JSON.stringify(pl));
     // the whole flow: helper asked for the stream, two ranged reads, one file; asked again = the same file, no new reads
     const dd = fs.mkdtempSync(path.join(os.tmpdir(), 'bs-yt-')); Y.init({ dataDir: dd }); P.init({ dataDir: dd }); Y._force(true);
-    fs.mkdirSync(path.join(dd, 'tools'), { recursive: true }); fs.writeFileSync(path.join(dd, 'tools', 'yt-dlp.exe'), Buffer.alloc(1.2e6));
+    fs.mkdirSync(path.join(dd, 'tools'), { recursive: true }); fs.writeFileSync(path.join(dd, 'tools', process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp'), Buffer.alloc(1.2e6)); /* (beta.11: the Linux helper has no .exe) */
     const asked = [], reads = [];
     Y._setRun(async args => { asked.push(args.join(' ')); const u = args[args.length - 1]; if (/v=gone/.test(u)) throw new Error('ERROR: [youtube] gone: Video unavailable'); return JSON.stringify({ url: 'https://rr1---sn-test.googlevideo.com/videoplayback?id=1', http_headers: { 'User-Agent': 'test' } }); });
     Y._fetch(async url => { const m = /range=(\d+)-(\d+)/.exec(url); reads.push(m && m[0]); return m ? stream.subarray(+m[1], +m[2] + 1) : Buffer.alloc(0); });
@@ -74,12 +74,13 @@ module.exports = async function previewsPass({ browser, base, check, OUT }) {
     Y._setRun(async args => { asked2.push(args[args.length - 1].slice(-11)); throw new Error('ERROR: [youtube] off0000000a: Unable to download webpage: <urlopen error [Errno 11001] getaddrinfo failed>'); });
     const o1 = await Y.clip('off0000000a'), o2 = await Y.clip('off0000000b');
     const offOk = o1 === null && o2 === null && asked2.length === 1 && !fs.existsSync(path.join(dd, 'previews', 'youtube', 'off0000000a.none'));
-    // the queue: the newest ask goes first, at most 3 wait (the oldest waiting one is dropped)
+    // the queue (beta.11): two are made at once, so a slow one never holds the rest up; the newest ask goes first, at most
+    // 5 wait (the oldest waiting one is dropped)
     Y._reset(); const order = []; let release; const gate = new Promise(r => { release = r; });
     Y._setRun(async args => { const id = args[args.length - 1].slice(-11); order.push(id); if (id === 'qqqqqqqqqq1') await gate; throw new Error('ERROR: [youtube] ' + id + ': Video unavailable'); });
-    const qs = ['qqqqqqqqqq1', 'qqqqqqqqqq2', 'qqqqqqqqqq3', 'qqqqqqqqqq4', 'qqqqqqqqqq5'].map(id => Y.clip(id)); await new Promise(r => setTimeout(r, 50)); release(); await Promise.all(qs);
-    check('Console trailers: offline marks nothing and pauses clips (no retry on every rest); the newest ask is made first, at most 3 wait',
-      offOk && order.join() === 'qqqqqqqqqq1,qqqqqqqqqq5,qqqqqqqqqq4,qqqqqqqqqq3', JSON.stringify({ offOk, asked: asked2.length, order }));
+    const qs = [1, 2, 3, 4, 5, 6, 7, 8].map(n => Y.clip('qqqqqqqqqq' + n)); await new Promise(r => setTimeout(r, 50)); const whileSlow = order.length; release(); await Promise.all(qs);
+    check('Console trailers: offline marks nothing and pauses clips (no retry on every rest); two at once, the newest ask first, at most 5 wait',
+      offOk && whileSlow === 7 && order.join() === 'qqqqqqqqqq1,qqqqqqqqqq2,qqqqqqqqqq8,qqqqqqqqqq7,qqqqqqqqqq6,qqqqqqqqqq5,qqqqqqqqqq4', JSON.stringify({ offOk, asked: asked2.length, whileSlow, order }));
     Y._reset(); Y._force(false); fs.rmSync(dd, { recursive: true, force: true }); }
 
   // ---------- the page ----------
@@ -151,7 +152,8 @@ module.exports = async function previewsPass({ browser, base, check, OUT }) {
     const sl = await page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), out = {};
       const pad = { id: 'Test pad', index: 0, connected: true, mapping: 'standard', timestamp: 0, axes: [0, 0, 0, 0], buttons: Array.from({ length: 17 }, () => ({ pressed: false, touched: false, value: 0 })) };
       Object.defineProperty(navigator, 'getGamepads', { configurable: true, value: () => [pad, null, null, null] }); window.dispatchEvent(Object.assign(new Event('gamepadconnected'), { gamepad: pad }));
-      const press = async b => { pad.buttons[b] = { pressed: true, touched: true, value: 1 }; pad.timestamp++; await w(150); pad.buttons[b] = { pressed: false, touched: false, value: 0 }; pad.timestamp++; await w(450); };
+      // (beta.11) held 250 ms: a software-drawn runner reads the pad once a frame, and a 150 ms press could fall between two reads
+      const press = async b => { pad.buttons[b] = { pressed: true, touched: true, value: 1 }; pad.timestamp++; await w(250); pad.buttons[b] = { pressed: false, touched: false, value: 0 }; pad.timestamp++; await w(450); };
       const bar = document.querySelector('#details .d-actions'), $ = id => document.getElementById(id);
       out.fits = bar.scrollWidth <= bar.clientWidth + 1; out.slim = ['dManual', 'dInspect', 'dMoreBtn'].every(id => $(id).offsetWidth < 64);
       out.lit = getComputedStyle($('dPlay')).backgroundImage.includes('gradient');
@@ -159,7 +161,7 @@ module.exports = async function previewsPass({ browser, base, check, OUT }) {
       const still = document.createElement('style'); still.textContent = '#details .d-actions, #details .d-actions *, #details .d-actions::before { transition: none !important; animation: none !important }'; document.head.appendChild(still);
       // Play → Manual → Inspect: right until Inspect has the focus (a slow runner can miss a press: at most six, then judged)
       const onId = () => (document.querySelector('#details .pad-focus') || {}).id;
-      for (let i = 0; i < 6 && onId() !== 'dInspect'; i++) await press(15);
+      for (let i = 0; i < 10 && onId() !== 'dInspect'; i++) await press(15); // (beta.11: up to ten presses)
       // (the highlight's glide and the name opening are transitions: a software-drawn runner finishes them late, so they are
       // judged once settled, up to 3 s)
       const f = document.querySelector('#details .pad-focus'), hl = bar.querySelector('.d-hl'), sp = f && f.querySelector('span'); out.on = f && f.id;
@@ -179,7 +181,8 @@ module.exports = async function previewsPass({ browser, base, check, OUT }) {
     const nw = await page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), out = {};
       const pad = { id: 'Test pad', index: 0, connected: true, mapping: 'standard', timestamp: 0, axes: [0, 0, 0, 0], buttons: Array.from({ length: 17 }, () => ({ pressed: false, touched: false, value: 0 })) };
       Object.defineProperty(navigator, 'getGamepads', { configurable: true, value: () => [pad, null, null, null] }); window.dispatchEvent(Object.assign(new Event('gamepadconnected'), { gamepad: pad }));
-      const press = async b => { pad.buttons[b] = { pressed: true, touched: true, value: 1 }; pad.timestamp++; await w(150); pad.buttons[b] = { pressed: false, touched: false, value: 0 }; pad.timestamp++; await w(450); };
+      // (beta.11) held 250 ms: a software-drawn runner reads the pad once a frame, and a 150 ms press could fall between two reads
+      const press = async b => { pad.buttons[b] = { pressed: true, touched: true, value: 1 }; pad.timestamp++; await w(250); pad.buttons[b] = { pressed: false, touched: false, value: 0 }; pad.timestamp++; await w(450); };
       const bar = document.querySelector('#details .d-actions'), xs = () => [...bar.querySelectorAll(':scope>button')].filter(b => !b.hidden).map(b => b.offsetLeft + ',' + b.offsetTop).join(' ');
       const onId = () => (document.querySelector('#details .pad-focus') || {}).id; // (a slow runner can miss a press: right until the controller is off Play, at most six)
       out.x0 = xs(); await press(15); for (let i = 0; i < 6 && (!onId() || onId() === 'dPlay'); i++) await press(15); await press(15); await w(300); out.x1 = xs(); out.on = onId();

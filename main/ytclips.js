@@ -18,8 +18,11 @@ const { execFile } = require('child_process');
 let log = () => {}, dataDir = '';
 function init(o) { log = o.log || log; dataDir = o.dataDir || ''; }
 let force = false; // (the device test runs the clip flow on Linux with a pretend helper)
-const supported = () => force || process.platform === 'win32';
-const helperPath = () => path.join(dataDir, 'tools', 'yt-dlp.exe');
+// (beta.11) Linux too (the Steam Deck): yt-dlp's own standalone Linux build (x64, or the ARM one), kept as data/tools/yt-dlp
+const WIN = process.platform === 'win32', LINUX = process.platform === 'linux' && (process.arch === 'x64' || process.arch === 'arm64');
+const ASSET = WIN ? 'yt-dlp.exe' : process.arch === 'arm64' ? 'yt-dlp_linux_aarch64' : 'yt-dlp_linux';
+const supported = () => force || WIN || LINUX;
+const helperPath = () => path.join(dataDir, 'tools', WIN ? 'yt-dlp.exe' : 'yt-dlp');
 const clipDir = () => path.join(dataDir, 'previews', 'youtube');
 const isFile = f => { try { return fs.statSync(f).isFile(); } catch { return false; } };
 const okId = id => /^[\w-]{6,20}$/.test(String(id || ''));
@@ -57,10 +60,12 @@ function getHelper(onPct) {
   helperFlight = (async () => {
     const f = helperPath(), part = f + '.part'; fs.mkdirSync(path.dirname(f), { recursive: true });
     const sums = (await fetch(HELPER_URL + 'SHA2-256SUMS', { cap: 1 << 20 })).toString('utf8');
-    const want = ((/^([a-f0-9]{64})\s+\*?yt-dlp\.exe\s*$/mi.exec(sums) || [])[1] || '').toLowerCase(); if (!want) throw new Error('no checksum for yt-dlp.exe');
-    await fetch(HELPER_URL + 'yt-dlp.exe', { dest: part, onPct, timeout: 60000 });
+    const re = new RegExp('^([a-f0-9]{64})\\s+\\*?' + ASSET.replace(/[.]/g, '\\.') + '\\s*$', 'mi');
+    const want = ((re.exec(sums) || [])[1] || '').toLowerCase(); if (!want) throw new Error('no checksum for ' + ASSET);
+    await fetch(HELPER_URL + ASSET, { dest: part, onPct, timeout: 60000 });
     const got = await new Promise((res, rej) => { const h = crypto.createHash('sha256'); fs.createReadStream(part).on('data', c => h.update(c)).on('end', () => res(h.digest('hex'))).on('error', rej); }); // (streamed: main never blocks on 25 MB)
     if (got !== want) { try { fs.unlinkSync(part); } catch {} throw new Error('checksum did not match'); }
+    if (!WIN) fs.chmodSync(part, 0o755); // (Linux: a program has to be marked runnable)
     fs.renameSync(part, f); log('Console trailers: helper ready', Math.round(fs.statSync(f).size / 1e6) + ' MB'); return true;
   })().catch(e => { log('Console trailers: helper download failed:', e.message); return false; }).finally(() => { helperFlight = null; });
   return helperFlight;
@@ -70,9 +75,13 @@ function getHelper(onPct) {
 // runtime is offered on purpose: with one, YouTube hands out streams that refuse ranged downloads (HTTP 403; tested
 // 2026-11-06). A run that times out
 // is ended with its whole process tree (yt-dlp.exe starts a child of its own), so nothing is left running.
+// (Linux: started in a process group of its own, which is ended as a whole, as taskkill /T does on Windows)
 let run = (args, timeout) => new Promise((resolve, reject) => {
-  const p = execFile(helperPath(), ['--ignore-config', ...args], { windowsHide: true, maxBuffer: 32 << 20 }, (e, out, err) => { clearTimeout(t); e ? reject(new Error(timedOut ? 'timed out' : String(err || e.message).trim().split('\n').pop().slice(0, 200))) : resolve(String(out)); });
-  let timedOut = false; const t = setTimeout(() => { timedOut = true; try { execFile('taskkill', ['/T', '/F', '/PID', String(p.pid)], { windowsHide: true }, () => {}); } catch {} try { p.kill(); } catch {} }, timeout);
+  const p = execFile(helperPath(), ['--ignore-config', ...args], { windowsHide: true, maxBuffer: 32 << 20, detached: !WIN }, (e, out, err) => { clearTimeout(t); e ? reject(new Error(timedOut ? 'timed out' : String(err || e.message).trim().split('\n').pop().slice(0, 200))) : resolve(String(out)); });
+  let timedOut = false; const t = setTimeout(() => { timedOut = true;
+    if (WIN) { try { execFile('taskkill', ['/T', '/F', '/PID', String(p.pid)], { windowsHide: true }, () => {}); } catch {} }
+    else { try { process.kill(-p.pid, 'SIGKILL'); } catch {} }
+    try { p.kill('SIGKILL'); } catch {} }, timeout);
 });
 // the trailer's 720p (else 480p or smaller) H.264 video stream: { url, headers }. (beta.9: 720p first; YouTube's 480p is
 // so compressed that it looked soft stretched behind the shelf, about a quarter of a Steam clip's data per second)
@@ -122,31 +131,38 @@ const ranged = (url, a, b) => url + (url.includes('?') ? '&' : '?') + 'range=' +
 // waits 10 minutes for that video; no connection pauses all clips for 2 minutes; six failures in a row pause them for 30.
 // Three non-network failures in a row: YouTube changed something, so the helper updates itself (between jobs, at most
 // once a session and only if it's over a week old).
-const QMAX = 3, FRESH = 30e3;
+// (beta.11) Two at a time, so the game you're on starts at once even while a clip for one you passed is still being
+// made. Asks marked low (the games either side, made ahead: preview:warm) wait behind every other ask, run only while
+// nothing else does, and are the first dropped when too many wait.
+const QMAX = 5, FRESH = 30e3, MAXRUN = 2;
 const flights = new Map(), q = [], asked = new Map(), failAt = new Map();
-let busy = false, fails = 0, updated = false, wantUpdate = false, pausedTill = 0;
+let running = 0, fails = 0, updated = false, wantUpdate = false, pausedTill = 0;
 const GONE = /video unavailable|this video is not available|private video|been removed|copyright|confirm your age|members[- ]only|no 480p stream|no usable stream|no fragment index/i;
 const OFFLINE = /unable to download|getaddrinfo|ENOTFOUND|ENETUNREACH|ECONNRESET|ECONNREFUSED|EAI_AGAIN|timed out|socket hang up|HTTP 5\d\d/i;
 function pump() {
-  if (busy) return;
-  if (wantUpdate) { wantUpdate = false; busy = true; run(['-U'], 120000).then(() => log('Console trailers: helper updated')).catch(e => log('Console trailers: helper update failed:', e.message)).finally(() => { busy = false; pump(); }); return; }
-  if (!q.length) return; busy = true; const job = q.pop(); job.run().finally(() => { busy = false; pump(); });
+  if (wantUpdate) { if (running) return; wantUpdate = false; running++; run(['-U'], 120000).then(() => log('Console trailers: helper updated')).catch(e => log('Console trailers: helper update failed:', e.message)).finally(() => { running--; pump(); }); return; }
+  while (q.length && running < MAXRUN) {
+    let i = -1; for (let k = q.length - 1; k >= 0; k--) if (!q[k].low) { i = k; break; }
+    if (i < 0) { if (running) return; i = q.length - 1; }
+    const job = q.splice(i, 1)[0]; running++; job.run().finally(() => { running--; pump(); });
+  }
 }
 // (beta.9) clips are kept as <id>.hd.mp4 (made from the 720p stream). A 480p one kept from before (<id>.mp4) still plays
 // at once (cached) while the 720p one is made in the background, and is removed the next time after that
 const hdOf = id => path.join(clipDir(), id + '.hd.mp4'), oldOf = id => path.join(clipDir(), id + '.mp4');
 // the clip for one YouTube video: its file, or null (no helper, no usable stream, offline)
-function clip(id) {
+// (beta.11) o.low: made ahead for a game beside the one you're on (see the queue above)
+function clip(id, o = {}) {
   if (!supported() || !okId(id)) return Promise.resolve(null);
   const out = hdOf(id), none = path.join(clipDir(), id + '.none'), now = Date.now();
   if (isFile(out)) { try { const t = new Date(); fs.utimesSync(out, t, t); } catch {} return Promise.resolve(out); }
   if (isFile(none)) { try { if (now - fs.statSync(none).mtimeMs < 3 * 864e5) return Promise.resolve(null); } catch {} }
   if (!helperState().have || now < pausedTill || now - (failAt.get(id) || 0) < 10 * 60e3) return Promise.resolve(null);
   asked.set(id, now); if (asked.size > 200) asked.delete(asked.keys().next().value);
-  if (flights.has(id)) return flights.get(id);
+  if (flights.has(id)) { if (!o.low) { const j = q.find(x => x.id === id); if (j) j.low = false; } return flights.get(id); }
   const p = new Promise(resolve => {
-    q.push({ run: () => (Date.now() - (asked.get(id) || 0) > FRESH ? Promise.resolve(null) : make(id, out, none)).then(resolve, () => resolve(null)), drop: () => resolve(null) });
-    while (q.length > QMAX) q.shift().drop();
+    q.push({ id, low: !!o.low, run: () => (Date.now() - (asked.get(id) || 0) > FRESH ? Promise.resolve(null) : make(id, out, none)).then(resolve, () => resolve(null)), drop: () => resolve(null) });
+    while (q.length > QMAX) { const k = q.findIndex(x => x.low); q.splice(k >= 0 ? k : 0, 1)[0].drop(); }
   });
   flights.set(id, p); p.finally(() => flights.delete(id)); pump(); return p;
 }
@@ -178,8 +194,71 @@ function cached(id) { if (!okId(id)) return null; let f = hdOf(id);
   if (isFile(f)) { const old = oldOf(id); if (isFile(old)) { try { fs.unlinkSync(old); } catch {} } }
   else { f = oldOf(id); if (!isFile(f)) return null; clip(id).catch(() => {}); }
   try { const t = new Date(); fs.utimesSync(f, t, t); } catch {} return f; }
+// (beta.11) the trailer link is gone (.none: private, removed) for this video
+function gone(id) { if (!okId(id)) return false; const none = path.join(clipDir(), id + '.none'); try { return Date.now() - fs.statSync(none).mtimeMs < 3 * 864e5; } catch { return false; } }
+// (beta.11) a game with no trailer link, or a dead one: YouTube is searched with the helper for "<title> <console> trailer"
+// and the best result taken: most of the title's words in its title, "trailer" in it, 20 s to 10 min long, not a review,
+// gameplay or reaction video. Remembered per game in previews\youtube\search.json (a miss is asked again after a week);
+// one search at a time.
+const STOP = /^(the|of|and|a|an|for|edition|usa|europe|japan|en|fr|de|es|it|rev|v\d.*|disc|\d)$/;
+const twords = s => String(s || '').toLowerCase().replace(/\(.*?\)|\[.*?\]/g, ' ').replace(/[^a-z0-9]+/g, ' ').split(' ').filter(w => w.length > 1 && !STOP.test(w));
+const NOT_TRAILER = /\b(review|gameplay|walkthrough|let'?s play|longplay|speedrun|reaction|unboxing|tier list|ranking|top \d+|comparison|vs\.?|mod|soundtrack|ost|music|full game|part \d+|episode)\b/i;
+let sMemo = null, sChain = Promise.resolve(); const sFlights = new Map();
+const sFile = () => path.join(clipDir(), 'search.json');
+function sLoad() { if (sMemo) return sMemo; try { sMemo = JSON.parse(fs.readFileSync(sFile(), 'utf8')) || {}; } catch { sMemo = {}; } return sMemo; }
+function sSave() { try { fs.mkdirSync(clipDir(), { recursive: true }); const t = sFile() + '.tmp'; fs.writeFileSync(t, JSON.stringify(sMemo)); fs.renameSync(t, sFile()); } catch {} }
+const sKey = (title, sys) => (String(sys || '') + '|' + twords(title).join(' ')).slice(0, 200);
+// (beta.11) every result that fits is kept, best first ({ id, alts }): YouTube refuses a few videos to the helper (only
+// preview pictures: "This video is not available") though they're public and show in the search, so a video that
+// can't be clipped (.none) is passed over for the next one
+const memoIds = e => [e.id, ...(Array.isArray(e.alts) ? e.alts : [])].filter(x => x && okId(x) && !gone(x));
+// what's known: a video id, null (searched, nothing fit or none could be clipped: not asked again for a week) or
+// undefined (search: never searched, or every video remembered has turned out to be gone since; an entry from before
+// beta.11's list kept only one)
+function searchKnown(title, sys) { const e = sLoad()[sKey(title, sys)]; if (!e) return undefined; const ids = memoIds(e); if (ids.length) return ids[0]; if (!e.id && Date.now() - (e.at || 0) < 7 * 864e5) return null; return undefined; }
+// the results that fit, best first (at most 5; none that's known to be gone)
+function rankResults(lines, title) {
+  const want = twords(title); if (!want.length) return []; const got = [];
+  for (const l of lines) { const [id, t = '', dur = ''] = l.split('\t'); if (!okId(id) || gone(id) || got.some(x => x.id === id)) continue; const d = +dur || 0;
+    if (NOT_TRAILER.test(t) || (d && (d < 20 || d > 600))) continue;
+    const tw = new Set(twords(t)), hit = want.filter(w => tw.has(w)).length / want.length; if (hit < .6) continue;
+    got.push({ id, s: hit + (/\btrailer\b/i.test(t) ? .5 : 0) + (/\b(official|launch|reveal|announce)/i.test(t) ? .2 : 0) }); }
+  return got.sort((a, b) => b.s - a.s).slice(0, 5).map(x => x.id);
+}
+const pickResult = (lines, title) => rankResults(lines, title)[0] || null;
+// the videos to try for a game, best first: what's remembered, else a search ([] for nothing)
+function searchList(title, sys, sysName) {
+  if (!supported() || !helperState().have || !twords(title).length) return Promise.resolve([]);
+  const k = sKey(title, sys), known = searchKnown(title, sys);
+  if (known === null) return Promise.resolve([]); if (known !== undefined) return Promise.resolve(memoIds(sLoad()[k]));
+  if (sFlights.has(k)) return sFlights.get(k);
+  const p = sChain = sChain.then(async () => {
+    try {
+      const q = `${String(title).replace(/\(.*?\)|\[.*?\]/g, ' ').replace(/\s+/g, ' ').trim()} ${sysName || ''} trailer`.slice(0, 150);
+      const out = await run(['--no-warnings', '--flat-playlist', '--print', '%(id)s\t%(title)s\t%(duration)s', '--', 'ytsearch6:' + q], 30000);
+      const ids = rankResults(out.split(/\r?\n/).filter(Boolean), title);
+      sLoad()[k] = { id: ids[0] || null, alts: ids.slice(1), at: Date.now() }; sSave(); log('Console trailers: searched', JSON.stringify(q), '→', ids.join(', ') || 'nothing that fits'); return ids;
+    } catch (e) { log('Console trailers: search failed:', String(e && e.message || e).slice(0, 160)); return []; }
+  });
+  sFlights.set(k, p); p.finally(() => sFlights.delete(k)); return p;
+}
+function search(title, sys, sysName) { return searchList(title, sys, sysName).then(l => l[0] || null); }
+// (beta.11) a clip for a game from the search: the first of up to three results that can be clipped (the one that
+// worked is remembered first). { id, file } or null; stops at a failure that isn't the video's (offline, moved on)
+async function clipFromSearch(title, sys, sysName, o = {}) {
+  const ids = await searchList(title, sys, sysName);
+  for (const id of ids.slice(0, 3)) {
+    const file = await clip(id, o);
+    if (file) { const e = sLoad()[sKey(title, sys)]; if (e && e.id !== id) { e.alts = [e.id, ...(e.alts || [])].filter(x => x && x !== id); e.id = id; sSave(); } return { id, file }; }
+    if (!gone(id)) return null;
+    log('Console trailers:', id, 'cannot be clipped, trying the next result');
+  }
+  // every result tried was refused: none for a week (searchKnown's null), not a fresh search on every visit
+  if (ids.length) { const e = sLoad()[sKey(title, sys)]; if (e && !memoIds(e).length) { sLoad()[sKey(title, sys)] = { id: null, alts: [], at: Date.now() }; sSave(); } }
+  return null;
+}
 function size() { try { return fs.readdirSync(clipDir()).filter(n => n.endsWith('.mp4')).reduce((a, n) => { try { a.n++; a.bytes += fs.statSync(path.join(clipDir(), n)).size; } catch {} return a; }, { n: 0, bytes: 0 }); } catch { return { n: 0, bytes: 0 }; } }
 function clear() { try { fs.rmSync(clipDir(), { recursive: true, force: true }); } catch {} }
 function status() { const h = helperState(); return { supported: supported(), helper: h.have, getting: !!helperFlight, ...size() }; }
 
-module.exports = { init, supported, status, helperState, getHelper, clip, cached, clear, size, plan, boxes, sidx, _setRun: f => { run = f; }, _fetch: f => { fetch = f; }, _force: v => { force = !!v; }, _reset: () => { failAt.clear(); asked.clear(); fails = 0; pausedTill = 0; updated = false; wantUpdate = false; } };
+module.exports = { init, supported, status, helperState, getHelper, clip, cached, clear, size, plan, boxes, sidx, gone, search, searchList, clipFromSearch, searchKnown, pickResult, rankResults, _setRun: f => { run = f; }, _fetch: f => { fetch = f; }, _force: v => { force = !!v; }, _reset: () => { failAt.clear(); asked.clear(); fails = 0; pausedTill = 0; updated = false; wantUpdate = false; sMemo = null; } };
