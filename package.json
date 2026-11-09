@@ -1,7 +1,7 @@
 {
   "name": "trustyshelf",
   "productName": "TrustyShelf",
-  "version": "1.3.0+1",
+  "version": "1.4.0+0",
   "description": "TV-style launcher for emulators, Steam and media apps",
   "license": "GPL-3.0-only",
   "main": "main.js",

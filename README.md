@@ -393,6 +393,16 @@ own settings pages with a Platform (Custom, PC or any console's shelf) and launc
 ports, automatic SteamGridDB posters for PC games with no cover, hiding the Open emulator and Surprise me tiles, and
 `docs/LOCALIZATION.md`; brought into (T)rustyShelf on top of Boxshelf beta.10.
 
+<!-- fork-survey credits: made by `node scripts/fork-survey.js --credits` from the commit history; edits here are replaced -->
+
+Brought into (T)rustyShelf from other people's forks (they are the authors or co-authors of these commits):
+
+- [Thanks2111](https://github.com/Thanks2111): Português (Brasil): the language is a choice now
+- [supalii](https://github.com/supalii): Custom games on any shelf, the Xbox One shelf, PC posters and hidden tiles (from supalii's fork)
+- [TrapEmAll](https://github.com/TrapEmAll): Retro TV guide: the progress line no longer stops the guide drawing; Retro TV: live progress for the commercial search and ad downloads; Credit TrapEmAll for the Museum's look-around; Museum: look left and right, and the side displays reachable from the wide view
+
+<!-- /fork-survey credits -->
+
 ## Release builds
 
 Every push to `t-rustyshelf` starts **Build/release check** (`.github/workflows/build-release-check.yml`), which reads the

@@ -8,6 +8,69 @@
 //   sections: [{ h, items: [[headline, more]] }] }; newest first.
 window.BS_WHATSNEW = [
   {
+    version: '1.4.0.0', android: '1.4.0.0', date: '2026-11-09', title: "Tour, YouTube trailers, achievements on 25 consoles, manual sorting and more",
+    highlights: [
+      "A shelf tour for new players and a full-screen first-run setup",
+      "Trailers searched on YouTube when the LaunchBox link is gone, and prepared ahead for neighbours",
+      "Achievements on 25 consoles (was 4), Trophies opens the game's set at once",
+      "Magazine and guide downloads show real sizes, speed, and resume interrupted transfers",
+      "Museum: pick up a magazine, add a 3D model for consoles that don't have one",
+      "Manual sorting with drag and drop, an All games shelf, auto-hide hints, and box scaling per game"
+    ],
+    platforms: [
+      "Windows and Linux: everything above.",
+      "Android: achievements on 25 consoles, text size options with system font scale detection, Art Studio layout lifting."
+    ],
+    sections: [
+      { h: "New player experience", items: [
+        ["Shelf tour", "Nine guided steps introduce the shelf, Details, Inspect, the quick menu, the Art Studio and Settings. A controller works throughout. Starts on first run after setup; Settings → Shelf → Show the tour restarts it. Not on Android. By sassiestrhihno."],
+        ["Full-screen first-run setup", "A full-screen setup wizard on Windows on a fresh install, with a sidebar showing progress and a hint pill under each step. By sassiestrhihno."]
+      ] },
+      { h: "Trailers and previews", items: [
+        ["YouTube trailer search", "When a game's LaunchBox trailer link is gone (private or removed), or there is none, (T)rustyShelf searches YouTube for its trailer instead. The result is remembered per game. By sassiestrhihno."],
+        ["Neighbours prepared ahead", "The clips for the two games either side of the one you're on are made in the background, so they play at once when you get there. By sassiestrhihno."],
+        ["No-clip notice", "When no clip is coming (the link is gone and nothing fits on YouTube), the waiting box closes straight away instead of after 45 seconds. By sassiestrhihno."]
+      ] },
+      { h: "Achievements", items: [
+        ["25 consoles", "RetroAchievements covers 25 consoles in (T)rustyShelf (was 4): all the ones the site supports. Each shelf shows its set count and a "why there's nothing" message when the game has none. By sassiestrhihno."],
+        ["Trophies opens the game's set", "The Trophies button in Inspect opens that game's achievement set page on RetroAchievements directly. By sassiestrhihno."]
+      ] },
+      { h: "Magazines and guides", items: [
+        ["Real sizes and speed", "The download card shows the file's actual size, the current speed and an estimated time left. By sassiestrhihno."],
+        ["Resume interrupted downloads", "An interrupted download picks up where it stopped. A file over 500 MB asks before starting. By sassiestrhihno."]
+      ] },
+      { h: "Museum", items: [
+        ["Pick up a magazine", "In the museum you can pick up a magazine from a file box's fan and put it back. The file-box fan works cleanly when there are many items. By sassiestrhihno."],
+        ["3D model for consoles", "Consoles that didn't have a 3D model in the museum get one now. By sassiestrhihno."]
+      ] },
+      { h: "Library and display", items: [
+        ["All games shelf", "Settings → Shelf → All games shelf adds an alphabetical shelf with every game across all consoles, each in its authentic 3D box."],
+        ["Manual sorting", "Sort panel (G) → Custom lets you drag games into your own order. Keyboard shortcuts: [ and ] or Shift + Arrows. Details More has Move earlier and Move later."],
+        ["Box scaling", "Settings → Display → Box scale sets the size from 80% to 120%. Details More → Box size scales an individual game."],
+        ["Auto-hide hints", "Settings → Display → Auto-hide navigation shortcuts fades the shortcut bar out after 4 seconds of inactivity; any input brings it back."]
+      ] },
+      { h: "Inspect and display", items: [
+        ["Xbox 360 covers wrap the case", "Xbox 360 box art wraps around the case the way retail boxes do. By sassiestrhihno."],
+        ["DOS games on floppy disks", "DOS games show a floppy disk instead of a cartridge in Inspect. By sassiestrhihno."],
+        ["Discs spin on Windows", "Disc art spins while a game loads on the Windows build. By sassiestrhihno."],
+        ["Settings switches", "Settings → Display: toggle box shine, the Surprise me tile, and the emulator case. Controller swap A/B prompt. By sassiestrhihno."]
+      ] },
+      { h: "Add games and PC", items: [
+        ["Folder scan improvements", "Names with hyphens and dots are matched correctly. Linux executables (.sh, .x86_64, .bin) are found. Local cover art (cover, folder, box, front) is detected and imported automatically."],
+        ["Bulk add UX", "Select all / Deselect all and Add the ticked games buttons are at the top of the scan results."],
+        ["PC console box geometry", "PC games that use a console's cover art render with that console's exact case dimensions and depth, so the art fits properly. Steam branding is never cropped."]
+      ] },
+      { h: "Android", items: [
+        ["Text size options", "Settings → Display → Text size on Android: Small, Default, Large, or the system font scale. Art Studio lifts when the keyboard opens. By sassiestrhihno."]
+      ] },
+      { h: "Fixes and other changes", items: [
+        ["GitHub bug report form", "Issues on GGStonks/t-rustyshelf now have a template with version and device fields, and a chooser that sends ideas and questions to Discussions. By sassiestrhihno."],
+        ["Quick menu sounds and Steam covers", "Quick menu: sound-related settings in one place; Steam covers shown in Inspect. Museum PDF range mode; Details smooth glide. By sassiestrhihno."],
+        ["CI and repo parity", "Demo tests updated for the new tiles; Android package bumped to match beta.11."]
+      ] }
+    ]
+  },
+  {
     version: '1.3.0.0', android: '1.3.0.0', date: '2026-11-09', title: "Neo Geo Pocket, Neo Geo Pocket Color and Game.com shelves",
     highlights: [
       "A Neo Geo Pocket shelf and a Neo Geo Pocket Color shelf, played in RetroArch's Beetle NeoPop core",
