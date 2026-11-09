@@ -8,6 +8,24 @@
 //   sections: [{ h, items: [[headline, more]] }] }; newest first.
 window.BS_WHATSNEW = [
   {
+    version: '1.3.0.0', android: '1.3.0.0', date: '2026-11-09', title: "Neo Geo Pocket, Neo Geo Pocket Color and Game.com shelves",
+    highlights: [
+      "A Neo Geo Pocket shelf and a Neo Geo Pocket Color shelf, played in RetroArch's Beetle NeoPop core",
+      "A Game.com shelf, played in MAME",
+      "Each with its own box art, manuals and card box"
+    ],
+    platforms: [
+      "Windows and Linux: all three shelves.",
+      "Android (AYN Thor): the Neo Geo Pocket and Neo Geo Pocket Color shelves, through RetroArch."
+    ],
+    sections: [
+      { h: "New shelves", items: [
+        ["Neo Geo Pocket and Neo Geo Pocket Color", "One shelf for each, as their box art is kept apart: .ngp games in an ngp or Neo Geo Pocket folder, .ngc games in an ngpc or Neo Geo Pocket Color folder. They play in RetroArch's Beetle NeoPop core (no BIOS needed; on Windows the core is downloaded the first time), with box art from libretro and LaunchBox, manuals from GamesDatabase.org and small card boxes of their own. On the Thor too. Asked for by ShayneVi."],
+        ["Game.com", "Tiger's handheld gets a shelf: .tgc or .bin games in a gamecom or Game.com folder, started in MAME. MAME needs the Game.com's own system file (gamecom.zip, from a MAME BIOS set) in its roms folder first; Setup and Settings say so. Asked for by ShayneVi."]
+      ] }
+    ]
+  },
+  {
     version: '1.2.0.0', android: '1.2.0.0', date: '2026-11-08', title: "Art match for console games, and console box art that shows",
     highlights: [
       "Art match: pick by name which game a console game's box art comes from, for ROM hacks, translations and mods",
