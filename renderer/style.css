@@ -70,7 +70,7 @@ button:focus-visible{outline:2px solid var(--ink);outline-offset:3px;border-radi
 #track.swap{transform:translateY(18px)}
 #scene:has(> #track.swap){opacity:0;transition:transform .6s cubic-bezier(.22,.9,.25,1),opacity .3s}
 #track.fresh .slot,#track.fresh .box,#track.fresh .glare{transition:none!important}
-.slot{--bw:var(--cw);--bh:var(--ch);--bd:var(--cd);--edge:var(--ce);
+.slot{--bw:var(--cw);--bh:var(--ch);--bd:var(--cd);--edge:var(--ce);--edge-in:var(--cei,var(--ce));
   position:absolute;left:calc(var(--bw)/-2);top:calc(var(--bh)/-2);transform-style:preserve-3d;
   transition:transform .55s cubic-bezier(.22,.9,.25,1),opacity .4s;will-change:transform;cursor:pointer}
 .slot.far{opacity:0;pointer-events:none}
@@ -78,6 +78,9 @@ button:focus-visible{outline:2px solid var(--ink);outline-offset:3px;border-radi
 .box.free{transition:none}
 .face{position:absolute;backface-visibility:hidden;-webkit-backface-visibility:hidden}
 .f-front,.f-back{inset:0;background:var(--case);padding:var(--edge);overflow:hidden}
+/* (upstream beta.11) the spine side's border (--edge-in): none on a case whose cover wraps round the spine (Xbox 360) */
+.f-front{padding-left:var(--edge-in,var(--edge))}
+.f-back{padding-right:var(--edge-in,var(--edge))}
 .f-front{transform:translateZ(calc(var(--bd)/2))}
 .f-back{transform:rotateY(180deg) translateZ(calc(var(--bd)/2))}
 .f-front img,.f-back img{width:100%;height:100%;display:block;object-fit:cover;max-width:none}

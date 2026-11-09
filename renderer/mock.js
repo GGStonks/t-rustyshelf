@@ -46,6 +46,10 @@ if(RETRO){[["psx","PlayStation","DuckStation","DuckStation\\duckstation-qt-x64-R
   ["megadrive","Mega Drive","RetroArch","RetroArch-Win64\\retroarch.exe","Mega Drive","md",["Blast Hedgehog","Street Rage"]],
   ["dreamcast","Dreamcast","RetroArch","RetroArch-Win64\\retroarch.exe","Dreamcast","chd",["Soul Spiral","Crazy Courier"]]].forEach(([id,name,en,ex,fo,e,ts])=>{
   consoles.push({id,name,emulatorName:en,exeNames:[ex.split("\\").pop()],extensions:[e],gameArgs:'"{rom}"'});titles[id]=ts;emu[id]=ex;folder[id]=fo})}
+// ?dos=1 (upstream beta.11's media): a DOS shelf (its games come on 3.5" floppy disks) and an Xbox 360 one (its cover wraps
+// round the spine), with games
+if(/[?&]dos=1/.test(location.search))[["dos","DOS","RetroArch","RetroArch-Win64\\retroarch.exe","DOS","zip",["Dungeon Disk","Pixel Pilot 3D"]],["x360","Xbox 360","Xenia","Xenia\\xenia_canary.exe","Xbox 360","iso",["Halo Bay","Gear Storm"]]].forEach(([id,name,en,ex,fo,e,ts])=>{
+  if(consoles.some(c=>c.id===id))return;consoles.push({id,name,emulatorName:en,exeNames:[ex.split("\\").pop()],extensions:[e],gameArgs:'"{rom}"'});titles[id]=ts;emu[id]=ex;folder[id]=fo});
 // ?wave2=1 (beta.7): RetroArch installed and every other retro console it can run, without games, for the first run's
 // tidy "More consoles" (RetroArch alone ticks none of them)
 const WAVE2=/[?&]wave2=1/.test(location.search);

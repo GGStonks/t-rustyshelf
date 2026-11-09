@@ -79,6 +79,12 @@ body.reduce-motion .slot.held .face{transition:opacity .18s}
 .inspect.cart .isp-disc-top{background-size:contain;background-repeat:no-repeat;background-color:#26262b}
 .inspect.cart .isp-disc-top::after{border-radius:10% 10% 6% 6%;background:linear-gradient(125deg,rgba(255,255,255,.22),transparent 40%)}
 .inspect.cart .isp-disc-bottom{background:linear-gradient(180deg,#2a2a30,#1b1b20);background-blend-mode:normal}
+/* (beta.11) DOS: a 3.5" floppy disk, nearly square, a metal shutter across the top and the label below it */
+.inspect.floppy .isp-disc{width:calc(var(--disc)*.9);left:calc(var(--disc)*-.45);height:calc(var(--disc)*.94)}
+.inspect.floppy .isp-disc-top,.inspect.floppy .isp-disc-bottom,.inspect.floppy .isp-disc-top::after{border-radius:3%}
+.inspect.floppy .isp-disc-top{background-color:#1d1e22;background-size:82% 56%;background-position:50% 88%}
+.inspect.floppy .isp-disc-top::after{background:linear-gradient(90deg,transparent 22%,#c4c8cf 22% 82%,transparent 82%) top/100% 34% no-repeat,linear-gradient(125deg,rgba(255,255,255,.18),transparent 40%)}
+.inspect.floppy .isp-disc-bottom{background:linear-gradient(90deg,transparent 22%,#c4c8cf 22% 82%,transparent 82%) top/100% 34% no-repeat,#1d1e22}
 .inspect.cart .isp-disc-bottom::after{border-radius:0;background:repeating-linear-gradient(90deg,#c9a24a 0 5%,transparent 5% 9%);top:auto;height:14%;left:12%;right:12%}
 .isp-shell{display:none}
 .inspect.umd .isp-shell{display:block;position:absolute;left:-9%;top:-14%;width:118%;height:128%;border-radius:18% 18% 10% 10%;background:linear-gradient(160deg,rgba(255,255,255,.22),rgba(255,255,255,.06));border:1px solid rgba(255,255,255,.3);transform:translateZ(-1px)}

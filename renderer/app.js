@@ -20,7 +20,7 @@ const STYLE={
   ps5:{id:"ps5",rc:0.065,re:0.26,hue:220,ratio:0.787,depth:0.089,edge:.03,caseColor:"#2b62d9",caseSide:"#1f4cb3",spineInk:"#111318",band:{bg:"#ffffff",fg:"#111318",label:"PS5"},spineBand:{bg:"#ffffff",fg:"#111318",label:"PS5"},tint:["#24345e","#0a0f1f"],glow:"#9ec2ff"}, // PS5: the blue case, a white band with the black PS5 logo
   ps3:{id:"ps3",rc:0.065,re:0.26,hue:221,ratio:0.787,depth:0.1,edge:.03,caseColor:"#203553",caseSide:"#16263f",spineInk:"#ffffff",band:{bg:"#0c0d10",fg:"#ffffff",label:"PS3"},spineBand:{bg:"#0c0d10",fg:"#ffffff",label:"PS3"},tint:["#24406e","#090f1e"],glow:"#7ab4ff"},
   ps2:{id:"ps2",rc:0.035,re:0.2,hue:226,ratio:0.711,depth:0.104,edge:.03,caseColor:"#0f1d55",caseSide:"#0a1440",spineInk:"#ffffff",band:{bg:"#0f1d55",fg:"#dfe6ff",label:"PS2"},spineBand:{bg:"#0f1d55",fg:"#dfe6ff",label:"PS2"},tint:["#1b2a7a","#070b24"],glow:"#8fa6ff"},
-  x360:{id:"x360",rc:0.04,re:0.22,hue:115,ratio:0.711,depth:0.104,edge:.03,caseColor:"#1a7f1a",caseSide:"#0f5a12",spineInk:"#ffffff",band:{bg:"#107c10",fg:"#ffffff",label:"XBOX 360"},spineBand:{bg:"#107c10",fg:"#ffffff",label:"X360"},tint:["#145a16","#061a07"],glow:"#7ee87e"},
+  x360:{id:"x360",rc:0.04,re:0.22,hue:115,ratio:0.711,depth:0.104,edge:.018,wrap:1 /* (beta.11) one printed sheet round front, spine and back, as on the real case; it looked like three inlays */,caseColor:"#1a7f1a",caseSide:"#0f5a12",spineInk:"#ffffff",band:{bg:"#107c10",fg:"#ffffff",label:"XBOX 360"},spineBand:{bg:"#107c10",fg:"#ffffff",label:"X360"},tint:["#145a16","#061a07"],glow:"#7ee87e"},
   xboxone:{id:"xboxone",rc:0.04,re:0.22,hue:118,ratio:0.711,depth:0.104,edge:.03,caseColor:"#107c10",caseSide:"#0b580b",spineInk:"#ffffff",band:{bg:"#107c10",fg:"#ffffff",label:"XBOX ONE"},spineBand:{bg:"#107c10",fg:"#ffffff",label:"XBOX ONE"},tint:["#145a16","#061a07"],glow:"#7ee87e"}, // (supalii's fork)
   psp:{id:"psp",rc:0.055,re:0.24,hue:235,ratio:0.589,depth:0.14,edge:.03,caseColor:"#101014",caseSide:"#07070a",spineInk:"#e8e8f0",band:{bg:"#0a0a0d",fg:"#ffffff",label:"PSP"},spineBand:{bg:"#0a0a0d",fg:"#ffffff",label:"PSP"},tint:["#4a4f63","#0b0c12"],glow:"#cfd6ff"},
   n3ds:{id:"n3ds",rc:0.05,re:0.24,hue:352,ratio:1.127,depth:0.1,h:.64,edge:.03,caseColor:"#f4f4f6",caseSide:"#dcdde2",spineInk:"#3a3d45",band:{bg:"#ffffff",fg:"#d40f2a",label:"NINTENDO 3DS"},spineBand:{bg:"#ffffff",fg:"#d40f2a",label:"3DS"},tint:["#c0182e","#3a0710"],glow:"#ff7a8a"},
@@ -323,7 +323,7 @@ function measure(){
   // Cases are laid out OS× larger and scaled back down in their transform. Chrome rasterises a layer under
   // perspective at its layout size, so the selected case (pushed towards the camera) would otherwise be
   // magnified from a small raster and go soft; oversampling keeps covers crisp at the screen's real resolution.
-  OS=fxOn?1.4:1.15;a.setProperty("--cw",(bw*OS)+"px");a.setProperty("--ch",(bh*OS)+"px");a.setProperty("--cd",(bd*OS)+"px");a.setProperty("--ce",(bw*s.edge*OS)+"px");a.setProperty("--crc",(bw*(s.rc||.03)*OS)+"px");a.setProperty("--cre",(bd*(s.re||.3)*OS)+"px");a.setProperty("--os",String(OS));
+  OS=fxOn?1.4:1.15;a.setProperty("--cw",(bw*OS)+"px");a.setProperty("--ch",(bh*OS)+"px");a.setProperty("--cd",(bd*OS)+"px");a.setProperty("--ce",(bw*s.edge*OS)+"px");a.setProperty("--cei",(s.wrap?0:bw*s.edge*OS)+"px") /* (beta.11) wrap: the cover runs on round the spine, no border on that side */;a.setProperty("--crc",(bw*(s.rc||.03)*OS)+"px");a.setProperty("--cre",(bd*(s.re||.3)*OS)+"px");a.setProperty("--os",String(OS));
 }
 function applyCase(){const s=st(),a=app.style;a.setProperty("--case",s.caseColor);a.setProperty("--case-side",s.caseSide);a.setProperty("--spine-ink",s.spineInk)}
 // Only the cases near the selection exist in the DOM (like the windowed carousels in ES-DE / Big Box): slots[] holds a
@@ -350,7 +350,7 @@ function mount(s){
   const g=s.g,i=s.i,sh=st();const slot=document.createElement("div");slot.className="slot";
   slot.innerHTML=`<div class="box"><div class="face f-front"><img alt="" draggable="false" decoding="async"><div class="dim"></div><div class="glare"></div><div class="sheen"></div></div><div class="face f-back"></div>
       <div class="face f-left"><div class="spine-band"></div><div class="spine-title"></div></div><div class="face f-right spine2"><div class="spine-band"></div><div class="spine-title"></div></div><div class="face bev bev-fl"></div><div class="face bev bev-fr"></div><div class="face bev bev-bl"></div><div class="face bev bev-br"></div></div>`;
-  const os=cur()===HOME?stOf(g):sh;if(os!==sh){slot.style.setProperty("--bw",`calc(var(--ch) * ${os.ratio})`);slot.style.setProperty("--bd",`calc(var(--ch) * ${os.ratio*os.depth})`);slot.style.setProperty("--edge",`calc(var(--ch) * ${os.ratio*os.edge})`);slot.style.setProperty("--rc",`calc(var(--ch) * ${os.ratio*(os.rc||.03)})`);slot.style.setProperty("--re",`calc(var(--ch) * ${os.ratio*os.depth*(os.re||.3)})`);slot.style.setProperty("--case",os.caseColor);slot.style.setProperty("--case-side",os.caseSide);slot.style.setProperty("--spine-ink",os.spineInk)}
+  const os=cur()===HOME?stOf(g):sh;if(os!==sh){slot.style.setProperty("--bw",`calc(var(--ch) * ${os.ratio})`);slot.style.setProperty("--bd",`calc(var(--ch) * ${os.ratio*os.depth})`);slot.style.setProperty("--edge",`calc(var(--ch) * ${os.ratio*os.edge})`);slot.style.setProperty("--edge-in",`calc(var(--ch) * ${os.wrap?0:os.ratio*os.edge})`);slot.style.setProperty("--rc",`calc(var(--ch) * ${os.ratio*(os.rc||.03)})`);slot.style.setProperty("--re",`calc(var(--ch) * ${os.ratio*os.depth*(os.re||.3)})`);slot.style.setProperty("--case",os.caseColor);slot.style.setProperty("--case-side",os.caseSide);slot.style.setProperty("--spine-ink",os.spineInk)}
   if(isFav(g))slot.classList.add("fav");
   if(g.installed===false)slot.classList.add("notinst"); // (an Epic game the account owns but isn't installed: greyed, Play offers to install it)
   slot.querySelectorAll(".spine-band").forEach(band=>{band.style.background=os.spineBand.bg;band.style.color=os.spineBand.fg;band.textContent=g.kind==="emulator"?"EMU":g.kind==="setup"?"ADD":os.spineBand.label});
@@ -928,7 +928,7 @@ function fillDetails(){
   infoRows(g).filter(([k,v])=>!skip.has(k)&&v!=null&&String(v).trim()!=="").forEach(([k,v])=>{ /* (beta.7: a fact with no value isn't shown as an empty box) */const box=document.createElement("div");if(/program|file/i.test(k))box.className="wide";const dt=document.createElement("dt"),dd=document.createElement("dd");dt.textContent=k;dd.textContent=v;box.append(dt,dd);grid.append(box)});
   // what's on file for this game: the box (front, back, spine), the disc / cartridge label, the manual
   {const box=$("dArt"),row=$("dArtRow");row.innerHTML="";const a=g.art||{},show=g.kind==="rom";box.hidden=!show;$("dTabCopy").hidden=!show;
-    if(show){const media=s&&(MEDIA[s.id]||{}).kind==="cart"?"Cartridge":s&&s.id==="psp"?"UMD":"Disc",man=Array.isArray(a.manual)?a.manual.length:0;
+    if(show){const media=s?mediaWord(s.id):"Disc",man=Array.isArray(a.manual)?a.manual.length:0;
       const items=[["Front cover",!!a.front],["Back cover",!!a.back],["Spine",!!a.spine],[media+" art",!!a.disc],["Manual",man>0,man?`${man} pages`:g.manualMiss?"none found online":""]]; /* (beta.9: manualMiss, the search looked and found none) */
       const full=a.front&&a.back&&a.spine;
       items.forEach(([l,ok,extra])=>{const c=document.createElement("span");c.className="d-art-chip"+(ok?" ok":"");c.textContent=(ok?"✓ ":"")+l+(extra?` · ${extra}`:"");row.appendChild(c)});
@@ -1343,7 +1343,7 @@ function openInspect(){uiCrumb("Inspect");
   const ch=Math.min(innerHeight*.58,innerWidth*.34/style.ratio),cw=ch*style.ratio;
   el.style.setProperty("--ch",ch+"px");el.style.setProperty("--cw",cw+"px");el.style.setProperty("--t",(cw*Math.max(.06,style.depth*.7))+"px");el.style.setProperty("--disc",(cw*m.size)+"px");
   el.style.setProperty("--case",style.caseColor);el.style.setProperty("--case-in",style.caseSide);el.style.setProperty("--case-side",style.caseSide);el.style.setProperty("--accent",style.glow);
-  el.classList.remove("open","out","cart","umd");if(m.kind!=="disc")el.classList.add(m.kind);
+  el.classList.remove("open","out","cart","umd","floppy");if(m.kind!=="disc")el.classList.add(m.kind);if(m.form)el.classList.add(m.form);
   const front=frontUrl(g);
   const sp=$("ispSpine");if(g.art&&g.art.spine){sp.hidden=false;sp.src=g.art.spine}else{sp.hidden=true;sp.removeAttribute("src")}
   $("ispSpineText").textContent=g.title;
@@ -1358,12 +1358,12 @@ function openInspect(){uiCrumb("Inspect");
     const from=slotPose(slots[sel]),hs=slots[sel];if(from&&hs&&hs.el){clearTimeout(hs.el._gl);hs.el.classList.add("glowfade","lift")}
     // the shelf box stays until the 3D case is drawn and ready to take its place; then both swap in the same frame
     const onStart=()=>{if(isp.tok!==tok||mode!=="inspect")return;if(hs&&hs.el){hs.el.classList.remove("unhold");hs.el.classList.add("held");isp.held=hs}app.classList.add("inspecting");el.classList.add("on")};
-    el.classList.add("gl");gl=Inspect3D.open({from,where:from?()=>slotPose(hs):null,standIn:from&&hs.img,onStart,sys:s.id,rc:style.rc||.04,ratio:style.ratio,depth:style.depth,caseColor:style.caseColor,caseSide:style.caseSide,spineInk:style.spineInk,edge:style.edge||0,title:g.title,kind:m.kind,size:m.size,
+    el.classList.add("gl");gl=Inspect3D.open({from,where:from?()=>slotPose(hs):null,standIn:from&&hs.img,onStart,sys:s.id,rc:style.rc||.04,ratio:style.ratio,depth:style.depth,caseColor:style.caseColor,caseSide:style.caseSide,spineInk:style.spineInk,edge:style.edge||0,wrap:!!style.wrap,title:g.title,kind:m.kind,form:m.form||"",size:m.size,
       // sized copies (still sharp up close): full-size scans cost ~70 MB of video memory per game and half a second to upload
-      front:thumb(front,1536),back:g.art&&g.art.back?thumb(g.art.back,1536):null,spine:g.art&&g.art.spine?thumb(g.art.spine,1536):null,disc:g.art&&g.art.disc?thumb(g.art.disc,1024):null,manual:(g.art&&g.art.manual&&g.art.manual[0])?thumb(g.art.manual[0],2048):null,modelUrl:th.media||null,modelOpts:th.mediaOpts||null});
+      front:thumb(front,1536),back:g.art&&g.art.back?thumb(g.art.back,1536):null,spine:g.art&&g.art.spine?thumb(g.art.spine,1536):null,disc:g.art&&g.art.disc?thumb(g.art.disc,1024):null,manual:manualCover(g)?thumb(manualCover(g),2048):null,modelUrl:th.media||null,modelOpts:th.mediaOpts||null});
   }}catch(err){gl=false;console.warn("3D inspect failed",err);api.log&&api.log("3D inspect failed: "+(err&&err.stack||err))}
   // the CSS case is only drawn without WebGL; don't decode its scans (or generate a back) when it's hidden
-  if(!gl){$("ispFront").src=front;$("ispManual").src=rdSrc((g.art&&g.art.manual&&g.art.manual[0])||front);$("ispBack").src=backUrl(g)}else["ispFront","ispManual","ispBack"].forEach(id=>$(id).removeAttribute("src"));
+  if(!gl){$("ispFront").src=front;$("ispManual").src=rdSrc(manualCover(g)||front);$("ispBack").src=backUrl(g)}else["ispFront","ispManual","ispBack"].forEach(id=>$(id).removeAttribute("src"));
   if(gl&&!(g.art&&g.art.manual&&g.art.manual.length)&&g.kind==="rom"&&Inspect3D.setManual)makeBooklet(g).then(u=>{if(u&&u[0]&&curGame()===g&&isp.tok===tok&&mode==="inspect")Inspect3D.setManual(u[0])},()=>{}); // only into this same open: a late booklet from a closed Inspect stays off another game's case
   el.classList.toggle("gl",gl);
   // anything still hidden from an earlier inspect that isn't this game's box comes back (fading)
@@ -1402,7 +1402,7 @@ function ispLoop(t){
   const big=Math.abs(ty-isp.ry)>60;const k=easeK(isp.stick&&ISP_STICK_EASE?ISP_STICK_EASE:big?ISP_EASE[0]:ISP_EASE[1],dt),k2=easeK(.1,dt); // (a held stick: follow it closely; buttons and flips keep their slow glide)
   isp.rx+=(tx-isp.rx)*k;isp.ry+=(ty-isp.ry)*k;
   isp.zoom+=(isp.tz-isp.zoom)*k2;isp.px+=(isp.tpx-isp.px)*k2;isp.py+=(isp.tpy-isp.py)*k2;isp.fl+=(isp.tf-isp.fl)*k;
-  if(window.Inspect3D&&Inspect3D.isActive())Inspect3D.setPose(isp.rx,isp.ry,isp.zoom,isp.px,isp.py,t-isp.last<1200||!!isp.drag,isp.fl,ANDROID?isp.sy0:null);
+  if(window.Inspect3D&&Inspect3D.isActive())Inspect3D.setPose(isp.rx,isp.ry,isp.zoom,isp.px,isp.py,t-isp.last<1200||!!isp.drag,isp.fl,isp.sy0);
   else if(spin){
     // CSS case, disc out: turn the whole stage about the disc's own centre (it sits var(--cw)*.3 in front of the case's middle),
     // so it moves in 3D about its own centre: side to side turns it over, up / down tilts it right round; the case is off-screen by then
@@ -1427,12 +1427,15 @@ function ispTurn(dx,dy,raw){const z=raw?1:Math.max(1,isp.tz),lim=ispSpins()?85:5
 // step from there lands under .9, so checking on the way in kept pinning the zoom until the case was opened.)
 function ispZoom(d,analog){const f=analog?Math.pow(1+.022*Math.abs(d),typeof analog==="number"?analog:1):1.12; /* analog: a trigger read every frame (a number: padF, so the zoom speed doesn't follow the refresh rate) */isp.tz=Math.max(.88,Math.min(2.6,d>0?isp.tz*f:isp.tz/f));if(d<0&&isp.tz<=.9){isp.tz=.88;isp.tpx=0;isp.tpy=0}isp.last=performance.now()}
 // The disc (or UMD) is out of its case: it moves in 3D about its own centre (side to side turns it over, up / down tilts it); "turn over" flips it.
-// (Android only: Windows keeps its old disc turn, per the brief. Drop ANDROID&& here and in setPose below to give Windows the same spin.)
-function ispSpins(){return ANDROID&&isp.state===2&&!$("inspect").classList.contains("cart")}
+// (upstream beta.11) Windows too: there the disc used to swing round the case's middle, as if its axle were off to one side
+function ispSpins(){return isp.state===2&&!$("inspect").classList.contains("cart")}
 function ispFlip(){if(ispSpins()){isp.tf=isp.tf?0:180;isp.last=performance.now()}else ispTurn(180,0,true)}
 function ispPan(dx,dy){if(isp.tz<=1)return;const lim=innerWidth*.35*(isp.tz-1);isp.tpx=Math.max(-lim,Math.min(lim,isp.tpx+dx));isp.tpy=Math.max(-lim,Math.min(lim,isp.tpy+dy));isp.last=performance.now()}
 /* manual reader (inside inspect) */
 const rd={pages:[],i:0,open:false};
+// (upstream beta.11) the booklet's cover in the open case: page 1, except a Wii U e-manual, whose first page is a wide
+// screenshot (it showed cropped and off-centre in the upright booklet): the box front, as the reader opens on
+function manualCover(g){const m=g&&g.art&&g.art.manual;if(!m||!m.length)return null;return /^wiiu:/.test(String(g.id||""))&&g.art.front?g.art.front:m[0]}
 function hasManual(g){return !!(g&&g.art&&g.art.manual&&g.art.manual.length)}
 // Games with no manual (most Switch and PS4 games never had a printed one) get a small booklet made from what (T)rustyShelf
 // knows: the cover, the description, the details, the back cover. Clearly marked as made by (T)rustyShelf. Made on demand,
@@ -1657,9 +1660,10 @@ function ispBack(){
   sfx.back();renderIspHints();
 }
 function renderIspHints(){
-  const steps=["Closed","Open","Disc out"],pad=inputMode==="pad",cart=$("inspect").classList.contains("cart");
+  const pad=inputMode==="pad",cart=$("inspect").classList.contains("cart"),flop=$("inspect").classList.contains("floppy");
+  const steps=["Closed","Open",flop?"Floppy out":cart?"Cartridge out":"Disc out"];
   $("ispStep").textContent=steps[isp.state];
-  const next=isp.state===0?"Open case":isp.state===1?(cart?"Take out cartridge":"Take out disc"):"Hold to play";
+  const next=isp.state===0?"Open case":isp.state===1?(flop?"Take out floppy disk":cart?"Take out cartridge":"Take out disc"):"Hold to play";
   let items,acts;
   if(rd.open){$("ispStep").textContent=$("rdCount").textContent||"Manual";items=[[pad?["L","R"]:["←","→"],"Turn page"],[pad?["x"]:["Space"],"Next page"],[pad?["o"]:["Esc"],"Put manual back"]];acts=[()=>rdTurn(1),()=>rdTurn(1),closeReader];
     if(hasManual(curGame())){if(fixOn()){items=[[pad?["tri"]:["W"],"Wrong game: find the right one"],[pad?["sq"]:["R"],"Repair it (cover, pages)"],[pad?["o"]:["Esc"],"Cancel"]];acts=[wrongManual,repairManual,fixCancel]}
@@ -1709,6 +1713,8 @@ addEventListener("unhandledrejection",e=>{try{api.log&&api.log(`rejection: ${e.r
 /* ---------- insert animation: case opens, disc goes into the drive ---------- */
 const MEDIA={gc:{kind:"disc",size:.62,drive:"top"},wii:{kind:"disc",size:.86,drive:"front"},wiiu:{kind:"disc",size:.84,drive:"front"},psp:{kind:"umd",size:.66,drive:"hatch"},sw:{kind:"cart",size:.5,drive:"slot"},sw2:{kind:"cart",size:.5,drive:"slot"},n3ds:{kind:"cart",size:.5,drive:"slot"},ps3:{kind:"disc",size:.78,drive:"front"},ps4:{kind:"disc",size:.78,drive:"front"},ps5:{kind:"disc",size:.78,drive:"front"},x360:{kind:"disc",size:.8,drive:"tray"},ps2:{kind:"disc",size:.8,drive:"tray"}};
 if(window.BS_SYSTEMS_EXTRA)Object.assign(MEDIA,BS_SYSTEMS_EXTRA.media||{});
+// (upstream beta.11) what a console's games come on, in words: DOS games on a floppy disk, cartridges, the PSP's UMD, or a disc
+function mediaWord(id){const m=MEDIA[id]||{};return m.form==="floppy"?"Floppy disk":m.kind==="cart"?"Cartridge":id==="psp"?"UMD":"Disc"}
 const DECK={front:"frontslot",tray:"trayload",hatch:"hatchload"};
 let insertT=null,insertSeatAt=0,slideEndAt=0;const INSERT_3D=false;
 // Every console boots on its own full-screen slide (see bootslide.css). The old disc-into-the-console animation (runInsert below)
@@ -1743,10 +1749,10 @@ function runInsert(s,g,done,hideAfter){
   const ch=Math.min(innerHeight*.46,innerWidth*.3/style.ratio),cw=ch*style.ratio;
   el.style.setProperty("--ch",ch+"px");el.style.setProperty("--cw",cw+"px");el.style.setProperty("--disc",(cw*m.size)+"px");
   el.style.setProperty("--case",style.caseColor);el.style.setProperty("--case-in",style.caseSide);el.style.setProperty("--accent",style.glow);
-  el.classList.remove("go","out","cart","umd");if(m.kind!=="disc")el.classList.add(m.kind);
+  el.classList.remove("go","out","cart","umd","floppy");if(m.kind!=="disc")el.classList.add(m.kind);if(m.form)el.classList.add(m.form);
   tinyBlur((g.art&&(g.art.hero||g.art.front))||front,d=>{el.querySelector(".ins-bg img").src=d||""});
   el.querySelector(".ins-lid-front img").src=front;
-  const man=el.querySelector(".ins-manual");if(man){man.style.backgroundImage=g.art&&g.art.manual&&g.art.manual[0]?`url("${g.art.manual[0]}")`:"";man.style.backgroundSize="cover";man.style.backgroundPosition="center";man.classList.toggle("real",!!(g.art&&g.art.manual&&g.art.manual.length))}
+  const man=el.querySelector(".ins-manual");if(man){man.style.backgroundImage=manualCover(g)?`url("${manualCover(g)}")`:"";man.style.backgroundSize="cover";man.style.backgroundPosition="center";man.classList.toggle("real",!!(g.art&&g.art.manual&&g.art.manual.length))}
   el.querySelector(".ins-label").style.backgroundImage=`url("${front}")`;
   const drive=themes[s.id]&&themes[s.id].console;el.classList.toggle("has-console",!!drive);if(drive)el.querySelector(".ins-console-img").src=drive;
   const mdl=themes[s.id]&&themes[s.id].model;
@@ -2135,7 +2141,7 @@ function renderCustomize(){
       CAN={logo:FILE,boot:FILE,console:FILE,model:FILE,ctl:FILE,media:FILE,findmodel:can("findModel"),restorelogo:can("restoreLogo"),folder:can("openThemeFolder"),rmlogo:can("removeTheme")};
     const B=(a,label,primary)=>(CAN[/^rm/.test(a)?"rmlogo":a]===false)?"":`<button class="chip${primary?" primary":""}" type="button" data-a="${a}">${label}</button>`;
     const R=(title,state,btns,note)=>!btns?"":`<div class="cz-row"><div class="cz-l"><b>${title}</b><span>${state}</span>${note?`<small>${note}</small>`:""}</div><div class="cz-btns">${btns}</div></div>`;
-    const media=(MEDIA[id]||{}).kind==="cart"?"Cartridge":id==="psp"?"UMD":"Disc",autoBoot=!sc||sc.bootOnLaunch!==false;
+    const media=mediaWord(id),autoBoot=!sc||sc.bootOnLaunch!==false;
     row.innerHTML=`<div class="set-head"><div class="set-thumb"></div><div class="set-name"></div></div>`+
       R("Logo",t.logo?"Your image":"Built-in wordmark",B("logo",t.logo?"Replace":"Add image",!t.logo)+(isConsole&&api.findLogos?B("findlogo","Find a logo"):"")+(t.logoPrev?B("restorelogo","Restore previous"):"")+(t.logo?B("rmlogo","Remove"):""),isConsole&&api.findLogos&&!(czPick&&czPick.id===id)?"Find a logo: official logos from Wikimedia Commons, free to use":"")+
       (czPick&&czPick.id===id?czPickHtml(name):"")+

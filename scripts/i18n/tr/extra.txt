@@ -99,3 +99,7 @@
 =type|digite
 =ON|LIGADO
 =OFF|DESLIGADO
+=Floppy out|Disquete fora
+=Take out floppy disk|Tirar o disquete
+=Floppy disk|Disquete
+=Cartridge out|Cartucho fora
