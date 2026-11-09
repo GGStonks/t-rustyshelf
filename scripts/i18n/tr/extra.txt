@@ -103,3 +103,7 @@
 =Take out floppy disk|Tirar o disquete
 =Floppy disk|Disquete
 =Cartridge out|Cartucho fora
+=RetroAchievements has no set for ${g.title} yet|O RetroAchievements ainda não tem conquistas para ${g.title}
+=RetroAchievements doesn't cover ${s.name} games|O RetroAchievements não cobre jogos de ${s.name}
+=RetroAchievements doesn't cover this game|O RetroAchievements não cobre este jogo
+=None unlocked yet · A opens the set|Nenhuma desbloqueada ainda · A abre a lista

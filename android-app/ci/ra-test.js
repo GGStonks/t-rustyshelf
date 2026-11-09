@@ -79,6 +79,22 @@ module.exports = async function raPass({ browser, base, check, newPage, OUT }) {
     check('RetroAchievements: the shelf\'s line says Mastered for Pikmin', onShelf, await page.evaluate(() => (document.getElementById('gMeta') || {}).textContent));
     check('RetroAchievements: the bottom screen\'s Trophies get the game\'s numbers', bottom, bottom ? 'Pikmin 30 / 30, mastered' : JSON.stringify(await page.evaluate(() => ((window.__fakeBottom || []).filter(x => x && x.game).pop() || {}).game || null)).slice(0, 160));
     check('RetroAchievements: the quick menu\'s Trophies row', /Trophies/.test(qm) && /30 \/ 30 · 4,321 pts/.test(qm), (qm.match(/Trophies.{0,60}/) || [qm.slice(0, 80)])[0]);
+    // (beta.11) signed in, on a game with a set: the Trophies row opens that game's achievements at once
+    await page.evaluate(async () => { Shelf.quickMenu(); await new Promise(r => setTimeout(r, 900));
+      const row = [...document.querySelectorAll('#quickMenu *')].find(e => e.childElementCount && /^\s*Trophies/.test(e.textContent) && e.getBoundingClientRect().height > 30 && e.getBoundingClientRect().height < 90); if (row) row.click(); });
+    const qmList = await until(() => { const v = document.getElementById('achv'); return v && v.classList.contains('on') && document.querySelectorAll('#achList .ach').length > 0; }, null, 15000);
+    const qmRows = await page.evaluate(() => document.querySelectorAll('#achList .ach').length);
+    check('RetroAchievements: Trophies in the quick menu opens the game\'s achievements straight away', qmList && qmRows === 30, `list ${qmList}, ${qmRows} rows`);
+    for (let i = 0; i < 3 && await page.evaluate(() => { const v = document.getElementById('achv'); return !!(v && v.classList.contains('on')); }); i++) { await page.keyboard.press('Escape'); await page.waitForTimeout(700); }
+    // (beta.11) a game with a set and nothing earned yet (Metroid Prime, 0 of 50): Trophies opens its whole set too, and
+    // the quick menu fetched it as it opened
+    for (let i = 0; i < 16 && await page.evaluate(() => Shelf._qs().g) !== 'Metroid Prime'; i++) { await page.keyboard.press(i < 8 ? 'ArrowLeft' : 'ArrowRight'); await page.waitForTimeout(700); }
+    const mp = await page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)); Shelf.quickMenu(); await w(1200);
+      const row = [...document.querySelectorAll('#quickMenu *')].find(e => e.childElementCount && /^\s*Trophies/.test(e.textContent) && e.getBoundingClientRect().height > 30 && e.getBoundingClientRect().height < 90); if (row) row.click();
+      for (let i = 0; i < 60 && !(document.getElementById('achv') && document.getElementById('achv').classList.contains('on') && document.querySelectorAll('#achList .ach').length); i++) await w(100);
+      return { game: Shelf._qs().g, rows: document.querySelectorAll('#achList .ach').length, locked: document.querySelectorAll('#achList .ach.locked').length }; });
+    check('RetroAchievements: Trophies opens the set of a game with nothing unlocked yet (Metroid Prime, 0 of 50)', mp.game === 'Metroid Prime' && mp.rows === 50 && mp.locked === 50, JSON.stringify(mp));
+    for (let i = 0; i < 3 && await page.evaluate(() => { const v = document.getElementById('achv'); return !!(v && v.classList.contains('on')); }); i++) { await page.keyboard.press('Escape'); await page.waitForTimeout(700); }
 
     // ---- Details: The Wind Waker's ring, then the full list ----
     for (let i = 0; i < 8 && await page.evaluate(() => Shelf._qs().g) !== ww; i++) { await page.keyboard.press('ArrowRight'); await page.waitForTimeout(700); }

@@ -1,13 +1,18 @@
-// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is the same as Boxshelf's
-// main/ra.js apart from the app's name ((T)rustyShelf).
-// RetroAchievements: progress and achievement lists for the shelves whose emulators support it
-// (GameCube and Wii through Dolphin, PSP through PPSSPP, PS2 through PCSX2). Achievements are earned inside the emulator;
+// Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): this file is Boxshelf's
+// main/ra.js with the app's name ((T)rustyShelf) and its own consoles (Neo Geo Pocket) added.
+// RetroAchievements: progress and achievement lists for the shelves it covers (GameCube and Wii through Dolphin, PSP through
+// PPSSPP, PS2 through PCSX2, PlayStation through DuckStation, the retro consoles through RetroArch). Achievements are earned inside the emulator;
 // this just reads your account through the RA web API and matches games by title.
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
 
-const CONSOLE_ID = { gc: 16, wii: 19, psp: 41, ps2: 21 }; // RA console ids (Wii sets since March 2026); Switch, PS4 and Xbox 360 have no achievement sets
+// RA console ids (rcheevos' rc_consoles.h). (beta.11) every shelf RetroAchievements covers, the same list as Android's
+// (android-ra.js): it was GameCube, Wii, PSP and PS2 only. Neo Geo sets are in RA's Arcade list. Switch, Wii U, 3DS, PS3,
+// PS4/5 and Xbox 360 have no sets; DOS has none to speak of
+const CONSOLE_ID = { megadrive: 1, n64: 2, snes: 3, gb: 4, gba: 5, gbc: 6, nes: 7, pcengine: 8, mastersystem: 11, psx: 12, gamegear: 15, gc: 16, nds: 18,
+  wii: 19, ps2: 21, arcade: 27, neogeo: 27, saturn: 39, dreamcast: 40, psp: 41, segacd: 9, sega32x: 10, atari2600: 25, atarilynx: 13, wonderswan: 53,
+  ngp: 14, ngpc: 14 }; // ((T)rustyShelf) its Neo Geo Pocket shelves, as on Android (android-ra.js): one RA list for both
 const API = 'https://retroachievements.org/API/';
 const MEDIA = 'https://media.retroachievements.org';
 let dir = null, log = () => {}, creds = { user: '', key: '' };

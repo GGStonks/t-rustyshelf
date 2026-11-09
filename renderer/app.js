@@ -2024,7 +2024,7 @@ async function openAchievements(){
   const g=curGame(),s=shelfFor(g);if(!raHas(s)||!g||g.kind!=="rom"||ach.open||ach.busy)return;
   let p=RA.game.get(s.id+"|"+g.title);if(p===undefined){toast("Loading achievements…");ach.busy=true;try{p=await api.raProgress(s.id,g.title,true);RA.game.set(s.id+"|"+g.title,p||false)}catch(e){toast(e&&e.message||"RetroAchievements didn't answer");if(mode==="details"&&curGame()===g)raRow("err","Achievements didn't load",e&&e.message||"RetroAchievements didn't answer.","Try again");return}finally{ach.busy=false}
     if(mode==="details"&&curGame()===g)raDetails(g)} // the Details row catches up with what just came in
-  if(!p){toast("No achievement set for this game");return}
+  if(!p){toast(`RetroAchievements has no set for ${g.title} yet`);return}
   if(curGame()!==g||(mode!=="browse"&&mode!=="details")||qm.open||sysBusy())return;
   ach.open=true;ach.p=p;ach.all=p.achievements;ach.filter="all";
   const ic=$("achIcon");if(p.icon){ic.src=p.icon;ic.hidden=false}else ic.hidden=true;
@@ -2232,6 +2232,14 @@ function qsBuild(){if(qsEl)return qsEl;qsEl=document.createElement("aside");qsEl
   $("app").appendChild(qsEl);return qsEl}
 function qsGame(){const g=curGame();return g&&isGame(g)&&g.kind!=="random"?g:null}
 function qsAch(){const g=qsGame();if(!RA.on||!g)return null;try{return raHas(shelfFor(g))?raFor(g):null}catch{return null}}
+/* (upstream beta.11) the Trophies row's line for a game with nothing to count yet: why, in words (it said "No trophies for this
+   game yet" even for consoles RetroAchievements doesn't cover, like Switch) */
+function qsAchNone(g){let s=null;try{s=shelfFor(g)}catch{}if(!s||g.kind!=="rom"||!raHas(s))return s&&s.name?`RetroAchievements doesn't cover ${s.name} games`:"RetroAchievements doesn't cover this game";
+  return RA.game.get(s.id+"|"+g.title)===false?`RetroAchievements has no set for ${g.title} yet`:"None unlocked yet · A opens the set"}
+/* (upstream beta.11) this game's set fetched the moment the quick menu opens, so Trophies opens at once (main keeps it 10
+   minutes; a second ask while it's on its way shares the same request) */
+function raPrefetch(g){if(!RA.on||!g||g.kind!=="rom")return;let s=null;try{s=shelfFor(g)}catch{}if(!raHas(s))return;const k=s.id+"|"+g.title;if(RA.game.has(k))return;
+  Promise.resolve(api.raProgress(s.id,g.title,false)).then(p=>{if(!RA.game.has(k))RA.game.set(k,p||false)}).catch(()=>{})}
 function qsThemeNow(){const t=qsUi().theme;return THEMES[t]?t:themeId()}
 function qsSwatch(id){try{const g=curGame()||{hue:220};return THEMES[id].tint(shelfHue(g),g,shelfPos())}catch{return "linear-gradient(135deg,#222,#555)"}}
 // the rows; `lines` opens in place into lines of chips
@@ -2304,7 +2312,7 @@ function qsFill(x,instant){const inn=document.createElement("div");inn.className
   x.r.lines().forEach(ln=>{const d=document.createElement("div");d.className="qm-line";
     if(ln.note){d.innerHTML=`<div class="qm-note">${qsEsc(ln.note)}</div>`;inn.appendChild(d);return}
     if(ln.info){const r=qsAch(),g=qsGame(),p=r&&r.total?Math.round(r.earned/r.total*100):0,pr=RA.profile;
-      d.innerHTML=`<div class="qm-trow"><div class="qm-ring" style="--p:${p}"><b>${pr&&pr.pic?`<img alt="" src="${qsEsc(pr.pic)}">`:"🏆"}</b></div><div style="min-width:0"><div class="qm-tt">${r&&r.total?(r.mastered==="mastered"?"★ Mastered · ":"")+`${r.earned} of ${r.total} unlocked`:g?"No trophies for this game yet":"Your trophies"}</div><div class="qm-ts">${qsEsc(pr?`${pr.user} · ${pr.points.toLocaleString()} points`:"Signed in")}</div></div></div>`;inn.appendChild(d);return}
+      d.innerHTML=`<div class="qm-trow"><div class="qm-ring" style="--p:${p}"><b>${pr&&pr.pic?`<img alt="" src="${qsEsc(pr.pic)}">`:"🏆"}</b></div><div style="min-width:0"><div class="qm-tt">${r&&r.total?(r.mastered==="mastered"?"★ Mastered · ":"")+`${r.earned} of ${r.total} unlocked`:g?qsAchNone(g):"Your trophies"}</div><div class="qm-ts">${qsEsc(pr?`${pr.user} · ${pr.points.toLocaleString()} points`:"Signed in")}</div></div></div>`;inn.appendChild(d);return}
     if(ln.l)d.innerHTML=`<div class="qm-ll">${qsEsc(ln.l)}</div>`;const o=document.createElement("div");o.className="qm-opts";const arr=[];
     ln.opts.forEach(([v,l,hold])=>{const b=document.createElement("button");b.type="button";b.className="qm-opt"+(ln.sw?" sw":"")+(ln.big?" big":"")+(hold?" danger":"")+(ln.cur===v?" cur":"");b.dataset.k=ln.k;b.dataset.v=v;b.title=l;if(hold)b.dataset.hold="1";
       b.innerHTML=ln.sw?`<i style="background:${qsEsc(qsSwatch(v))}"></i><span class="qm-swl">${qsEsc(l)}</span>`:(hold?'<i class="qm-hb"></i>':"")+`<span>${qsEsc(l)}</span>`; // (1.81: theme tiles carry their names, as in Settings)
@@ -2335,7 +2343,7 @@ function qsHints(){if(!qsEl)return;const pad=showPad(),G=(p,k)=>pad?glyph(p):`<s
   else{const x=qm.rows[qm.r],id=x&&x.r.id;out.push([pad?glyph("↕"):`<span class="g">↑↓</span>`,"Move"]);if(id==="vol")out.push([pad?glyph("↔"):`<span class="g">←→</span>`,"Volume"]);
     out.push([G("x","Enter"),x&&x.r.lines?"Open":"Select"],[G("o","Esc"),"Close"])}
   qsEl.querySelector(".qm-hints").innerHTML=out.map(([k,l])=>`<span class="hint">${k}<span>${qsEsc(l)}</span></span>`).join("")}
-function qmOpen(){if(qm.open||(mode!=="browse"&&mode!=="details")||sysBusy())return;uiCrumb("Quick menu");qsBuild();detailsBack=mode==="details"?curGame():null;if(mode==="details")closeDetails(true); /* (beta.10) back out of the menu: Details again */
+function qmOpen(){if(qm.open||(mode!=="browse"&&mode!=="details")||sysBusy())return;uiCrumb("Quick menu");qsBuild();raPrefetch(curGame());detailsBack=mode==="details"?curGame():null;if(mode==="details")closeDetails(true); /* (beta.10) back out of the menu: Details again */
   qm.open=true;qm.sub=null;qm.pv=null;qm.ac=0;qsEl.querySelector(".qm-scroll").scrollTop=0;if(!ANDROID||qm.sig!==qsSig())qsRender(); /* Android: rows already built for this game and these settings (qsFreshSoon) are kept: the press only moves the highlight and slides the panel in */qm.r=qm.rows.findIndex(x=>x.r.id===(ANDROID?"mus":"vol"));if(qm.r<0)qm.r=0; /* (Android 0.3.2: the highlight starts on the top three) */
   // Android: the menu's own rows are measured (qsPaint reads their offsetTop) before the page-wide qm-open class goes on.
   // The other way round, that read made the phone restyle and lay out the whole shelf, every case face included, right
@@ -2386,6 +2394,7 @@ function qsPick(){const x=qm.rows[qm.r];if(!x)return;const r=x.r;
   if(r.id==="vol"){const v=curVol();setVol(v>0?0:(volPrev||.7));if(curVol()>0)play_("tick",{dir:1});qsSoft();return}
   if(r.id==="set"){qmClose(true);play_("open");Setup.open();return}
   if(r.id==="mus"){qmClose(true);openMuseum();return}
+  if(r.id==="ach"&&RA.on){const g=qsGame(),s=g&&shelfFor(g);if(g&&g.kind==="rom"&&raHas(s)&&RA.game.get(s.id+"|"+g.title)!==false){qmClose(true);play_("open");openAchievements();return}} /* (upstream beta.11) signed in, on a console RetroAchievements covers: straight to this game's set, earned or not (the row opens only when there's nothing to show) */
   if(r.id==="studio"){const g=qsGame();qmClose(true);if(g&&ANDROID){play_("panel");Setup.open({page:"artstudio",systemId:shelfFor(g).id});return} /* (Android: the console's whole studio) */if(g)artStudioFor(g);return}
   if(r.id==="cz3d"){const e=qsCzShelf();qmClose(true);play_("open");if(e)custSel=e[0];czPick=null;openCustomize();return}
   if(!r.lines)return;if(qm.sub===qm.r){qsCollapse();return}
