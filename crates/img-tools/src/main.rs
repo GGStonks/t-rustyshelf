@@ -1,5 +1,6 @@
 mod cart;
 mod crop;
+pub mod lbindex;
 mod rebrand;
 mod shrink;
 mod spine;
@@ -244,7 +245,10 @@ fn run_worker() {
 }
 
 fn print_usage() {
-    eprintln!("Usage: trustyshelf-imgtools [OPTIONS]");
+    eprintln!("Usage: trustyshelf-imgtools [COMMAND / OPTIONS]");
+    eprintln!("Commands:");
+    eprintln!("  lbindex --xml <PATH> --out <PATH> --platforms <LIST> --version <V> [--shards <DIR>]");
+    eprintln!("  lbshards --index <PATH> --dir <DIR>");
     eprintln!("Options:");
     eprintln!("  --worker                  Run in worker mode (read JSON from stdin)");
     eprintln!("  --mode <MODE>             Operation mode: shrink, crop, spine, rebrand, cart");
@@ -257,10 +261,142 @@ fn print_usage() {
     eprintln!("  --version                 Print version");
 }
 
+fn run_lbindex(args: &[String]) {
+    let mut xml: Option<String> = None;
+    let mut out: Option<String> = None;
+    let mut platforms: Vec<String> = Vec::new();
+    let mut version: u32 = 8;
+    let mut shards_dir: Option<String> = None;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--xml" => {
+                if i + 1 < args.len() { xml = Some(args[i + 1].clone()); i += 1; }
+            }
+            "--out" => {
+                if i + 1 < args.len() { out = Some(args[i + 1].clone()); i += 1; }
+            }
+            "--platforms" => {
+                if i + 1 < args.len() {
+                    let val = &args[i + 1];
+                    if val.starts_with('[') {
+                        if let Ok(list) = serde_json::from_str::<Vec<String>>(val) {
+                            platforms = list;
+                        }
+                    } else {
+                        platforms = val.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+                    }
+                    i += 1;
+                }
+            }
+            "--version" => {
+                if i + 1 < args.len() {
+                    if let Ok(v) = args[i + 1].parse() { version = v; }
+                    i += 1;
+                }
+            }
+            "--shards" | "--shards-dir" => {
+                if i + 1 < args.len() { shards_dir = Some(args[i + 1].clone()); i += 1; }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
+    let xml_path = match xml {
+        Some(x) => std::path::PathBuf::from(x),
+        None => {
+            println!("{{\"error\":\"Missing --xml argument\"}}");
+            std::process::exit(1);
+        }
+    };
+    let out_path = match out {
+        Some(o) => std::path::PathBuf::from(o),
+        None => {
+            println!("{{\"error\":\"Missing --out argument\"}}");
+            std::process::exit(1);
+        }
+    };
+
+    let shards_path = shards_dir.map(std::path::PathBuf::from);
+
+    let stdout = std::io::stdout();
+    let on_pct = |pct: u32| {
+        let mut handle = stdout.lock();
+        let _ = writeln!(handle, "{{\"pct\":{}}}", pct);
+        let _ = handle.flush();
+    };
+
+    match lbindex::build_index_file(&xml_path, &out_path, &platforms, version, shards_path.as_deref(), on_pct) {
+        Ok(counts) => {
+            println!("{{\"done\":true,\"counts\":{}}}", serde_json::to_string(&counts).unwrap());
+        }
+        Err(e) => {
+            println!("{{\"error\":{}}}", serde_json::to_string(&e.to_string()).unwrap());
+            std::process::exit(1);
+        }
+    }
+}
+
+fn run_lbshards(args: &[String]) {
+    let mut index: Option<String> = None;
+    let mut dir: Option<String> = None;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--index" => {
+                if i + 1 < args.len() { index = Some(args[i + 1].clone()); i += 1; }
+            }
+            "--dir" => {
+                if i + 1 < args.len() { dir = Some(args[i + 1].clone()); i += 1; }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
+    let idx_path = match index {
+        Some(p) => std::path::PathBuf::from(p),
+        None => {
+            println!("{{\"error\":\"Missing --index argument\"}}");
+            std::process::exit(1);
+        }
+    };
+    let dir_path = match dir {
+        Some(d) => std::path::PathBuf::from(d),
+        None => {
+            println!("{{\"error\":\"Missing --dir argument\"}}");
+            std::process::exit(1);
+        }
+    };
+
+    match lbindex::split_index_file(&idx_path, &dir_path) {
+        Ok(()) => {
+            println!("{{\"split\":true}}");
+        }
+        Err(e) => {
+            println!("{{\"error\":{}}}", serde_json::to_string(&e.to_string()).unwrap());
+            std::process::exit(1);
+        }
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--worker") {
         run_worker();
+        return;
+    }
+
+    if args.len() > 1 && (args[1] == "lbindex" || args[1] == "--lbindex") {
+        run_lbindex(&args[2..]);
+        return;
+    }
+
+    if args.len() > 1 && (args[1] == "lbshards" || args[1] == "--lbshards") {
+        run_lbshards(&args[2..]);
         return;
     }
 
