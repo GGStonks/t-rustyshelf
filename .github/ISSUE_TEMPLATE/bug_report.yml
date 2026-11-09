@@ -1,0 +1,49 @@
+name: Bug report
+description: Something doesn't work or looks wrong
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! The most helpful thing you can add is a problem report: in (T)rustyShelf, **Settings → System → Report a problem → Create**, then drag the zip from your Desktop into the box at the bottom.
+  - type: input
+    id: version
+    attributes:
+      label: (T)rustyShelf version
+      description: Settings → System → Updates / About. Filled in for you when you come from the app.
+      placeholder: 1.3.0.0
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Device
+      description: For example Windows 11, AYN Thor, Steam Deck, or another Android or Linux device.
+      placeholder: Windows 11
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen again
+      description: The steps, and which console and emulator.
+  - type: textarea
+    id: setup
+    attributes:
+      label: Your setup
+      description: Controller, screen size, anything else that might matter.
+  - type: textarea
+    id: files
+    attributes:
+      label: Problem report and screenshots
+      description: Drag the zip from Report a problem here. Screenshots or a short video help too.

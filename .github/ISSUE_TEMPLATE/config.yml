@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Ideas and wishes
+    url: https://github.com/GGStonks/t-rustyshelf/discussions/categories/ideas
+    about: Suggest a feature or vote on other people's ideas.
+  - name: Questions and help
+    url: https://github.com/GGStonks/t-rustyshelf/discussions/categories/q-a
+    about: Ask how to set something up.
