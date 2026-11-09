@@ -192,4 +192,50 @@ module.exports = async function betaPass({ browser, base, check, newPage, OUT })
     check('Beta pass (Windows wizard): no script errors', !w2.errors.length, w2.errors.slice(0, 3).join(' | '));
   } catch (e) { check('Beta pass (Windows wizard) ran to the end', false, e && e.stack ? e.stack.split('\n').slice(0, 2).join(' ') : e); }
   await w2.ctx.close();
+
+  // (beta.11) the museum's file box (?mags=1: three Nintendo Power issues): A fans them out, Y / P picks the one you're on
+  // up into your hands (still in its bag), it turns, B puts it back and the fan returns, with no stand-in left behind
+  const w4 = await newPage(browser, null);
+  try {
+    await w4.page.goto(base + '?platform=windows&shelf=1&mags=1');
+    await w4.page.waitForFunction(() => window.Shelf && Shelf._qs && Shelf._qs().g, null, { timeout: 90000, polling: 250 });
+    const f = await w4.page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), out = {};
+      const key = k => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+      const st = () => { const c = Museum.current() || {}; return c.stack ? 'stack' : c.fan ? 'fan' : c.lib ? 'lib' : c.wide ? 'wide:' + c.wide.label : 'other'; };
+      key('m'); for (let i = 0; i < 80 && Shelf.getMode() !== 'museum'; i++) await w(250); await w(4000);
+      for (let i = 0; i < 6 && Museum._dv && Museum._dv(); i++) { Museum.skipDelivery(); await w(800); }
+      for (let i = 0; i < 60 && !((Museum._rack && Museum._rack()) || []).some(x => x.box); i++) await w(300);
+      const it = (Museum._rack() || []).find(x => x.box); if (!it) return { nobox: true };
+      Museum.setRow(it.ri); await w(500);
+      for (let i = 0; i < 10 && !/^wide:Magazines|^lib|^stack/.test(st()); i++) { Museum.move(1, 0); await w(600); }
+      if (/^wide:/.test(st())) { Museum.activate(); await w(1200); }
+      for (let i = 0; i < 8 && st() !== 'stack'; i++) { Museum.move(1, 0); await w(600); }
+      out.at = st(); key('Enter'); await w(1500); out.fan = st(); out.items0 = Museum._rack().length;
+      const t0 = (Museum.current() || {}).lib; out.t0 = t0 && t0.title;
+      // (waits for each state, up to a few seconds: GitHub's software-drawn runner is slower than a PC)
+      const until = async (fn, ms) => { for (let i = 0; i < ms / 150 && !fn(); i++) await w(150); };
+      key('p'); await until(() => Museum.isHolding(), 6000); await w(400); out.held = Museum.isHolding(); out.hint = [...document.querySelectorAll('#musHints > *')].map(h => h.textContent.trim()).join(' | ');
+      key('ArrowRight'); await w(500); key('e'); await w(300); key('q'); await w(600); // (Q / E, L1 / R1 used to flip the fan behind the issue in your hands)
+      const t1 = (Museum.current() || {}).lib; out.t1 = t1 && t1.title;
+      key('Escape'); await until(() => !Museum.isHolding() && st() === 'fan', 6000); await w(400);
+      out.back = st(); out.holding = Museum.isHolding(); out.items1 = Museum._rack().length; const t2 = (Museum.current() || {}).lib; out.t2 = t2 && t2.title;
+      key('Escape'); await until(() => st() === 'stack', 6000); out.closed = st(); return out; });
+    const fd = f.nobox ? { nobox: true } : { back: f.back, holding: f.holding, items: f.items0 + '>' + f.items1, closed: f.closed, at: f.at, fan: f.fan, held: f.held, same: f.t1 === f.t0 && f.t2 === f.t0, t0: f.t0, hint: f.hint };
+    check('Museum (beta.11): in a file box\'s fan, Y / P picks the issue up into your hands (in its bag), and B puts it back into the fan, nothing left behind',
+      f.at === 'stack' && f.fan === 'fan' && f.held === true && /Turn/.test(f.hint) && !!f.t0 && f.t1 === f.t0 && f.t2 === f.t0 && f.back === 'fan' && f.holding === false && f.items1 === f.items0 && f.closed === 'stack', JSON.stringify(fd));
+    // (beta.11) A on a console with no 3D model of its own opens "Add a 3D model" (a file on this PC, or a free model site); Not now closes it
+    const am = await w4.page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), out = {};
+      const key = k => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+      for (let i = 0; i < 4 && Museum.isHolding(); i++) { key('Escape'); await w(600); }
+      Museum.setRow(0); await w(600); Museum.toConsole && Museum.toConsole(); await w(1200);
+      const c = Museum.current() || {}; out.onConsole = !!c.console; out.hasModel = !!(Museum.consoleFit && Museum.consoleFit());
+      key('Enter'); await w(700); const el = document.getElementById('musAdd'); out.open = !!(el && el.classList.contains('on'));
+      out.rows = el ? [...el.querySelectorAll('.mr-row .mr-lbl')].map(r => r.textContent.trim()) : [];
+      key('ArrowUp'); await w(250); out.last = el && (el.querySelector('.mr-row.on .mr-lbl') || {}).textContent;
+      key('Enter'); await w(500); out.closed = !(el && el.classList.contains('on')); out.holding = Museum.isHolding(); return out; });
+    check('Museum (beta.11): A on a console with no 3D model of its own opens "Add a 3D model" (a file, Sketchfab, Poly Pizza, Not now); Not now closes it',
+      am.onConsole && !am.hasModel && am.open && am.rows.length === 4 && /model file on this PC/.test(am.rows[0]) && /Sketchfab/.test(am.rows[1]) && am.last === 'Not now' && am.closed && !am.holding, JSON.stringify(am));
+    check('Museum file box pass: no script errors', !w4.errors.length, w4.errors.slice(0, 3).join(' | '));
+  } catch (e) { check('Museum file box pass ran to the end', false, e && e.stack ? e.stack.split('\n').slice(0, 2).join(' ') : e); }
+  await w4.ctx.close();
 };

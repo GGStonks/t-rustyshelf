@@ -2074,7 +2074,7 @@ function showUnlocks(list){
   RA.game.clear();RA.shelf={};raShelfLoad(); // all shelves: the game may not be on cur() (a Surprise pick from another shelf)
 }
 api.onRaUnlocks&&api.onRaUnlocks(showUnlocks);
-api.onModelInstalled&&api.onModelInstalled(async r=>{toast(`Installed ${r.file} as the ${r.name} console model`);await reloadThemes();if(mode==="browse"&&INSERT_3D)testModel(r.sysId)}); // (Test shows the start-up animation, which is off: the museum shows the model)
+api.onModelInstalled&&api.onModelInstalled(async r=>{toast(`Installed ${r.file} as the ${r.name} console model`);await reloadThemes();if(mode==="browse"&&INSERT_3D)testModel(r.sysId);if(musAdd.wait&&musAdd.wait===r.sysId){musAdd.wait="";musAfterModel(r.sysId)}}); // (beta.11) asked for from the museum: back there with Fit on shelf // (Test shows the start-up animation, which is off: the museum shows the model)
 // a note about new manuals waits for the shelf if it arrives during a game or a panel (it used to be dropped)
 let pendingNote="";
 function manualNote(list){if(!list||!list.length)return"";const up=list.filter(x=>x.upgraded).length,names=list.slice(0,2).map(x=>x.title).join(", ")+(list.length>2?` and ${list.length-2} more`:"");
@@ -2673,7 +2673,7 @@ function musRoomRender(){const el=musRoomEl(),st=musStyle(),L=musRoomRows(st);mu
   const f=document.createElement("div");f.className="mr-foot";const pad=inputMode==="pad",K=k=>`<span class="g">${k}</span>`;
   f.innerHTML=(pad?[[glyph("↕"),"Choose"],[glyph("↔"),"Change"],[glyph("x"),"Switch"],[glyph("o")+glyph("tri"),"Done"]]:[[K("↑")+K("↓"),"Choose"],[K("←")+K("→"),"Change"],[K("Enter"),"Switch"],[K("Esc")+K("Tab"),"Done"]]).map(([k,t])=>`<span class="mr-k">${k}<em>${t}</em></span>`).join("");dock.appendChild(f);el.appendChild(dock);
   const on=el.querySelector(".mr-row.on");if(on)on.scrollIntoView({block:"nearest"})}
-function musRoomOpen(){if(mode!=="museum"||musHand().tv||tvS.guide||musHand().delivery||musHand().held||Museum.isHolding())return;musRoom.open=true;Museum.setRoomView&&Museum.setRoomView(true);musRoomEl().classList.add("on");musRoomRender();play_("panel")}
+function musRoomOpen(){if(mode!=="museum"||musAdd.open||musHand().tv||tvS.guide||musHand().delivery||musHand().held||Museum.isHolding())return;musRoom.open=true;Museum.setRoomView&&Museum.setRoomView(true);musRoomEl().classList.add("on");musRoomRender();play_("panel")}
 function musRoomClose(){musRoom.open=false;Museum.setRoomView&&Museum.setRoomView(false);const el=document.getElementById("musRoom");if(el)el.classList.remove("on");play_("back")}
 function musRoomKey(k){const st=musStyle(),L=musRoomRows(st),o=L[Math.max(0,Math.min(musRoom.i,L.length-1))];if(!o)return;
   if(k==="up"){musRoom.i=(musRoom.i+L.length-1)%L.length;play_("tick",{dir:-1})}else if(k==="down"){musRoom.i=(musRoom.i+1)%L.length;play_("tick",{dir:1})}
@@ -2729,6 +2729,35 @@ function musFitKey(k){const f=Museum.consoleFit&&Museum.consoleFit();if(!f){musF
   play_("tick",{dir:d})}
 // Settings → Customize → Fit on shelf: open the museum on that console's shelf with the panel up
 function musFitAt(id){if(mode==="customize")closeCustomize();openMuseum(id);if(mode!=="museum")return;setTimeout(()=>{if(mode!=="museum")return;if(Museum.skipFill)Museum.skipFill();if(Museum.skipDelivery)Museum.skipDelivery(true);Museum.toConsole();if(!musFitOpen())toast("No 3D model on that shelf yet")},700)}
+/* (beta.11) a console with no 3D model of its own: A opens "Add a 3D model": a model file from this PC, or one found on a
+   free model site (the browser opens; (T)rustyShelf installs the first .glb / .gltf / .zip that lands in Downloads). Once
+   it's in, the museum opens again on that console with Fit on shelf, to set it in place. Same look and controls as Room. */
+const musAdd={open:false,i:0,id:"",name:"",wait:""};
+const MUS_ADD=[{k:"file",label:"Choose a model file on this PC…",note:"A .glb or .gltf file you have"},{k:"sketchfab",label:"Find one on Sketchfab",note:"Free downloadable models. Check each one's licence; save it to Downloads and (T)rustyShelf puts it in"},{k:"polypizza",label:"Find one on Poly Pizza",note:"Free low-poly models. Save it to Downloads and (T)rustyShelf puts it in"},{k:"close",label:"Not now",note:""}];
+function musAddEl(){let el=document.getElementById("musAdd");if(!el){el=document.createElement("aside");el.id="musAdd";el.className="mus-room";el.setAttribute("aria-label","Add a 3D model");$("museum").appendChild(el)}return el}
+function musAddRender(){const el=musAddEl();el.innerHTML="";const h=document.createElement("div");h.className="mr-head";h.textContent="Add a 3D model";el.appendChild(h);
+  const g=document.createElement("div");g.className="mr-group";g.textContent=musAdd.name;el.appendChild(g);
+  MUS_ADD.forEach((o,i)=>{const row=document.createElement("div");row.className="mr-row"+(i===musAdd.i?" on":"");const l=document.createElement("span");l.className="mr-lbl";l.textContent=o.label;const v=document.createElement("span");v.className="mr-val";v.textContent=o.k==="close"?"":"›";row.append(l,v);
+    row.addEventListener("click",()=>{setInput("pointer");musAdd.i=i;musAddKey("ok")});el.appendChild(row)});
+  const dock=document.createElement("div");dock.className="mr-dock";const n=document.createElement("div");n.className="mr-note";n.textContent=MUS_ADD[musAdd.i].note||"Then Fit on shelf sets it in place";dock.appendChild(n);
+  const f=document.createElement("div");f.className="mr-foot";const pad=inputMode==="pad",K=k=>`<span class="g">${k}</span>`;
+  f.innerHTML=(pad?[[glyph("↕"),"Choose"],[glyph("x"),"Select"],[glyph("o"),"Back"]]:[[K("↑")+K("↓"),"Choose"],[K("Enter"),"Select"],[K("Esc"),"Back"]]).map(([k,t])=>`<span class="mr-k">${k}<em>${t}</em></span>`).join("");dock.appendChild(f);el.appendChild(dock);
+  el.style.scrollPaddingBottom=(dock.offsetHeight+10)+"px";const on=el.querySelector(".mr-row.on");if(on)on.scrollIntoView({block:"nearest"})}
+function musAddOpen(id,name){if(mode!=="museum"||musAdd.open||!api.setTheme)return false;if(musRoom.open)musRoomClose();musAdd.open=true;musAdd.i=0;musAdd.id=id;musAdd.name=name||id;musAddEl().classList.add("on");musAddRender();play_("panel");return true}
+function musAddClose(quiet){if(!musAdd.open)return;musAdd.open=false;const el=document.getElementById("musAdd");if(el)el.classList.remove("on");if(!quiet)play_("back");renderMusHints()}
+// the model's in: the museum opens again on its console (it loads its models as it opens) with Fit on shelf
+function musAfterModel(id){if(mode==="museum"){closeMuseum();setTimeout(()=>{if(mode==="browse")musFitAt(id)},900)}}
+async function musAddKey(k){if(!musAdd.open)return;const L=MUS_ADD;
+  if(k==="up"||k==="down"){musAdd.i=(musAdd.i+(k==="up"?L.length-1:1))%L.length;play_("tick",{dir:k==="up"?-1:1});musAddRender();return}
+  if(k==="back"){musAddClose();return}
+  if(k!=="ok"&&k!=="right")return;const o=L[musAdd.i],id=musAdd.id,name=musAdd.name;
+  if(o.k==="close"){musAddClose();return}
+  if(o.k==="file"){const f=await api.pick({kind:"file",title:`Choose a ${name} 3D model (.glb)`,filters:[{name:"3D models",extensions:["glb","gltf"]}]}).catch(()=>null);if(!f)return;
+    try{await api.setTheme(id,"model",f)}catch(e){toast(String(e&&e.message||e));play_("error");return}
+    musAddClose(true);play_("open");toast(`3D model set for ${name}. Now fit it on the shelf`);await reloadThemes();musAfterModel(id);return}
+  if(api.findModel){const r=await api.findModel(id,name,o.k).catch(e=>({error:String(e&&e.message||e)}));
+    if(r&&r.ok){musAdd.wait=id;musAddClose(true);toast(`Pick a free, downloadable ${name} model in your browser (check its licence) and save the .glb or .zip to Downloads. (T)rustyShelf puts it in as soon as it lands.`)}
+    else{toast((r&&r.error)||"Couldn't open the site");play_("error")}}}
 /* ---------- the reading corner: your Magazines\ and Guides\ (main/library.js) and a full-screen reader ---------- */
 let libItems=[],libSig="",libCovers=new Map();
 // the museum's movie shelves: your Stremio library ((T)rustyShelf reads it from Stremio's own storage on this PC)
@@ -2924,7 +2953,7 @@ let musFillT=0,musGuideNext=false;
 // the museum's screen state (shared by B and by hold-to-play from Inspect opened inside it, so neither leaves museum-open behind)
 function museumTeardown(){clearInterval(musFillT);if(tvS.guide)tvGuideClose(true);tvS.tok++;tvFlush();tvS.bad.clear();tvS.list=[];clearInterval(tvS.slideT);tvS.slideT=0;try{Museum.tvOff&&Museum.tvOff()}catch{}if(rdr.open)libClose();if(musFind.open)musFindClose();if(musRoom.open)musRoomClose();if(musFit.open)musFitClose();if(window.Sound&&Sound.roomStop)Sound.roomStop();app.classList.remove("museum-open");const el=$("museum");el.classList.remove("on","filling");el.setAttribute("aria-hidden","true")}
 function closeMuseum(){
-  if(mode!=="museum")return;museumTeardown();
+  if(mode!=="museum")return;if(musAdd.open)musAddClose(true);museumTeardown();
   setTimeout(()=>{if(mode!=="museum")Museum.close()},650);mode="browse";ambient(true);sfx.back();bsSelectSoon(); /* the bottom screen goes back to the shelf */
 }
 // the collection's catalogue: when a game arrived by mail (and its item number), written by the museum as you unbox it
@@ -2970,6 +2999,8 @@ function renderMusHints(){
   items.forEach(([keys,label])=>{const b=document.createElement("button");b.type="button";b.className="hint";b.innerHTML=`<span class="keys">${(pad?keys.map(glyph):keys.map(k=>`<span class="g">${k}</span>`)).join("")}</span><span>${label}</span>`;if(label==="TV guide")b.addEventListener("click",()=>{setInput("pointer");museumY()}); /* the mouse's way in */h.appendChild(b)});
 }
 function museumActivate(){bsSelectSoon(); /* the bottom screen shows what's in your hands (picked up, opened…) */
+  // (beta.11) A on a console with no 3D model: open Add a 3D model
+  {const c0=Museum.current();if(c0&&c0.console&&c0.row&&c0.row.id&&!Museum.isHolding()&&!(Museum.consoleFit&&Museum.consoleFit())&&musAddOpen(c0.row.id,c0.row.name))return}
   const r=Museum.activate();if(!r){museumSelect.first=true;museumSelect(Museum.current());return}
   if(r.held!=null){play_(r.held?"open":"back");rumble(.2,.4,100);renderMusHints();return}
   if(r.lifted){rumble(.1,.3,80);renderMusHints();setTimeout(renderMusHints,450);return}
@@ -3174,6 +3205,7 @@ function museumPad(gp,t,B,ax){
     const ry=gp.axes[3]||0;if(Math.abs(ry)>.18){const dt=Math.min(50,t-(musHeld.st||t));musFindScroll(Math.sign(ry)*Math.pow((Math.abs(ry)-.18)/.82,1.6)*1.6*dt)}musHeld.st=t; // right stick: scroll, faster the further you push
     edge(gp,4,()=>musFindSection(-1));edge(gp,5,()=>musFindSection(1));
     edge(gp,0,()=>musFindKey("ok"));edge(gp,1,()=>musFindKey("back"));edge(gp,2,()=>musFindKey("back"));return}
+  if(musAdd.open){const v=(B(13)||ax[1]>.6)?1:(B(12)||ax[1]<-.6)?-1:0,k=v?(v>0?"down":"up"):null;if(k&&k!==musHeld.ak)musAddKey(k);musHeld.ak=k;edge(gp,0,()=>musAddKey("ok"));edge(gp,1,()=>musAddKey("back"));return}
   // the Room menu takes the pad while it's open (Start opens/closes it)
   if(musRoom.open){const h=(B(15)||ax[0]>.55)?1:(B(14)||ax[0]<-.55)?-1:0,v=(B(13)||ax[1]>.6)?1:(B(12)||ax[1]<-.6)?-1:0,k=h?(h>0?"right":"left"):v?(v>0?"down":"up"):null;
     if(k&&k!==musHeld.rk)musRoomKey(k);musHeld.rk=k;edge(gp,0,()=>musRoomKey("ok"));edge(gp,1,()=>musRoomKey("back"));edge(gp,9,()=>musRoomClose());edge(gp,3,()=>musRoomClose());return}
@@ -3439,6 +3471,7 @@ addEventListener("keydown",e=>{
     else if(e.repeat)return;else if(k==="ArrowRight"||k==="e"||k==="E"||(k==="Tab"&&!e.shiftKey))tvGuideTab(1);else if(k==="ArrowLeft"||k==="q"||k==="Q"||k==="Tab")tvGuideTab(-1);else if(k==="Enter"||k===" ")tvGuidePick();else if(k==="f"||k==="F"||k==="x"||k==="X")tvGuideFav();else if(k==="Escape"||k==="Backspace"||k==="t"||k==="T")tvGuideClose();return}
   if(mode==="museum"&&(e.key==="t"||e.key==="T")&&!e.repeat&&(musHand().tv||musHand().held||tvSelWide()&&!musRoom.open)){e.preventDefault();setInput("kbd");museumY();return}
   if(mode==="museum"&&(e.key==="p"||e.key==="P")&&!e.repeat&&musHand().fan&&!musRoom.open){e.preventDefault();setInput("kbd");museumY();return} // (beta.11) pick up the issue you're on
+  if(mode==="museum"&&musAdd.open){e.preventDefault();setInput("kbd");const m={ArrowUp:"up",ArrowDown:"down",ArrowRight:"ok",Enter:"ok"," ":"ok",Escape:"back",Backspace:"back"}[e.key];if(m&&!e.repeat)musAddKey(m);return} // (beta.11) Add a 3D model
   if(mode==="museum"&&(e.key==="Tab"||musRoom.open)){e.preventDefault();setInput("kbd");if(e.key==="Tab"){musRoom.open?musRoomClose():musRoomOpen();return}const m={ArrowUp:"up",ArrowDown:"down",ArrowLeft:"left",ArrowRight:"right",Enter:"ok"," ":"ok",Escape:"back",Backspace:"back"}[e.key];if(m)musRoomKey(m);return}
   if(mode==="museum"&&musReading()&&/^Arrow/.test(e.key)){setInput("kbd");const k=e.key;if(k==="ArrowLeft")Museum.turnPage(-1);else if(k==="ArrowRight")Museum.turnPage(1);else if(k==="ArrowUp")Museum.readerZoom(1);else Museum.readerZoom(-1);renderMusHints();e.preventDefault();return}
   if(mode==="museum"){const k=e.key;setInput("kbd");if(k==="."||k===","){Museum.turn(k===","?-8:8,0);e.preventDefault();return}if(k==="ArrowLeft")Museum.isHolding()?Museum.turn(-90,0):Museum.move(-1,0);else if(k==="ArrowRight")Museum.isHolding()?Museum.turn(90,0):Museum.move(1,0);else if(k==="ArrowUp"){if(musHand().held||musHand().libHeld)Museum.zoomHand(1); /* a magazine / Blu-ray in your hands zooms too, as on the pad */else if(!e.repeat)Museum.move(0,-1)}else if(k==="ArrowDown"){if(musHand().held||musHand().libHeld)Museum.zoomHand(-1);else if(!e.repeat)Museum.move(0,1)}else if(k==="q"||k==="Q"||k==="PageUp")Museum.jump(-10);else if(k==="e"||k==="E"||k==="PageDown")Museum.jump(10);else if(k==="l"||k==="L"){if(!e.repeat)museumLight()}else if(k==="p"||k==="P"||k===" "||k==="x"||k==="X"){if(!e.repeat)museumX()}else if(k==="r"||k==="R"){if(!e.repeat)museumX()}else if((k==="w"||k==="W")&&musReading()){Museum.readerPan(-.25)}else if((k==="s"||k==="S")&&musReading()){Museum.readerPan(.25)}else if(/^[wasdWASD]$/.test(k)&&musHand().held){const q=k.toLowerCase();Museum.panHand(q==="a"?-.08:q==="d"?.08:0,q==="w"?.08:q==="s"?-.08:0)}else if(k==="Enter"){if(!e.repeat){if(musHoldable())musHoldBegin();else museumActivate()}}else if(k==="Escape"||k==="Backspace"||k==="m"||k==="M"){if(!e.repeat)museumBack()}else return;e.preventDefault();return}

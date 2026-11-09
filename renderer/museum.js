@@ -290,7 +290,7 @@ window.Museum = (() => {
     x.font = '400 34px Lexend, sans-serif'; x.fillStyle = 'rgba(243,231,201,.85)';
     const n = row.games.length, lines = [row.stats.played ? `${n} ${n === 1 ? 'game' : 'games'} · ${row.stats.played} played · ${row.stats.hours}` : `${n} ${n === 1 ? 'game' : 'games'} · nothing played yet`];
     if (row.stats.top) lines.push(`Most played: ${row.stats.top}`); if (row.stats.fav) lines.push(`${row.stats.fav} favorite${row.stats.fav === 1 ? '' : 's'}`);
-    if (!(row.console && row.console.model)) lines.push(`Add themes\\${row.id}\\console.glb to show your console`);
+    if (!(row.console && row.console.model)) lines.push(`${hooks.okWord ? hooks.okWord() : 'A'}: add a 3D model of your console`); // (beta.11: A opens Add a 3D model)
     lines.forEach((l, i) => x.fillText(l, 64, 204 + i * 52));
   });
   const CARD_S = 1.16; // the museum card's size on the shelf
