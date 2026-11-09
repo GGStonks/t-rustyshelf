@@ -21,6 +21,9 @@
   const N = isNative ? reg('TrustyShelfNative') : fakeNative();
   if (!isNative) window.__fakeN = N; // browser tests only
   window.BS_NATIVE = N; // android-bottom.js (the bottom screen) talks to the same plugin
+  // (beta.11) Android's own font size, kept for Text size: Automatic (android-early.js reads it as the page starts); a change
+  // is used from the next start (an APK without this call just answers nothing: 1 stays)
+  if (N && N.fontScale) Promise.resolve(N.fontScale()).then(r => { const s = r && +r.scale; if (s > .5 && s < 3) try { localStorage.setItem('bs-fontscale', String(Math.round(s * 100) / 100)); } catch {} }).catch(() => {});
   // (beta.10) the emulator test's channel (ci/emulator-test.sh reads it with run-as): the app logs nothing to Android's log
   // ("loggingBehavior": "none"), so the status, whether the adapter started, and the first script errors go into a small
   // file in the app's own folder. Only those words: never settings, keys or paths it was handed
@@ -44,6 +47,9 @@
     st.folders = await load('folders.json', {}); st.foldersOff = [].concat(await load('folders-off.json', [])).filter(x => typeof x === 'string'); st.library = await load('library.json', null); st.history = await load('history.json', {}); st.home = await load('home.json', {});
     { const f = histFix(st.history); st.history = f.h; if (f.changed) store('history.json', st.history); } // (0.3.2) the PC's shape
     st.config.ui = st.config.ui || {}; if (st.config.ui.autoCovers === undefined) st.config.ui.autoCovers = true; // box art comes on its own on Android unless switched off
+    // (beta.11) Text size: android-early.js reads it from localStorage, so the saved choice is copied back in case the
+    // WebView's storage was cleared; it's used from the next start
+    { const ts = st.config.ui.textSize; if (/^(auto|normal|large|larger)$/.test(ts || '')) try { if (localStorage.getItem('bs-textsize') !== ts) localStorage.setItem('bs-textsize', ts); } catch {} }
     if (st.config.ui.fullArt === undefined) st.config.ui.fullArt = true; // backs and spines too, where a source has them
     art.db = Object.assign({ v: 1, games: {}, miss: {}, ids: {} }, await load('art.json', {}));
     art.db.studio = Object.assign({ styles: {}, games: {} }, art.db.studio || {});

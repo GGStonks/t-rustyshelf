@@ -604,7 +604,7 @@
     else if (st_.k === 'failed') { line = st_.err || 'Paused'; btn = 'Try again'; U.xHint.hidden = false; }
     else if (st_.k === 'no') { line = `${st_.why}: it can't be downloaded`; btn = ''; }
     else if (st_.k === 'checking') { btn = 'Download'; line += '  ·  checking the size…'; }
-    else btn = `Download · ${fmtSize(c.size)}`;
+    else { btn = `Download · ${fmtSize(c.size)}`; if (c && c.size >= 300 * 1048576) line += `  ·  Large: needs ${fmtSize(c.size)} of free space`; } // (beta.11) big files say so
     U.itS.textContent = line; U.act.hidden = !btn; U.act.textContent = btn; U.act.className = 'brd-act' + (cls ? ' ' + cls : '');
   }
   function paintFocus(quiet) {

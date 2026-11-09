@@ -31,6 +31,8 @@ body.bst-full>:not(#bsStudio):not(#thorHud):not(#bsDim):not(#bsBottomPreview):no
 /* body: the part rows (left) and the preview (right) */
 .bst-body{position:absolute;left:28px;right:28px;top:104px;bottom:78px}
 .bst-rows{position:absolute;left:0;top:0;bottom:0;right:404px}
+/* (beta.11) the rows are moved up to keep the open one in view (a shorter page): nothing shows over the header */
+.bst-rows.lift{overflow:hidden}
 .bst-row{position:absolute;left:0;right:0;top:0;height:80px;border-radius:22px;background:rgba(255,255,255,.035);border:1px solid var(--line);
   overflow:hidden;transition:transform .3s cubic-bezier(.2,.8,.2,1),height .3s cubic-bezier(.2,.8,.2,1),background .2s}
 .bst-row.on{height:266px;background:rgba(255,255,255,.065);border-color:color-mix(in srgb,var(--acc) 45%,transparent)}

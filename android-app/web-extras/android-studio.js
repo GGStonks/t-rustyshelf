@@ -251,7 +251,7 @@
   const aspect = p => p === 'disc' ? 1 : p === 'spine' ? 0.16 : S.ratio;
   function cardW(p, x) { if (x.act || x.look) return 150; return Math.max(MIN_W, Math.round(IMG_H * aspect(p))) + 16; }
   // the strip's width at 1440 (CSS keeps it the same), minus the set column, the track's inset and the fade at the right edge
-  const STRIP_W = () => 1440 - 56 - 404 - 172 - 12 - 10 - 30;
+  const STRIP_W = () => (innerWidth || 1440) - 56 - 404 - 172 - 12 - 10 - 30; // (beta.11: the page's width follows Text size)
   function clampX(R, x) { const end = R.xs.length ? R.xs[R.xs.length - 1] + R.ws[R.ws.length - 1] : 0; return Math.max(0, Math.min(x, Math.max(0, end - STRIP_W() + 8))); }
   function seeCursor(R) { if (!R.xs.length) { R.sx = 0; return; } const x = R.xs[R.i] || 0, w = R.ws[R.i] || 0, W = STRIP_W();
     if (x - 40 < R.sx) R.sx = x - 40; else if (x + w + 40 > R.sx + W) R.sx = x + w + 40 - W; R.sx = clampX(R, R.sx); }
@@ -308,7 +308,8 @@
     return (has ? (mine ? 'Your pick' : 'Shelf style') : 'Missing') + (R.list ? ` · ${n} version${n === 1 ? '' : 's'}` : R.state === 'loading' ? ' · looking…' : ''); }
   function paint() {
     if (!S) return;
-    ROWS.forEach((p, r) => { const on = S.row === r, el = E.rows[p]; el.s.classList.toggle('on', on); el.s.style.transform = `translate3d(0,${rowY(r)}px,0)`; place(p); paintRow(p); });
+    const lift = rowLift(); if (E.rowsEl._lift !== lift > 0) { E.rowsEl._lift = lift > 0; E.rowsEl.classList.toggle('lift', lift > 0); }
+    ROWS.forEach((p, r) => { const on = S.row === r, el = E.rows[p]; el.s.classList.toggle('on', on); el.s.style.transform = `translate3d(0,${rowY(r) - lift}px,0)`; place(p); paintRow(p); });
     const id = rowId(), R = S.rows[id], c = R.cards[R.i];
     if (c) { const t = `translate3d(${R.xs[R.i] - 7}px,-7px,0)`, w = R.ws[R.i] + 14 + 'px'; if (E.ring._t !== t) { E.ring._t = t; E.ring.style.transform = t; } if (E.ring.style.width !== w) E.ring.style.width = w; E.ring.classList.add('on'); }
     else E.ring.classList.remove('on');
@@ -321,6 +322,14 @@
   }
   // where each row sits: the tall one where it falls, the small ones above and below it (moved by transform only)
   function rowY(r) { let y = 0; for (let k = 0; k < r; k++) y += (S.row === k ? ROW_BIG : ROW_SMALL) + ROW_GAP; return y; }
+  // (beta.11) when the rows are taller than the space for them (Text size Large or Larger, or a 20:9 phone), all of them
+  // move up together so the open one stays in view. The space is the page's height less the header and hints (CSS
+  // .bst-body: top 104, bottom 78; less 2 for the rows' borders); innerHeight is read, never layout. 0 on the Thor at Normal
+  function rowLift() {
+    const H = (innerHeight || 810) - 104 - 78 - 2, total = ROW_BIG + (ROWS.length - 1) * (ROW_SMALL + ROW_GAP);
+    if (total <= H) return 0;
+    return Math.max(0, Math.min(total - H, Math.round(rowY(S.row) + ROW_BIG / 2 - H / 2)));
+  }
   // the case as it would be: what's in use, with the version (or the whole set) under the cursor put in
   function viewArt() {
     const id = rowId(), R = S.rows[id], it = R.list && R.list[R.i], art = Object.assign({}, S.art);

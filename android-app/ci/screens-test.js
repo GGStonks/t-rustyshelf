@@ -61,4 +61,91 @@ module.exports = async function screensPass({ browser, base, check, OUT }) {
     } catch (e) { check(`Screens (${sz.name}) ran to the end`, false, e && e.stack ? e.stack.split('\n').slice(0, 2).join(' ') : e); }
     await ctx.close();
   }
+
+  // (beta.11) Text size (android-early.js): the page's layout width. The Thor keeps 1440 on Automatic; a small screen or a
+  // bigger Android font size gets a narrower page (so everything is drawn bigger); the choice in Settings wins over both
+  const TS = [
+    { name: 'Thor, Automatic', w: 853, h: 480, dpr: 2.25, want: 1440 },
+    { name: 'small 4-inch screen, Automatic', w: 640, h: 360, dpr: 3, want: 1152 },
+    { name: 'Thor, Android font size 1.3, Automatic', w: 853, h: 480, dpr: 2.25, fs: '1.3', want: 1152 },
+    { name: 'Thor, Large', w: 853, h: 480, dpr: 2.25, pref: 'large', want: 1280 },
+    { name: 'small 4-inch screen, Normal', w: 640, h: 360, dpr: 3, pref: 'normal', want: 1440 },
+  ];
+  for (const t of TS) {
+    const ctx = await browser.newContext({ viewport: { width: t.w, height: t.h }, deviceScaleFactor: t.dpr, isMobile: true, hasTouch: true });
+    await ctx.addInitScript(o => { try { if (o.pref) localStorage.setItem('bs-textsize', o.pref); if (o.fs) localStorage.setItem('bs-fontscale', o.fs); } catch {} }, { pref: t.pref, fs: t.fs });
+    const page = await ctx.newPage();
+    try {
+      await page.goto(base + '?fakeNative=1'); await page.waitForFunction(() => window.Shelf, null, { timeout: 90000, polling: 250 });
+      const r = await page.evaluate(() => ({ iw: innerWidth, lw: window.__bsLayoutW, sw: document.documentElement.scrollWidth }));
+      check(`Text size (${t.name}): the page is ${t.want} wide and nothing spills sideways`, r.iw === t.want && r.lw === t.want && r.sw <= r.iw + 1, JSON.stringify(r));
+    } catch (e) { check(`Text size (${t.name}) ran to the end`, false, e && e.message); }
+    await ctx.close();
+  }
+  // Larger on the Thor: the shelf, Settings (with its Text size row), the quick menu and Details all fit the narrower page
+  {
+    const ctx = await browser.newContext({ viewport: { width: 853, height: 480 }, deviceScaleFactor: 2.25, isMobile: true, hasTouch: true });
+    ctx.setDefaultTimeout(90000);
+    await ctx.addInitScript(() => { try { localStorage.setItem('bs-textsize', 'larger'); } catch {} });
+    const page = await ctx.newPage(), errors = [];
+    page.on('pageerror', e => errors.push(e.message));
+    try {
+      await page.goto(base + '?platform=android&shelf=1');
+      await page.waitForFunction(() => window.Shelf && Shelf._qs && Shelf._qs().g && window.Setup, null, { timeout: 90000, polling: 250 });
+      await page.waitForTimeout(2000);
+      const fit = sel => page.evaluate(sel => { const e = document.querySelector(sel); if (!e) return { sel, missing: true }; const b = e.getBoundingClientRect();
+        return { sel, l: Math.round(b.left), r: Math.round(b.right), t: Math.round(b.top), b: Math.round(b.bottom), w: Math.round(b.width), vw: innerWidth, vh: innerHeight, sw: document.documentElement.scrollWidth }; }, sel);
+      const fits = b => !b.missing && b.w > 0 && b.l >= -2 && b.r <= b.vw + 2 && b.t >= -2 && b.b <= b.vh + 2 && b.sw <= b.vw + 1;
+      const shelf = await fit('#tabs');
+      check('Text size (Thor, Larger): the page is 1152 wide and the console tabs fit', shelf.vw === 1152 && fits(shelf), JSON.stringify(shelf));
+      const s = await page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms));
+        Setup.open({ page: 'display' }); for (let i = 0; i < 40 && !document.querySelector('#bss.on .bss-row'); i++) await w(150); await w(900);
+        return [...document.querySelectorAll('#bss .bss-row .nm')].map(e => e.textContent.trim()); });
+      const sb = await fit('#bss');
+      await page.screenshot({ path: path.join(OUT, 'textsize-larger-settings.png') }).catch(() => {});
+      check('Text size (Thor, Larger): Settings fits, and Display & sound has the Text size row', fits(sb) && s.includes('Text size'), JSON.stringify({ sb, rows: s.slice(0, 6) }));
+      await page.evaluate(async () => { if (window.Settings && Settings.isOpen && Settings.isOpen()) await Settings.close(); await new Promise(r => setTimeout(r, 800)); });
+      await page.evaluate(async () => { Shelf.quickMenu(); for (let i = 0; i < 30 && !Shelf._qs().open; i++) await new Promise(r => setTimeout(r, 150)); await new Promise(r => setTimeout(r, 600)); });
+      const qm = await fit('#quickMenu');
+      check('Text size (Thor, Larger): the quick menu opens and fits', fits(qm), JSON.stringify(qm));
+      await page.keyboard.press('Escape'); await page.waitForTimeout(800);
+      await page.keyboard.press('i'); await page.waitForTimeout(1500);
+      const det = await fit('#details'), mode = await page.evaluate(() => Shelf.getMode());
+      await page.screenshot({ path: path.join(OUT, 'textsize-larger-details.png') }).catch(() => {});
+      check('Text size (Thor, Larger): Details opens and fits', mode === 'details' && fits(det), JSON.stringify({ mode, det }));
+      check('Text size (Thor, Larger): no script errors', !errors.length, errors.slice(0, 3).join(' | '));
+    } catch (e) { check('Text size (Thor, Larger) ran to the end', false, e && e.stack ? e.stack.split('\n').slice(0, 2).join(' ') : e); }
+    await ctx.close();
+  }
+  // Larger on the Thor: the Art Studio's five rows don't fit the shorter page, so they move up together; each one, when
+  // it's open, sits whole between the header and the hints (android-studio.js rowLift)
+  {
+    const ctx = await browser.newContext({ viewport: { width: 853, height: 480 }, deviceScaleFactor: 2.25, isMobile: true, hasTouch: true });
+    ctx.setDefaultTimeout(90000);
+    await ctx.addInitScript(() => { try { localStorage.setItem('bs-textsize', 'larger'); } catch {} });
+    const page = await ctx.newPage(), errors = [];
+    page.on('pageerror', e => errors.push(e.message));
+    try {
+      const url = base + '?fakeNative=1';
+      await page.goto(url); await page.waitForTimeout(4000);
+      await page.evaluate(async () => { const api = window.trustyshelf, info = await api.getConfig(), det = await api.detect(), c = info.config;
+        const d0 = await api.pick({ kind: 'folder' }); c.systems.gc.romDirs = [d0]; c.systems.gc.emulator = det.systems.gc.emulator; c.setupDone = true; await api.saveConfig(c); await api.scan(); });
+      await page.goto(url); await page.waitForFunction(() => window.Shelf && Shelf._qs && Shelf._qs().g, null, { timeout: 90000, polling: 250 }); await page.waitForTimeout(2500);
+      // (onto a game first: the shelf opens on its Surprise me / emulator case, which has no box art)
+      for (let i = 0; i < 6 && !/^Pikmin/.test(await page.evaluate(() => Shelf._qs().g || '')); i++) { await page.keyboard.press('ArrowRight'); await page.waitForTimeout(700); }
+      await page.evaluate(() => Shelf.bottomCmd('art'));
+      await page.waitForFunction(() => window.BS_STUDIO && BS_STUDIO.isOpen(), null, { timeout: 30000, polling: 250 }); await page.waitForTimeout(1500);
+      await page.keyboard.press('ArrowUp'); const rows = [];
+      for (let k = 0; k < 5; k++) {
+        await page.waitForTimeout(700);
+        rows.push(await page.evaluate(() => { const on = document.querySelector('#bsStudio .bst-row.on'), body = document.querySelector('#bsStudio .bst-body').getBoundingClientRect(), r = on && on.getBoundingClientRect();
+          return { part: on && on.dataset.part, t: r && Math.round(r.top), b: r && Math.round(r.bottom), top: Math.round(body.top), bottom: Math.round(body.bottom), ok: !!r && r.top >= body.top - 1 && r.bottom <= body.bottom + 1 }; }));
+        if (k === 4) await page.screenshot({ path: path.join(OUT, 'textsize-larger-studio.png') }).catch(() => {});
+        await page.keyboard.press('ArrowDown');
+      }
+      check('Text size (Thor, Larger): every Art Studio row, when open, is fully on screen', rows.length === 5 && new Set(rows.map(r => r.part)).size === 5 && rows.every(r => r.ok) && !errors.length,
+        JSON.stringify(rows) + (errors.length ? ' errors: ' + errors.slice(0, 2).join(' | ') : ''));
+    } catch (e) { check('Text size (Thor, Larger): Art Studio ran to the end', false, e && e.stack ? e.stack.split('\n').slice(0, 2).join(' ') : e); }
+    await ctx.close();
+  }
 };

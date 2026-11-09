@@ -6,6 +6,21 @@
 // (Inspect, the 3D case model, the theme layer, cover thumbnails, manual pages) was drawn 1.7x too wide and tall, up to
 // 2.8x the pixels the screen actually shows. Here the ratio is what it really is for this layout: screen pixels per CSS
 // pixel (1920 / 1440 = 1.33 on the Thor), read live so a rotation or window change stays right.
+// (beta.11) Text size. The page's layout width sets how big everything is (the WebView scales the page to fill the screen
+// whatever its shape): Normal 1440, Large 1280, Larger 1152 CSS px. Automatic (the default) goes by the screen's real
+// size and Android's own font size: a 6" Thor stays at 1440; a smaller screen, or a bigger system font, gets bigger
+// text. Set here, before the page lays anything out (this script runs before any layout); a change in Settings reloads
+// the page. bs-textsize: the choice; bs-fontscale: Android's font size (android-api.js keeps it up to date).
+(function () {
+  try {
+    const pref = localStorage.getItem('bs-textsize') || 'auto', fs = Math.min(1.3, Math.max(1, +localStorage.getItem('bs-fontscale') || 1));
+    let w = { normal: 1440, large: 1280, larger: 1152 }[pref];
+    if (!w) { const dp = Math.max(screen.width || 0, screen.height || 0), inches = dp / 160; // (1 dp = 1/160 inch; the Thor: 853 dp, 5.3")
+      const k = Math.min(1.25, Math.max(1, inches > 2 ? 5.3 / inches : 1)) * fs; w = Math.max(1152, Math.min(1440, Math.round(1440 / k / 16) * 16)); }
+    window.__bsLayoutW = w;
+    if (w !== 1440) { const m = document.querySelector('meta[name="viewport"]'); if (m) m.setAttribute('content', 'width=' + w + ',user-scalable=no'); }
+  } catch (e) { window.__bsLayoutW = 1440; }
+})();
 (function () {
   if (window.__bsDprFixed) return; window.__bsDprFixed = true;
   const desc = Object.getOwnPropertyDescriptor(window, 'devicePixelRatio') || Object.getOwnPropertyDescriptor(Window.prototype, 'devicePixelRatio');
