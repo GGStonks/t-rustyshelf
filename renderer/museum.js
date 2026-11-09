@@ -20,12 +20,12 @@ window.Museum = (() => {
   // their number, so a scene change never recompiles a shader); bg: the dark beyond the room; wash / strip / caseGlow: the
   // shelf's own glow (the LED line, its wash on the back panel, the cases' faint self-light); tvGlow: the TV's light on the floor.
   const LIGHTS = {
-    gallery: { name: 'Classic', lamp: 0xffe0b0, lampI: 16, env: 1, spot: 0xfff1dc, spotI: 5, hue: 0, fill: .28, beam: .07, amb: .12, ambC: 0xaab0c8, moon: .25, rimL: 0xbfd2ff, rimR: 0xbfd2ff, rim: .22, bg: 0x05060a, exp: .95, wash: 1, strip: 1, caseGlow: 1, tvGlow: 1 },
-    daylight: { name: 'Daylight', lamp: 0xf4f7ff, lampI: 13, env: 2.6, spot: 0xffffff, spotI: 3, hue: 0, fill: .3, beam: .03, amb: .55, ambC: 0xe4ecff, moon: 1.1, rimL: 0xf2f6ff, rimR: 0xfff4e0, rim: .45, bg: 0x2a3140, exp: 1.08, wash: .5, strip: .6, caseGlow: 1.1, tvGlow: .45 },
-    night: { name: 'Evening', lamp: 0xffa860, lampI: 11, env: .4, spot: 0xffd6a0, spotI: 7, hue: 0, fill: .36, beam: .13, amb: .05, ambC: 0x6a5a8a, moon: .2, rimL: 0x5a6cff, rimR: 0xff8a40, rim: .5, bg: 0x0b0612, exp: .95, wash: 1.3, strip: 1, caseGlow: .9, tvGlow: 1.4 },
-    neon: { name: 'Neon night', lamp: 0xffffff, lampI: 10, env: .3, spot: 0xffffff, spotI: 4, hue: 1, fill: .3, beam: 0, amb: .04, ambC: 0x7a50ff, moon: .08, rimL: 0xff2fb4, rimR: 0x22d8ff, rim: 1.6, bg: 0x0a0320, exp: 1, wash: 0, strip: 0, caseGlow: 1, tvGlow: 1.6 },
-    spotlit: { name: 'Spotlit gallery', lamp: 0xfff0d6, lampI: 26, env: .3, spot: 0xffffff, spotI: 10, hue: 0, fill: .14, beam: .22, amb: .03, ambC: 0xaab0c8, moon: .05, rimL: 0xbfd2ff, rimR: 0xbfd2ff, rim: .06, bg: 0x020203, exp: 1, wash: .3, strip: .4, caseGlow: .5, tvGlow: 1 },
-    lightsout: { name: 'Lights out', lamp: 0xffd0a0, lampI: 0, env: .05, spot: 0xffe8cc, spotI: 1.4, hue: 0, fill: .1, beam: 0, amb: .012, ambC: 0x6070a0, moon: .02, rimL: 0x4050a0, rimR: 0x4050a0, rim: .04, bg: 0x010102, exp: 1, wash: 1.7, strip: 1.5, caseGlow: 1.9, tvGlow: 2.4 }
+    gallery: { name: 'Classic', lamp: 0xffe0b0, lampI: 16, env: 1.1, spot: 0xfff1dc, spotI: 5, hue: 0, fill: .38, beam: .07, amb: .22, ambC: 0xaab0c8, moon: .35, rimL: 0xbfd2ff, rimR: 0xbfd2ff, rim: .24, bg: 0x05060a, exp: 1, wash: 1, strip: 1, caseGlow: 1, tvGlow: 1 },
+    daylight: { name: 'Daylight', lamp: 0xf4f7ff, lampI: 13, env: 2.6, spot: 0xffffff, spotI: 3, hue: 0, fill: .38, beam: .03, amb: .58, ambC: 0xe4ecff, moon: 1.1, rimL: 0xf2f6ff, rimR: 0xfff4e0, rim: .45, bg: 0x2a3140, exp: 1.08, wash: .5, strip: .6, caseGlow: 1.1, tvGlow: .45 },
+    night: { name: 'Evening', lamp: 0xffa860, lampI: 11, env: .6, spot: 0xffd6a0, spotI: 7, hue: 0, fill: .44, beam: .13, amb: .12, ambC: 0x6a5a8a, moon: .32, rimL: 0x5a6cff, rimR: 0xff8a40, rim: .5, bg: 0x0b0612, exp: 1, wash: 1.3, strip: 1, caseGlow: .95, tvGlow: 1.4 },
+    neon: { name: 'Neon night', lamp: 0xffffff, lampI: 10, env: .5, spot: 0xffffff, spotI: 4, hue: 1, fill: .4, beam: 0, amb: .1, ambC: 0x7a50ff, moon: .18, rimL: 0xff2fb4, rimR: 0x22d8ff, rim: 1.6, bg: 0x0a0320, exp: 1.02, wash: 0, strip: 0, caseGlow: 1, tvGlow: 1.6 },
+    spotlit: { name: 'Spotlit gallery', lamp: 0xfff0d6, lampI: 26, env: .55, spot: 0xffffff, spotI: 10, hue: 0, fill: .32, beam: .22, amb: .09, ambC: 0xaab0c8, moon: .18, rimL: 0xbfd2ff, rimR: 0xbfd2ff, rim: .16, bg: 0x020203, exp: 1.02, wash: .35, strip: .4, caseGlow: .6, tvGlow: 1 },
+    lightsout: { name: 'Lights out', lamp: 0xffd0a0, lampI: 0, env: .15, spot: 0xffe8cc, spotI: 1.4, hue: 0, fill: .22, beam: 0, amb: .03, ambC: 0x6070a0, moon: .06, rimL: 0x4050a0, rimR: 0x4050a0, rim: .08, bg: 0x010102, exp: 1, wash: 1.7, strip: 1.5, caseGlow: 1.9, tvGlow: 2.4 }
   };
   const LCOL = ['lamp', 'spot', 'ambC', 'rimL', 'rimR', 'bg'], LNUM = Object.keys(LIGHTS.gallery).filter(k => k !== 'name' && !LCOL.includes(k));
   // light: the values in use (THREE.Colors for the colours), eased from lightFrom to the chosen scene over ~1.4 s
@@ -81,11 +81,11 @@ window.Museum = (() => {
     renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = .95;
     // shadows follow the Performance level (Settings → Performance: off at Low) for weaker GPUs
     renderer.shadowMap.enabled = wantShadows(); renderer.shadowMap.type = THREE.PCFShadowMap; renderer.shadowMap.autoUpdate = false;
-    scene = new THREE.Scene(); scene.background = new THREE.Color(0x05060a); scene.fog = new THREE.Fog(0x05060a, 16, 46);
-    scene.environmentIntensity = .22; // the reflections (makeEnv) are made in their own step
+    scene = new THREE.Scene(); scene.background = new THREE.Color(0x05060a); scene.fog = new THREE.Fog(0x05060a, 28, 90);
+    scene.environmentIntensity = .28; // the reflections (makeEnv) are made in their own step
     camera = new THREE.PerspectiveCamera(36, 1, .05, 90);
-    ambL = new THREE.AmbientLight(0xaab0c8, .12); scene.add(ambL);
-    moonL = new THREE.DirectionalLight(0x9fb0ff, .25); moonL.position.set(-6, 6, 8); scene.add(moonL);
+    ambL = new THREE.AmbientLight(0xaab0c8, .22); scene.add(ambL);
+    moonL = new THREE.DirectionalLight(0x9fb0ff, .35); moonL.position.set(-6, 6, 8); scene.add(moonL);
     // movie-set lighting on top of the lamps: two rim lights that catch shelf edges and case corners from either side (cool
     // in Classic, magenta and cyan in Neon night), and a soft fill that follows the camera so whatever you're looking at
     // always reads, however dark the scene
@@ -655,7 +655,7 @@ window.Museum = (() => {
   function fillify(m, u) { m.userData.fill = u; m.customProgramCacheKey = () => 'bs-fill';
     m.onBeforeCompile = sh => { sh.uniforms.uFill = m.userData.fill; sh.fragmentShader = 'uniform float uFill;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance += diffuseColor.rgb * uFill;'); }; return m; }
   function evenFill() {
-    const k0 = .22 * (room ? room.bright : 1) * (1 - .5 * light.hue) * light.caseGlow * (1 - .6 * dimK);
+    const k0 = .26 * (room ? room.bright : 1) * (1 - .5 * light.hue) * light.caseGlow * (1 - .6 * dimK);
     rows.forEach(rw => { if (rw.fillU) rw.fillU.value = k0 * (rw.fill == null ? 1 : rw.fill); });
   }
   function stepWrap(dt, now, r) {
@@ -2032,7 +2032,7 @@ window.Museum = (() => {
     // the room itself brightens with the lamps (environment + bulbs), so the switch-on reads clearly
     const lit = rows.length ? rows.reduce((a, rw) => a + rw.lampOn, 0) / rows.length : 1;
     dimK = sm(dimK, heldCase || libHeld || (fan && !fan.closing) ? 1 : 0, 1 - Math.exp(-dt * 3)); if (!heldCase && !libHeld) { handZoomT = 1; hPan.tx = hPan.ty = 0; } handZoom = sm(handZoom, handZoomT, 1 - Math.exp(-dt * 6)); if (!heldCase) hPan.lx = hPan.ly = 0; hPan.x = sm(hPan.x, hPan.tx + (hPan.lx || 0), 1 - Math.exp(-dt * 5)); hPan.y = sm(hPan.y, hPan.ty + (hPan.ly || 0), 1 - Math.exp(-dt * 5)); // gentle easing: no jitter from a twitchy stick // holding a case: the room falls back, the case stays in its light
-    scene.environmentIntensity = (.04 + .18 * lit) * light.env * room.bright * (1 - .5 * dimK);
+    scene.environmentIntensity = (.06 + .22 * lit) * light.env * room.bright * (1 - .5 * dimK);
     if (rack && rack.items.length && (dimK > .001 || rack.dimmed)) { rack.dimmed = dimK > .001; rack.items.forEach(it => { it.front.emissiveIntensity = it === libHeld ? .38 : .3 * (1 - .8 * dimK); if (it.labelM) it.labelM.emissiveIntensity = .22 * (1 - .8 * dimK); }); }
     if (wideFrame || wide) { const f = wideFrameMesh(), on = wide && !intro.on && !roomView && wideSel < wideCount(), zf = tw.on && tw.zoom && !intro.on && !roomView && wideSel < wideCount();
       // zooming in the frame swells outward and fades over the first 40%; zooming out it comes back over the last 40%, drawing in to the shelf
@@ -2181,8 +2181,8 @@ window.Museum = (() => {
       camera.lookAt(lx, ly, lz);
       // (issues 11 / 13) the haze and the farthest distance drawn follow the camera when it has to stand far back (a wide
       // wall in the Room menu's view): the wall is never lost in the haze or past the far end. Near the wall: as before
-      { const d = Math.max(0, camera.position.z), fn = Math.max(16, d + 3), cf = Math.max(90, fn + 50);
-        if (scene.fog && Math.abs(scene.fog.near - fn) > .25) { scene.fog.near = fn; scene.fog.far = fn + 30; }
+      { const d = Math.max(0, camera.position.z), fn = Math.max(28, d + 14), cf = Math.max(120, fn + 80);
+        if (scene.fog && Math.abs(scene.fog.near - fn) > .25) { scene.fog.near = fn; scene.fog.far = fn + 60; }
         if (Math.abs(camera.far - cf) > 1) { camera.far = cf; camera.updateProjectionMatrix(); } }
       if ((Math.abs(look.x) > 1e-4 || Math.abs(look.y) > 1e-4) && lookF > .001) { camera.rotateY(look.x * lookF * (1 - gazeK)); camera.rotateX(look.y * lookF * (1 - gazeK)); } } // the look: turn in place, the wall straight ahead is level again
     if (delivery) stepDelivery(dt, now);
@@ -2192,7 +2192,7 @@ window.Museum = (() => {
     // while the camera glides to a new shelf the moving lamp and cases would redraw the shadows every frame: every third is plenty
     if (shadowDirty && (fst.row || (!twQuiet && (!(settling || racing) || ++shadowSkip % 3 === 0)))) { renderer.shadowMap.needsUpdate = true; shadowDirty = false; fst.sh = 1; }
     // the fill light rides with the camera, aimed where it looks
-    if (fillL) { fillL.intensity = (light.fill || .25) * (.7 + .3 * room.bright); fillL.position.copy(camera.position); const f = sv('fillDir'); camera.getWorldDirection(f); fillL.target.position.copy(camera.position).addScaledVector(f, 4); }
+    if (fillL) { fillL.intensity = (light.fill || .25) * (.7 + .3 * room.bright) * (wide || intro.on ? 1.4 : 1); fillL.position.copy(camera.position); const f = sv('fillDir'); camera.getWorldDirection(f); fillL.target.position.copy(camera.position).addScaledVector(f, 4); }
     drawFrame(); const fms = performance.now() - fT0; fst.jsMs = Math.round(fms); maybeSleep(now);
     facc.n++; facc.js += fms; if (fms > facc.jsMax) { facc.jsMax = fms; facc.worst = Object.assign({ sinceStep: Math.round(now - lastNav), racing, twQuiet }, fst); } facc.up += fst.up; facc.fr += fst.fr; if (racing) { facc.rn++; facc.rFr += fst.fr; if (fst.up > facc.rUpMax) facc.rUpMax = fst.up; } facc.sp += fst.sp; facc.sh += fst.sh; facc.row += fst.row;
   }
