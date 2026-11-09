@@ -32,7 +32,7 @@ window.BS_WHATSNEW = [
         ["No-clip notice", "When no clip is coming (the link is gone and nothing fits on YouTube), the waiting box closes straight away instead of after 45 seconds. By sassiestrhihno."]
       ] },
       { h: "Achievements", items: [
-        ["25 consoles", "RetroAchievements covers 25 consoles in (T)rustyShelf (was 4): all the ones the site supports. Each shelf shows its set count and a "why there's nothing" message when the game has none. By sassiestrhihno."],
+        ["25 consoles", "RetroAchievements covers 25 consoles in (T)rustyShelf (was 4): all the ones the site supports. Each shelf shows its set count and a 'why there\'s nothing' message when the game has none. By sassiestrhihno."],
         ["Trophies opens the game's set", "The Trophies button in Inspect opens that game's achievement set page on RetroAchievements directly. By sassiestrhihno."]
       ] },
       { h: "Magazines and guides", items: [
