@@ -39,8 +39,19 @@ function init(o = {}) { creds = o.creds || creds; log = o.log || log; cacheFile 
 // app builds only. It's never in git (the .gitignore lists it) and so never in the public source. One the player enters wins.
 const OWN_DEV = (() => { try { const j = require('./ss-dev.json'); return j && j.devId && j.devPass ? { devId: String(j.devId), devPass: String(j.devPass) } : null; } catch { return null; } })();
 const hasDevLogin = () => { const c = C(); return !!(c.devId && c.devPass); };
-const C = () => { const c = creds() || {}, own = !String(c.devId || '').trim() && OWN_DEV;
-  return { user: String(c.user || '').trim(), pass: String(c.pass || ''), devId: own ? OWN_DEV.devId : String(c.devId || '').trim(), devPass: own ? OWN_DEV.devPass : String(c.devPass || '') }; };
+const C = () => {
+  const c = creds() || {};
+  let user = String(c.user || '').trim();
+  let pass = String(c.pass || '');
+  let devId = String(c.devId || '').trim();
+  let devPass = String(c.devPass || '');
+  if (devPass && !devId && user) devId = user;
+  if (!user && devId) user = devId;
+  if (!pass && devPass) pass = devPass;
+  const own = !devId && OWN_DEV;
+  if (own) { devId = OWN_DEV.devId; devPass = OWN_DEV.devPass; }
+  return { user, pass, devId, devPass };
+};
 const sigOf = c => crypto.createHash('sha256').update([c.user, c.pass, c.devId, c.devPass].join('\0')).digest('hex').slice(0, 16); // (a fingerprint, never the values)
 const configured = () => { const c = C(); return !!(c.user && c.pass); };
 const enabled = () => configured() && sigOf(C()) !== badSig; // a sign-in the server refused isn't sent again until it changes

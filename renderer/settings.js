@@ -130,7 +130,7 @@ function comboOpts(){const st=padStyle(),N=st==="ps"?{lb:"L1",rb:"R1",start:"Opt
   return [["l3+r3","L3 + R3"],["lb+rb+start",`${N.lb} + ${N.rb} + ${N.start}`],["back+b",`${N.back} + ${N.b}`],["start+back",`${N.start} + ${N.back}`]]}
 // Accounts & services (1.71): one row per service, A opens its own small page (sub kind "svc") with its fields, Test and the sign-up link
 const SVC_N={ra:"RetroAchievements",fanart:"fanart.tv",steamgriddb:"SteamGridDB",screenscraper:"ScreenScraper"},ART_SVC=["fanart","steamgriddb","screenscraper"];
-const svcSet=s=>s==="ra"?!!(gp("ra.user")&&gp("ra.key")):s==="screenscraper"?!!(gp("keys.ssUser")&&gp("keys.ssPass")):!!gp("keys."+s);
+const svcSet=s=>s==="ra"?!!(gp("ra.user")&&gp("ra.key")):s==="screenscraper"?!!((gp("keys.ssUser")||gp("keys.ssDevId"))&&(gp("keys.ssPass")||gp("keys.ssDevPass"))):!!gp("keys."+s);
 function svcState(s){const st=status[s]||{};if(!svcSet(s))return {state:"none"};return st.state&&st.state!=="none"?st:{state:"unknown"}} // set up but never checked: main says "none" (Not checked yet)
 function acctDot(){const L=["ra",...ART_SVC].map(svcState).filter(x=>x.state!=="none"&&x.state!=="unknown");if(!L.length)return null;return L.some(x=>x.state==="fail")?"warn":"ok"}
 function pathSub(p,want){if(!p)return null;const ok=pathOk[p];if(ok==null){if(ok===undefined)pathAsk.add(p);return null}const good=want==="file"?ok.file:ok.dir;return good?{text:want==="file"?"Found":"Folder found",cls:"ok"}:{text:"Can't find it",cls:"bad"}}
@@ -459,7 +459,7 @@ function svcPage0(id){const n=SVC_N[id]||id,P=(lead,rows)=>({g:"Library",id:"acc
   return P("Box fronts, backs, full wraps ((T)rustyShelf cuts the spine from them) and disc or cartridge art, by region, in Art Studio. Optional, and needs a free ScreenScraper account. ScreenScraper only answers apps registered with it: until (T)rustyShelf's registration is done, the test says \"Not available yet\" and no account can sign in (unless you have your own developer login, below). Box art still comes from libretro, LaunchBox and SteamGridDB meanwhile.",[
     X("Username","keys.ssUser","Your screenscraper.fr username. Stored encrypted.",{ph:"Not set",fan:true,keys:"screenscraper account user login"}),
     X("Password","keys.ssPass","Your screenscraper.fr password. Stored encrypted, sent only to ScreenScraper.",{secret:true,ph:"Not set",fan:true,keys:"screenscraper password"}),
-    X("Developer ID","keys.ssDevId","Only if ScreenScraper gave you a developer login of your own (devid). (T)rustyShelf uses its own registration otherwise, once it has one.",{ph:"Only if you have one",fan:true,keys:"screenscraper devid developer"}),
+    X("Developer ID","keys.ssDevId","Only if ScreenScraper gave you a developer login of your own (devid, often your username). If left blank, your username above is used.",{ph:"Your developer ID or username",fan:true,keys:"screenscraper devid developer"}),
     X("Developer password","keys.ssDevPass","The developer password (devpassword) that goes with your developer ID. Stored encrypted.",{secret:true,ph:"Only if you have one",fan:true,keys:"screenscraper devpassword developer"}),
     test("Test the account","Signs in and shows how many lookups the account has left today."),
     A("Get a free account","Open site","Opens ScreenScraper's sign-up page. A free account allows a set number of lookups a day; a donation raises it.",()=>openLink("https://www.screenscraper.fr/membreinscription.php"),{keys:"screenscraper sign up register"}),

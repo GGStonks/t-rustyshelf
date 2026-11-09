@@ -205,7 +205,7 @@ window.trustyshelf={
   onLibraryChanged:fn=>{(apiHooks.lib=apiHooks.lib||[]).push(fn)},
   apiStatus:async()=>({ra:config.ra&&config.ra.user&&config.ra.key?{state:"ok",at:Date.now(),msg:"Connected",user:config.ra.user,points:1234}:{state:"none",at:0,msg:"Not set up"},fanart:config.keys&&config.keys.fanart?{state:"fail",at:Date.now(),msg:"not accepted"}:{state:"none",at:0,msg:"Not set up"},steamgriddb:config.keys&&config.keys.steamgriddb?{state:"ok",at:Date.now(),msg:"Key works"}:{state:"none",at:0,msg:"Not set up"},
     // ScreenScraper (1.71): an account with no developer login answers "developer login not accepted" (window.__ssNoDev)
-    screenscraper:config.keys&&config.keys.ssUser&&config.keys.ssPass?(window.__ssNoDev&&!config.keys.ssDevId?{state:"fail",at:Date.now(),msg:"developer login not accepted"}:{state:"ok",at:Date.now(),msg:"Working",left:19876}):{state:"none",at:0,msg:"Not set up"}}),
+    screenscraper:config.keys&&config.keys.ssUser&&config.keys.ssPass?(window.__ssNoDev&&!config.keys.ssDevId&&!config.keys.ssDevPass?{state:"fail",at:Date.now(),msg:"developer login not accepted"}:{state:"ok",at:Date.now(),msg:"Working",left:19876}):{state:"none",at:0,msg:"Not set up"}}),
   clipboardText:async()=>String(window.__bsClip||"").split(/\r?\n/)[0].trim(), // (beta.9: tests set window.__bsClip)
   testApi:async s=>{await wait(300);const st=await window.trustyshelf.apiStatus();(apiHooks.api||[]).forEach(f=>f(st));return st[s]},
   onApiStatus:fn=>{(apiHooks.api=apiHooks.api||[]).push(fn)},

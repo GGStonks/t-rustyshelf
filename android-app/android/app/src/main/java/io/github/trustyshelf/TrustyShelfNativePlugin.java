@@ -688,6 +688,9 @@ public class TrustyShelfNativePlugin extends Plugin {
             JSONObject keys = new JSONObject(text).optJSONObject("keys");
             if (keys == null) return url;
             String user = keys.optString("ssUser", "").trim(), pass = keys.optString("ssPass", ""), devId = keys.optString("ssDevId", "").trim(), devPass = keys.optString("ssDevPass", "");
+            if (devId.isEmpty() && !devPass.isEmpty() && !user.isEmpty()) devId = user;
+            if (user.isEmpty() && !devId.isEmpty()) user = devId;
+            if (pass.isEmpty() && !devPass.isEmpty()) pass = devPass;
             if (devId.isEmpty()) { String[] own = readSsOwnDev(); if (own != null) { devId = own[0]; devPass = own[1]; } } // (beta.10) (T)rustyShelf's own, when this build has one
             StringBuilder b = new StringBuilder(url);
             char sep = url.indexOf('?') >= 0 ? '&' : '?';

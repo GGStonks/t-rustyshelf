@@ -1175,7 +1175,15 @@ window.BS_QUIET = () => ({ running: !!running, artPaused: !!art.paused, hidden: 
   const SS_REGION = r => { r = String(r || '').toLowerCase(); return r === 'us' || r === 'cus' ? 'usa' : r === 'jp' ? 'jpn' : r === 'wor' ? 'world' : /^(eu|fr|de|es|it|uk|nl|pt|se|dk|fi|no|pl|gr|ru|au|nz)$/.test(r) ? 'eur' : ''; };
   const SS_MSG = { rate: 'ScreenScraper asked us to slow down', quota: "Today's ScreenScraper lookups are used up", closed: 'ScreenScraper is closed to apps right now', auth: 'The ScreenScraper login was not accepted', blocked: 'ScreenScraper has blocked this version of (T)rustyShelf', net: "Couldn't reach ScreenScraper" };
   const ss = { until: 0, why: '', bad: '', threads: 1, spacing: 0, lastAt: 0, active: 0, waiting: [], cache: null, saveT: 0, dirty: false };
-  const ssKeys = () => { const k = (st.config && st.config.keys) || {}; return { user: String(k.ssUser || '').trim(), pass: String(k.ssPass || ''), devId: String(k.ssDevId || '').trim(), devPass: String(k.ssDevPass || '') }; };
+  const ssKeys = () => {
+    const k = (st.config && st.config.keys) || {};
+    let user = String(k.ssUser || '').trim(), pass = String(k.ssPass || '');
+    let devId = String(k.ssDevId || '').trim(), devPass = String(k.ssDevPass || '');
+    if (devPass && !devId && user) devId = user;
+    if (!user && devId) user = devId;
+    if (!pass && devPass) pass = devPass;
+    return { user, pass, devId, devPass };
+  };
   const ssSig = () => { const c = ssKeys(); return fp([c.user, c.pass, c.devId, c.devPass].join('\0')); };
   const ssConfigured = () => { const c = ssKeys(); return !!(c.user && c.pass); };
   // (beta.10) ScreenScraper turns away every app without a developer login: the player's own, or this build's (native
