@@ -34,7 +34,7 @@ const only = arg('only') && arg('only') !== true ? String(arg('only')).split(','
 const JOBS = Math.max(1, +arg('jobs') || 8), CAP = arg('cap') && arg('cap') !== true ? String(arg('cap')) : '12G';
 
 // the tests, by kind (the first of each is the slowest: they start first)
-const NODE = ['detect', 'pad', 'portable', 'dataexport', 'release-version', 'presence', 'epicdl', 'storage', 'windowmode', 'hoyoplay', 'music', 'looks', 'artmatch'];
+const NODE = ['detect', 'pad', 'portable', 'dataexport', 'release-version', 'presence', 'epicdl', 'storage', 'windowmode', 'hoyoplay', 'music', 'looks', 'artmatch', 'fork-survey'];
 const DESKTOP = ['app', 'pc', 'xbox', 'home', 'music-app', 'windowmode-app', 'epicdl-app', 'consolebox-app', 'artmatch-app', 'ngp', 'gamecom'];
 const DEMO = ['android-artcard', 'android-pc', 'usermusic', 'windowmode', 'looks', 'artmatch', 'padnote'];
 const GROUPS = ['screens', 'screens2', 'windows', 'thor3', 'thor2', 'thor', 'windows2']; // (the device test's seven parts, longest first: each 1.5-3.5 minutes)
@@ -90,8 +90,9 @@ function changedPlan(files) {
     if (/^android-app\//.test(f)) { kinds.add('demo'); kinds.add('device'); say(f, 'demo and device (the Android app)'); continue; }
     if (f === 'scripts/test-all.js') { kinds.add('node'); say(f, 'node (a short run of this runner itself)'); continue; }
     if (f === 'scripts/release-version.js') { named.add('release-version-test'); say(f, 'release-version-test'); continue; }
+    if (/^scripts\/(fork-survey|credits|release-notes)\.js$/.test(f)) { named.add('fork-survey-test'); say(f, 'fork-survey-test'); continue; }
     if (/^package(-lock)?\.json$/.test(f)) { ['node', 'desktop', 'demo', 'device'].forEach(k => kinds.add(k)); say(f, 'everything (the app\'s packages and version)'); continue; }
-    if (/^(\.github\/|android-app\/ci\/[^/]*\.(yml|sh|bat)$|android-app\/ci\/fixtures\/README|scripts\/(community-report|release-notes|push-build)\.js$|start-trustyshelf\.sh$|\.gitignore$|LICENSE|[^/]*\.(md|txt|bat)$)/.test(f)) { say(f, 'nothing (not the app\'s code)'); continue; }
+    if (/^(\.github\/|android-app\/ci\/[^/]*\.(yml|sh|bat)$|android-app\/ci\/fixtures\/README|scripts\/(community-report|push-build)\.js$|start-trustyshelf\.sh$|\.gitignore$|LICENSE|[^/]*\.(md|txt|bat)$)/.test(f)) { say(f, 'nothing (not the app\'s code)'); continue; }
     ['node', 'desktop', 'demo', 'device'].forEach(k => kinds.add(k)); say(f, 'everything (not known to this script: to be safe)');
   }
   return { kinds, named, why };
