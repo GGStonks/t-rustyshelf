@@ -8,6 +8,33 @@
 //   sections: [{ h, items: [[headline, more]] }] }; newest first.
 window.BS_WHATSNEW = [
   {
+    version: '1.5.0.0', android: '1.5.0.0', date: '2026-11-09', title: "Shared RetroArch setup, ScreenScraper login fallback, brighter museum and export fixes",
+    highlights: [
+      "Set your RetroArch executable once in Consoles settings across all retro systems",
+      "ScreenScraper login works with developer username and password alone",
+      "Museum lighting is brighter across all presets, with extended fog distance in wide view",
+      "Data export handles Windows drive roots and retries locked or busy files"
+    ],
+    platforms: [
+      "Windows and Linux: everything above.",
+      "Android: ScreenScraper developer login fallback, museum lighting and fog visibility improvements."
+    ],
+    sections: [
+      { h: "Consoles and emulators", items: [
+        ["Shared RetroArch setup", "Settings → Consoles now has a shared 'RetroArch location' under 'For every console'. Setting it once configures all supported retro systems (NES, SNES, N64, Genesis, PS1, Saturn, Dreamcast, GBA, NDS, Arcade, DOS, etc.) without having to set each console emulator manually. Individual console emulator paths can still be set to override the shared setting. Asked for by retro_fan on GitHub (#12)."]
+      ] },
+      { h: "Scraping and metadata", items: [
+        ["ScreenScraper developer credentials fallback", "Entering your ScreenScraper developer username and developer password without a separate developer ID now logs in cleanly, falling back to the username. Asked for by retro-dan on GitHub (#13)."]
+      ] },
+      { h: "Museum", items: [
+        ["Museum lighting and visibility", "Lighting presets (Classic, Evening, Neon, Spotlit, Lights out) have lifted ambient, fill, moon, and environment intensities. Fog near and far distances are pushed back so models along long shelves and wide overviews stay crisp and visible instead of fading into dark haze. Fill light is also boosted when viewing the whole room. Reported by @retro-enjoyer in issue 30."]
+      ] },
+      { h: "Data export and fixes", items: [
+        ["Windows root and busy files in data export", "Exporting your library to a drive root on Windows (like D:\\ or E:\\) no longer errors. Files that are temporarily locked or busy by other programs are safely retried before falling back to read streams. Asked for by pixel-runner on GitHub (#11)."]
+      ] }
+    ]
+  },
+  {
     version: '1.4.0.0', android: '1.4.0.0', date: '2026-11-09', title: "Tour, YouTube trailers, achievements on 25 consoles, manual sorting and more",
     highlights: [
       "A shelf tour for new players and a full-screen first-run setup",
