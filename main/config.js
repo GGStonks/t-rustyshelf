@@ -29,6 +29,7 @@ function defaults() {
   for (const a of APPS) apps[a.id] = { enabled: true, path: '' };
   return {
     setupDone: false,
+    retroarch: '',
     systems,
     steam: { enabled: true, path: '', hideTools: true },
     // (beta.4) PC games beyond Steam (main/pcgames.js): Epic's installs on the PC shelf; Quiver Launcher's apps and games
@@ -208,6 +209,7 @@ function sanitize(cfg) {
   // per-game emulator overrides: plain paths only, a sane number of them
   const games = {}; if (isObj(cfg.games)) for (const [id, v] of Object.entries(cfg.games).slice(0, 5000)) { if (typeof id !== 'string' || id.length > 2048 || !isObj(v)) continue; const e = typeof v.emulator === 'string' ? v.emulator.trim().slice(0, 1024) : '', t = typeof v.title === 'string' ? v.title.replace(/\s+/g, ' ').trim().slice(0, 120) : '', w = v.window === 'borderless' || v.window === 'windowed' ? v.window : '', ins = v.install === 'installed' || v.install === 'notinstalled' ? v.install : '', an = typeof v.artName === 'string' ? v.artName.replace(/\s+/g, ' ').trim().slice(0, 120) : ''; if (e || t || w || ins || an) games[id] = { ...(e ? { emulator: e } : {}), ...(t ? { title: t } : {}), ...(w ? { window: w } : {}), ...(ins ? { install: ins } : {}), ...(an ? { artName: an } : {}) }; } // (beta.5: title = the name the player gave it; window: a PC game's own window mode, main/windowmode.js; install: an Epic game set by hand to installed / not installed; artName: a console game's art match, Details → Art match)
   cfg.games = games;
+  cfg.retroarch = typeof cfg.retroarch === 'string' ? cfg.retroarch.trim().slice(0, 1024) : '';
   // (beta.7) your collections (shelves of your own): [{ id, name, ids: [game ids] }], a sane number and size
   ui.lastSeenVersion = typeof ui.lastSeenVersion === 'string' ? ui.lastSeenVersion.slice(0, 40) : '';
   if (!['off', 'details', 'shelf'].includes(ui.previews)) ui.previews = 'off'; for (const k of ['previewSound', 'previewYoutube', 'previewClips']) if (typeof ui[k] !== 'boolean') ui[k] = d[k];

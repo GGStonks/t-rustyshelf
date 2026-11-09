@@ -639,7 +639,8 @@ async function buildLibrary() {
     const sc = cfg.systems[def.id];
     if (!sc || !sc.enabled) continue;
     await new Promise(r => setImmediate(r)); // let covers and IPC through between shelves: a big folder scan shouldn't freeze everything
-    if (def.standalone || !sc.emulator && !(sc.romDirs || []).length) continue; // (supalii: a standalone shelf has no folder to scan; its programs join it below)
+    const emu = sc.emulator || (def.retro && cfg.retroarch ? cfg.retroarch : '');
+    if (def.standalone || (!emu && !(sc.romDirs || []).length)) continue; // (supalii: a standalone shelf has no folder to scan; its programs join it below)
     markEvent('scan ' + def.id); // (beta.9) the freeze watch names the console being scanned (these showed up as "start")
     if (def.id === 'x360') { let t; try { await Promise.race([x360.ensureDb(), new Promise(r => { t = setTimeout(r, 15000); })]); } catch {} finally { clearTimeout(t); } }
     // (beta.10) the folders read with fs.promises (a games folder on a NAS held the whole app up: no pictures, no input),
@@ -649,7 +650,7 @@ async function buildLibrary() {
       games.push({ ...g, ...(artNameOf(g.id) ? { artName: artNameOf(g.id) } : {}), info: covers.gameInfo(def.id, artNameOf(g.id) || g.title), manualMiss: manualMiss(def.id, g), art: { front: fileUrl(g.art.front), hero: fileUrl(g.art.hero), back: fileUrl(g.art.back), madeBack: g.art.madeBack || undefined, spine: fileUrl(g.art.spine), madeSpine: g.art.madeSpine || undefined, disc: fileUrl(g.art.disc), manual: def.id === 'wiiu' ? await withCoverAsync(def.id, g, (g.art.manual || []).map(fileUrl)) /* (beta.10: async) */ : (g.art.manual || []).map(fileUrl), manualPdf: fileUrl(g.art.manualPdf) } }); }
     // (beta.7) arcade zips are named from FinalBurn Neo's list: fetched once in the background, then the shelf refreshes
     if (games.length && arcadenames.SYSTEMS.has(def.id) && !arcadenames.ready()) arcadenames.fetchNames().then(ok => { if (ok && alive()) win.webContents.send('library:changed', { arcade: 1 }); });
-    shelves.push({ id: def.id, kind: 'console', name: def.name, emulatorName: emuShown(def, sc.emulator), hasEmulator: !!sc.emulator && paths.isFile(emuPath(sc.emulator)) /* (1.82) an uninstalled one gets no Open tile */, emulator: sc.emulator, emulatorIcon: fileUrl(await iconQuick(sc.emulator)), gameArgs: sc.gameArgs, bootOnLaunch: sc.bootOnLaunch !== false, useIpl: def.id === 'gc' && !!sc.useIpl, insertAnim: sc.insertAnim !== false, games });
+    shelves.push({ id: def.id, kind: 'console', name: def.name, emulatorName: emuShown(def, emu), hasEmulator: !!emu && paths.isFile(emuPath(emu)) /* (1.82) an uninstalled one gets no Open tile */, emulator: emu, emulatorIcon: fileUrl(await iconQuick(emu)), gameArgs: sc.gameArgs, bootOnLaunch: sc.bootOnLaunch !== false, useIpl: def.id === 'gc' && !!sc.useIpl, insertAnim: sc.insertAnim !== false, games });
   }
   let pcShelf = [];
   const boxOn = !!(cfg.pc && cfg.pc.consoleBox); // ((T)rustyShelf) Settings → PC games → Console box art: a PC game in its console box (pcConsoleBoxes)
@@ -711,7 +712,7 @@ async function buildLibrary() {
   for (const g of mine) if (g.shelf && g.shelf !== 'pc') { const sc = cfg.systems[g.shelf]; if (!sc || !sc.enabled) { back.push(g); continue; } if (!toCon.has(g.shelf)) toCon.set(g.shelf, []); toCon.get(g.shelf).push(g); }
   for (const def of CONSOLES) { const list = toCon.get(def.id); if (!list) continue; const games = list.map(pcGame), sh = shelves.find(x => x.id === def.id && x.kind === 'console');
     if (sh) { sh.games.push(...games); continue; }
-    const sc = cfg.systems[def.id], emu = sc.emulator || '';
+    const sc = cfg.systems[def.id], emu = (sc && sc.emulator) || (def.retro && cfg.retroarch ? cfg.retroarch : '');
     shelves.push({ id: def.id, kind: 'console', name: def.name, emulatorName: emuShown(def, emu), hasEmulator: !!emu && paths.isFile(emuPath(emu)), emulator: emu, emulatorIcon: emu ? fileUrl(await iconQuick(emu)) : null, gameArgs: sc.gameArgs, bootOnLaunch: sc.bootOnLaunch !== false, useIpl: def.id === 'gc' && !!sc.useIpl, insertAnim: sc.insertAnim !== false, games }); }
   const toPc = mine.filter(g => g.shelf === 'pc'), onCustom = mine.filter(g => !g.shelf);
   onCustom.push(...back); // (a program whose console's shelf is switched off; the line above stays self-contained: android-app/ci/issues-test.js runs it on its own)
@@ -1550,7 +1551,12 @@ handle('launch:game', async ({ systemId, file, emulator }) => {
   // this game's own emulator build, when one was chosen for it
   const own = gameEmuOverride(systemId, file);
   if (own) { if (!paths.isFile(own)) throw new Error(`This game's own emulator isn't there any more (${own}). Choose another in its Details → Emulator, or go back to the shelf's.`); sc = { ...sc, emulator: own }; }
-  else sc = { ...sc, emulator: emuPath(sc.emulator) }; // the real path for everything below (Azahar's SD card folder, Dolphin's settings), not "{app}\…" or "%VAR%\…"
+  else {
+    let e = sc.emulator;
+    const def = CONSOLES.find(c => c.id === systemId);
+    if (!e && def && def.retro && cfg.retroarch) e = cfg.retroarch;
+    sc = { ...sc, emulator: emuPath(e) };
+  } // the real path for everything below (Azahar's SD card folder, Dolphin's settings), not "{app}\…" or "%VAR%\…"
   // (Switch 2 started without a choice, its shelf build gone: the newest build that can open the game)
   if (systemId === 'sw2' && !paths.isFile(sc.emulator)) { const b = (await nx2.builds(sw2Roots())).filter(x => !/\.nup$/i.test(file) || x.nup).sort((a, c) => c.date - a.date)[0]; if (b) sc = { ...sc, emulator: b.exe }; }
   }
@@ -1577,6 +1583,7 @@ async function launchGameNow(systemId, file, sc) {
   // (1.82) no emulator, or one that's gone: say which console and emulator, before anything is prepared for it (Dolphin's
   // settings, a 3DS .cia installed into Azahar's folder)
   { const def = CONSOLES.find(c => c.id === systemId), con = def ? def.name : systemId, emu = (def && def.emulatorName) || 'its emulator';
+    if (!sc.emulator && def && def.retro && cfg.retroarch) sc.emulator = emuPath(cfg.retroarch);
     if (!sc.emulator) throw new Error(`No emulator is set up for ${con} yet. Choose ${emu} in Settings → ${con} → Emulator.`);
     if (!paths.isFile(sc.emulator)) throw new Error(`${emu} isn't at ${sc.emulator} any more. Choose it again in Settings → ${con} → Emulator.`); }
   // GameCube startup sequence: tell Dolphin not to skip it, and lift the
@@ -1653,7 +1660,7 @@ const busyCheck = () => { if (launching || launcher.isRunning()) throw new Error
 // (beta.10) a game's title for that message: the shelf's (the last scan), else its file or folder name, never a path
 function gameTitleOf(systemId, file) { try { const s = (lastLib || []).find(x => x.id === systemId), lo = String(file).toLowerCase(), g = s && (s.games || []).find(x => String(x.file || '').toLowerCase() === lo); if (g && g.title) return String(g.title); } catch {}
   const f = String(file || ''), b = path.basename(f); return /^(main|.+\.rpx)$/i.test(b) ? path.basename(path.dirname(path.dirname(f))) : /^(eboot\.bin|default\.xex)$/i.test(b) ? path.basename(path.dirname(f)) : path.basename(b, path.extname(b)); } // (a Wii U code\x.rpx, a Switch 2 exefs\main: the game's folder)
-handle('launch:emulator', async ({ systemId }) => { let sc = cfg.systems[systemId]; if (!sc) throw new Error('Unknown system.'); busyCheck(); sc = { ...sc, emulator: emuPath(sc.emulator) }; const wii = systemId === 'gc' || systemId === 'wii' || /dolphin/i.test(path.basename(sc.emulator || '')); if (wii) { launching = true; try { await wiimote.pause(); } finally { launching = false; } } /* (beta.8: a second press while the Wii remote lets go is refused, as for games) */ /* (Dolphin: the Wii remote is its) */ if (systemId === 'ps5') { const ui = ['kyty_launcher.exe', 'launcher.exe'].map(n => path.join(path.dirname(sc.emulator || ''), n)).find(paths.isFile); if (ui) sc.emulator = ui; } /* (PS5: kyty_emulator needs a game; the emulator on its own is Kyty's launcher) */ emucfg.beforeLaunch(systemId, sc.emulator, { quitCombo: cfg.ui.quitCombo === false ? null : (cfg.ui.quitComboKeys || 'l3+r3') }); taskbarShow('an emulator in its own window'); /* (beta.10: still hidden from the last game, it stayed gone over the emulator's window) */ let r; try { r = launcher.launchEmulator(sc, onExit); } catch (e) { if (wii) wiimote.resume(); throw e; } /* (1.82: a missing exe no longer leaves the remote paused) */ runKind = 'emulator'; pendingPower = null; { const def = CONSOLES.find(c => c.id === systemId); if (def && def.emulatorName) launcher.setRunningName(def.emulatorName); } watchPad(); return r; });
+handle('launch:emulator', async ({ systemId }) => { let sc = cfg.systems[systemId]; if (!sc) throw new Error('Unknown system.'); const def = CONSOLES.find(c => c.id === systemId); const emu = sc.emulator || (def && def.retro && cfg.retroarch ? cfg.retroarch : ''); busyCheck(); sc = { ...sc, emulator: emuPath(emu) }; const wii = systemId === 'gc' || systemId === 'wii' || /dolphin/i.test(path.basename(sc.emulator || '')); if (wii) { launching = true; try { await wiimote.pause(); } finally { launching = false; } } /* (beta.8: a second press while the Wii remote lets go is refused, as for games) */ /* (Dolphin: the Wii remote is its) */ if (systemId === 'ps5') { const ui = ['kyty_launcher.exe', 'launcher.exe'].map(n => path.join(path.dirname(sc.emulator || ''), n)).find(paths.isFile); if (ui) sc.emulator = ui; } /* (PS5: kyty_emulator needs a game; the emulator on its own is Kyty's launcher) */ emucfg.beforeLaunch(systemId, sc.emulator, { quitCombo: cfg.ui.quitCombo === false ? null : (cfg.ui.quitComboKeys || 'l3+r3') }); taskbarShow('an emulator in its own window'); /* (beta.10: still hidden from the last game, it stayed gone over the emulator's window) */ let r; try { r = launcher.launchEmulator(sc, onExit); } catch (e) { if (wii) wiimote.resume(); throw e; } /* (1.82: a missing exe no longer leaves the remote paused) */ runKind = 'emulator'; pendingPower = null; { const def = CONSOLES.find(c => c.id === systemId); if (def && def.emulatorName) launcher.setRunningName(def.emulatorName); } watchPad(); return r; });
 handle('launch:app', async ({ appId, link }) => {
   const a = cfg.apps[appId]; if (!a) throw new Error('Unknown app.'); busyCheck();
   const args = appId === 'stremio' && /^stremio:\/\/\/detail\/[^\s"]+$/.test(String(link || '')) ? [String(link)] : []; // a title from the museum's movie shelves opens on its page
@@ -2290,7 +2297,7 @@ async function setupOpts() {
   return { graphics: gpuPreset };
 }
 const setupOn = () => process.platform === 'win32';
-function setupExe(systemId) { const sc = cfg.systems[systemId]; if (!sc || !sc.emulator) throw new Error('Choose this console\'s emulator first.'); return emuPath(sc.emulator); }
+function setupExe(systemId) { const sc = cfg.systems[systemId], def = CONSOLES.find(c => c.id === systemId); const emu = (sc && sc.emulator) || (def && def.retro && cfg.retroarch ? cfg.retroarch : ''); if (!emu) throw new Error('Choose this console\'s emulator first.'); return emuPath(emu); }
 const samePath = (a, b) => path.resolve(String(a)).toLowerCase() === path.resolve(String(b)).toLowerCase();
 async function setupPending(exe) {
   const P = cfg.emuSetup && cfg.emuSetup.pending; if (!setupOn() || !P || !P.some(p => samePath(emuPath(p), exe))) return;
@@ -2299,9 +2306,11 @@ async function setupPending(exe) {
   cfg.emuSetup.pending = P.filter(p => !samePath(emuPath(p), exe)); try { persistCfg(cfg); } catch {}
 }
 handle('emusetup:status', async ({ systemId }) => {
-  const sc = cfg.systems[systemId]; if (!sc || !sc.emulator) return { supported: false, none: true };
+  const sc = cfg.systems[systemId], def = CONSOLES.find(c => c.id === systemId);
+  const emu = (sc && sc.emulator) || (def && def.retro && cfg.retroarch ? cfg.retroarch : '');
+  if (!emu) return { supported: false, none: true };
   if (!setupOn()) return { supported: false, why: 'Windows only for now' };
-  const exe = emuPath(sc.emulator), s = emusetup.status(exe), def = CONSOLES.find(c => c.id === systemId);
+  const exe = emuPath(emu), s = emusetup.status(exe);
   // (beta.7) RetroArch: this console's core (there or not), and the BIOS files it wants, checked in RetroArch's system folder
   // and the shared one (Neo Geo: the games folder too). Other emulators: whether their BIOS folder has anything in it.
   let core = null, bios = null;
@@ -2318,15 +2327,19 @@ handle('emusetup:status', async ({ systemId }) => {
 });
 // (beta.7) Get this core (Settings → a RetroArch console → Set up for me), with its progress on the row
 handle('racore:get', async ({ systemId }) => {
-  const sc = cfg.systems[systemId], def = CONSOLES.find(c => c.id === systemId); if (!sc || !sc.emulator || !def || !def.raCore) throw new Error('This console doesn\'t use a RetroArch core.');
-  const exe = emuPath(sc.emulator); if (!/^retroarch\.exe$/i.test(path.basename(exe))) throw new Error('This console doesn\'t run in RetroArch.');
+  const sc = cfg.systems[systemId], def = CONSOLES.find(c => c.id === systemId);
+  const emu = (sc && sc.emulator) || (def && def.retro && cfg.retroarch ? cfg.retroarch : '');
+  if (!emu || !def || !def.raCore) throw new Error('This console doesn\'t use a RetroArch core.');
+  const exe = emuPath(emu); if (!/^retroarch\.exe$/i.test(path.basename(exe))) throw new Error('This console doesn\'t run in RetroArch.');
   const f = await racores.get(exe, def.raCore, p => { if (alive()) win.webContents.send('racore:progress', { systemId, pct: p }); });
   return { ok: true, file: f, name: RA_CORE_NAME[def.raCore] || def.raCore };
 });
 // Opens the folder this console's emulator reads its BIOS files from (made if it isn't there yet)
 handle('bios:open', async ({ systemId }) => {
-  const sc = cfg.systems[systemId]; if (!sc || !sc.emulator) throw new Error('Choose this console\'s emulator first.');
-  const exe = emuPath(sc.emulator), k = emusetup.kindOf(exe), d = (k && emusetup.biosDirOf(k, exe)) || emusetup.sharedBiosDir();
+  const sc = cfg.systems[systemId], def = CONSOLES.find(c => c.id === systemId);
+  const emu = (sc && sc.emulator) || (def && def.retro && cfg.retroarch ? cfg.retroarch : '');
+  if (!emu) throw new Error('Choose this console\'s emulator first.');
+  const exe = emuPath(emu), k = emusetup.kindOf(exe), d = (k && emusetup.biosDirOf(k, exe)) || emusetup.sharedBiosDir();
   try { fs.mkdirSync(d, { recursive: true }); } catch {}
   const e = await shell.openPath(d); if (e) throw new Error(e); return d;
 });

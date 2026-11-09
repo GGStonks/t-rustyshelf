@@ -111,12 +111,15 @@ async function findSteam() {
 
 async function detectAll() {
   const systems = {}, index = makeIndex();
+  let foundRetroarch = '';
   for (const s of CONSOLES) {
-    systems[s.id] = { emulator: findExe(s.emulatorFolders, s.exeNames, index), romDirs: findRomDirs(s) };
+    const emu = findExe(s.emulatorFolders, s.exeNames, index);
+    if (!foundRetroarch && s.retro && emu && /retroarch/i.test(path.basename(emu))) foundRetroarch = emu;
+    systems[s.id] = { emulator: emu, romDirs: findRomDirs(s) };
   }
   const apps = {};
   for (const a of APPS) apps[a.id] = { path: findExe(a.folders, a.exeNames, index) };
-  return { systems, apps, steam: { path: await findSteam() }, appRoot: appRoot() };
+  return { systems, apps, steam: { path: await findSteam() }, appRoot: appRoot(), retroarch: foundRetroarch };
 }
 
 // one console's emulator and games folders (a console added in an update, found once as setup would have)
@@ -125,10 +128,18 @@ function detectSystem(id) { const s = CONSOLES.find(c => c.id === id); return s 
 // ((T)rustyShelf, asked for in Boxshelf's discussions) portable emulators kept anywhere: the emulator programs in a folder
 // the player picks (four folders deep), per console: { systems: { <console id>: program } }
 function emulatorsIn(dir) {
-  const systems = {}; if (!dir || !isDir(dir)) return { systems };
+  const systems = {}; if (!dir || !isDir(dir)) return { systems, retroarch: '' };
   const index = makeIndex(4, 4000);
-  for (const s of CONSOLES) { if (s.standalone || !(s.exeNames || []).length) continue; const hit = findIn(index, dir, s.exeNames); if (hit) systems[s.id] = hit; }
-  return { systems };
+  let retroarch = '';
+  for (const s of CONSOLES) {
+    if (s.standalone || !(s.exeNames || []).length) continue;
+    const hit = findIn(index, dir, s.exeNames);
+    if (hit) {
+      systems[s.id] = hit;
+      if (!retroarch && s.retro && /retroarch/i.test(path.basename(hit))) retroarch = hit;
+    }
+  }
+  return { systems, retroarch };
 }
 
 module.exports = { detectAll, detectSystem, findSteam, emulatorsIn };

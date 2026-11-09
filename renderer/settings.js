@@ -104,15 +104,15 @@ function consoleList(){return info&&info.consoles||[]}
 // through this, so a tile and its index always agree
 function tileList(){const L=consoleList();return [...L.filter(c=>sysCfg(c.id).enabled!==false),...L.filter(c=>sysCfg(c.id).enabled===false)]}
 function sysCfg(id){cfg.systems=cfg.systems||{};const c=cfg.systems[id]||(cfg.systems[id]={enabled:true,emulator:"",gameArgs:"",emulatorArgs:"",romDirs:[],artDir:"",bootOnLaunch:true});if(!Array.isArray(c.romDirs))c.romDirs=[];return c}
-function conState(c){const s=sysCfg(c.id);if(s.enabled===false)return "off";if(c.standalone)return "ok";return s.emulator&&s.romDirs.length?"ok":s.emulator||s.romDirs.length?"warn":""}
+function conState(c){const s=sysCfg(c.id),emu=s.emulator||(c.retro&&gp("retroarch")?gp("retroarch"):"");if(s.enabled===false)return "off";if(c.standalone)return "ok";return emu&&s.romDirs.length?"ok":emu||s.romDirs.length?"warn":""}
 // (games counted on the last scan: "13 games"; until a scan has run, the folders)
 const gameCount=id=>{const m=shelf("gameCounts");return m&&typeof m[id]==="number"?m[id]:null};
-function conStatus(c){const s=sysCfg(c.id),d=conState(c),n=s.romDirs.length,g=gameCount(c.id);
-  return d==="off"?"Shelf hidden":c.standalone?(g!=null?`Ready · ${g} game${g===1?"":"s"}`:"Standalone games"):d==="ok"?(g!=null?`Ready · ${g} game${g===1?"":"s"}`:`Ready · ${n} folder${n===1?"":"s"}`):d==="warn"?(s.emulator?"Add a games folder":`Needs ${conEmu(c)||"its emulator"}`):"Not set up"}
+function conStatus(c){const s=sysCfg(c.id),emu=s.emulator||(c.retro&&gp("retroarch")?gp("retroarch"):""),d=conState(c),n=s.romDirs.length,g=gameCount(c.id);
+  return d==="off"?"Shelf hidden":c.standalone?(g!=null?`Ready · ${g} game${g===1?"":"s"}`:"Standalone games"):d==="ok"?(g!=null?`Ready · ${g} game${g===1?"":"s"}`:`Ready · ${n} folder${n===1?"":"s"}`):d==="warn"?(emu?"Add a games folder":`Needs ${conEmu(c)||"its emulator"}`):"Not set up"}
 // a program shown by its name ("Dolphin.exe" → "Dolphin"); the whole path stays in the row's explanation
 const progName=p=>String(p||"").split(/[\\/]/).pop().replace(/\.exe$/i,"");
 // the emulator a console uses: the one set up when it's a known emulator ("Lichii", "Citron"), else the console's usual one
-const conEmu=c=>{const e=sysCfg(c.id).emulator,k=e&&window.BSEmuName?BSEmuName.knownName(e):"";return k&&k!=="RetroArch"?k:c.emulatorName};
+const conEmu=c=>{const e=sysCfg(c.id).emulator||(c.retro&&gp("retroarch")?gp("retroarch"):""),k=e&&window.BSEmuName?BSEmuName.knownName(e):"";return k&&k!=="RetroArch"?k:c.emulatorName};
 const folderName=p=>{const L=String(p||"").split(/[\\/]/).filter(Boolean);return L.slice(-2).join(" › ")||String(p||"")};
 function consolesReady(){const on=consoleList().filter(c=>sysCfg(c.id).enabled!==false);return `${on.filter(c=>conState(c)==="ok").length}/${on.length}`}
 const melody=()=>voiceOf(gp("ui.soundTheme"))==="melody";
@@ -156,6 +156,7 @@ function build(){
   {g:"Games",id:"consoles",name:"Consoles",ic:"games",badge:consolesReady,lead:"Every console (T)rustyShelf can run. Pick one to set its emulator, games folders and how it starts.",rows:[
     {t:"consoles",label:"Consoles",info:""},
     H("For every console"),
+    F("RetroArch location","retroarch","file","Point to retroarch.exe to use it across all supported retro consoles. Each retro console without its own emulator will use this RetroArch automatically.",{want:"file",rescan:true,ph:"Point to retroarch.exe",filters:[{name:"RetroArch",extensions:["exe","*"]}],keys:"retroarch emulator retro core shared"}),
     A("Find emulators again",()=>detecting?"Searching…":"Search","Looks in the usual install places and your (T)rustyShelf folder for emulators and games folders you haven't set up yet, and fills in any console that has nothing set.",runDetect,{keys:"detect scan auto find"}),
     ...(api.emulatorsIn?[A("Find emulators in a folder",()=>detecting?"Searching…":"Choose","Portable emulators kept anywhere (another drive, a USB stick): choose the folder they're in and (T)rustyShelf looks through it, four folders deep, for every emulator it knows. Each console with no emulator set gets the one found; the ones already set are left as they are.",runFolderDetect,{keys:"portable emulators folder find search usb drive"})]:[]),
   ]},
@@ -540,7 +541,7 @@ function conPages(id){
   // the shelf on / off first, with where it stands ("Ready · 13 games", "Needs Dolphin"); then the emulator and games
   // folders by name (the whole path is in the explanation on the right)
   const rows=[T("Show this shelf",p+"enabled",true,"Turn a console off without losing its settings.",{rescan:true,keys:"hide shelf console off",sub:()=>{const st=conState(def);return {text:conStatus(def),cls:st==="ok"?"ok":st==="warn"?"warn":""}}}),
-    F("Emulator",p+"emulator","file",id==="sw"?"The Switch emulator this shelf uses: Eden, Citron or Ryujinx. One game can use a different one: Details → Emulator.":`The ${emu} program this shelf uses.`,{rescan:true,want:"file",short:v=>{const b=progName(v).toLowerCase();return ({citron:"Citron",ryujinx:"Ryujinx"})[b]||((def.exeNames||[]).some(x=>progName(x).toLowerCase()===b)?emu:progName(v))} /* the usual program: its proper name (PPSSPP, not PPSSPPWindows64); (beta.10) the Switch's other emulators by their own names */,filters:[{name:emu,extensions:["exe"]}],pickTitle:`Find ${exe}`,ph:`Point to ${exe}`,more:()=>c.emulator?c.emulator:"Found automatically when it's in your (T)rustyShelf folder or a usual install place. Find emulators again (Consoles) looks once more."})];
+    F("Emulator",p+"emulator","file",id==="sw"?"The Switch emulator this shelf uses: Eden, Citron or Ryujinx. One game can use a different one: Details → Emulator.":`The ${emu} program this shelf uses.`,{rescan:true,want:"file",short:v=>{const b=progName(v).toLowerCase();return ({citron:"Citron",ryujinx:"Ryujinx"})[b]||((def.exeNames||[]).some(x=>progName(x).toLowerCase()===b)?emu:progName(v))} /* the usual program: its proper name (PPSSPP, not PPSSPPWindows64); (beta.10) the Switch's other emulators by their own names */,filters:[{name:emu,extensions:["exe"]}],pickTitle:`Find ${exe}`,ph:()=>def.retro&&gp("retroarch")?`Using shared RetroArch (${progName(gp("retroarch"))})`:`Point to ${exe}`,sub:()=>{const v=c.emulator||(def.retro?gp("retroarch"):"");if(!v)return null;const s=pathSub(v,"file");if(!c.emulator&&def.retro&&gp("retroarch"))return s?{text:"Shared RetroArch",cls:s.cls}:{text:"Shared RetroArch",cls:"ok"};return s},more:()=>c.emulator?c.emulator:(def.retro&&gp("retroarch")?`${gp("retroarch")} (shared RetroArch)`:"Found automatically when it's in your (T)rustyShelf folder or a usual install place. Find emulators again (Consoles) looks once more.")})];
   // Switch 2 (Windows): which Eglantine build Play starts. "Ask each time" (the default) shows the list at Play; a build
   // picked here becomes the shelf's emulator and Play starts in it straight away. A game's own Details → Emulator wins.
   // (beta.3) a page of its own: every build (the list Play shows), Ask each time, and builds or folders kept elsewhere
@@ -1083,6 +1084,7 @@ async function runFolderDetect(){if(detecting||!api.emulatorsIn)return;const p=a
   try{const r=await api.emulatorsIn(dir);if(my!==openId||!isOpen){detecting=false;return}
     const found=Object.entries((r&&r.systems)||{}),name=id=>(consoleList().find(c=>c.id===id)||{}).name||id,set=[],had=[];
     for(const[id,exe]of found){const c=cfg.systems&&cfg.systems[id];if(!c)continue;if(!c.emulator){c.emulator=exe;set.push(name(id))}else if(c.emulator!==exe)had.push(name(id))}
+    if(!cfg.retroarch&&r&&r.retroarch){cfg.retroarch=r.retroarch;set.push("RetroArch")}
     const list=a=>a.length>4?a.slice(0,4).join(", ")+` and ${a.length-4} more`:a.join(", ");
     toast(!found.length?`No emulators found in ${folderName(dir)}`:set.length?`Set up ${list(set)}${had.length?` (${had.length} already had one)`:""}`:`Found emulators for ${list(had)}, which already have one set`);
     if(set.length)changed({rescan:true})}
@@ -1104,6 +1106,7 @@ async function runDetect(){if(detecting||!api.detect)return;detecting=true;bump(
     for(const[id,d]of Object.entries(det.systems||{})){const c=cfg.systems&&cfg.systems[id];if(!c)continue;if(!c.emulator&&d.emulator){c.emulator=d.emulator;n++}if(!(c.romDirs||[]).length&&(d.romDirs||[]).length){c.romDirs=[...d.romDirs];n++}}
     if(cfg.steam&&!cfg.steam.path&&det.steam&&det.steam.path){cfg.steam.path=det.steam.path;n++}
     for(const[id,a]of Object.entries(det.apps||{}))if(cfg.apps&&cfg.apps[id]&&!cfg.apps[id].path&&a.path){cfg.apps[id].path=a.path;n++}
+    if(!cfg.retroarch&&det.retroarch){cfg.retroarch=det.retroarch;n++}
     toast(n?`Found ${n} new thing${n===1?"":"s"} and filled them in`:"Nothing new found");if(n)changed({rescan:true})}
   catch(e){toast(errMsg(e))}detecting=false;bump()}
 async function loadStatus(){if(!api.apiStatus)return;try{const s=await api.apiStatus();if(s&&typeof s==="object")status=s}catch{}if(isOpen)bump()}
@@ -2453,7 +2456,7 @@ function valHtml(R,compact){const v=R.get?R.get():undefined;
     case "toggle":return `<span class="tv">${v?"On":"Off"}</span><span class="bss-sw ${v?"on":""}"><i></i></span>`;
     case "slider":{const p=Math.max(0,Math.min(1,(v-R.min)/(R.max-R.min)));return `<span class="bss-bar"><i style="transform:scaleX(${p})"></i><b style="left:${p*100}%"></b></span><span class="num">${esc(R.fmt?R.fmt(+v):v)}</span>`}
     case "action":{if(R.status)return svcChip(R.status)+CHEV;if(R.emu)return emuChip(R.emu)+CHEV;if(R.dim)return "";const b=typeof R.btn==="function"?R.btn():R.btn;return `<span class="vt${R.warnBtn&&R.warnBtn()?" warn":""}">${esc(b)}</span>${CHEV}`}
-    case "path":return (v?`<span class="vt path">${esc(R.short?R.short(v):truncMid(v,44))}</span>`:`<span class="vt ph">${esc(R.ph||"Not set")}</span>`)+CHEV;
+    case "path":return (v?`<span class="vt path">${esc(R.short?R.short(v):truncMid(v,44))}</span>`:`<span class="vt ph">${esc(typeof R.ph==="function"?R.ph():R.ph||"Not set")}</span>`)+CHEV;
     case "folder":return `<span class="vt path">${esc(R.short?R.short(v):truncMid(v,40))}</span><span class="vt${asking(R.ask)?" warn":""}">${asking(R.ask)?"Press again to remove":""}</span>${CHEV}`;
     case "text":{const t=v?(R.secret?"•".repeat(Math.min(14,String(v).length)):truncMid(v,40)):"";return (t?`<span class="vt path">${esc(t)}</span>`:`<span class="vt ph">${esc(R.ph||"Not set")}</span>`)+CHEV}
     case "order":return `<span class="num">${R.n}</span><span class="vt${grab===R.id?" warn":""}">${grab===R.id?"Moving · ▲▼":""}</span>${CHEV}`;
