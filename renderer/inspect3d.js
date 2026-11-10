@@ -244,7 +244,7 @@ window.Inspect3D = (() => {
     clone.traverse(n => {
       if (n.isSkinnedMesh && n.skeleton) {
         const newBones = n.skeleton.bones.map(b => cloneBones[b.name] || b);
-        n.bind(new THREE.Skeleton(newBones, n.skeleton.boneInverses), n.matrixWorld);
+        n.bind(new THREE.Skeleton(newBones, n.skeleton.boneInverses.map(m => m.clone())), n.bindMatrix.clone());
       }
     });
     return clone;
@@ -252,25 +252,34 @@ window.Inspect3D = (() => {
   function makeFullCoverTexture(o) {
     const THREE = T(); if (!THREE) return null;
     const W = 2048, H = 1024, c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d');
-    const isSw = o.sys === 'sw' || (typeof o.caseColor === 'string' && (o.caseColor.startsWith('rgba') || o.caseColor === 'transparent'));
-    x.fillStyle = isSw ? '#ffffff' : (typeof o.caseColor === 'string' ? o.caseColor : '#ffffff');
-    x.fillRect(0, 0, W, H);
-    const ft = o.front ? tex.get(o.front) : null, bt = o.back ? tex.get(o.back) : null, stTex = o.spine ? tex.get(o.spine) : null;
-    const bw = W * 0.47;
-    if (bt && bt.image && (bt.image.naturalWidth || bt.image.width)) x.drawImage(bt.image, 0, 0, bw, H);
-    else { x.fillStyle = 'rgba(0,0,0,0.06)'; x.fillRect(0, 0, bw, H); }
-    const sx = W * 0.47, sw = W * 0.06;
-    if (stTex && stTex.image && (stTex.image.naturalWidth || stTex.image.width)) x.drawImage(stTex.image, sx, 0, sw, H);
-    else {
-      x.fillStyle = typeof o.caseColor === 'string' && !o.caseColor.startsWith('rgba') ? o.caseColor : '#e60012';
-      x.fillRect(sx, 0, sw, H);
-      x.save(); x.translate(sx + sw / 2, H / 2); x.rotate(-Math.PI / 2); x.fillStyle = o.spineInk || '#ffffff'; x.font = '600 48px Lexend, system-ui, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
-      let title = o.title || ''; if (title.length > 25) title = title.slice(0, 23) + '…'; x.fillText(title, 0, 0); x.restore();
-    }
-    const fx = W * 0.53, fw = W * 0.47;
-    if (ft && ft.image && (ft.image.naturalWidth || ft.image.width)) x.drawImage(ft.image, fx, 0, fw, H);
-    else if (o.standIn && o.standIn.naturalWidth) x.drawImage(o.standIn, fx, 0, fw, H);
-    const texture = new THREE.CanvasTexture(c); texture.colorSpace = THREE.SRGBColorSpace; return texture;
+    const texture = new THREE.CanvasTexture(c); texture.colorSpace = THREE.SRGBColorSpace;
+    const redraw = () => {
+      const isSw = o.sys === 'sw' || (typeof o.caseColor === 'string' && (o.caseColor.startsWith('rgba') || o.caseColor === 'transparent'));
+      x.fillStyle = isSw ? '#ffffff' : (typeof o.caseColor === 'string' ? o.caseColor : '#ffffff');
+      x.fillRect(0, 0, W, H);
+      const ft = o.front ? loadTex(o.front) : null, bt = o.back ? loadTex(o.back) : null, stTex = o.spine ? loadTex(o.spine) : null;
+      const bw = W * 0.47;
+      if (bt && bt.image && (bt.image.naturalWidth || bt.image.width)) x.drawImage(bt.image, 0, 0, bw, H);
+      else { x.fillStyle = 'rgba(0,0,0,0.06)'; x.fillRect(0, 0, bw, H); }
+      const sx = W * 0.47, sw = W * 0.06;
+      if (stTex && stTex.image && (stTex.image.naturalWidth || stTex.image.width)) x.drawImage(stTex.image, sx, 0, sw, H);
+      else {
+        x.fillStyle = typeof o.caseColor === 'string' && !o.caseColor.startsWith('rgba') ? o.caseColor : '#e60012';
+        x.fillRect(sx, 0, sw, H);
+        x.save(); x.translate(sx + sw / 2, H / 2); x.rotate(-Math.PI / 2); x.fillStyle = o.spineInk || '#ffffff'; x.font = '600 48px Lexend, system-ui, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+        let title = o.title || ''; if (title.length > 25) title = title.slice(0, 23) + '…'; x.fillText(title, 0, 0); x.restore();
+      }
+      const fx = W * 0.53, fw = W * 0.47;
+      if (ft && ft.image && (ft.image.naturalWidth || ft.image.width)) x.drawImage(ft.image, fx, 0, fw, H);
+      else if (o.standIn && o.standIn.naturalWidth) x.drawImage(o.standIn, fx, 0, fw, H);
+      texture.needsUpdate = true;
+    };
+    redraw();
+    [o.front, o.back, o.spine].forEach(u => {
+      if (!u) return; const t = loadTex(u);
+      if (t && t.userData && t.userData.p) t.userData.p.then(redraw);
+    });
+    return texture;
   }
   function ensureUniversalModel() {
     if (universalGltf || universalLoading) return;
@@ -286,8 +295,13 @@ window.Inspect3D = (() => {
     const THREE = T(); if (!THREE) return;
     try {
       universalCase = cloneSkinned(universalGltf.scene);
-      const k = 1 / 0.1692; universalCase.scale.set(k * (o.ratio / 0.71), k, k);
-      universalCase.rotation.x = -Math.PI / 2; universalCase.position.set(0, 0, 0);
+      const s = 1 / 0.1692; universalCase.scale.set(s * (o.ratio / 0.618), s, s);
+      universalCase.rotation.set(0, 0, 0); universalCase.position.set(0, 0, 0);
+      const rotBone = universalCase.getObjectByName('Rotate_Bone') || universalCase.getObjectByName('Rotate Bone');
+      const frontBone = universalCase.getObjectByName('Front_Bone') || universalCase.getObjectByName('Front Bone');
+      const angle = -(1 - easeIO(st.lid)) * (Math.PI / 2);
+      if (rotBone) rotBone.rotation.z = angle;
+      if (frontBone) frontBone.rotation.z = angle;
       const fullCoverTex = makeFullCoverTexture(o);
       const isClear = o.sys === 'sw' || (typeof o.caseColor === 'string' && (o.caseColor.startsWith('rgba') || o.caseColor === 'transparent'));
       universalCase.traverse(n => {
@@ -307,6 +321,9 @@ window.Inspect3D = (() => {
       if (spineG) spineG.visible = false;
       if (backPivot) backPivot.visible = false;
       if (lidPivot) lidPivot.visible = false;
+      const cartObj = universalCase.getObjectByName('Cartridge');
+      if (cartObj) cartObj.visible = (o.kind === 'cart');
+      if (media && o.kind === 'cart') media.visible = false;
       caseG.add(universalCase);
     } catch (e) { console.warn(e); }
   }
@@ -621,14 +638,19 @@ window.Inspect3D = (() => {
       caseG.position.set(0, 0, 0);
       caseG.rotation.set(0, 0, 0);
       caseG.visible = true;
+    } else if (universalCase) {
+      caseG.position.set(k * 0.33 * (w / 0.618) - 2.6 * o, -0.3 * o, -0.6 * o);
+      caseG.rotation.set(0, 30 * DEG * o, 0);
+      caseG.visible = o < .995;
+      const rotBone = universalCase.getObjectByName('Rotate_Bone') || universalCase.getObjectByName('Rotate Bone');
+      const frontBone = universalCase.getObjectByName('Front_Bone') || universalCase.getObjectByName('Front Bone');
+      const angle = -(1 - k) * (Math.PI / 2);
+      if (rotBone) rotBone.rotation.z = angle;
+      if (frontBone) frontBone.rotation.z = angle;
     } else {
       caseG.position.set(-(1 - k) * (w / 2) - 2.6 * o, -.3 * o, -(1 - k) * (D / 2) - .6 * o);
       caseG.rotation.y = (1 - k) * (Math.PI / 2) + 30 * DEG * o;
       caseG.visible = o < .995;
-      if (universalCase) {
-        const rotBone = universalCase.getObjectByName('Rotate_Bone') || universalCase.getObjectByName('Rotate Bone');
-        if (rotBone) rotBone.rotation.y = -(1 - k) * (Math.PI / 2);
-      }
     }
     caseG.updateMatrixWorld(true);
     const dockWorldPos = new THREE.Vector3();
