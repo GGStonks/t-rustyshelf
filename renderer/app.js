@@ -14,8 +14,8 @@ const STYLE={
   gc:{id:"gc",rc:0.03,re:0.2,hue:258,ratio:.712,depth:.105,edge:.022,caseColor:"#16161b",caseSide:"#0b0b0e",spineInk:"#e8e8f0",band:{bg:"#26262e",fg:"#c3c3cf",label:"GAMECUBE"},spineBand:{bg:"#2c2c35",fg:"#c3c3cf",label:"GCN"},tint:["#3a2a86","#120d2c"],glow:"#9d8cff"},
   wii:{id:"wii",rc:0.04,re:0.22,hue:205,ratio:0.711,depth:0.104,edge:.03,caseColor:"#f2f3f5",caseSide:"#d9dbe0",spineInk:"#4a4f58",band:{bg:"#ffffff",fg:"#8e949e",label:"Wii"},spineBand:{bg:"#ffffff",fg:"#8e949e",label:"Wii"},tint:["#2f7bff","#0b2a7a"],glow:"#9fd0ff"},
   wiiu:{id:"wiiu",rc:0.04,re:0.22,hue:194,ratio:0.711,depth:0.104,edge:.03,caseColor:"#1d8fd1",caseSide:"#146ea6",spineInk:"#ffffff",band:{bg:"#1d8fd1",fg:"#ffffff",label:"Wii U"},spineBand:{bg:"#ffffff",fg:"#1d8fd1",label:"Wii U"},tint:["#0f6fb0","#04203a"],glow:"#6fd0ff"},
-  sw:{id:"sw",rc:0.06,re:0.28,hue:355,ratio:0.612,depth:0.096,edge:.035,caseColor:"#d8101f",caseSide:"#a30a16",spineInk:"#ffffff",band:{bg:"#d8101f",fg:"#ffffff",label:"SWITCH"},spineBand:{bg:"#d8101f",fg:"#ffffff",label:"SW"},tint:["#7a2bd6","#2a0b4e"],glow:"#ff6470"},
-  sw2:{id:"sw2",rc:0.06,re:0.28,hue:352,ratio:0.612,depth:0.096,edge:.035,caseColor:"#e60012",caseSide:"#ad000d",spineInk:"#ffffff",band:{bg:"#e60012",fg:"#ffffff",label:"SWITCH 2"},spineBand:{bg:"#e60012",fg:"#ffffff",label:"SW2"},tint:["#16608f","#071a2e"],glow:"#ff5a66"}, // Switch 2: the brighter red case, "SWITCH 2" band; a blue backdrop (the Joy-Con 2 accents) tells it from the Switch shelf
+  sw:{id:"sw",rc:0.06,re:0.28,hue:355,ratio:0.612,depth:0.096,edge:.035,wrap:1,caseColor:"rgba(255,255,255,0.28)",caseSide:"#dcdfe4",spineInk:"#ffffff",band:{bg:"#d8101f",fg:"#ffffff",label:"SWITCH"},spineBand:{bg:"#d8101f",fg:"#ffffff",label:"SW"},tint:["#7a2bd6","#2a0b4e"],glow:"#ff6470"},
+  sw2:{id:"sw2",rc:0.06,re:0.28,hue:352,ratio:0.612,depth:0.096,edge:.035,wrap:1,caseColor:"#e60012",caseSide:"#ad000d",spineInk:"#ffffff",band:{bg:"#e60012",fg:"#ffffff",label:"SWITCH 2"},spineBand:{bg:"#e60012",fg:"#ffffff",label:"SW2"},tint:["#16608f","#071a2e"],glow:"#ff5a66"}, // Switch 2: the brighter red case, "SWITCH 2" band; a blue backdrop (the Joy-Con 2 accents) tells it from the Switch shelf
   ps4:{id:"ps4",rc:0.065,re:0.26,hue:216,ratio:0.787,depth:0.089,edge:.03,caseColor:"#1d4ed8",caseSide:"#153a9e",spineInk:"#ffffff",band:{bg:"#1d4ed8",fg:"#ffffff",label:"PS4"},spineBand:{bg:"#1d4ed8",fg:"#ffffff",label:"PS4"},tint:["#1e3a8a","#0b1533"],glow:"#6aa6ff"},
   ps5:{id:"ps5",rc:0.065,re:0.26,hue:220,ratio:0.787,depth:0.089,edge:.03,caseColor:"#2b62d9",caseSide:"#1f4cb3",spineInk:"#111318",band:{bg:"#ffffff",fg:"#111318",label:"PS5"},spineBand:{bg:"#ffffff",fg:"#111318",label:"PS5"},tint:["#24345e","#0a0f1f"],glow:"#9ec2ff"}, // PS5: the blue case, a white band with the black PS5 logo
   ps3:{id:"ps3",rc:0.065,re:0.26,hue:221,ratio:0.787,depth:0.1,edge:.03,caseColor:"#203553",caseSide:"#16263f",spineInk:"#ffffff",band:{bg:"#0c0d10",fg:"#ffffff",label:"PS3"},spineBand:{bg:"#0c0d10",fg:"#ffffff",label:"PS3"},tint:["#24406e","#090f1e"],glow:"#7ab4ff"},
@@ -24,9 +24,9 @@ const STYLE={
   xboxone:{id:"xboxone",rc:0.04,re:0.22,hue:118,ratio:0.711,depth:0.104,edge:.03,caseColor:"#107c10",caseSide:"#0b580b",spineInk:"#ffffff",band:{bg:"#107c10",fg:"#ffffff",label:"XBOX ONE"},spineBand:{bg:"#107c10",fg:"#ffffff",label:"XBOX ONE"},tint:["#145a16","#061a07"],glow:"#7ee87e"}, // (supalii's fork)
   psp:{id:"psp",rc:0.055,re:0.24,hue:235,ratio:0.589,depth:0.14,edge:.03,caseColor:"#101014",caseSide:"#07070a",spineInk:"#e8e8f0",band:{bg:"#0a0a0d",fg:"#ffffff",label:"PSP"},spineBand:{bg:"#0a0a0d",fg:"#ffffff",label:"PSP"},tint:["#4a4f63","#0b0c12"],glow:"#cfd6ff"},
   n3ds:{id:"n3ds",rc:0.05,re:0.24,hue:352,ratio:1.127,depth:0.1,h:.64,edge:.03,caseColor:"#f4f4f6",caseSide:"#dcdde2",spineInk:"#3a3d45",band:{bg:"#ffffff",fg:"#d40f2a",label:"NINTENDO 3DS"},spineBand:{bg:"#ffffff",fg:"#d40f2a",label:"3DS"},tint:["#c0182e","#3a0710"],glow:"#ff7a8a"},
-  pc:{id:"pc",rc:0.02,re:0.16,hue:207,ratio:.667,depth:.07,edge:.015,caseColor:"#1b1f27",caseSide:"#11141a",spineInk:"#dfe8f3",band:null,spineBand:{bg:"#11141a",fg:"#8fb4d9",label:"PC"},tint:["#1d4a6e","#0a121c"],glow:"#8fc3ff"},
+  pc:{id:"pc",rc:0.02,re:0.16,hue:207,ratio:.667,depth:.07,edge:0,caseColor:"#1b1f27",caseSide:"#11141a",spineInk:"#dfe8f3",band:null,spineBand:{bg:"#11141a",fg:"#8fb4d9",label:"PC"},tint:["#1d4a6e","#0a121c"],glow:"#8fc3ff"},
   // (beta.4) Custom: PC ports, recomps and games added by hand (Quiver's too); the PC case in a warm tint
-  custom:{id:"custom",rc:0.02,re:0.16,hue:28,ratio:.667,depth:.07,edge:.015,caseColor:"#211b17",caseSide:"#15110e",spineInk:"#f3e6da",band:null,spineBand:{bg:"#15110e",fg:"#e0a878",label:"PC"},tint:["#6e3f1d","#1c120a"],glow:"#ffbf8a"},
+  custom:{id:"custom",rc:0.02,re:0.16,hue:28,ratio:.667,depth:.07,edge:0,caseColor:"#211b17",caseSide:"#15110e",spineInk:"#f3e6da",band:null,spineBand:{bg:"#15110e",fg:"#e0a878",label:"PC"},tint:["#6e3f1d","#1c120a"],glow:"#ffbf8a"},
   home:{id:"home",rc:0.04,re:0.22,hue:268,ratio:.71,depth:.09,edge:.025,caseColor:"#1b1d27",caseSide:"#101218",spineInk:"#e8e8f0",band:{bg:"#1b1d27",fg:"#c9cfe0",label:"HOME"},spineBand:{bg:"#2a2d3a",fg:"#c9cfe0",label:"HOME"},tint:["#3b2f6e","#0a0b16"],glow:"#c9b8ff"},
   media:{id:"media",rc:0.03,re:0.18,hue:285,ratio:.71,depth:.06,edge:.02,caseColor:"#1a1c24",caseSide:"#0e0f14",spineInk:"#e8e8f0",band:{bg:"#1a1c24",fg:"#9aa3b8",label:"APP"},spineBand:{bg:"#2a2d38",fg:"#c8cede",label:"APP"},tint:["#2a3550","#0a0d16"],glow:"#b9a6ff"}
 };
@@ -50,8 +50,16 @@ let shelves=[],sysIdx=0,sel=0,flipped=false,spin=0,mode="browse",inputMode="kbd"
 let slots=[],bw=240,bh=340,bd=24,OS=1,themes={},cfgInfo=null;
 const cur=()=>shelves[sysIdx];
 const st=()=>STYLE[(cur()||{}).id]||STYLE.media; // no shelves yet (empty library): the neutral look, never a TypeError
+const isPcGame=g=>!!(g&&(g.kind==="steam"||(shelfFor(g)&&(shelfFor(g).id==="pc"||shelfFor(g).id==="custom"))));
 const shelfFor=g=>(g&&g._shelf!=null&&allShelves[g._shelf])||cur();
-const stOf=g=>(g&&g.artFrom==='console'&&g.boxPlat&&STYLE[g.boxPlat])||STYLE[shelfFor(g).id]||STYLE.media;
+const stOf=g=>{
+  const sh=shelfFor(g)||{};
+  const base=(g&&g.artFrom==='console'&&g.boxPlat&&STYLE[g.boxPlat])||STYLE[sh.id]||STYLE.media;
+  if(isPcGame(g)){
+    return {...base,edge:0,spineBand:STYLE.pc.spineBand};
+  }
+  return base;
+};
 let allShelves=[];
 // Android (the Thor's small screen): the console bar only lists shelves that have games (plus Home and Apps), with short
 // names, and glides with a transform instead of scrolling (see placePill). Windows keeps every shelf as before.
@@ -1035,7 +1043,7 @@ function fillDetails(){
   const how=$("dHow");if(how){how.textContent=g.kind==="rom"?`Plays in ${s.emulatorName}${s.bootOnLaunch&&!s.useIpl&&((themes[s.id]||{}).boot||s.insertAnim===false)?" after the boot "+((themes[s.id]||{}).boot?"video":"intro"):""}. Close the emulator to come back here.`:"";how.hidden=g.kind!=="rom"}
   raDetails(g);
   $("dPlay").textContent=g.kind==="rom"||g.kind==="steam"?"Play":"Open";
-  $("dInspect").hidden=g.kind!=="rom";$("dManual").hidden=g.kind!=="rom";$("dManual").querySelector("span").textContent=hasManual(g)?"Read manual":"Read booklet"; /* (beta.7: an icon button: only its label changes) */
+  $("dInspect").hidden=!isGame(g);$("dManual").hidden=g.kind!=="rom";$("dManual").querySelector("span").textContent=hasManual(g)?"Read manual":"Read booklet"; /* (beta.7: an icon button: only its label changes) */
   $("dEmu").hidden=!(g.kind==="rom"&&s.hasEmulator);$("dEmu").textContent=`Open ${s.emulatorName||"emulator"}`;
   {const pc=g.kind==="steam"&&!!api.pcCoverOptions,b=$("dBoxArt"),p=$("dBoxArtPc");if(b)b.hidden=!(g.kind==="rom"&&api.artStudio&&g.file);if(p)p.hidden=!pc;} /* (beta.9) a PC game's Box art sits beside Play (it has no manual or Inspect), not in More */{const b=$("dRename");if(b)b.hidden=!(api.renameGame&&((g.kind==="rom"&&g.file)||g.kind==="steam"));} /* (beta.5: PC games too, through the cover picker) */
   {const b=$("dCols");if(b)b.hidden=!isGame(g)||g.kind==="app";}
@@ -1448,9 +1456,9 @@ function slotPose(s){if(!s||!s.el||!s.el.isConnected||!s.img)return null;const f
 function relight(e){if(!e||!e.classList.contains("lift"))return;e.classList.add("glowfade");e.classList.remove("lift");clearTimeout(e._gl);e._gl=setTimeout(()=>e.classList.remove("glowfade"),450)}
 function unhold(e,fade){if(!e)return;if(!e.classList.contains("held")){relight(e);return}if(fade){e.classList.add("unhold");clearTimeout(e._uh);e._uh=setTimeout(()=>e.classList.remove("unhold"),260)}e.classList.remove("held");relight(e)}
 function openInspect(){uiCrumb("Inspect");
-  const g=curGame(),s=pickShelf();if(!g||g.kind!=="rom"||sysBusy()||(mode!=="browse"&&mode!=="details"))return;
+  const g=curGame(),s=pickShelf();if(!g||!isGame(g)||sysBusy()||(mode!=="browse"&&mode!=="details"))return;
   detailsBack=mode==="details"?g:null;closeDetails(true);mode="inspect";clearTimeout(isp.wd);const tok=++isp.tok;
-  const el=$("inspect"),style=STYLE[s.id]||STYLE.media,m=MEDIA[s.id]||MEDIA.wii;
+  const el=$("inspect"),style=stOf(g),m=MEDIA[s.id]||MEDIA.wii;
   const ch=Math.min(innerHeight*.58,innerWidth*.34/style.ratio),cw=ch*style.ratio;
   el.style.setProperty("--ch",ch+"px");el.style.setProperty("--cw",cw+"px");el.style.setProperty("--t",(cw*Math.max(.06,style.depth*.7))+"px");el.style.setProperty("--disc",(cw*m.size)+"px");
   el.style.setProperty("--case",style.caseColor);el.style.setProperty("--case-in",style.caseSide);el.style.setProperty("--case-side",style.caseSide);el.style.setProperty("--accent",style.glow);
@@ -1748,6 +1756,7 @@ function showSpread(anim){
 function rdTurn(d){const n=rd.pages.length;let i=rd.i===0?(d>0?1:0):rd.i+d*2;if(i<1)i=0;if(i>=n)return void play_("error");rd.i=i;showSpread(true);play_("page")}
 function ispAdvance(){
   if(rd.open){closeReader();return}
+  const g=curGame();if(g&&g.kind==="steam")return;
   isp.tz=1;isp.tpx=isp.tpy=0;
   const el=$("inspect");isp.last=performance.now();
   if(isp.state===0){isp.state=1;el.classList.add("open");isp.ty=Math.round(isp.ty/360)*360+18;isp.tx=-6;play_("caseOpen")}
@@ -1772,14 +1781,15 @@ function ispBack(){
 }
 function renderIspHints(){
   const pad=inputMode==="pad",cart=$("inspect").classList.contains("cart"),flop=$("inspect").classList.contains("floppy");
+  const g=curGame(),isPc=g&&g.kind==="steam";
   const steps=["Closed","Open",flop?"Floppy out":cart?"Cartridge out":"Disc out"];
-  $("ispStep").textContent=steps[isp.state];
+  $("ispStep").textContent=isPc?"Case":steps[isp.state];
   const next=isp.state===0?"Open case":isp.state===1?(flop?"Take out floppy disk":cart?"Take out cartridge":"Take out disc"):"Hold to play";
   let items,acts;
   if(rd.open){$("ispStep").textContent=$("rdCount").textContent||"Manual";items=[[pad?["L","R"]:["←","→"],"Turn page"],[pad?["x"]:["Space"],"Next page"],[pad?["o"]:["Esc"],"Put manual back"]];acts=[()=>rdTurn(1),()=>rdTurn(1),closeReader];
     if(hasManual(curGame())){if(fixOn()){items=[[pad?["tri"]:["W"],"Wrong game: find the right one"],[pad?["sq"]:["R"],"Repair it (cover, pages)"],[pad?["o"]:["Esc"],"Cancel"]];acts=[wrongManual,repairManual,fixCancel]}
       else{items.push([pad?["tri"]:["W"],"Fix manual…"]);acts.push(wrongManual)}}}
-  else{items=[[pad?["L","R"]:["←","→"],ispSpins()?"Spin":"Next side"],[pad?["L2","R2"]:["+","−"],"Zoom"],[pad?["tri"]:["F"],"Turn over"],[pad?["x"]:["Enter"],next],[pad?["o"]:["Esc"],isp.state?"Put back":"Close"]];acts=[()=>{ispTurn(90,0,true);ispSnap()},()=>ispZoom(1),()=>ispFlip(),ispAdvance,ispBack];
+  else{items=[[pad?["L","R"]:["←","→"],ispSpins()?"Spin":"Next side"],[pad?["L2","R2"]:["+","−"],"Zoom"],[pad?["tri"]:["F"],"Turn over"],...(isPc?[]:[[pad?["x"]:["Enter"],next]]),[pad?["o"]:["Esc"],isp.state?"Put back":"Close"]];acts=[()=>{ispTurn(90,0,true);ispSnap()},()=>ispZoom(1),()=>ispFlip(),...(isPc?[]:[ispAdvance]),ispBack];
     if(isp.state>=1&&curGame()&&curGame().kind==="rom"){items.splice(4,0,[pad?["sq"]:["M"],hasManual(curGame())?"Read manual":"Read booklet"]);acts.splice(4,0,openReader)}}
   const h=$("ispHints");h.innerHTML="";
   items.forEach(([keys,label],i)=>{const b=document.createElement("button");b.type="button";b.className="hint";

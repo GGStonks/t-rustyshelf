@@ -1035,8 +1035,8 @@ function oskMove(a){const K=keysNow(),pos=[];K.forEach((row,ri)=>row.forEach((k,
 function startEdit(r,first){edit={row:r,value:(first!=null?String(r.get()||"")+first:String(r.get()||"")),idx:rowI};
   if(device==="pad"){openOsk("edit");render()}else{focus="edit";render();const inp=E.list.querySelector(".bss-edit");if(inp){inp.focus();try{inp.setSelectionRange(inp.value.length,inp.value.length)}catch{}}}}
 function paintEdit(){const el=E.list.querySelector(".bss-editv");if(el){el.firstChild.textContent=edit.row.secret?"•".repeat(edit.value.length):edit.value}}
-function commitEdit(){if(!edit)return;const r=edit.row,v=edit.value.trim().replace(/^"(.*)"$/,"$1");edit=null;closeOsk();focus="page";
-  if(!eq(v,r.get()||"")){r.set(v);changed(r);if(r.ra||r.fan)setTimeout(loadStatus,2500)}else{render()}}
+function commitEdit(){if(!edit)return;const r=edit.row,v=edit.value.trim().replace(/^"(.*)"$/,"$1");const changedVal=!eq(v,r.get()||"");edit=null;closeOsk();focus="page";
+  if(changedVal||r.alwaysCommit){r.set(v);changed(r);if(r.ra||r.fan)setTimeout(loadStatus,2500)}else if(r.live){try{r.live(r.get())}catch(e){console.warn("settings live",e)}render()}else{render()}}
 function cancelEdit(){if(!edit)return;edit=null;closeOsk();focus="page";render()}
 
 /* ---------- changing things ---------- */
@@ -1194,7 +1194,7 @@ async function artMatchUse(name){const s=artMatch;if(!s)return;
     s.current=name;play("open");await close();shelf("toast",name?`${s.title}: its art comes from "${name}" now`:`${s.title}: art looked up under its own name again`)}catch(e){toast(errMsg(e))}} // (said on the shelf: Settings has closed)
 let coverSearch=null;
 function coverSearchRows(){const s=coverSearch;if(!s)return [];
-  if(!s.row)s.row=X("Search for","",`A name to look up on SteamGridDB instead of "${s.title}". Enter searches. The game's own name stays as it is (Rename changes that).`,{get:()=>s.term,set:v=>{s.term=String(v||"")},nosave:true,live:v=>coverSearchGo(v),ns:true,keys:"search cover name steamgriddb"});
+  if(!s.row)s.row=X("Search for","",`A name to look up on SteamGridDB instead of "${s.title}". Enter searches. The game's own name stays as it is (Rename changes that).`,{get:()=>s.term,set:v=>{s.term=String(v||"")},nosave:true,live:v=>coverSearchGo(v),alwaysCommit:true,ns:true,keys:"search cover name steamgriddb"});
   return [s.row]}
 async function coverSearchGo(v){const s=coverSearch;v=String(v||"").replace(/\s+/g," ").trim();if(!s||!v)return;play("open");await close();shelf("pcCoverSearch",s.id,v)}
 // (beta.7) Add games (main/addgames.js): what was found is listed with a tick each (a game already on the Custom shelf

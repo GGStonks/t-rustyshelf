@@ -139,11 +139,8 @@ async function use(id, key) {
     const cb = k.consoleBox;
     const buf0 = await o.fetchImage(cb.url);
     if (!buf0 || !isImg(buf0)) throw new Error("Couldn't download that cover. Check the connection and try again.");
-    let mBuf = null;
-    if (o.rebrand) {
-      try { mBuf = await o.rebrand(buf0, { plat: cb.plat, part: '' }); } catch (e) { o.log('rebrand failed', e.message); }
-    }
-    const finalBuf = mBuf || buf0;
+    // Front cover: preserve clean artwork without Steam banner overlay
+    const finalBuf = buf0;
     const dest = await save(id, finalBuf, 'jpg');
     const b = path.join(dir(), safeId(id));
     await fs.promises.writeFile(b + '.plat', cb.plat);
@@ -155,7 +152,7 @@ async function use(id, key) {
         const pbuf = await o.fetchImage(url);
         if (!pbuf || !isImg(pbuf)) continue;
         let pmBuf = null;
-        if (o.rebrand) {
+        if (o.rebrand && part === 'spine') {
           try { pmBuf = await o.rebrand(pbuf, { plat: cb.plat, part }); } catch {}
         }
         await saveConsole(id, pmBuf || pbuf, `${cb.platform} ${url}`, part, cb.plat);

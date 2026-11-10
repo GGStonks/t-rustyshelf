@@ -232,7 +232,14 @@ window.Inspect3D = (() => {
     if (customMedia && customMedia.parent === mediaG) mediaG.remove(customMedia);
     disposeGroup(caseG); disposeGroup(mediaG); cur = o;
     const h = 1, w = o.ratio, lt = Math.max(.014, o.depth * .18), r = Math.min(.016, lt * .9);
-    const plastic = (color, extra) => new THREE.MeshPhysicalMaterial(Object.assign({ color, roughness: .42, metalness: .02, clearcoat: .35, clearcoatRoughness: .4 }, extra || {}));
+    const plastic = (color, extra) => {
+      let col = color, op = 1, tr = false;
+      if (typeof color === 'string' && color.startsWith('rgba')) {
+        const m = color.match(/rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)/);
+        if (m) { col = new THREE.Color(`rgb(${m[1]},${m[2]},${m[3]})`); op = parseFloat(m[4]); tr = op < 1; }
+      } else if (color === 'transparent') { col = new THREE.Color(0xffffff); op = 0; tr = true; }
+      return new THREE.MeshPhysicalMaterial(Object.assign({ color: col, transparent: tr, opacity: op, roughness: .42, metalness: .02, clearcoat: .35, clearcoatRoughness: .4 }, extra || {}));
+    };
     // printed sleeve under clear plastic: the paper itself is matte (no broad haze over the art), the shine is a
     // tight clearcoat highlight that moves as you turn the case
     const sleeve = map => new THREE.MeshPhysicalMaterial({ map, color: 0xffffff, roughness: .62, metalness: 0, clearcoat: .55, clearcoatRoughness: .22, reflectivity: .3, envMapIntensity: .6 });

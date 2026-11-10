@@ -195,17 +195,17 @@ pub fn rebrand(img: &DynamicImage, plat: &str, part: &str) -> Option<DynamicImag
         }
     }
 
-    // Render "STEAM" text
+    // Render "PC" text
     if let Ok(font) = FontRef::try_from_slice(FONT_DATA) {
         let is_vertical = (w as f32) < (bh as f32 * 2.2);
         if is_vertical {
             // Spine: word runs down vertically
             let font_size = ((w as f32 * 0.5).min(bh as f32 * 0.2)).round().max(8.0);
-            render_text_vertical(&mut out, &font, "STEAM", w, bh, font_size);
+            render_text_vertical(&mut out, &font, "PC", w, bh, font_size);
         } else {
             // Front/back: horizontal text
             let font_size = (bh as f32 * 0.46).round().max(8.0);
-            render_text_horizontal(&mut out, &font, "STEAM", w, bh, font_size);
+            render_text_horizontal(&mut out, &font, "PC", w, bh, font_size);
         }
     }
 
