@@ -5,7 +5,7 @@
    Optional models: themes\<system>\cart.glb (Switch) or disc.glb / umd.glb replace the built-in media. */
 window.Inspect3D = (() => {
   const T = () => window.BS3D && window.BS3D.THREE;
-  let renderer, scene, camera, canvas, env, rot, caseG, lidPivot, backPivot, spineG, media, mediaG, manualPlane, spineM = null, dockAnchor = null;
+  let renderer, scene, camera, canvas, env, rot, caseG, lidPivot, backPivot, spineG, media, mediaG, manualPlane, spineM = null, dockAnchor = null, universalCase = null, universalGltf = null, universalLoading = false;
   let active = false, raf = 0, failed = false, tex = new Map(), cur = null, customMedia = null, customUrl = null;
   const st = { state: 0, lid: 0, lidT: 0, out: 0, outT: 0, bump: 0, spin: 0, rx: 0, ry: 0, zoom: 1, px: 0, py: 0, in: 0, lid0: 0, out0: 0, flip: 0, base: 0 };
   // The hand-off between the shelf and this canvas. phase: 'idle' | 'wait' (built, art decoding: the shelf box still shows) |
@@ -39,6 +39,7 @@ window.Inspect3D = (() => {
     const stage = document.querySelector('#inspect .isp-stage'); if (stage) stage.appendChild(canvas);
     // If the GPU drops our context (it can while a game runs fullscreen), throw everything away and rebuild on the next open.
     canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); lost = true; });
+    ensureUniversalModel();
     return true;
   }
   let lost = false;
@@ -47,7 +48,7 @@ window.Inspect3D = (() => {
     try { canvas && canvas.remove(); } catch {}
     tex.forEach(t => { try { t.dispose(); } catch {} }); tex = new Map(); mediaSeq++;
     genTex.forEach(t => { try { t.dispose(); } catch {} }); genTex.clear();
-    renderer = scene = camera = canvas = env = rot = caseG = lidPivot = backPivot = spineG = media = mediaG = manualPlane = spineM = dockAnchor = null; cur = null; customMedia = null; customUrl = null; lost = false;
+    renderer = scene = camera = canvas = env = rot = caseG = lidPivot = backPivot = spineG = media = mediaG = manualPlane = spineM = dockAnchor = null; universalCase = null; cur = null; customMedia = null; customUrl = null; lost = false;
     coverMat = null; if (standInTex) { try { standInTex.dispose(); } catch {} standInTex = null; } phase = 'idle'; pend = null; fadeT0 = 0; target = null; tok++;
     const cb = onDone; onDone = null; if (cb) try { cb(true); } catch {} // a box still hidden for a flight that can't finish now comes back
   }
@@ -236,12 +237,105 @@ window.Inspect3D = (() => {
   // (beta.10) frees every texture a material holds (a cart.glb brings normal / roughness maps, and the label's original), not only .map; cached art stays
   function disposeGroup(g) { if (!g) return; g.traverse(n => { if (n.geometry) n.geometry.dispose(); if (n.material) (Array.isArray(n.material) ? n.material : [n.material]).forEach(m => { if (!m) return; for (const k in m) { const v = m[k]; if (v && v.isTexture && !(v.userData && v.userData.cached)) v.dispose(); } const lo = m.userData && m.userData.labelOrig; if (lo && lo.isTexture && !(lo.userData && lo.userData.cached)) lo.dispose(); m.dispose(); }); }); while (g.children.length) g.remove(g.children[0]); }
 
+  function cloneSkinned(source) {
+    const THREE = T(); if (!THREE) return source.clone(true);
+    const clone = source.clone(true), cloneBones = {};
+    clone.traverse(n => { if (n.isBone) cloneBones[n.name] = n; });
+    clone.traverse(n => {
+      if (n.isSkinnedMesh && n.skeleton) {
+        const newBones = n.skeleton.bones.map(b => cloneBones[b.name] || b);
+        n.bind(new THREE.Skeleton(newBones, n.skeleton.boneInverses), n.matrixWorld);
+      }
+    });
+    return clone;
+  }
+  function makeFullCoverTexture(o) {
+    const THREE = T(); if (!THREE) return null;
+    const W = 2048, H = 1024, c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d');
+    const isSw = o.sys === 'sw' || (typeof o.caseColor === 'string' && (o.caseColor.startsWith('rgba') || o.caseColor === 'transparent'));
+    x.fillStyle = isSw ? '#ffffff' : (typeof o.caseColor === 'string' ? o.caseColor : '#ffffff');
+    x.fillRect(0, 0, W, H);
+    const ft = o.front ? tex.get(o.front) : null, bt = o.back ? tex.get(o.back) : null, stTex = o.spine ? tex.get(o.spine) : null;
+    const bw = W * 0.47;
+    if (bt && bt.image && (bt.image.naturalWidth || bt.image.width)) x.drawImage(bt.image, 0, 0, bw, H);
+    else { x.fillStyle = 'rgba(0,0,0,0.06)'; x.fillRect(0, 0, bw, H); }
+    const sx = W * 0.47, sw = W * 0.06;
+    if (stTex && stTex.image && (stTex.image.naturalWidth || stTex.image.width)) x.drawImage(stTex.image, sx, 0, sw, H);
+    else {
+      x.fillStyle = typeof o.caseColor === 'string' && !o.caseColor.startsWith('rgba') ? o.caseColor : '#e60012';
+      x.fillRect(sx, 0, sw, H);
+      x.save(); x.translate(sx + sw / 2, H / 2); x.rotate(-Math.PI / 2); x.fillStyle = o.spineInk || '#ffffff'; x.font = '600 48px Lexend, system-ui, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+      let title = o.title || ''; if (title.length > 25) title = title.slice(0, 23) + '…'; x.fillText(title, 0, 0); x.restore();
+    }
+    const fx = W * 0.53, fw = W * 0.47;
+    if (ft && ft.image && (ft.image.naturalWidth || ft.image.width)) x.drawImage(ft.image, fx, 0, fw, H);
+    else if (o.standIn && o.standIn.naturalWidth) x.drawImage(o.standIn, fx, 0, fw, H);
+    const texture = new THREE.CanvasTexture(c); texture.colorSpace = THREE.SRGBColorSpace; return texture;
+  }
+  function ensureUniversalModel() {
+    if (universalGltf || universalLoading) return;
+    const THREE = T(); if (!THREE || !window.BS3D.GLTFLoader) return;
+    universalLoading = true;
+    new window.BS3D.GLTFLoader().loadAsync('case.glb').then(gltf => {
+      universalGltf = gltf; universalLoading = false;
+      if (cur && cur.sys !== 'pc' && caseG && !universalCase) applyUniversalModel(cur);
+    }).catch(() => { universalLoading = false; });
+  }
+  function applyUniversalModel(o) {
+    if (!universalGltf || !caseG || o.sys === 'pc') return;
+    const THREE = T(); if (!THREE) return;
+    try {
+      universalCase = cloneSkinned(universalGltf.scene);
+      const k = 1 / 0.1692; universalCase.scale.set(k * (o.ratio / 0.71), k, k);
+      universalCase.rotation.x = -Math.PI / 2; universalCase.position.set(0, 0, 0);
+      const fullCoverTex = makeFullCoverTexture(o);
+      const isClear = o.sys === 'sw' || (typeof o.caseColor === 'string' && (o.caseColor.startsWith('rgba') || o.caseColor === 'transparent'));
+      universalCase.traverse(n => {
+        if (n.isMesh) {
+          if (n.name === 'Cover' || n.name === 'Plane.001') {
+            n.material = new THREE.MeshPhysicalMaterial({ map: fullCoverTex, roughness: 0.5, metalness: 0, clearcoat: 0.2 });
+          } else if (n.name === 'Sleeve') {
+            n.material = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.1, clearcoat: 0.8, clearcoatRoughness: 0.15, transmission: 0.85, ior: 1.49, transparent: true, opacity: 0.3 });
+          } else if (n.name.startsWith('Case')) {
+            if (isClear) n.material = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.24, metalness: 0.01, transmission: 0.65, ior: 1.49, clearcoat: 0.8, transparent: true, opacity: 0.3 });
+            else n.material = new THREE.MeshPhysicalMaterial({ color: new THREE.Color(o.caseSide || o.caseColor || 0x222222), roughness: 0.42, metalness: 0.02, clearcoat: 0.35 });
+          } else if (n.name === 'Cartridge_Cover' && (o.disc || o.front)) {
+            n.material = new THREE.MeshPhysicalMaterial({ map: loadTex(o.disc || o.front), roughness: 0.3, clearcoat: 0.4 });
+          }
+        }
+      });
+      if (spineG) spineG.visible = false;
+      if (backPivot) backPivot.visible = false;
+      if (lidPivot) lidPivot.visible = false;
+      caseG.add(universalCase);
+    } catch (e) { console.warn(e); }
+  }
+
   // Build the case for a game. o = {ratio, depth, caseColor, caseSide, spineInk, front, back, spine, disc, manual, kind:'disc'|'cart'|'umd', size, title, modelUrl}
   function build(o) {
     const THREE = T();
     if (customMedia && customMedia.parent === mediaG) mediaG.remove(customMedia);
-    disposeGroup(caseG); disposeGroup(mediaG); cur = o;
+    disposeGroup(caseG); disposeGroup(mediaG); cur = o; universalCase = null;
     const h = 1, w = o.ratio, lt = Math.max(.014, o.depth * .18), r = Math.min(.016, lt * .9);
+    if (o.sys === "pc") {
+      const D = Math.max(.045, o.depth * .55); cur._D = D;
+      const ft = o.front ? loadTex(o.front) : null;
+      const spineMap = o.spine ? loadTex(o.spine) : spineTexture(o.title, "#0a0a0a", "#ffffff");
+      const bt = o.back ? loadTex(o.back) : null;
+      const blackMat = new THREE.MeshPhysicalMaterial({ color: 0x0a0a0a, roughness: .6, metalness: .05 });
+      const sleeve = map => map ? new THREE.MeshPhysicalMaterial({ map, color: 0xffffff, roughness: .62, metalness: 0, clearcoat: .55, clearcoatRoughness: .22 }) : blackMat;
+      const frontMat = sleeve(ft), spineSleeve = sleeve(spineMap), backMat = sleeve(bt);
+      coverMat = frontMat;
+      const pcBox = new THREE.Mesh(new THREE.BoxGeometry(w, h, D), [blackMat, spineSleeve, blackMat, blackMat, frontMat, backMat]);
+      caseG.add(pcBox);
+      lidPivot = new THREE.Group(); backPivot = new THREE.Group(); spineG = new THREE.Group();
+      caseG.add(lidPivot); caseG.add(backPivot); caseG.add(spineG);
+      dockAnchor = new THREE.Object3D(); caseG.add(dockAnchor);
+      media = new THREE.Group(); mediaG.add(media);
+      st.lid = st.lidT = 0; st.out = st.outT = 0; st.spin = 0;
+      applyState(true);
+      return;
+    }
     const isClear = o.sys === "sw" || (typeof o.caseColor === "string" && (o.caseColor.startsWith("rgba") || o.caseColor === "transparent")) || (typeof o.caseSide === "string" && (o.caseSide.startsWith("rgba") || o.caseSide === "transparent"));
     const plastic = (color, extra) => {
       let col = color, op = 1, tr = false;
@@ -348,6 +442,8 @@ window.Inspect3D = (() => {
     if (o.manual) { const mt = man.material.map; let n = 0; const chk = () => { if (manualPlane !== man) return; const img = mt.image; if (!img || !(img.naturalWidth || img.width)) { if (n++ < 100) setTimeout(chk, 100); return; } fitCover(man, coverRect(img, false), w * .8, h * .86); }; chk(); }
     [[-.36, .34], [-.36, -.34]].forEach(([x, y]) => { const clip = new THREE.Mesh(new THREE.BoxGeometry(w * .08, h * .09, .006), side); clip.position.set(-w / 2 + x * w * .5, y * h, .005); lidPivot.add(clip); });
 
+    ensureUniversalModel();
+    if (universalGltf) applyUniversalModel(o);
     st.lid = st.lidT = 0; st.out = st.outT = 0; st.spin = 0;
     applyState(true);
   }
@@ -521,10 +617,19 @@ window.Inspect3D = (() => {
     backPivot.rotation.y = -(1 - k) * (Math.PI / 2);
     const o = easeIO(st.out);
     const w = cur.ratio, D = cur._D || .05;
-    // disc out: the case slides away off-screen and the disc alone sits in your hands; "put back" brings the case in again
-    caseG.position.set(-(1 - k) * (w / 2) - 2.6 * o, -.3 * o, -(1 - k) * (D / 2) - .6 * o);
-    caseG.rotation.y = (1 - k) * (Math.PI / 2) + 30 * DEG * o;
-    caseG.visible = o < .995;
+    if (cur.sys === "pc") {
+      caseG.position.set(0, 0, 0);
+      caseG.rotation.set(0, 0, 0);
+      caseG.visible = true;
+    } else {
+      caseG.position.set(-(1 - k) * (w / 2) - 2.6 * o, -.3 * o, -(1 - k) * (D / 2) - .6 * o);
+      caseG.rotation.y = (1 - k) * (Math.PI / 2) + 30 * DEG * o;
+      caseG.visible = o < .995;
+      if (universalCase) {
+        const rotBone = universalCase.getObjectByName('Rotate_Bone') || universalCase.getObjectByName('Rotate Bone');
+        if (rotBone) rotBone.rotation.y = -(1 - k) * (Math.PI / 2);
+      }
+    }
     caseG.updateMatrixWorld(true);
     const dockWorldPos = new THREE.Vector3();
     const dockWorldQuat = new THREE.Quaternion();
