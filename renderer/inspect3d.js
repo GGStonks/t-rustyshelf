@@ -67,17 +67,43 @@ window.Inspect3D = (() => {
     return { x: (f.x - (r ? r.left : 0)) * kx, y: (f.y - (r ? r.top : 0)) * ky, h: f.h * ky, ry: f.ry || 0 }; }
   function loadTex(url) {
     if (!url) return null;
-    if (tex.has(url)) { const t = tex.get(url); tex.delete(url); tex.set(url, t); return t; } // used again: last in line to be freed
+    if (tex.has(url)) {
+      const t = tex.get(url);
+      if (t && !t.userData.gone) {
+        tex.delete(url);
+        tex.set(url, t);
+        return t;
+      }
+      tex.delete(url);
+    }
     const THREE = T(), t = new THREE.Texture();
-    t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); t.userData.cached = true;
-    // decoded off the main thread (img.decode) before three gets it, so its upload never stops to decode a 1536px scan
-    // mid-animation; userData.p resolves (true = it has its picture) once that's done, userData.ok says so afterwards
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = renderer ? renderer.capabilities.getMaxAnisotropy() : 8;
+    t.userData.cached = true;
     t.addEventListener('dispose', () => { t.userData.gone = true; });
-    t.userData.p = new Promise(res => { const im = new Image(); im.crossOrigin = 'anonymous'; im.decoding = 'async';
-      im.onload = () => Promise.resolve(im.decode && im.decode()).catch(() => {}).then(() => { if (t.userData.gone) return res(false); t.image = im; t.needsUpdate = true; t.userData.ok = true; res(true); });
-      im.onerror = () => res(false); im.src = url; });
+    const im = new Image();
+    im.crossOrigin = 'anonymous';
+    im.decoding = 'async';
+    t.userData.p = new Promise(res => {
+      im.onload = () => Promise.resolve(im.decode && im.decode()).catch(() => {}).then(() => {
+        if (t.userData.gone) return res(false);
+        t.image = im;
+        t.needsUpdate = true;
+        t.userData.ok = true;
+        res(true);
+      });
+      im.onerror = () => {
+        t.userData.ok = false;
+        res(false);
+      };
+      im.src = url;
+    });
     tex.set(url, t);
-    if (tex.size > 14) { const [k, old] = tex.entries().next().value; tex.delete(k); try { old.dispose(); } catch {} } // keep the last few games' art on the GPU, not everything ever opened
+    if (tex.size > 64) {
+      const [k, old] = tex.entries().next().value;
+      tex.delete(k);
+      try { old.dispose(); } catch {}
+    }
     return t;
   }
   // Spine text drawn into a texture when there's no spine art
@@ -240,7 +266,7 @@ window.Inspect3D = (() => {
     g.traverse(n => {
       if (n.geometry && !(n.geometry.userData && n.geometry.userData.keep)) n.geometry.dispose();
       if (n.material) (Array.isArray(n.material) ? n.material : [n.material]).forEach(m => {
-        if (!m) return;
+        if (!m || (m.userData && m.userData.keep)) return;
         for (const k in m) {
           const v = m[k];
           if (v && v.isTexture && !(v.userData && v.userData.cached)) v.dispose();
@@ -269,9 +295,13 @@ window.Inspect3D = (() => {
     const THREE = T(); if (!THREE) return null;
     const W = 2048, H = 1024, c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d');
     const texture = new THREE.CanvasTexture(c); texture.colorSpace = THREE.SRGBColorSpace;
+    texture.addEventListener('dispose', () => { c.width = c.height = 0; });
     const drawFlippedY = (img, dx, dy, dw, dh) => {
       if (!img || !(img.naturalWidth || img.width)) return;
-      x.save(); x.translate(dx, dy + dh); x.scale(1, -1); x.drawImage(img, 0, 0, dw, dh); x.restore();
+      if (!untainted(img)) return;
+      try {
+        x.save(); x.translate(dx, dy + dh); x.scale(1, -1); x.drawImage(img, 0, 0, dw, dh); x.restore();
+      } catch (err) {}
     };
     const redraw = () => {
       if (cur !== o) return;
@@ -310,6 +340,15 @@ window.Inspect3D = (() => {
       universalGltf = gltf; universalLoading = false;
       gltf.scene.traverse(n => {
         if (n.geometry) n.geometry.userData.keep = true;
+        if (n.material) (Array.isArray(n.material) ? n.material : [n.material]).forEach(m => {
+          if (m) {
+            m.userData.keep = true;
+            for (const k in m) {
+              const v = m[k];
+              if (v && v.isTexture) v.userData.cached = true;
+            }
+          }
+        });
       });
       if (cur && cur.sys !== 'pc' && caseG && !universalCase) applyUniversalModel(cur);
     }).catch(() => { universalLoading = false; });
@@ -331,7 +370,9 @@ window.Inspect3D = (() => {
       universalCase.traverse(n => {
         if (n.isMesh) {
           if (n.name === 'Cover_1' || n.name === 'Cover' || n.name === 'Plane001') {
-            n.material = new THREE.MeshPhysicalMaterial({ map: fullCoverTex, roughness: 0.5, metalness: 0, clearcoat: 0.2 });
+            const coverM = new THREE.MeshPhysicalMaterial({ map: fullCoverTex, roughness: 0.5, metalness: 0, clearcoat: 0.2 });
+            n.material = coverM;
+            coverMat = coverM;
           } else if (n.name === 'Cover_2' || n.name === 'Plane001_1' || n.name === 'Cover_Inside') {
             n.material = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.65, metalness: 0, clearcoat: 0.1 });
           } else if (n.name === 'Cover_3' || n.name === 'Plane001_2') {
@@ -339,7 +380,7 @@ window.Inspect3D = (() => {
           } else if (n.name === 'Booklet') {
             let manualTex = null;
             if (o.manual) {
-              manualTex = loadTex(o.manual).clone(); manualTex.flipY = false;
+              manualTex = loadTex(o.manual).clone();
               const srcM = loadTex(o.manual);
               if (srcM && srcM.userData && srcM.userData.p) {
                 srcM.userData.p.then(ok => { if (ok && srcM.image) { manualTex.image = srcM.image; manualTex.needsUpdate = true; } });
@@ -376,7 +417,11 @@ window.Inspect3D = (() => {
           disposeGroup(media);
         }
         cart.parent.remove(cart);
-        media = cart;
+        
+        const cartPivot = new THREE.Group();
+        cart.position.set(0, 0, -0.0015);
+        cartPivot.add(cart);
+        media = cartPivot;
         mediaG.add(media);
         media.visible = true;
 
@@ -738,29 +783,36 @@ window.Inspect3D = (() => {
     const qMediaG = new THREE.Quaternion();
     mediaG.getWorldQuaternion(qMediaG);
     const dockLocalQuat = qMediaG.clone().invert().multiply(dockWorldQuat);
+    const dockPivotPos = (universalCase && cur.kind === "cart")
+      ? dockPosInMediaG.clone().add(new THREE.Vector3(0, 0, 0.0015).applyQuaternion(dockLocalQuat))
+      : dockPosInMediaG;
     const centerPos = new THREE.Vector3(0, 0, .25 + st.bump);
-    media.position.lerpVectors(dockPosInMediaG, centerPos, o);
+    media.position.lerpVectors(dockPivotPos, centerPos, o);
     const ms = (universalCase && cur.kind === "cart" ? (1 / 0.1692) : 1) * (1 + (cur.kind === "cart" ? .9 : .55) * o);
     media.scale.set(ms, ms, ms);
 
     let rxE = st.rx, ryE = st.ry;
-    if (cur.kind !== "cart" && !st.own) { const idle = now - lastMove > 1500; st.spinV = sm(st.spinV || 0, (st.out > .95 && idle) ? .22 : 0, 1 - Math.exp(-dt * 2)); st.spin += dt * st.spinV; } // Windows: as before
-    else if (cur.kind !== "cart") {
-      const idle = now - lastMove > 1500; st.spinV = sm(st.spinV || 0, (st.out > .95 && idle) ? .22 : 0, 1 - Math.exp(-dt * 2)); st.spin += dt * st.spinV;
+    const idle = now - lastMove > 1500;
+    if (cur.kind !== "cart" && !st.own) {
+      st.spinV = sm(st.spinV || 0, (st.out > .95 && idle) ? .22 : 0, 1 - Math.exp(-dt * 2));
+      st.spin += dt * st.spinV;
+    } else {
+      if (cur.kind !== "cart") {
+        st.spinV = sm(st.spinV || 0, (st.out > .95 && idle) ? .22 : 0, 1 - Math.exp(-dt * 2));
+        st.spin += dt * st.spinV;
+      }
       const d = st.ry - st.base, dw = d - 360 * Math.round(d / 360), whole = d - dw, front = 360 * Math.round(st.base / 360);
-      ryE = st.base + whole + dw * (1 - o) + (front - st.base) * o; rxE = st.rx * (1 - o); // out: the scene squares up, so the disc faces you
+      ryE = st.base + whole + dw * (1 - o) + (front - st.base) * o;
+      rxE = st.rx * (1 - o); // out: the scene squares up, so the media faces you
     }
     if (o < 0.001) {
       media.quaternion.copy(dockLocalQuat);
     } else {
       const targetQuat = new THREE.Quaternion();
-      if (cur.kind === "cart") {
-        targetQuat.set(0, 0, 0, 1);
-      } else {
-        const d = st.ry - st.base, dw = d - 360 * Math.round(d / 360);
-        const euler = new THREE.Euler(-st.rx * o * DEG, (st.flip + dw) * o * DEG, st.spin, "YXZ");
-        targetQuat.setFromEuler(euler);
-      }
+      const d = st.ry - st.base, dw = d - 360 * Math.round(d / 360);
+      const spinZ = cur.kind === "cart" ? 0 : st.spin;
+      const euler = new THREE.Euler(-st.rx * o * DEG, (st.flip + dw) * o * DEG, spinZ, "YXZ");
+      targetQuat.setFromEuler(euler);
       media.quaternion.slerpQuaternions(dockLocalQuat, targetQuat, o);
     }
     const perPx = (2 * 3.9 * Math.tan(camera.fov * DEG / 2)) / innerHeight;
@@ -854,9 +906,7 @@ window.Inspect3D = (() => {
     phase = 'out'; target = cur.from ? tgt : null; onDone = done;
   }
   // closed: only the shown game's art stays on the GPU (reopening it is instant); every other cached texture is freed
-  function close() { active = false; cancelAnimationFrame(raf); raf = 0; phase = 'idle'; pend = null; fadeT0 = 0; if (canvas) canvas.classList.remove('on');
-    const keep = new Set(cur ? [cur.front, cur.back, cur.spine, cur.disc, cur.manual, cur.disc || cur.front] : []);
-    tex.forEach((t, k) => { if (keep.has(k)) return; tex.delete(k); try { t.dispose(); } catch {} }); }
+  function close() { active = false; cancelAnimationFrame(raf); raf = 0; phase = 'idle'; pend = null; fadeT0 = 0; if (canvas) canvas.classList.remove('on'); }
   let lastMove = 0;
   // flip: the disc turned over (degrees, eased by the caller); base: the turn (ry) it had when it came out of the case
   function setPose(rx, ry, zoom, px, py, busy, flip, base) { if (busy) lastMove = performance.now(); st.rx = rx; st.ry = ry; st.zoom = zoom; st.px = px; st.py = py; st.flip = flip || 0; st.own = base != null; st.base = base || 0; } // (base null: Windows, the disc turns with the case as before)

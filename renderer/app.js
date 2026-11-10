@@ -394,7 +394,7 @@ function qsPrebuild(){if(qsPrebuild.done||!window.requestIdleCallback)return;qsP
   requestIdleCallback(()=>{try{if(qsEl||qm.open)return;qsBuild();if(cfgInfo)qsRender();qsEl.getBoundingClientRect()}catch{}},{timeout:4000})}
 function mount(s){
   const g=s.g,i=s.i,sh=st();const slot=document.createElement("div");slot.className="slot";
-  slot.innerHTML=`<div class="box"><div class="face f-front"><img alt="" draggable="false" decoding="async"><div class="dim"></div><div class="glare"></div><div class="sheen"></div></div><div class="face f-back"></div>
+  slot.innerHTML=`<div class="box"><div class="face f-front"><img alt="" draggable="false" decoding="async" crossorigin="anonymous"><div class="dim"></div><div class="glare"></div><div class="sheen"></div></div><div class="face f-back"></div>
       <div class="face f-left"><div class="spine-band"></div><div class="spine-title"></div></div><div class="face f-right spine2"><div class="spine-band"></div><div class="spine-title"></div></div><div class="face bev bev-fl"></div><div class="face bev bev-fr"></div><div class="face bev bev-bl"></div><div class="face bev bev-br"></div></div>`;
   const os=stOf(g);
   const gScale=(cfgInfo&&cfgInfo.config&&cfgInfo.config.ui&&cfgInfo.config.ui.gameScale&&cfgInfo.config.ui.gameScale[g.id])||1;
@@ -523,7 +523,7 @@ function glareAndroid(s,ad,sg,x,ry){
 }
 // Real covers load asynchronously; generated covers are drawn a few per frame so moving never stutters.
 let coverQ=[],coverQRunning=false;
-function setFront(s,g,url,made){if(url&&url.then){const img=s.img;s.coverP=url;url.then(u=>{if(s.img===img&&s.coverP===url&&u)setFront(s,g,u,made)});return}s.coverP=null;url=made?url:thumb(url,bh*OS);s.img.decoding="async";s.img.onerror=made?null:()=>{s.img.onerror=null;setFront(s,g,ANDROID&&Covers.frontAsync?Covers.frontAsync(stOf(g),g):Covers.front(stOf(g),g),true)};s.img.src=url} /* (a picture that won't load: the made-up cover is encoded in the worker, not on this thread mid-slide; made: never retried) */
+function setFront(s,g,url,made){if(url&&url.then){const img=s.img;s.coverP=url;url.then(u=>{if(s.img===img&&s.coverP===url&&u)setFront(s,g,u,made)});return}s.coverP=null;url=made?url:thumb(url,bh*OS);s.img.crossOrigin="anonymous";s.img.decoding="async";s.img.onerror=made?null:()=>{s.img.onerror=null;setFront(s,g,ANDROID&&Covers.frontAsync?Covers.frontAsync(stOf(g),g):Covers.front(stOf(g),g),true)};s.img.src=url} /* (a picture that won't load: the made-up cover is encoded in the worker, not on this thread mid-slide; made: never retried) */
 function queueCover(s,g,dist){
   if(g.art&&g.art.front){setFront(s,g,g.art.front);return}
   if(dist===0){setFront(s,g,Covers.frontAsync(stOf(g),g));return}
@@ -1043,7 +1043,7 @@ function fillDetails(){
   const how=$("dHow");if(how){how.textContent=g.kind==="rom"?`Plays in ${s.emulatorName}${s.bootOnLaunch&&!s.useIpl&&((themes[s.id]||{}).boot||s.insertAnim===false)?" after the boot "+((themes[s.id]||{}).boot?"video":"intro"):""}. Close the emulator to come back here.`:"";how.hidden=g.kind!=="rom"}
   raDetails(g);
   $("dPlay").textContent=g.kind==="rom"||g.kind==="steam"?"Play":"Open";
-  $("dInspect").hidden=!isGame(g);$("dManual").hidden=g.kind!=="rom";$("dManual").querySelector("span").textContent=hasManual(g)?"Read manual":"Read booklet"; /* (beta.7: an icon button: only its label changes) */
+  $("dInspect").hidden=!isGame(g)||!canInspect(g);$("dManual").hidden=g.kind!=="rom";$("dManual").querySelector("span").textContent=hasManual(g)?"Read manual":"Read booklet"; /* (beta.7: an icon button: only its label changes) */
   $("dEmu").hidden=!(g.kind==="rom"&&s.hasEmulator);$("dEmu").textContent=`Open ${s.emulatorName||"emulator"}`;
   {const pc=g.kind==="steam"&&!!api.pcCoverOptions,b=$("dBoxArt"),p=$("dBoxArtPc");if(b)b.hidden=!(g.kind==="rom"&&api.artStudio&&g.file);if(p)p.hidden=!pc;} /* (beta.9) a PC game's Box art sits beside Play (it has no manual or Inspect), not in More */{const b=$("dRename");if(b)b.hidden=!(api.renameGame&&((g.kind==="rom"&&g.file)||g.kind==="steam"));} /* (beta.5: PC games too, through the cover picker) */
   {const b=$("dCols");if(b)b.hidden=!isGame(g)||g.kind==="app";}
@@ -1456,7 +1456,7 @@ function slotPose(s){if(!s||!s.el||!s.el.isConnected||!s.img)return null;const f
 function relight(e){if(!e||!e.classList.contains("lift"))return;e.classList.add("glowfade");e.classList.remove("lift");clearTimeout(e._gl);e._gl=setTimeout(()=>e.classList.remove("glowfade"),450)}
 function unhold(e,fade){if(!e)return;if(!e.classList.contains("held")){relight(e);return}if(fade){e.classList.add("unhold");clearTimeout(e._uh);e._uh=setTimeout(()=>e.classList.remove("unhold"),260)}e.classList.remove("held");relight(e)}
 function openInspect(){uiCrumb("Inspect");
-  const g=curGame(),s=pickShelf();if(!g||!isGame(g)||sysBusy()||(mode!=="browse"&&mode!=="details"))return;
+  const g=curGame(),s=pickShelf();if(!g||!isGame(g)||!canInspect(rawItem())||sysBusy()||(mode!=="browse"&&mode!=="details"))return;
   detailsBack=mode==="details"?g:null;closeDetails(true);mode="inspect";clearTimeout(isp.wd);const tok=++isp.tok;
   const el=$("inspect"),style=stOf(g),m=MEDIA[s.id]||MEDIA.wii;
   const ch=Math.min(innerHeight*.58,innerWidth*.34/style.ratio),cw=ch*style.ratio;
@@ -2650,6 +2650,7 @@ let shuffling=false;
 const shuffleAll=()=>!(cfgInfo&&cfgInfo.config.ui.shuffleAll===false);
 const isGame=g=>g.kind==="rom"||g.kind==="steam";
 const isHideable=g=>!!g&&(isGame(g)||g.kind==="random"||g.kind==="emulator"); // (supalii) what Hide from shelf works on
+const canInspect=g=>{const item=g||rawItem();return !emptyShelf()&&!!item&&isGame(item)&&item.kind!=="emulator"&&item.kind!=="random"&&item.kind!=="shuffle";};
 // (beta.4) PC games carry their source: Steam, Epic, Quiver or added by hand (main/pcgames.js)
 const PC_SRC={epic:"Epic Games",folder:"PC games folder",quiver:"Quiver",custom:"Custom",gog:"GOG",ubisoft:"Ubisoft",ea:"EA",xbox:"Xbox",hoyoplay:"HoYoPlay"},PC_HOW={epic:"Starts through the Epic Games Launcher, so its sign-in, cloud saves and overlay work as usual.",quiver:"Installed with Quiver Launcher. (T)rustyShelf starts it from its own folder; updates stay in Quiver.",custom:"Added by you in Settings → Custom games. (T)rustyShelf starts it from its own folder.",folder:"A folder in your PC games folder (Settings → PC games). (T)rustyShelf starts it from there.",
   gog:"Installed with GOG Galaxy. GOG games have no copy protection: (T)rustyShelf starts it itself; updates stay in GOG Galaxy.",ubisoft:"Starts through Ubisoft Connect, so its sign-in and cloud saves work as usual.",ea:"Starts through the EA app, so its sign-in and cloud saves work as usual.",hoyoplay:"Installed with HoYoPlay. (T)rustyShelf starts the game itself, so HoYoPlay doesn't have to run; updates stay in HoYoPlay.",xbox:"An Xbox app game (Game Pass included). It starts like any Xbox app game, signed in with your Microsoft account."};
@@ -3442,7 +3443,7 @@ const HINTS=[
   {act:()=>toggleFav(),pad:["tri"],kbd:["H"],label:"♥ hold",when:notDet},
   {act:()=>mode==="details"?closeDetails():openDetails(),pad:["sq"],kbd:["I"],label:"Details",when:notDet},
   {act:()=>play(),pad:["x"],kbd:["Enter"],label:"Play"},
-  {act:()=>openInspect(),pad:["R3"],kbd:["V"],label:"Inspect"},
+  {act:()=>openInspect(),pad:["R3"],kbd:["V"],label:"Inspect",when:canInspect},
   {act:()=>shuffle(),pad:["L3"],kbd:["R"],label:"Shuffle",when:notDet},
   {act:()=>openMuseum(),pad:["⧉"],kbd:["M"],label:"Museum hold",when:notDet},
   {act:()=>openSort(),pad:["☰"],kbd:["G"],label:"Sort hold",when:notDet},
@@ -3458,7 +3459,7 @@ const PAD_HINTS=[
   {act:()=>detailsY(),pad:["tri"],label:"Flip",dy:1,when:()=>mode==="details"},
   {act:()=>mode==="details"?closeDetails():openDetails(),pad:["sq"],label:"Details",when:notDet},
   {act:()=>play(),pad:["x"],label:"Play"},
-  {act:()=>openInspect(),pad:["R3"],label:"Inspect"},
+  {act:()=>openInspect(),pad:["R3"],label:"Inspect",when:canInspect},
   {act:()=>shuffle(),pad:["L3"],label:"Shuffle",when:notDet},
   {act:()=>Setup.open(),pad:["⧉"],label:"Settings",when:notDet},
   {act:()=>openMuseum(),pad:["⧉"],label:"",hold:"Museum",when:notDet},
@@ -3527,7 +3528,7 @@ const showPad=()=>inputMode==="pad"||(!!padSeen&&(inputMode!=="kbd"||!kbdEver));
 function renderHints(){pvGuard();
   try{paintMenuGlyph();if(qm.open)qsHints();if(mode==="achv")achHints();if(mode==="customize")custSwitchText()}catch{} // the quick menu's own hint bar follows a switch between pad and keyboard too
   const usePad=showPad();const g=curGame();
-  const es=!g&&!!emptyShelf();const sig=usePad+"|"+glyphStyle()+"|"+(g&&g.kind)+"|"+!!(g&&g.pick)+"|"+es+"|"+(mode==="details")+"|"+(mode==="details"?detailsYLab().join():"");if(sig===renderHints.sig&&$("hints").childElementCount)return;renderHints.sig=sig; // only rebuilt when something it shows changed
+  const es=!g&&!!emptyShelf();const sig=usePad+"|"+glyphStyle()+"|"+(g&&g.kind)+"|"+!!(g&&g.pick)+"|"+es+"|"+(mode==="details")+"|"+(mode==="details"?detailsYLab().join():"")+"|"+canInspect(rawItem());if(sig===renderHints.sig&&$("hints").childElementCount)return;renderHints.sig=sig; // only rebuilt when something it shows changed
   const h=$("hints");h.innerHTML="";
   (usePad?PAD_HINTS:HINTS).forEach(hn=>{if(hn.when&&!hn.when(rawItem()))return;const b=document.createElement("button");b.type="button";b.className="hint"+(/Letter|Shuffle/.test(hn.label)?" hint-lo":"");
     const keys=(usePad?hn.pad.map(glyph):hn.kbd.map(k=>`<span class="g">${k}</span>`)).join("");

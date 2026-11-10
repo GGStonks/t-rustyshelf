@@ -75,5 +75,13 @@ check('Sleeve uses depthWrite: false to prevent z-fighting and flickering', /Sle
 check('Cartridge model from 3D case is extracted into mediaG with label', /o\.kind\s*===\s*["']cart["']\s*&&\s*cart[\s\S]*?mediaG\.add\(media\)[\s\S]*?Cartridge_Cover/.test(inspect3dSrc));
 check('Geometries are protected from disposal to prevent black textures', /userData\.keep\s*=\s*true/.test(inspect3dSrc) && /!\(n\.geometry\.userData\s*&&\s*n\.geometry\.userData\.keep\)/.test(inspect3dSrc));
 
+// 11. Check removal of inspect button for emulator and shuffle cases
+check('canInspect hides inspect button for emulator and shuffle cases', /canInspect[\s\S]*?item\.kind\s*!==\s*"emulator"[\s\S]*?item\.kind\s*!==\s*"random"/.test(appSrc));
+check('HINTS and PAD_HINTS inspect button uses canInspect condition', /label:\s*"Inspect",\s*when:\s*canInspect/.test(appSrc));
+
+// 12. Check cartridge centering pivot and canvas disposal protection
+check('Cartridge uses centered pivot container in mediaG', /cartPivot[\s\S]*?cart\.position\.set\(0,\s*0,\s*-0\.0015\)[\s\S]*?cartPivot\.add\(cart\)/.test(inspect3dSrc));
+check('Cover canvas releases GPU memory on disposal', /addEventListener\(['"]dispose['"],\s*\(\)\s*=>\s*\{\s*c\.width\s*=\s*c\.height\s*=\s*0;\s*\}\)/.test(inspect3dSrc));
+
 console.log(fails ? `${fails} failed` : "all passed");
 process.exit(fails ? 1 : 0);
