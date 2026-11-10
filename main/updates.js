@@ -4,6 +4,8 @@
 // is on, asks the public beta page's Releases which version is newest and tells the shelf when it's newer than this
 // one. Nothing is downloaded or installed: the notice opens the download page. Offline, or with GitHub busy, it stays
 // quiet and the next start tries again.
+const fs = require('fs');
+const path = require('path');
 const https = require('https');
 
 const REPO = 'GGStonks/t-rustyshelf'; // (this fork's own releases: the official Boxshelf's would offer to replace it)
@@ -65,7 +67,8 @@ async function check(current, force = false) {
         .sort((p, q) => compare(q.tag_name, p.tag_name))[0];
       const latest = best ? String(best.tag_name).replace(/^v/, '') : null;
       last = { current, latest, newer: !!latest && compare(latest, current) > 0, url: best ? best.html_url : LINKS.releases,
-        notes: best && typeof best.body === 'string' ? best.body.slice(0, 2000) : '', checkedAt: Date.now() };
+        notes: best && typeof best.body === 'string' ? best.body.slice(0, 2000) : '', checkedAt: Date.now(),
+        assets: best && Array.isArray(best.assets) ? best.assets.map(a => ({ name: a.name, url: a.browser_download_url, size: a.size })) : [] };
       log('Update check:', latest ? `newest ${latest}${last.newer ? ' (newer)' : ''}` : 'no releases yet');
       return last;
     } catch (e) {
@@ -76,4 +79,85 @@ async function check(current, force = false) {
   return inflight;
 }
 
-module.exports = { init, check, compare, LINKS };
+function downloadFile(url, dest, onProgress, hops = 0) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, { headers: { 'User-Agent': 'TrustyShelf' } }, res => {
+      if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location && hops < 5) {
+        res.resume();
+        return resolve(downloadFile(new URL(res.headers.location, url).toString(), dest, onProgress, hops + 1));
+      }
+      if (res.statusCode !== 200) {
+        res.resume();
+        return reject(new Error('the download server said ' + res.statusCode));
+      }
+      const total = +res.headers['content-length'] || 0;
+      let got = 0, lastPct = -1;
+      res.on('data', c => {
+        got += c.length;
+        if (total && onProgress) {
+          const p = Math.floor(got / total * 100);
+          if (p !== lastPct) { lastPct = p; onProgress(p); }
+        }
+      });
+      const fileStream = fs.createWriteStream(dest);
+      require('stream').pipeline(res, fileStream, err => {
+        clearTimeout(cap);
+        if (err) reject(err);
+        else if (total && got < total) reject(new Error('the download was cut short'));
+        else resolve();
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(60000, () => req.destroy(new Error('the download timed out')));
+    const cap = setTimeout(() => req.destroy(new Error('the download took too long')), 15 * 60e3);
+  });
+}
+
+async function applyUpdate(release, onProgress) {
+  const isLinux = process.platform === 'linux';
+  const isWin = process.platform === 'win32';
+  const assets = release.assets || [];
+  const asset = assets.find(a => isLinux ? /\.AppImage$/i.test(a.name) : isWin ? /\.exe$/i.test(a.name) : false);
+  if (!asset || !asset.url) throw new Error('No matching download asset found for this platform.');
+
+  let target = isLinux ? process.env.APPIMAGE : (process.env.PORTABLE_EXECUTABLE_FILE || process.execPath);
+  if (!target && isLinux) target = process.execPath;
+  if (!target || /node_modules|electron(?:\.exe)?$/i.test(target)) {
+    throw new Error('Development environment detected; skipping executable replacement.');
+  }
+
+  const tmpFile = target + '.update.tmp';
+  log('Auto-update: downloading', asset.name, 'to', tmpFile);
+  await downloadFile(asset.url, tmpFile, onProgress);
+
+  if (isLinux) {
+    fs.chmodSync(tmpFile, 0o755);
+  }
+
+  if (isWin) {
+    try { fs.renameSync(target, target + '.old'); } catch {}
+  }
+  fs.renameSync(tmpFile, target);
+  try {
+    const generic = path.join(path.dirname(target), '(T)rustyShelf.AppImage');
+    if (generic !== target && fs.existsSync(generic)) {
+      fs.copyFileSync(target, generic);
+      fs.chmodSync(generic, 0o755);
+    }
+  } catch {}
+  log('Auto-update: installed cleanly to', target);
+  return { ok: true, target, version: release.latest };
+}
+
+function relaunchApp() {
+  const { app } = require('electron');
+  const target = process.env.APPIMAGE || (process.platform === 'linux' ? process.execPath : undefined);
+  if (target) {
+    app.relaunch({ execPath: target });
+  } else {
+    app.relaunch();
+  }
+  app.exit(0);
+}
+
+module.exports = { init, check, compare, applyUpdate, relaunchApp, LINKS };

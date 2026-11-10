@@ -420,6 +420,7 @@ function build(){
     M("What's new","whatsnew","Each version's changes: the newest one out, and the one you have.","What changed in each version of (T)rustyShelf. Select an item to read more about it.",[{t:"dyn",fn:wnRows}],{keys:"what's new whats new release notes patch notes changelog changes version update",sub:()=>{const e=wnFor(info.version);return {text:upd&&upd.newer?`${upd.latest} is out`:e?e.title:"Release notes"}}}),
     A("Updates",updBtn,"Looks on (T)rustyShelf's releases page on GitHub for a newer version. When there is one, this opens its download page: unzip it over this folder and your settings are kept.",checkUpdates,{when:()=>!!api.updateCheck,keys:"update new version beta download upgrade"}),
     T("Check for new versions","ui.updateCheck",true,"Once each time (T)rustyShelf starts, it asks its releases page on GitHub whether a newer version is out, and says so on the shelf. Nothing downloads by itself.",{when:()=>!!api.updateCheck,keys:"update check online automatic"}),
+    T("Automatically update on startup","ui.autoUpdate",false,"At startup, check for updates and automatically install any new version found, then restart.",{when:()=>!!api.updateCheck,keys:"update auto automatic download upgrade restart"}),
     H("More"),
     M("Advanced","sys-more","Run setup again, the app folder, clearing the play history and restoring emulator settings.","Setup, folders and resets you rarely need.",[
       A("Run setup again","Start","Walks through the first-time setup.",()=>legacy("welcome",{wizard:true}),{keys:"wizard first"}),

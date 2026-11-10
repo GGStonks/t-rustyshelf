@@ -16,6 +16,11 @@ contextBridge.exposeInMainWorld('trustyshelf', {
   openExternal: url => call('app:openExternal', { url }),
   updateCheck: force => call('app:updateCheck', { force: !!force }), // (1.82) { current, latest, newer, url, links } or { error }
   onUpdate: cb => ipcRenderer.on('app:update', (_e, r) => cb(r)),
+  onUpdateDownloading: cb => ipcRenderer.on('app:updateDownloading', (_e, r) => cb(r)),
+  onUpdateProgress: cb => ipcRenderer.on('app:updateProgress', (_e, r) => cb(r)),
+  onUpdateRestarting: cb => ipcRenderer.on('app:updateRestarting', (_e, r) => cb(r)),
+  onUpdateFailed: cb => ipcRenderer.on('app:updateFailed', (_e, r) => cb(r)),
+  relaunchApp: () => call('app:relaunch'),
   restoreEmuSettings: () => call('emucfg:restore'),
   // (beta.7) Set up for me
   emuSetupStatus: (systemId) => call('emusetup:status', { systemId }), emuSetupPlan: (systemId) => call('emusetup:plan', { systemId }),

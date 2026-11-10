@@ -8,6 +8,24 @@
 //   sections: [{ h, items: [[headline, more]] }] }; newest first.
 window.BS_WHATSNEW = [
   {
+    version: '1.5.2.0', android: '1.5.2.0', date: '2026-11-10', title: "Startup auto-update with automatic restart and startup trailer suppression",
+    highlights: [
+      "Optional automatic update check at startup with background download",
+      "Automatic 5-second restart prompt once updates are applied without manual downloading",
+      "Suppressed background video trailers from auto-playing on initial app startup"
+    ],
+    platforms: [
+      "Linux and Windows: optional startup auto-update check and automatic restart countdown.",
+      "All platforms: background video trailer suppression on initial startup."
+    ],
+    sections: [
+      { h: "Updates and startup", items: [
+        ["Startup auto-update", "You can now enable automatic update checking at startup in Settings → System. When enabled, (T)rustyShelf checks for newer releases in the background, downloads and installs updates automatically without manual downloading, and alerts you with a 5-second countdown before restarting."],
+        ["Startup video trailer suppression", "Background video trailers are now suppressed on initial app launch until you browse or navigate the shelf, preventing trailers from auto-playing unexpectedly on startup."]
+      ] }
+    ]
+  },
+  {
     version: '1.5.1.0', android: '1.5.1.0', date: '2026-11-10', title: "Citron Switch emulator crash fix and Linux environment cleanup",
     highlights: [
       "Nintendo Switch games boot reliably in Citron without crashing on launch",

@@ -1149,7 +1149,7 @@ if(api.onPreviewClip)api.onPreviewClip(d=>{if(!d||!d.id)return;
   if(mode==="details"&&PV.key&&PV.r&&PV.r.id===d.id&&(PV.r.type==="youtube"||PV.r.type==="pending")){const k=PV.key,ytOn=!!PV.yt;PV.r={type:"file",url:d.url,yt:d.id};
     $("dTabMedia").classList.add("has");$("dNoMedia").hidden=true;
     if(dTabNow()===MEDIA_TAB){if(!ytOn)pvBoxStart(k)}else pvVid($("pvBack"),d.url,k,()=>app.classList.add("pv-det"))}
-  if(PV.bwait&&PV.bwait.id===d.id&&PV.bkey===PV.bwait.k&&mode==="browse"){const k=PV.bkey;PV.bwait=null;pvBackPlay(k,d.url)}});
+  if(PV.bwait&&PV.bwait.id===d.id&&PV.bkey===PV.bwait.k&&mode==="browse"&&shelfMovedAt>=0&&lastInputAt>0){const k=PV.bkey;PV.bwait=null;pvBackPlay(k,d.url)}});
 // the panel scrolls: YouTube's player steps aside and comes back where the box now is
 $("details").addEventListener("scroll",()=>{if(!PV.yt||!api.previewYtMove)return;api.previewYtMove(null,false);clearTimeout(PV.st);PV.st=setTimeout(()=>{if(!PV.yt)return;const rc=pvRect();api.previewYtMove(rc,!!rc)},180)},{passive:true});
 addEventListener("resize",()=>{if(PV.yt&&api.previewYtMove){const rc=pvRect();api.previewYtMove(rc,!!rc)}});
@@ -1161,15 +1161,16 @@ function pvBackStop(){clearTimeout(PV.bt);PV.bkey="";PV.bwait=null;app.classList
 function pvWarm(){clearTimeout(PV.wt);if(ANDROID||pvMode()!=="details"||mode!=="browse")return;const g=curGame();if(!pvCan(g)||!(g.kind==="steam"||(g.info&&g.info.video)))return;
   PV.wt=setTimeout(()=>{if(mode!=="browse"||curGame()!==g)return;if(window.BS_BUSY&&BS_BUSY()){pvWarm();return}pvAsk(g)},2000)}
 function pvBackSchedule(){if(!PV)return;if(pvMode()!=="shelf"||ANDROID){if(PV.bkey)pvBackStop();pvWarm();return}
+  if(shelfMovedAt<0||lastInputAt===0)return; // startup: suppress background video trailer until user navigates
   const g=curGame(),k=g?String(g.id!=null?g.id:g.title):"";if(k&&k===PV.bkey&&mode==="browse")return;pvBackStop();
   if(mode!=="browse"||!pvCan(g))return;PV.bkey=k;PV.bt=setTimeout(()=>pvBackStart(g,k),pvDelay()+500)}
 async function pvBackStart(g,k){
-  if(PV.bkey!==k||mode!=="browse")return;if(window.BS_BUSY&&BS_BUSY()){PV.bt=setTimeout(()=>pvBackStart(g,k),300);return}
-  const r=await pvAsk(g);if(PV.bkey!==k||mode!=="browse"||!r)return;
+  if(PV.bkey!==k||mode!=="browse"||shelfMovedAt<0||lastInputAt===0)return;if(window.BS_BUSY&&BS_BUSY()){PV.bt=setTimeout(()=>pvBackStart(g,k),300);return}
+  const r=await pvAsk(g);if(PV.bkey!==k||mode!=="browse"||!r||shelfMovedAt<0||lastInputAt===0)return;
   if(r.type!=="file"){if(r.pending||r.type==="pending")PV.bwait={k,id:r.id};return} // (beta.8) its console trailer clip plays when ready
   pvBackPlay(k,r.url)}
-function pvBackPlay(k,url){if(PV.bkey!==k||mode!=="browse")return;if(window.BS_BUSY&&BS_BUSY()){PV.bt=setTimeout(()=>pvBackPlay(k,url),300);return}
-  uiCrumb("Shelf video: "+String(url).split(/[\\/]/).pop().slice(0,60));const v=$("pvBack");v.muted=true;v.onplaying=()=>{if(PV.bkey===k)app.classList.add("pv-on")};v.src=url;v.play().catch(()=>{})}
+function pvBackPlay(k,url){if(PV.bkey!==k||mode!=="browse"||shelfMovedAt<0||lastInputAt===0)return;if(window.BS_BUSY&&BS_BUSY()){PV.bt=setTimeout(()=>pvBackPlay(k,url),300);return}
+  uiCrumb("Shelf video: "+String(url).split(/[\\/]/).pop().slice(0,60));const v=$("pvBack");v.muted=true;v.onplaying=()=>{if(PV.bkey===k&&shelfMovedAt>=0&&lastInputAt>0)app.classList.add("pv-on")};v.src=url;v.play().catch(()=>{})}
 // people who set (T)rustyShelf up before previews existed: told once, on the shelf, where to turn them on
 // one UI setting saved on top of the settings as they are now (the shelf's own copy may be older than what Settings or a
 // test saved since: saving that whole copy would undo them)
@@ -2181,6 +2182,34 @@ function manualNote(list){if(!list||!list.length)return"";const up=list.filter(x
 setInterval(()=>{if(pendingNote&&mode==="browse"&&!sysBusy()){toast(pendingNote);pendingNote=""}},1500);
 // (1.82) a newer beta on the public page (main asks once per start): said once per version, when the shelf is idle
 api.onUpdate&&api.onUpdate(r=>noteUpdate(r)); // (beta.7: a card with the release's highlights, not a one-line note)
+api.onUpdateDownloading&&api.onUpdateDownloading(r=>{toastWork(`Downloading (T)rustyShelf ${r.latest}…`)});
+api.onUpdateProgress&&api.onUpdateProgress(r=>{toastWork(`Downloading (T)rustyShelf ${r.latest} (${r.pct}%)…`)});
+api.onUpdateFailed&&api.onUpdateFailed(r=>{toast(`Update download failed: ${r.error||"unknown error"}`)});
+api.onUpdateRestarting&&api.onUpdateRestarting(r=>{
+  toastDone("Update downloaded");
+  let sec = r.seconds || 5;
+  const updateMsg = () => `(T)rustyShelf has updated to version ${r.version}. The app needs to restart to use the update. Restarting automatically in ${sec} second${sec===1?"":"s"}…`;
+  const noteObj = {
+    wide: true,
+    kick: "Warning",
+    title: "Restart Required",
+    sub: updateMsg(),
+    primary: ["Restart now", () => { if (api.relaunchApp) api.relaunchApp(); }]
+  };
+  noteShow(noteObj);
+  const iv = setInterval(() => {
+    sec--;
+    if (sec > 0) {
+      if (NOTE.el) {
+        const subEl = NOTE.el.querySelector(".nc-sub");
+        if (subEl) subEl.textContent = updateMsg();
+      }
+    } else {
+      clearInterval(iv);
+      if (api.relaunchApp) api.relaunchApp();
+    }
+  }, 1000);
+});
 api.onLibraryChanged&&api.onLibraryChanged(info=>{const note=info&&manualNote(info.manualUpdates);
   // (beta.9) the background manual re-check set some aside and looked them up again: said plainly, once it's all done
   const rk=info&&info.rechecked&&info.rechecked.moved?`✓ Manuals checked: ${info.rechecked.moved} set aside and looked up again`:"";
