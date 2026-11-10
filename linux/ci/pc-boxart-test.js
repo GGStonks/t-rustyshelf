@@ -67,5 +67,13 @@ check('Universal case.glb exists in renderer', fs.existsSync(path.join(__dirname
 check('Universal case.blend exists in renderer', fs.existsSync(path.join(__dirname, '..', '..', 'renderer', 'case.blend')));
 check('Inspect3D uses universal case.glb model', /ensureUniversalModel\(\)[\s\S]*?loadAsync\(["']case\.glb["']\)/.test(inspect3dSrc));
 
+// 10. Check new features: booklet, white interior, singular vertical flip, cartridge extraction, flicker prevention
+check('Cover art draws each image flipped vertically singularly', /drawFlippedY\s*=/.test(inspect3dSrc) && /drawFlippedY\(bt\.image/.test(inspect3dSrc) && /drawFlippedY\(ft\.image/.test(inspect3dSrc));
+check('Case interior has white page interior material for Cover_2', /Cover_2[\s\S]*?MeshPhysicalMaterial[\s\S]*?color:\s*0xffffff/.test(inspect3dSrc));
+check('Booklet material is supported inside case under clips', /Booklet[\s\S]*?MeshStandardMaterial/.test(inspect3dSrc));
+check('Sleeve uses depthWrite: false to prevent z-fighting and flickering', /Sleeve[\s\S]*?depthWrite:\s*false/.test(inspect3dSrc));
+check('Cartridge model from 3D case is extracted into mediaG with label', /o\.kind\s*===\s*["']cart["']\s*&&\s*cart[\s\S]*?mediaG\.add\(media\)[\s\S]*?Cartridge_Cover/.test(inspect3dSrc));
+check('Geometries are protected from disposal to prevent black textures', /userData\.keep\s*=\s*true/.test(inspect3dSrc) && /!\(n\.geometry\.userData\s*&&\s*n\.geometry\.userData\.keep\)/.test(inspect3dSrc));
+
 console.log(fails ? `${fails} failed` : "all passed");
 process.exit(fails ? 1 : 0);

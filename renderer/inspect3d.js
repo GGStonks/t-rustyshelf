@@ -235,7 +235,23 @@ window.Inspect3D = (() => {
     return box;
   }
   // (beta.10) frees every texture a material holds (a cart.glb brings normal / roughness maps, and the label's original), not only .map; cached art stays
-  function disposeGroup(g) { if (!g) return; g.traverse(n => { if (n.geometry) n.geometry.dispose(); if (n.material) (Array.isArray(n.material) ? n.material : [n.material]).forEach(m => { if (!m) return; for (const k in m) { const v = m[k]; if (v && v.isTexture && !(v.userData && v.userData.cached)) v.dispose(); } const lo = m.userData && m.userData.labelOrig; if (lo && lo.isTexture && !(lo.userData && lo.userData.cached)) lo.dispose(); m.dispose(); }); }); while (g.children.length) g.remove(g.children[0]); }
+  function disposeGroup(g) {
+    if (!g) return;
+    g.traverse(n => {
+      if (n.geometry && !(n.geometry.userData && n.geometry.userData.keep)) n.geometry.dispose();
+      if (n.material) (Array.isArray(n.material) ? n.material : [n.material]).forEach(m => {
+        if (!m) return;
+        for (const k in m) {
+          const v = m[k];
+          if (v && v.isTexture && !(v.userData && v.userData.cached)) v.dispose();
+        }
+        const lo = m.userData && m.userData.labelOrig;
+        if (lo && lo.isTexture && !(lo.userData && lo.userData.cached)) lo.dispose();
+        m.dispose();
+      });
+    });
+    while (g.children.length) g.remove(g.children[0]);
+  }
 
   function cloneSkinned(source) {
     const THREE = T(); if (!THREE) return source.clone(true);
@@ -253,25 +269,30 @@ window.Inspect3D = (() => {
     const THREE = T(); if (!THREE) return null;
     const W = 2048, H = 1024, c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d');
     const texture = new THREE.CanvasTexture(c); texture.colorSpace = THREE.SRGBColorSpace;
+    const drawFlippedY = (img, dx, dy, dw, dh) => {
+      if (!img || !(img.naturalWidth || img.width)) return;
+      x.save(); x.translate(dx, dy + dh); x.scale(1, -1); x.drawImage(img, 0, 0, dw, dh); x.restore();
+    };
     const redraw = () => {
+      if (cur !== o) return;
       const isSw = o.sys === 'sw' || (typeof o.caseColor === 'string' && (o.caseColor.startsWith('rgba') || o.caseColor === 'transparent'));
       x.fillStyle = isSw ? '#ffffff' : (typeof o.caseColor === 'string' ? o.caseColor : '#ffffff');
       x.fillRect(0, 0, W, H);
       const ft = o.front ? loadTex(o.front) : null, bt = o.back ? loadTex(o.back) : null, stTex = o.spine ? loadTex(o.spine) : null;
       const bw = W * 0.47;
-      if (bt && bt.image && (bt.image.naturalWidth || bt.image.width)) x.drawImage(bt.image, 0, 0, bw, H);
+      if (bt && bt.image && (bt.image.naturalWidth || bt.image.width)) drawFlippedY(bt.image, 0, 0, bw, H);
       else { x.fillStyle = 'rgba(0,0,0,0.06)'; x.fillRect(0, 0, bw, H); }
       const sx = W * 0.47, sw = W * 0.06;
-      if (stTex && stTex.image && (stTex.image.naturalWidth || stTex.image.width)) x.drawImage(stTex.image, sx, 0, sw, H);
+      if (stTex && stTex.image && (stTex.image.naturalWidth || stTex.image.width)) drawFlippedY(stTex.image, sx, 0, sw, H);
       else {
         x.fillStyle = typeof o.caseColor === 'string' && !o.caseColor.startsWith('rgba') ? o.caseColor : '#e60012';
         x.fillRect(sx, 0, sw, H);
-        x.save(); x.translate(sx + sw / 2, H / 2); x.rotate(-Math.PI / 2); x.fillStyle = o.spineInk || '#ffffff'; x.font = '600 48px Lexend, system-ui, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+        x.save(); x.translate(sx + sw / 2, H / 2); x.rotate(Math.PI / 2); x.fillStyle = o.spineInk || '#ffffff'; x.font = '600 48px Lexend, system-ui, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
         let title = o.title || ''; if (title.length > 25) title = title.slice(0, 23) + '…'; x.fillText(title, 0, 0); x.restore();
       }
       const fx = W * 0.53, fw = W * 0.47;
-      if (ft && ft.image && (ft.image.naturalWidth || ft.image.width)) x.drawImage(ft.image, fx, 0, fw, H);
-      else if (o.standIn && o.standIn.naturalWidth) x.drawImage(o.standIn, fx, 0, fw, H);
+      if (ft && ft.image && (ft.image.naturalWidth || ft.image.width)) drawFlippedY(ft.image, fx, 0, fw, H);
+      else if (o.standIn && o.standIn.naturalWidth) drawFlippedY(o.standIn, fx, 0, fw, H);
       texture.needsUpdate = true;
     };
     redraw();
@@ -287,6 +308,9 @@ window.Inspect3D = (() => {
     universalLoading = true;
     new window.BS3D.GLTFLoader().loadAsync('case.glb').then(gltf => {
       universalGltf = gltf; universalLoading = false;
+      gltf.scene.traverse(n => {
+        if (n.geometry) n.geometry.userData.keep = true;
+      });
       if (cur && cur.sys !== 'pc' && caseG && !universalCase) applyUniversalModel(cur);
     }).catch(() => { universalLoading = false; });
   }
@@ -306,24 +330,75 @@ window.Inspect3D = (() => {
       const isClear = o.sys === 'sw' || (typeof o.caseColor === 'string' && (o.caseColor.startsWith('rgba') || o.caseColor === 'transparent'));
       universalCase.traverse(n => {
         if (n.isMesh) {
-          if (n.name === 'Cover' || n.name === 'Plane.001') {
+          if (n.name === 'Cover_1' || n.name === 'Cover' || n.name === 'Plane001') {
             n.material = new THREE.MeshPhysicalMaterial({ map: fullCoverTex, roughness: 0.5, metalness: 0, clearcoat: 0.2 });
+          } else if (n.name === 'Cover_2' || n.name === 'Plane001_1' || n.name === 'Cover_Inside') {
+            n.material = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.65, metalness: 0, clearcoat: 0.1 });
+          } else if (n.name === 'Cover_3' || n.name === 'Plane001_2') {
+            n.material = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.65, metalness: 0 });
+          } else if (n.name === 'Booklet') {
+            let manualTex = null;
+            if (o.manual) {
+              manualTex = loadTex(o.manual).clone(); manualTex.flipY = false;
+              const srcM = loadTex(o.manual);
+              if (srcM && srcM.userData && srcM.userData.p) {
+                srcM.userData.p.then(ok => { if (ok && srcM.image) { manualTex.image = srcM.image; manualTex.needsUpdate = true; } });
+              }
+            }
+            n.material = new THREE.MeshStandardMaterial({ map: manualTex, color: manualTex ? 0xffffff : 0xf4f0e8, roughness: 0.8 });
+            manualPlane = n;
           } else if (n.name === 'Sleeve') {
-            n.material = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.1, clearcoat: 0.8, clearcoatRoughness: 0.15, transmission: 0.85, ior: 1.49, transparent: true, opacity: 0.3 });
+            n.material = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.1, clearcoat: 0.9, clearcoatRoughness: 0.1, transmission: 0.9, ior: 1.49, transparent: true, opacity: 0.25, depthWrite: false });
           } else if (n.name.startsWith('Case')) {
             if (isClear) n.material = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.24, metalness: 0.01, transmission: 0.65, ior: 1.49, clearcoat: 0.8, transparent: true, opacity: 0.3 });
             else n.material = new THREE.MeshPhysicalMaterial({ color: new THREE.Color(o.caseSide || o.caseColor || 0x222222), roughness: 0.42, metalness: 0.02, clearcoat: 0.35 });
-          } else if (n.name === 'Cartridge_Cover' && (o.disc || o.front)) {
-            n.material = new THREE.MeshPhysicalMaterial({ map: loadTex(o.disc || o.front), roughness: 0.3, clearcoat: 0.4 });
+          } else if (n.name === 'Cartridge') {
+            n.material = new THREE.MeshPhysicalMaterial({ color: 0x1e1f24, roughness: 0.55, clearcoat: 0.2 });
+          } else if (n.name.startsWith('Switch_PCB')) {
+            n.material = new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: 0.85, roughness: 0.3 });
           }
         }
       });
       if (spineG) spineG.visible = false;
       if (backPivot) backPivot.visible = false;
       if (lidPivot) lidPivot.visible = false;
-      const cartObj = universalCase.getObjectByName('Cartridge');
-      if (cartObj) cartObj.visible = (o.kind === 'cart');
-      if (media && o.kind === 'cart') media.visible = false;
+
+      const cart = universalCase.getObjectByName('Cartridge');
+      if (o.kind === 'cart' && cart) {
+        dockAnchor = new THREE.Object3D();
+        cart.parent.add(dockAnchor);
+        dockAnchor.position.copy(cart.position);
+        dockAnchor.quaternion.copy(cart.quaternion);
+        dockAnchor.scale.copy(cart.scale);
+
+        if (media && media.parent === mediaG) {
+          mediaG.remove(media);
+          disposeGroup(media);
+        }
+        cart.parent.remove(cart);
+        media = cart;
+        mediaG.add(media);
+        media.visible = true;
+
+        const cc = cart.getObjectByName('Cartridge_Cover_1') || cart.getObjectByName('Cartridge_Cover') || cart.getObjectByName('Plane');
+        if (cc) {
+          const labelTex = loadTex(o.disc || o.front).clone();
+          labelTex.flipY = false;
+          const src = loadTex(o.disc || o.front);
+          if (src && src.userData && src.userData.p) {
+            src.userData.p.then(ok => { if (ok && src.image) { labelTex.image = src.image; labelTex.needsUpdate = true; } });
+          }
+          cc.material = new THREE.MeshPhysicalMaterial({ map: labelTex, roughness: 0.35, clearcoat: 0.5 });
+        }
+      } else if (cart) {
+        cart.visible = false;
+        dockAnchor = new THREE.Object3D();
+        const rootBone = universalCase.getObjectByName('Root');
+        if (rootBone) {
+          rootBone.add(dockAnchor);
+          dockAnchor.position.set(0.0054, -0.3221, 0.0207);
+        }
+      }
       caseG.add(universalCase);
     } catch (e) { console.warn(e); }
   }
@@ -665,7 +740,7 @@ window.Inspect3D = (() => {
     const dockLocalQuat = qMediaG.clone().invert().multiply(dockWorldQuat);
     const centerPos = new THREE.Vector3(0, 0, .25 + st.bump);
     media.position.lerpVectors(dockPosInMediaG, centerPos, o);
-    const ms = 1 + (cur.kind === "cart" ? .9 : .55) * o;
+    const ms = (universalCase && cur.kind === "cart" ? (1 / 0.1692) : 1) * (1 + (cur.kind === "cart" ? .9 : .55) * o);
     media.scale.set(ms, ms, ms);
 
     let rxE = st.rx, ryE = st.ry;
