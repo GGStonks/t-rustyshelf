@@ -6,6 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const { shell } = require('electron');
 const { isFile, expand } = require('./paths');
+const cleanEnv = process.platform === 'linux' ? require('./linuxpc').cleanEnv : null;
 
 let running = null;
 
@@ -35,7 +36,8 @@ function start(exe, args, onExit, env, cwd, logFile, elevate) { // elevate: a PC
   // would take the emulator (and its unsaved game) with it. Not unref'd: the 'exit' event must still reach us.
   // logFile: the program's output goes there (Linux PC games), else nowhere
   let fd = null; if (logFile) { try { fd = require('fs').openSync(logFile, 'w'); } catch { fd = null; } }
-  let child; try { child = spawn(exe, args, Object.assign({ cwd: cwd || path.dirname(exe), windowsHide: false, stdio: fd != null ? ['ignore', fd, fd] : 'ignore', detached: true }, env ? { env } : {})); }
+  const childEnv = process.platform === 'linux' && cleanEnv ? cleanEnv(env || {}) : env;
+  let child; try { child = spawn(exe, args, Object.assign({ cwd: cwd || path.dirname(exe), windowsHide: false, stdio: fd != null ? ['ignore', fd, fd] : 'ignore', detached: true }, childEnv ? { env: childEnv } : {})); }
   finally { if (fd != null) { try { require('fs').closeSync(fd); } catch {} } }
   running = child; child.bsName = path.basename(exe, path.extname(exe)); // (beta.10) its program name, never the path: the "already running" message names it
   const started = Date.now(); let done = false, spawned = false;

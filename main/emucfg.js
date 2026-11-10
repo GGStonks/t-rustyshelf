@@ -9,7 +9,12 @@ const path = require('path');
 const os = require('os');
 
 let log = () => {};
-function init(logger) { if (logger) log = logger; }
+function init(logger) {
+  if (logger) log = logger;
+  try {
+    for (const f of edenInis('citron')) restoreCitronGamedirs(f);
+  } catch {}
+}
 
 // Eden / yuzu: "Are you sure you want to stop the emulation?" when the window is asked to close.
 // qt-config.ini lives in user\config next to the exe (portable) or in %APPDATA%\<name>\config. The forks each keep
@@ -19,6 +24,8 @@ function edenInis(exe) {
   const c = [path.join(path.dirname(exe || ''), 'user', 'config', 'qt-config.ini')], n0 = path.basename(exe || '').toLowerCase();
   const names = [...EDEN_FORKS.filter(n => n0.includes(n)), ...EDEN_FORKS.filter(n => !n0.includes(n))];
   if (process.env.APPDATA) for (const n of names) c.push(path.join(process.env.APPDATA, n, 'config', 'qt-config.ini'));
+  const xdg = process.env.XDG_CONFIG_HOME || (os.homedir() ? path.join(os.homedir(), '.config') : '');
+  if (xdg) for (const n of names) { c.push(path.join(xdg, n, 'qt-config.ini')); c.push(path.join(xdg, n, 'config', 'qt-config.ini')); }
   return c;
 }
 function edenIni(exe) {
@@ -44,13 +51,88 @@ function writeIni(f, text, ini) {
   fs.mkdirSync(path.dirname(f), { recursive: true });
   const tmp = f + '.tmp'; try { fs.writeFileSync(tmp, ini.bom + text); fs.renameSync(tmp, f); } catch (e) { try { fs.unlinkSync(tmp); } catch {} throw e; }
 }
+
+const savedCitronGamedirs = new Map();
+const citronMarker = f => path.join(path.dirname(f), '.trustyshelf-citron-gamedirs.json');
+
+function restoreCitronGamedirs(f) {
+  if (!f) return false;
+  const marker = citronMarker(f);
+  let data = savedCitronGamedirs.get(f);
+  if (!data && fs.existsSync(marker)) {
+    try { data = JSON.parse(fs.readFileSync(marker, 'utf8')); } catch {}
+  }
+  if (!data || !data.lines || !data.lines.length) {
+    if (fs.existsSync(marker)) { try { fs.unlinkSync(marker); } catch {} }
+    savedCitronGamedirs.delete(f);
+    return false;
+  }
+  try {
+    const ini = readIni(f, 'Citron:');
+    if (!ini || ini.isNew) return false;
+    const nl = ini.src.includes('\r\n') ? '\r\n' : '\n';
+    const lines = ini.src.split(/\r?\n/);
+    let sec = '', uiAt = -1, lastGamedirIdx = -1, sizeIdx = -1;
+    const existingLines = new Set();
+    for (let i = 0; i < lines.length; i++) {
+      const m = /^\[(.+)\]\s*$/.exec(lines[i]);
+      if (m) { sec = m[1]; if (sec === 'UI') uiAt = i; continue; }
+      if (sec !== 'UI') continue;
+      if (/^Paths\\gamedirs\\size=/.test(lines[i])) sizeIdx = i;
+      if (/^Paths\\gamedirs\\/.test(lines[i])) {
+        lastGamedirIdx = i;
+        existingLines.add(lines[i]);
+      }
+    }
+    let changed = false;
+    if (sizeIdx >= 0) {
+      const wantSize = `Paths\\gamedirs\\size=${data.originalSize}`;
+      if (lines[sizeIdx] !== wantSize) {
+        lines[sizeIdx] = wantSize;
+        changed = true;
+      }
+    }
+    const toInsert = data.lines.filter(l => !existingLines.has(l));
+    if (toInsert.length) {
+      changed = true;
+      const insertAt = lastGamedirIdx >= 0 ? lastGamedirIdx + 1 : (uiAt >= 0 ? uiAt + 1 : lines.length);
+      lines.splice(insertAt, 0, ...toInsert);
+    }
+    if (changed) {
+      writeIni(f, lines.join(nl), ini);
+      log('Citron: restored original game directories in', f);
+    }
+    try { if (fs.existsSync(marker)) fs.unlinkSync(marker); } catch {}
+    savedCitronGamedirs.delete(f);
+    return true;
+  } catch (e) {
+    log('Citron gamedirs restore failed', e.message);
+    return false;
+  }
+}
+
 function quietEden(exe) {
   const f = edenIni(exe); if (!f) return false;
   try {
+    restoreCitronGamedirs(f);
     const ini = readIni(f, 'Eden:'); if (!ini || ini.isNew) return false; const src = ini.src;
     const want = { 'confirmClose': 'false', 'confirmClose\\default': 'false', 'confirmStop': '2', 'confirmStop\\default': 'false' };
     const lines = src.split(/\r?\n/); const nl = src.includes('\r\n') ? '\r\n' : '\n';
     let sec = '', uiAt = -1, changed = false; const seen = new Set();
+    const isCitron = /citron/i.test(path.basename(exe || '')) || /citron/i.test(f);
+    let citronOriginalSize = 0;
+    const removedCitronLines = [];
+    if (isCitron) {
+      for (const line of lines) {
+        const sm = /^Paths\\gamedirs\\size=(\d+)$/.exec(line);
+        if (sm) citronOriginalSize = parseInt(sm[1], 10);
+        const gm = /^Paths\\gamedirs\\(\d+)\\/.exec(line);
+        if (gm && parseInt(gm[1], 10) >= 4) removedCitronLines.push(line);
+      }
+      if (citronOriginalSize > 3 && removedCitronLines.length) {
+        want['Paths\\gamedirs\\size'] = '3';
+      }
+    }
     for (let i = 0; i < lines.length; i++) {
       const m = /^\[(.+)\]\s*$/.exec(lines[i]); if (m) { sec = m[1]; if (sec === 'UI') uiAt = i; continue; }
       if (sec !== 'UI') continue;
@@ -59,7 +141,23 @@ function quietEden(exe) {
     }
     const missing = Object.keys(want).filter(k => !seen.has(k)).map(k => `${k}=${want[k]}`);
     if (missing.length) { changed = true; if (uiAt < 0) lines.push('[UI]', ...missing); else lines.splice(uiAt + 1, 0, ...missing); }
-    if (changed) { writeIni(f, lines.join(nl), ini); log('Eden: close confirmations turned off in', f); }
+    let outLines = lines;
+    if (isCitron && citronOriginalSize > 3 && removedCitronLines.length) {
+      outLines = lines.filter(l => {
+        const gm = /^Paths\\gamedirs\\(\d+)\\/.exec(l);
+        return !(gm && parseInt(gm[1], 10) >= 4);
+      });
+      const marker = citronMarker(f);
+      const data = { originalSize: citronOriginalSize, lines: removedCitronLines };
+      try { fs.writeFileSync(marker, JSON.stringify(data)); } catch {}
+      savedCitronGamedirs.set(f, data);
+      changed = true;
+    }
+    if (changed) {
+      writeIni(f, outLines.join(nl), ini);
+      log('Eden: close confirmations turned off in', f);
+      if (removedCitronLines.length) log('Citron: gamedirs capped to 3 for launch to prevent scanner crash in', f);
+    }
     return true;
   } catch (e) { log('Eden config tweak failed', e.message); return false; }
 }
@@ -185,15 +283,22 @@ function dolphinQuitPads(exe, combo) {
   return true;
 }
 function beforeLaunch(systemId, exe, opts = {}) {
-  // (Linux: these tweaks look for the emulators' Windows settings folders, next to the program or in %APPDATA%; beside a
+  // (Switch: Citron and Eden forks on Linux and Windows: turn off close confirmations, and cap Citron gamedirs to 3 to prevent scanner crash)
+  try { if ((systemId === 'sw' && EDEN_RE.test(path.basename(exe || ''))) || systemId === 'sw2') quietEden(exe); } catch {}
+  // (Linux: other tweaks look for the emulators' Windows settings folders, next to the program or in %APPDATA%; beside a
   // Flatpak launcher or in /usr/bin that would only make stray folders. Skipped there for now.)
   if (process.platform === 'linux') return;
   try { if ((systemId === 'gc' || systemId === 'wii') && /dolphin/i.test(path.basename(exe || '')) && opts.quitCombo) dolphinQuitPads(exe, opts.quitCombo); } catch (e) { log('Dolphin quit combo tweak failed', e.message); }
-  // (Switch 2: every build is an Eden fork, whatever it calls its program: lichii.exe, orchid.exe…)
-  try { if ((systemId === 'sw' && EDEN_RE.test(path.basename(exe || ''))) || systemId === 'sw2') quietEden(exe); } catch {}
   // Dolphin: nothing written any more, launchArgs() passes the same two settings for this session only
   try { if (/pcsx2/i.test(path.basename(exe || ''))) pcsx2NoConfirm(exe); } catch {}
   try { if (/rpcs3/i.test(path.basename(exe || ''))) rpcs3NoConfirm(exe); } catch {}
+}
+function afterExit(systemId, exe) {
+  try {
+    if ((systemId === 'sw' && EDEN_RE.test(path.basename(exe || ''))) || systemId === 'sw2') {
+      restoreCitronGamedirs(edenIni(exe));
+    }
+  } catch (e) { log('emucfg afterExit failed', e.message); }
 }
 const isDolphin = (systemId, exe) => (systemId === 'gc' || systemId === 'wii') && /dolphin/i.test(path.basename(exe || ''));
 // Extra command-line args for this launch. Dolphin takes any setting as -C System.Section.Key=Value for the session only,
@@ -210,7 +315,12 @@ function restoreBackups(exeBySystem) {
   for (const [sys, v] of Object.entries(exeBySystem || {})) {
     const exe = typeof v === 'string' ? v : v && v.emulator; if (!exe) continue; const name = path.basename(exe);
     if (sys === 'gc' || sys === 'wii' || /dolphin/i.test(name)) for (const d of dolphinUserDirs(exe)) for (const n of ['GFX.ini', 'Dolphin.ini', 'Hotkeys.ini']) files.add(path.join(d, 'Config', n)); // Hotkeys.ini: the quit combo for every pad (GFX / Dolphin.ini: backups from older versions, which tweaked those)
-    if (sys === 'sw' || sys === 'sw2' || EDEN_RE.test(name)) edenInis(exe).forEach(f => files.add(f));
+    if (sys === 'sw' || sys === 'sw2' || EDEN_RE.test(name)) {
+      edenInis(exe).forEach(f => {
+        restoreCitronGamedirs(f);
+        files.add(f);
+      });
+    }
     if (/pcsx2/i.test(name)) pcsx2Inis(exe, process.env, true).forEach(f => files.add(f));
     if (/rpcs3/i.test(name)) files.add(rpcs3Ini(exe));
   }
@@ -224,4 +334,4 @@ function restoreBackups(exeBySystem) {
   return done;
 }
 
-module.exports = { init, beforeLaunch, dolphinQuitPads, launchArgs, restoreBackups, quietEden, resolveExe, findXenia, setIni, pcsx2NoConfirm, rpcs3NoConfirm, dolphinUserDirs, pcsx2Inis, docsDirs };
+module.exports = { init, beforeLaunch, afterExit, dolphinQuitPads, launchArgs, restoreBackups, quietEden, resolveExe, findXenia, setIni, pcsx2NoConfirm, rpcs3NoConfirm, dolphinUserDirs, pcsx2Inis, docsDirs };
