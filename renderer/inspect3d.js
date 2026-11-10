@@ -5,7 +5,7 @@
    Optional models: themes\<system>\cart.glb (Switch) or disc.glb / umd.glb replace the built-in media. */
 window.Inspect3D = (() => {
   const T = () => window.BS3D && window.BS3D.THREE;
-  let renderer, scene, camera, canvas, env, rot, caseG, lidPivot, media, mediaG, manualPlane, spineM = null;
+  let renderer, scene, camera, canvas, env, rot, caseG, lidPivot, backPivot, spineG, media, mediaG, manualPlane, spineM = null, dockAnchor = null;
   let active = false, raf = 0, failed = false, tex = new Map(), cur = null, customMedia = null, customUrl = null;
   const st = { state: 0, lid: 0, lidT: 0, out: 0, outT: 0, bump: 0, spin: 0, rx: 0, ry: 0, zoom: 1, px: 0, py: 0, in: 0, lid0: 0, out0: 0, flip: 0, base: 0 };
   // The hand-off between the shelf and this canvas. phase: 'idle' | 'wait' (built, art decoding: the shelf box still shows) |
@@ -47,7 +47,7 @@ window.Inspect3D = (() => {
     try { canvas && canvas.remove(); } catch {}
     tex.forEach(t => { try { t.dispose(); } catch {} }); tex = new Map(); mediaSeq++;
     genTex.forEach(t => { try { t.dispose(); } catch {} }); genTex.clear();
-    renderer = scene = camera = canvas = env = rot = caseG = lidPivot = media = mediaG = manualPlane = null; cur = null; customMedia = null; customUrl = null; lost = false;
+    renderer = scene = camera = canvas = env = rot = caseG = lidPivot = backPivot = spineG = media = mediaG = manualPlane = spineM = dockAnchor = null; cur = null; customMedia = null; customUrl = null; lost = false;
     coverMat = null; if (standInTex) { try { standInTex.dispose(); } catch {} standInTex = null; } phase = 'idle'; pend = null; fadeT0 = 0; target = null; tok++;
     const cb = onDone; onDone = null; if (cb) try { cb(true); } catch {} // a box still hidden for a flight that can't finish now comes back
   }
@@ -97,21 +97,31 @@ window.Inspect3D = (() => {
     // now has its own read-back canvas, so nothing reads this one back on any platform)
     const THREE = T(), H = 1024, W = Math.round(H * (w || .71) / (h || 1)), c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d', window.bsPlatform && bsPlatform.os === 'android' ? { willReadFrequently: true } : undefined); // Android: read back without a GPU stall
     const px = v => v / (h || 1) * H, cx = W / 2, cy = H / 2 - px(discLift(kind, sys));
-    // black / very dark plastic still reads as dark grey under light, so the moulding shows; lift the base a little
-    { const cc = new THREE.Color(bg), l = cc.r * .3 + cc.g * .59 + cc.b * .11; if (l < .12) cc.lerp(new THREE.Color(0x2c2d33), .75); bg = '#' + cc.getHexString(); }
-    x.fillStyle = bg; x.fillRect(0, 0, W, H);
+    const clearBg = sys === 'sw' || (typeof bg === 'string' && (bg.startsWith('rgba') || bg === 'transparent'));
+    if (clearBg) {
+      x.clearRect(0, 0, W, H);
+      x.fillStyle = 'rgba(255,255,255,.05)'; x.fillRect(0, 0, W, H);
+    } else {
+      // black / very dark plastic still reads as dark grey under light, so the moulding shows; lift the base a little
+      const cc = new THREE.Color(bg), l = cc.r * .3 + cc.g * .59 + cc.b * .11; if (l < .12) cc.lerp(new THREE.Color(0x2c2d33), .75); bg = '#' + cc.getHexString();
+      x.fillStyle = bg; x.fillRect(0, 0, W, H);
+    }
     // moulded-plastic grain and a soft falloff toward the edges
     // (beta.10) the grain is a small tile (read back on its own CPU canvas) repeated over the plate: the whole-plate noise loop cost ~13 ms mid-lift
-    { const N = 128, tc = document.createElement('canvas'); tc.width = tc.height = N; const tx = tc.getContext('2d', { willReadFrequently: true }); tx.fillStyle = bg; tx.fillRect(0, 0, N, N);
-      const img = tx.getImageData(0, 0, N, N), d = img.data; for (let i = 0; i < d.length; i += 4) { const n = (Math.random() - .5) * 10; d[i] += n; d[i + 1] += n; d[i + 2] += n; } tx.putImageData(img, 0, 0);
+    { const N = 128, tc = document.createElement('canvas'); tc.width = tc.height = N; const tx = tc.getContext('2d', { willReadFrequently: true });
+      tx.fillStyle = clearBg ? 'rgba(255,255,255,.04)' : bg; tx.fillRect(0, 0, N, N);
+      const img = tx.getImageData(0, 0, N, N), d = img.data; for (let i = 0; i < d.length; i += 4) { const n = (Math.random() - .5) * (clearBg ? 8 : 10); d[i] += n; d[i + 1] += n; d[i + 2] += n; } tx.putImageData(img, 0, 0);
       const pat = x.createPattern(tc, 'repeat'); if (pat) { x.fillStyle = pat; x.fillRect(0, 0, W, H); } }
-    const g = x.createRadialGradient(cx, cy, 40, cx, cy, H * .62); g.addColorStop(0, 'rgba(255,255,255,.05)'); g.addColorStop(1, 'rgba(0,0,0,.3)'); x.fillStyle = g; x.fillRect(0, 0, W, H);
-    const emboss = (path, depth) => { x.save(); x.lineWidth = 3; x.strokeStyle = `rgba(255,255,255,${.16 * depth})`; x.translate(-1.5, -1.5); path(); x.stroke(); x.restore(); x.save(); x.lineWidth = 3; x.strokeStyle = `rgba(0,0,0,${.35 * depth})`; x.translate(1.5, 1.5); path(); x.stroke(); x.restore(); };
+    const g = x.createRadialGradient(cx, cy, 40, cx, cy, H * .62);
+    if (clearBg) { g.addColorStop(0, 'rgba(255,255,255,.06)'); g.addColorStop(1, 'rgba(0,0,0,.14)'); }
+    else { g.addColorStop(0, 'rgba(255,255,255,.05)'); g.addColorStop(1, 'rgba(0,0,0,.3)'); }
+    x.fillStyle = g; x.fillRect(0, 0, W, H);
+    const emboss = (path, depth) => { x.save(); x.lineWidth = 3; x.strokeStyle = `rgba(255,255,255,${(clearBg ? .1 : .16) * depth})`; x.translate(-1.5, -1.5); path(); x.stroke(); x.restore(); x.save(); x.lineWidth = 3; x.strokeStyle = `rgba(0,0,0,${(clearBg ? .18 : .35) * depth})`; x.translate(1.5, 1.5); path(); x.stroke(); x.restore(); };
     if (kind === 'cart') {
       const cw = px(R * 2 * .9 * 1.06), ch = cw * 1.1, ty = cy - ch / 2; // the cradle, a touch bigger than the cartridge
-      x.fillStyle = 'rgba(0,0,0,.22)'; x.beginPath(); x.roundRect(cx - cw / 2, ty, cw, ch, 14); x.fill();
+      x.fillStyle = clearBg ? 'rgba(0,0,0,.12)' : 'rgba(0,0,0,.22)'; x.beginPath(); x.roundRect(cx - cw / 2, ty, cw, ch, 14); x.fill();
       emboss(() => { x.beginPath(); x.roundRect(cx - cw / 2, ty, cw, ch, 14); }, 1);
-      x.fillStyle = 'rgba(0,0,0,.28)'; x.beginPath(); x.ellipse(cx, ty + ch + 6, cw * .22, 26, 0, Math.PI, 0, true); x.fill(); // thumb notch
+      x.fillStyle = clearBg ? 'rgba(0,0,0,.15)' : 'rgba(0,0,0,.28)'; x.beginPath(); x.ellipse(cx, ty + ch + 6, cw * .22, 26, 0, Math.PI, 0, true); x.fill(); // thumb notch
     } else if (kind === 'umd') {
       const rw = px(R * 1.25), rh = px(R * 1.32);
       x.fillStyle = 'rgba(0,0,0,.2)'; x.beginPath(); x.ellipse(cx, cy, rw, rh, 0, 0, Math.PI * 2); x.fill(); emboss(() => { x.beginPath(); x.ellipse(cx, cy, rw, rh, 0, 0, Math.PI * 2); }, 1);
@@ -232,88 +242,112 @@ window.Inspect3D = (() => {
     if (customMedia && customMedia.parent === mediaG) mediaG.remove(customMedia);
     disposeGroup(caseG); disposeGroup(mediaG); cur = o;
     const h = 1, w = o.ratio, lt = Math.max(.014, o.depth * .18), r = Math.min(.016, lt * .9);
+    const isClear = o.sys === "sw" || (typeof o.caseColor === "string" && (o.caseColor.startsWith("rgba") || o.caseColor === "transparent")) || (typeof o.caseSide === "string" && (o.caseSide.startsWith("rgba") || o.caseSide === "transparent"));
     const plastic = (color, extra) => {
       let col = color, op = 1, tr = false;
-      if (typeof color === 'string' && color.startsWith('rgba')) {
+      if (typeof color === "string" && color.startsWith("rgba")) {
         const m = color.match(/rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)/);
         if (m) { col = new THREE.Color(`rgb(${m[1]},${m[2]},${m[3]})`); op = parseFloat(m[4]); tr = op < 1; }
-      } else if (color === 'transparent') { col = new THREE.Color(0xffffff); op = 0; tr = true; }
-      return new THREE.MeshPhysicalMaterial(Object.assign({ color: col, transparent: tr, opacity: op, roughness: .42, metalness: .02, clearcoat: .35, clearcoatRoughness: .4 }, extra || {}));
+      } else if (color === "transparent") { col = new THREE.Color(0xffffff); op = 0; tr = true; }
+      const clearDefaults = isClear ? { roughness: .24, metalness: .01, transmission: .65, ior: 1.49, thickness: .012, clearcoat: .8, clearcoatRoughness: .2 } : { roughness: .42, metalness: .02, clearcoat: .35, clearcoatRoughness: .4 };
+      return new THREE.MeshPhysicalMaterial(Object.assign({ color: col, transparent: tr || isClear, opacity: tr ? op : (isClear ? .3 : 1) }, clearDefaults, extra || {}));
     };
     // printed sleeve under clear plastic: the paper itself is matte (no broad haze over the art), the shine is a
     // tight clearcoat highlight that moves as you turn the case
     const sleeve = map => new THREE.MeshPhysicalMaterial({ map, color: 0xffffff, roughness: .62, metalness: 0, clearcoat: .55, clearcoatRoughness: .22, reflectivity: .3, envMapIntensity: .6 });
-    const side = plastic(o.caseSide), inner = plastic(o.caseSide, { roughness: .55 });
+    const side = plastic(o.caseSide), inner = plastic(o.caseSide, isClear ? { roughness: .28 } : { roughness: .55 });
     // Media first, so the tray is exactly deep enough for it (a cartridge needs more room than a disc)
     buildMedia(o, 0);
     // measure the media in its own space (the whole scene may be turned at this point; a world-space box would be far too deep)
     const mb = localBox(media), mDepth = mb.isEmpty() ? .01 : (mb.max.z - mb.min.z);
     const tb = .012, D = Math.max(.045, o.depth * .55, mDepth + tb + .014); // tray depth: back plate + media + a little air
+    cur._D = D;
     // Hollow tray: back plate, a spine wall along the hinge edge and thin top/bottom walls — the lid closes flush on them
     const spineMap = o.spine ? loadTex(o.spine) : spineTexture(o.title, o.caseColor, o.spineInk);
-    // The case is built like the real moulded thing: the front and back are rounded rectangles with each console's
-    // own corner radius (Blu-ray and Switch cases are much rounder than a GameCube's), softly bevelled at every edge,
+    // The case is built like the real moulded thing: the front and back are rounded rectangles with each console\x27s
+    // own corner radius (Blu-ray and Switch cases are much rounder than a GameCube\x27s), softly bevelled at every edge,
     // and the walls are one continuous rounded ring, so there are no square corners poking out past the curves.
     const rc = Math.max(.012, Math.min(.09, (o.rc || .04) * w)), bev = .0028;
     const rr = (W, H, R) => { const sh = new THREE.Shape(), x = -W / 2, y = -H / 2; R = Math.min(R, W / 2 - .001, H / 2 - .001);
       sh.moveTo(x + R, y); sh.lineTo(x + W - R, y); sh.quadraticCurveTo(x + W, y, x + W, y + R); sh.lineTo(x + W, y + H - R); sh.quadraticCurveTo(x + W, y + H, x + W - R, y + H);
       sh.lineTo(x + R, y + H); sh.quadraticCurveTo(x, y + H, x, y + H - R); sh.lineTo(x, y + R); sh.quadraticCurveTo(x, y, x + R, y); return sh; };
-    // a printed face that sits on a rounded slab: UVs spread 0..1 over the whole rectangle so the art fills it
-    // like the shelf's cover pictures (object-fit: cover): once the scan has loaded, crop it to the face's shape
-    // instead of stretching it
     const cropTo = (mesh, t, W, H) => { if (!t || !t.userData || !t.userData.p) return; t.userData.p.then(ok => { const im = t.image; if (!ok || !im || !mesh.geometry || !mesh.geometry.attributes) return;
       const ia = (im.naturalWidth || im.width) / (im.naturalHeight || im.height), pa = W / H; if (!isFinite(ia) || !ia) return;
       let su = 1, sv = 1; if (ia > pa) su = pa / ia; else sv = ia / pa; const u0 = (1 - su) / 2, v0 = (1 - sv) / 2, uv = mesh.geometry.attributes.uv, pos = mesh.geometry.attributes.position;
       for (let i = 0; i < pos.count; i++) uv.setXY(i, u0 + (pos.getX(i) / W + .5) * su, v0 + (pos.getY(i) / H + .5) * sv); uv.needsUpdate = true; }); };
     const face = (W, H, R, mat) => { const g = new THREE.ShapeGeometry(rr(W, H, R), 12), uv = g.attributes.uv, pos = g.attributes.position; for (let i = 0; i < pos.count; i++) uv.setXY(i, pos.getX(i) / W + .5, pos.getY(i) / H + .5); uv.needsUpdate = true; return new THREE.Mesh(g, mat); };
     const slab = (W, H, R, T, mat) => { const g = new THREE.ExtrudeGeometry(rr(W - 2 * bev, H - 2 * bev, Math.max(.002, R - bev)), { depth: Math.max(.0005, T - 2 * bev), bevelEnabled: true, bevelThickness: bev, bevelSize: bev, bevelSegments: 3, curveSegments: 12 }); g.translate(0, 0, -(T - 2 * bev) / 2); return new THREE.Mesh(g, mat); };
-    const back = slab(w, h, rc, tb, side); back.position.z = -D / 2 + tb / 2; caseG.add(back);
-    { const inFace = face(w - .02, h - .02, rc * .8, plastic(0xffffff, { map: interiorCached(o.caseSide, o.kind, w - .02, h - .02, o.ratio * o.size / 2, o.sys), roughness: .7, clearcoat: .1 })); inFace.position.z = -D / 2 + tb + .0004; caseG.add(inFace);
-      const eb = o.back ? Math.max(0, Math.min(.08, o.edge || 0)) * w : 0; if (eb > .0015) { const rimB = face(w - .004, h - .004, rc, plastic(o.caseColor)); rimB.rotation.y = Math.PI; rimB.position.z = -D / 2 - .0003; caseG.add(rimB); }
-      // (beta.11) o.wrap (Xbox 360): no border on the spine side, the sheet runs on round the spine
-      const bw2 = w - .004 - (o.wrap ? eb : 2 * eb);
-      const outFace = face(bw2, h - .004 - 2 * eb, Math.max(.003, rc - eb * .6), o.back ? sleeve(loadTex(o.back)) : plastic(o.caseColor)); outFace.rotation.y = Math.PI; outFace.position.set(o.wrap ? -eb / 2 : 0, 0, -D / 2 - .0006); if (o.back) cropTo(outFace, outFace.material.map, bw2, h - .004 - 2 * eb); caseG.add(outFace); }
-    // the walls: one rounded ring (outer = the case outline, inner = a wall's thickness in), standing on the back plate
-    const wall = .011, Dw = D - tb, zw = tb / 2;
+
+    // Dual living hinge kinematics:
+    // spineG sits in center; backPivot is hinged at right score line (+D/2); lidPivot at left score line (-D/2)
+    spineG = new THREE.Group(); caseG.add(spineG);
+    backPivot = new THREE.Group(); backPivot.position.set(D / 2, 0, 0); caseG.add(backPivot);
+    lidPivot = new THREE.Group(); lidPivot.position.set(-D / 2, 0, 0); caseG.add(lidPivot);
+
+    // Spine structure: rigid plastic column, printed spine art, top/bottom structural flaps, and two score lines
+    const spinePlate = new THREE.Mesh(new THREE.BoxGeometry(D, h, tb), side); spinePlate.position.set(0, 0, -tb / 2); spineG.add(spinePlate);
+    const spineH = o.wrap ? h - .004 - 2 * Math.max(0, Math.min(.08, o.edge || 0)) * w : h - rc * 1.1;
+    const spine = new THREE.Mesh(new THREE.PlaneGeometry(D - .002, spineH), sleeve(spineMap)); spine.rotation.y = Math.PI; spine.position.set(0, 0, -tb - .0006); spineG.add(spine); spineM = spine;
+    const grooveM = plastic(o.caseSide, { roughness: .5, transparent: isClear, opacity: isClear ? .45 : .85 });
+    const groove1 = new THREE.Mesh(new THREE.BoxGeometry(.0018, h - .006, .002), grooveM); groove1.position.set(-D / 2 + .0009, 0, .001); spineG.add(groove1);
+    const groove2 = new THREE.Mesh(new THREE.BoxGeometry(.0018, h - .006, .002), grooveM); groove2.position.set(D / 2 - .0009, 0, .001); spineG.add(groove2);
+    const topCap = new THREE.Mesh(new THREE.BoxGeometry(D - .004, .0025, .014), side); topCap.position.set(0, h / 2 - .005, .007); spineG.add(topCap);
+    const btmCap = new THREE.Mesh(new THREE.BoxGeometry(D - .004, .0025, .014), side); btmCap.position.set(0, -h / 2 + .005, .007); spineG.add(btmCap);
+
+    // Back cover (Right side in open view): slab, outer art, transparent inFace, perimeter ring, cartridge dock / disc hub
+    const back = slab(w, h, rc, tb, side); back.position.set(w / 2, 0, -tb / 2); backPivot.add(back);
+    const inFaceMat = plastic(isClear ? o.caseSide : 0xffffff, { map: interiorCached(o.caseSide, o.kind, w - .02, h - .02, o.ratio * o.size / 2, o.sys), roughness: isClear ? .28 : .7, clearcoat: isClear ? .6 : .1, transparent: isClear, opacity: isClear ? .35 : 1, transmission: isClear ? .65 : 0 });
+    const inFace = face(w - .02, h - .02, rc * .8, inFaceMat); inFace.position.set(w / 2, 0, .0004); backPivot.add(inFace);
+    const eb = o.back ? Math.max(0, Math.min(.08, o.edge || 0)) * w : 0;
+    if (eb > .0015) { const rimB = face(w - .004, h - .004, rc, plastic(o.caseColor)); rimB.rotation.y = Math.PI; rimB.position.set(w / 2, 0, -tb - .0003); backPivot.add(rimB); }
+    const bw2 = w - .004 - (o.wrap ? eb : 2 * eb);
+    const outFace = face(bw2, h - .004 - 2 * eb, Math.max(.003, rc - eb * .6), o.back ? sleeve(loadTex(o.back)) : plastic(o.caseColor)); outFace.rotation.y = Math.PI; outFace.position.set(w / 2 + (o.wrap ? -eb / 2 : 0), 0, -tb - .0006); if (o.back) cropTo(outFace, outFace.material.map, bw2, h - .004 - 2 * eb); backPivot.add(outFace);
+    const wall = .011, Dw = D - tb;
     { const ringS = rr(w, h, rc), hole = rr(w - 2 * wall, h - 2 * wall, Math.max(.003, rc - wall)); ringS.holes.push(new THREE.Path(hole.getPoints(48)));
       const rg = new THREE.ExtrudeGeometry(ringS, { depth: Dw, bevelEnabled: false, curveSegments: 16 }); rg.translate(0, 0, -Dw / 2);
-      const ring = new THREE.Mesh(rg, [inner, side]); ring.position.z = zw; caseG.add(ring); }
-    // the spine: the printed spine wraps the hinge side, full height between the rounded corners, curving at its edges
-    // (beta.11) wrap: the spine as tall as the covers it joins
-    const spine = new THREE.Mesh(new THREE.PlaneGeometry(D + lt - .004, o.wrap ? h - .004 - 2 * Math.max(0, Math.min(.08, o.edge || 0)) * w : h - rc * 1.1), sleeve(spineMap)); spine.rotation.y = -Math.PI / 2; spine.position.set(-w / 2 - .0008, 0, lt / 2); caseG.add(spine); spineM = spine;
-    // hub / cradle on the back plate
-    const floorZ = -D / 2 + tb;
-    // the hub (a "rosette"): a raised collar, a ring of springy fingers that grip the disc's hole, and a push button in
-    // the middle that releases it, moulded in the case's own plastic
-    if (o.kind === 'disc') { const hubM = plastic(new THREE.Color(o.caseSide).lerp(new THREE.Color(0xffffff), .12), { roughness: .5 }), btnM = plastic(new THREE.Color(o.caseSide).lerp(new THREE.Color(0x000000), .25), { roughness: .35 });
-      const hr = o.ratio * o.size / 2 * .135, hub = new THREE.Group(); hub.position.set(0, discLift(o.kind, o.sys), floorZ); caseG.add(hub);
+      const ring = new THREE.Mesh(rg, [inner, side]); ring.position.set(w / 2, 0, Dw / 2); backPivot.add(ring); }
+
+    dockAnchor = new THREE.Object3D();
+    let dockY = discLift(o.kind, o.sys);
+    if (o.kind === "cart") {
+      dockY = -.11;
+      const cw = o.ratio * o.size * .9, ch = cw * 1.1, cd = .035;
+      const dockFrame = new THREE.Mesh(new THREE.BoxGeometry(cw + .014, ch + .014, .006), side); dockFrame.position.set(w / 2, dockY, .003); backPivot.add(dockFrame);
+      const dockPocket = new THREE.Mesh(new THREE.BoxGeometry(cw + .002, ch + .002, .008), inner); dockPocket.position.set(w / 2, dockY, .004); backPivot.add(dockPocket);
+      const tabW = cw * .18, tabH = .008, tabD = .005;
+      const tab1 = new THREE.Mesh(new THREE.BoxGeometry(tabW, tabH, tabD), side); tab1.position.set(w / 2 - cw * .25, dockY - ch / 2 + tabH / 2, .007); backPivot.add(tab1);
+      const tab2 = new THREE.Mesh(new THREE.BoxGeometry(tabW, tabH, tabD), side); tab2.position.set(w / 2 + cw * .25, dockY - ch / 2 + tabH / 2, .007); backPivot.add(tab2);
+      dockAnchor.position.set(w / 2, dockY, .006 + cd / 2);
+    } else if (o.kind === "disc") {
+      const hubM = plastic(new THREE.Color(o.caseSide).lerp(new THREE.Color(0xffffff), .12), { roughness: .5 }), btnM = plastic(new THREE.Color(o.caseSide).lerp(new THREE.Color(0x000000), .25), { roughness: .35 });
+      const hr = o.ratio * o.size / 2 * .135, hub = new THREE.Group(); hub.position.set(w / 2, dockY, .001); backPivot.add(hub);
       const collar = new THREE.Mesh(new THREE.CylinderGeometry(hr * 1.45, hr * 1.6, .0036, 48), hubM); collar.rotation.x = Math.PI / 2; collar.position.z = .0018; hub.add(collar);
       for (let k = 0; k < 10; k++) { const a = k / 10 * Math.PI * 2, f = new THREE.Mesh(new THREE.BoxGeometry(hr * .4, hr * .32, .011), hubM); f.position.set(Math.cos(a) * hr * .7, Math.sin(a) * hr * .7, .0105); f.rotation.z = a + Math.PI / 2; f.rotation.x = .25; hub.add(f); }
       const btn = new THREE.Mesh(new THREE.CylinderGeometry(hr * .45, hr * .5, .016, 32), btnM); btn.rotation.x = Math.PI / 2; btn.position.z = .01; hub.add(btn);
-      const cap = new THREE.Mesh(new THREE.SphereGeometry(hr * .45, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), btnM); cap.rotation.x = Math.PI / 2; cap.scale.set(1, .35, 1); cap.position.z = .018; hub.add(cap); }
-    else if (o.kind === 'umd') { const pegM = plastic(new THREE.Color(o.caseSide).lerp(new THREE.Color(0xffffff), .12), { roughness: .5 }); [[-1, 1], [1, 1], [-1, -1], [1, -1]].forEach(([sx, sy]) => { const peg = new THREE.Mesh(new THREE.BoxGeometry(.03, .03, .014), pegM); const R0 = o.ratio * o.size / 2; peg.position.set(sx * R0 * 1.1, sy * R0 * 1.2, floorZ + .007); caseG.add(peg); }); }
-    // lid hinged at the spine edge, flush on the walls
-    lidPivot = new THREE.Group(); lidPivot.position.set(-w / 2, 0, D / 2 + lt / 2); caseG.add(lidPivot);
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(hr * .45, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), btnM); cap.rotation.x = Math.PI / 2; cap.scale.set(1, .35, 1); cap.position.z = .018; hub.add(cap);
+      dockAnchor.position.set(w / 2, dockY, .006);
+    } else if (o.kind === "umd") {
+      const pegM = plastic(new THREE.Color(o.caseSide).lerp(new THREE.Color(0xffffff), .12), { roughness: .5 });
+      [[-1, 1], [1, 1], [-1, -1], [1, -1]].forEach(([sx, sy]) => { const peg = new THREE.Mesh(new THREE.BoxGeometry(.03, .03, .014), pegM); const R0 = o.ratio * o.size / 2; peg.position.set(sx * R0 * 1.1, sy * R0 * 1.2, .007); backPivot.add(peg); });
+      dockAnchor.position.set(w / 2, 0, .008);
+    }
+    backPivot.add(dockAnchor);
+
+    // Front cover (Left side in open view): slab, outer art, inside face, clips and booklet
     const ft = o.front ? loadTex(o.front) : null;
-    const lidMats = [side, side, side, side, o.front ? sleeve(ft.userData.ok || !standInTex ? ft : standInTex) : plastic(o.caseColor), plastic(o.caseSide, { roughness: .5 })];
+    const lidMats = [side, side, side, side, o.front ? sleeve(ft.userData.ok || !standInTex ? ft : standInTex) : plastic(o.caseColor), plastic(o.caseSide, isClear ? { roughness: .26 } : { roughness: .5 })];
     coverMat = o.front ? lidMats[4] : null;
-    // the lid: a rounded slab like the back, with the cover on a face just above it (under the clear-sleeve finish)
-    const lid = slab(w, h, rc, lt, side); lid.position.set(w / 2, 0, 0); lidPivot.add(lid);
-    // the printed cover sits inside a border of the case's own colour, the same width as on the shelf (style edge), so
-    // the case looks the same in your hands as on the shelf
+    const lid = slab(w, h, rc, lt, side); lid.position.set(-w / 2, 0, -lt / 2); lidPivot.add(lid);
     const ed = o.front ? Math.max(0, Math.min(.08, o.edge || 0)) * w : 0;
-    { if (ed > .0015) { const rim = face(w - .004, h - .004, rc, plastic(o.caseColor)); rim.position.set(w / 2, 0, lt / 2 + .0003); lidPivot.add(rim); }
-      const cw2 = w - .004 - (o.wrap ? ed : 2 * ed); // (beta.11) wrap: no border on the hinge side
-      const cover = face(cw2, h - .004 - 2 * ed, Math.max(.003, rc - ed * .6), lidMats[4]); cover.position.set(o.wrap ? w / 2 - ed / 2 : w / 2, 0, lt / 2 + .0006); lidPivot.add(cover); if (ft) cropTo(cover, ft, cw2, h - .004 - 2 * ed);
-      const under = face(w - .01, h - .01, rc * .9, lidMats[5]); under.rotation.y = Math.PI; under.position.set(w / 2, 0, -lt / 2 - .0004); lidPivot.add(under); }
-    // the manual sits in clips on the inside of the lid
+    if (ed > .0015) { const rim = face(w - .004, h - .004, rc, plastic(o.caseColor)); rim.position.set(-w / 2, 0, -lt - .0003); lidPivot.add(rim); }
+    const cw2 = w - .004 - (o.wrap ? ed : 2 * ed);
+    const cover = face(cw2, h - .004 - 2 * ed, Math.max(.003, rc - ed * .6), lidMats[4]); cover.rotation.y = Math.PI; cover.position.set(-w / 2 + (o.wrap ? ed / 2 : 0), 0, -lt - .0006); lidPivot.add(cover); if (ft) cropTo(cover, ft, cw2, h - .004 - 2 * ed);
+    const under = face(w - .01, h - .01, rc * .9, lidMats[5]); under.position.set(-w / 2, 0, .0004); lidPivot.add(under);
     const man = new THREE.Mesh(new THREE.PlaneGeometry(w * .8, h * .86), new THREE.MeshStandardMaterial({ map: o.manual ? loadTex(o.manual) : null, color: o.manual ? 0xffffff : 0xe8e4dc, roughness: .75 }));
-    man.position.set(w / 2 + .01, 0, -lt / 2 - .002); man.rotation.y = Math.PI; lidPivot.add(man); manualPlane = man;
-    // the front cover only (see coverRect), once the scan has loaded
+    man.position.set(-w / 2, 0, .002); lidPivot.add(man); manualPlane = man;
     if (o.manual) { const mt = man.material.map; let n = 0; const chk = () => { if (manualPlane !== man) return; const img = mt.image; if (!img || !(img.naturalWidth || img.width)) { if (n++ < 100) setTimeout(chk, 100); return; } fitCover(man, coverRect(img, false), w * .8, h * .86); }; chk(); }
-    [[-.4, .34], [-.4, -.34]].forEach(([x, y]) => { const clip = new THREE.Mesh(new THREE.BoxGeometry(w * .07, h * .09, .006), plastic(o.caseColor)); clip.position.set(w / 2 + x * w + w * .035, y * h, -lt / 2 - .006); lidPivot.add(clip); });
-    // seat the media on the back plate
-    const zIn = floorZ + .004 - mb.min.z; media.position.set(0, discLift(o.kind, o.sys), zIn); media.userData.zIn = zIn; media.userData.y0 = discLift(o.kind, o.sys);
+    [[-.36, .34], [-.36, -.34]].forEach(([x, y]) => { const clip = new THREE.Mesh(new THREE.BoxGeometry(w * .08, h * .09, .006), side); clip.position.set(-w / 2 + x * w * .5, y * h, .005); lidPivot.add(clip); });
+
     st.lid = st.lidT = 0; st.out = st.outT = 0; st.spin = 0;
     applyState(true);
   }
@@ -455,6 +489,7 @@ window.Inspect3D = (() => {
   function frame(now) {
     if (!cur || paused) { raf = 0; lastT = 0; return; } // (beta.10) paused (a manual is open) or nothing shown: the loop stops; setPaused(false) / open() start it again
     raf = requestAnimationFrame(frame);
+    const THREE = T(); if (!THREE) return;
     const dt = Math.min(.05, lastT ? (now - lastT) / 1000 : .016); lastT = now;
     // the quick cross-fade: the canvas keeps its last picture, only its opacity moves (no re-render)
     if (fadeT0) {
@@ -481,28 +516,50 @@ window.Inspect3D = (() => {
     if (leaving) { const k = easeIO(st.in); st.lid = st.lid0 * k; st.out = st.out0 * k; } // shut on the way back: it lands closed, like the box on the shelf
     else { st.lid = sm(st.lid, st.lidT, kl); st.out = sm(st.out, st.outT, ko); }
     st.bump *= Math.exp(-dt * 9);
-    lidPivot.rotation.y = -165 * DEG * easeIO(st.lid);
+    const k = easeIO(st.lid);
+    lidPivot.rotation.y = (1 - k) * (Math.PI / 2);
+    backPivot.rotation.y = -(1 - k) * (Math.PI / 2);
     const o = easeIO(st.out);
+    const w = cur.ratio, D = cur._D || .05;
     // disc out: the case slides away off-screen and the disc alone sits in your hands; "put back" brings the case in again
-    caseG.position.set(-2.6 * o, -.3 * o, -.6 * o); caseG.rotation.y = 30 * DEG * o; caseG.visible = o < .995;
-    media.position.x = 0; media.position.y = (media.userData.y0 || 0) * (1 - o); media.position.z = media.userData.zIn * (1 - o) + .25 * o + st.bump;
-    const ms = 1 + (cur.kind === 'cart' ? .9 : .55) * o; media.scale.set(ms, ms, ms);
-    media.rotation.set(0, 0, 0);
-    // A disc (or UMD) out of its case spins about its own centre, like in a player, and only tilts gently; it doesn't swing round
-    // the case's middle. So as it comes out, the turn the controls make (st.ry, counted from where it left the case: st.base)
-    // moves off the whole scene and onto the disc's own face axis, and up / down becomes a softer tilt of the disc alone.
-    // rxE / ryE: what's left for the scene (the case), squared up to face you once the disc is out. dw: the spin, wrapped to half a turn, so taking it in or out only ever
-    // unwinds less than half a turn (whole turns are invisible on a round disc and on the off-screen case).
+    caseG.position.set(-(1 - k) * (w / 2) - 2.6 * o, -.3 * o, -(1 - k) * (D / 2) - .6 * o);
+    caseG.rotation.y = (1 - k) * (Math.PI / 2) + 30 * DEG * o;
+    caseG.visible = o < .995;
+    caseG.updateMatrixWorld(true);
+    const dockWorldPos = new THREE.Vector3();
+    const dockWorldQuat = new THREE.Quaternion();
+    if (dockAnchor) {
+      dockAnchor.getWorldPosition(dockWorldPos);
+      dockAnchor.getWorldQuaternion(dockWorldQuat);
+    }
+    const dockPosInMediaG = mediaG.worldToLocal(dockWorldPos.clone());
+    const qMediaG = new THREE.Quaternion();
+    mediaG.getWorldQuaternion(qMediaG);
+    const dockLocalQuat = qMediaG.clone().invert().multiply(dockWorldQuat);
+    const centerPos = new THREE.Vector3(0, 0, .25 + st.bump);
+    media.position.lerpVectors(dockPosInMediaG, centerPos, o);
+    const ms = 1 + (cur.kind === "cart" ? .9 : .55) * o;
+    media.scale.set(ms, ms, ms);
+
     let rxE = st.rx, ryE = st.ry;
-    if (cur.kind !== 'cart' && !st.own) { const idle = now - lastMove > 1500; st.spinV = sm(st.spinV || 0, (st.out > .95 && idle) ? .22 : 0, 1 - Math.exp(-dt * 2)); st.spin += dt * st.spinV; media.rotation.z = st.spin; } // Windows: as before
-    else if (cur.kind !== 'cart') {
+    if (cur.kind !== "cart" && !st.own) { const idle = now - lastMove > 1500; st.spinV = sm(st.spinV || 0, (st.out > .95 && idle) ? .22 : 0, 1 - Math.exp(-dt * 2)); st.spin += dt * st.spinV; } // Windows: as before
+    else if (cur.kind !== "cart") {
       const idle = now - lastMove > 1500; st.spinV = sm(st.spinV || 0, (st.out > .95 && idle) ? .22 : 0, 1 - Math.exp(-dt * 2)); st.spin += dt * st.spinV;
       const d = st.ry - st.base, dw = d - 360 * Math.round(d / 360), whole = d - dw, front = 360 * Math.round(st.base / 360);
       ryE = st.base + whole + dw * (1 - o) + (front - st.base) * o; rxE = st.rx * (1 - o); // out: the scene squares up, so the disc faces you
-      // (0.3.1) the turn moves the disc in 3D about its own centre: side to side turns it over (both faces), up / down
-      // tilts it right round; it still spins in its own plane when left alone, like in a player (Euler XYZ: the spin is
-      // applied in the disc's plane first, then the turn, then the tilt)
-      media.rotation.set(-st.rx * o * DEG, (st.flip + dw) * o * DEG, st.spin);
+    }
+    if (o < 0.001) {
+      media.quaternion.copy(dockLocalQuat);
+    } else {
+      const targetQuat = new THREE.Quaternion();
+      if (cur.kind === "cart") {
+        targetQuat.set(0, 0, 0, 1);
+      } else {
+        const d = st.ry - st.base, dw = d - 360 * Math.round(d / 360);
+        const euler = new THREE.Euler(-st.rx * o * DEG, (st.flip + dw) * o * DEG, st.spin, "YXZ");
+        targetQuat.setFromEuler(euler);
+      }
+      media.quaternion.slerpQuaternions(dockLocalQuat, targetQuat, o);
     }
     const perPx = (2 * 3.9 * Math.tan(camera.fov * DEG / 2)) / innerHeight;
     const e = easeIO(st.in);

@@ -80,7 +80,7 @@ details.adv summary{cursor:pointer;font-size:13px;color:var(--ink-dim)}
 [hidden]{display:none!important}
 .hints{width:max-content}
 .su-ver{margin-top:auto;padding:16px 12px 0;font-size:11px;color:var(--ink-dim);letter-spacing:.04em}
-.f-left .spine-img,.f-right .spine-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;max-width:none}
+.f-left .spine-img,.f-right .spine-img{position:absolute;top:var(--edge);bottom:var(--edge);left:0;right:0;width:100%;height:calc(100% - var(--edge)*2);object-fit:cover;max-width:none}
 .f-right .spine-img{transform:scaleX(-1)}
 .info{top:calc(42% + var(--bh)/2 + 8vh)}
 /* Selected box: rim light drawn inside the face (outer shadows get clipped on big 3D boxes); glow comes from the halo behind it */

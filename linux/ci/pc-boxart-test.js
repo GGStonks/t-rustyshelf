@@ -40,5 +40,23 @@ check('pccovers.js preserves clean front cover without rebranding', /const\s+fin
 // 6. Check crates/img-tools/src/rebrand.rs writes "PC"
 check('img-tools rebrand renders "PC" text', /render_text_vertical\([^)]*"PC"/.test(rebrandSrc));
 
+// 7. Check Switch transparency and spine frame on shelf
+const styleCss = fs.readFileSync(path.join(__dirname, '..', '..', 'renderer', 'style.css'), 'utf8');
+const setupCss = fs.readFileSync(path.join(__dirname, '..', '..', 'renderer', 'setup.css'), 'utf8');
+check('Switch STYLE has transparent caseSide', /sw:\s*\{[^}]*caseSide:\s*"rgba\(/.test(appSrc));
+check('Shelf f-left has edge padding for top/bottom spine frame', /\.f-left\{[^}]*padding-top:\s*var\(--edge\)[^}]*padding-bottom:\s*var\(--edge\)/.test(styleCss));
+check('Shelf spine-img respects top and bottom edge inset', /\.f-left\s+\.spine-img[^\{]*\{[^}]*top:\s*var\(--edge\)[^}]*bottom:\s*var\(--edge\)/.test(setupCss));
+
+// 8. Check 3D dual living hinge model and transparency in Inspect3D
+const inspect3dSrc = fs.readFileSync(path.join(__dirname, '..', '..', 'renderer', 'inspect3d.js'), 'utf8');
+check('Inspect3D has dual-hinge pivots (lidPivot, backPivot, spineG)', /lidPivot[\s\S]*?backPivot[\s\S]*?spineG/.test(inspect3dSrc));
+check('Inspect3D handles clear polypropylene transparency', /isClear\s*=\s*o\.sys\s*===\s*["']sw["']/.test(inspect3dSrc) && /transmission:/.test(inspect3dSrc));
+check('Inspect3D interiorTexture has clearBg transparent clear mode', /clearBg\s*=\s*sys\s*===\s*["']sw["']/.test(inspect3dSrc));
+check('Inspect3D spine has top and bottom structural flap caps', /topCap[\s\S]*?btmCap/.test(inspect3dSrc));
+check('Inspect3D spine has two parallel living hinge score line grooves', /groove1[\s\S]*?groove2/.test(inspect3dSrc));
+check('Inspect3D back cover has cartridge dock with two retaining tabs', /dockFrame[\s\S]*?tab1[\s\S]*?tab2/.test(inspect3dSrc));
+check('Inspect3D lid cover has molded booklet clips', /clip\.position\.set\(-w\s*\/\s*2/.test(inspect3dSrc));
+check('Inspect3D opens flat with dual-hinge book kinematics', /lidPivot\.rotation\.y\s*=\s*\(1\s*-\s*k\)\s*\*\s*\(Math\.PI\s*\/\s*2\)/.test(inspect3dSrc) && /backPivot\.rotation\.y\s*=\s*-\(1\s*-\s*k\)\s*\*\s*\(Math\.PI\s*\/\s*2\)/.test(inspect3dSrc));
+
 console.log(fails ? `${fails} failed` : 'all passed');
 process.exit(fails ? 1 : 0);
