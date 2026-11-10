@@ -78,6 +78,19 @@ if (argv.includes('--mark')) {
   if (status === 'clear') delete d[link]; else d[link] = { status, ...(note ? { note } : {}), until: new Date().toISOString() };
   fs.writeFileSync(f, JSON.stringify(d, null, 2) + '\n'); console.log(status === 'clear' ? `Forgot ${link}` : `${link}: ${status}${note ? ` (${note})` : ''}, until now`); process.exit(0);
 }
+// --done-notification <thread_id>: mark a notification thread as done so it leaves the inbox
+if (argv.includes('--done-notification')) {
+  const i = argv.indexOf('--done-notification'), id = argv[i + 1];
+  if (!id) { console.error('--done-notification <thread_id>'); process.exit(2); }
+  try {
+    execFileSync('gh', ['api', '-X', 'DELETE', `notifications/threads/${id}`], { stdio: 'inherit' });
+    console.log(`Notification ${id} marked as done.`);
+  } catch (e) {
+    console.error(`Failed to mark notification ${id} as done:`, e.message);
+    process.exit(1);
+  }
+  process.exit(0);
+}
 const TOKEN = token(); if (!TOKEN) { console.error('No GitHub sign-in: run `gh auth login` or set GITHUB_TOKEN.'); process.exit(2); }
 const H = { Authorization: `Bearer ${TOKEN}`, 'User-Agent': 'trustyshelf-community-report', Accept: 'application/vnd.github+json' };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -464,8 +477,12 @@ const kindsFor = r => [...(r.has_issues ? ['issues'] : []), 'pulls', ...(r.has_d
         const hit = d && d.repository && d.repository.discussions.nodes.find(x => x.title === title); if (hit) num = hit.number;
         if (num) it = await oneThread(repo, num, 'discussions');
       } else if (!it && num) it = await oneThread(repo, num, type === 'PullRequest' ? 'pulls' : 'issues');
+      if (it) {
+        it.notificationIds = it.notificationIds || [];
+        if (!it.notificationIds.includes(nt.id)) it.notificationIds.push(nt.id);
+      }
       if (it && !byKey.has(it.key)) { it.via = 'notification'; byKey.set(it.key, it); data.items.push(it); }
-      data.notifications.threads.push({ ...base, key: it ? it.key : key || '' });
+      data.notifications.threads.push({ ...base, id: nt.id, key: it ? it.key : key || '' });
     }));
     console.log(`  notifications: ${data.notifications.threads.length} about conversations (${data.notifications.threads.filter(x => x.unread).length} unread), ${data.notifications.other.length} other`);
   }
@@ -524,6 +541,8 @@ const kindsFor = r => [...(r.has_issues ? ['issues'] : []), 'pulls', ...(r.has_d
         command: `gh api graphql -f query='mutation($d:ID!,$r:ID,$b:String!){addDiscussionComment(input:{discussionId:$d,replyToId:$r,body:$b}){comment{url}}}' -f d=${it.nodeId}${m && m.type !== 'post' ? ` -f r=${m.type === 'reply' ? m.parent : m.id}` : ''} -f b="$(cat reply.md)"` }
     : { how: it.kind, command: `gh ${it.kind === 'pull' ? 'pr' : 'issue'} comment ${it.number} -R ${it.repo} --body-file reply.md` };
   const answerJson = waitingItems.map(it => ({ key: it.key, where: where(it), title: it.title, kind: it.kind, type: it.type, state: it.state, yours: it.repo === MINE, decided: it.status ? { status: it.status, note: it.note } : null, promises: it.promises, poll: it.poll || null, markedAnswered: !!it.answered,
+    notificationIds: it.notificationIds || [],
+    markNotificationDone: (it.notificationIds && it.notificationIds.length) ? it.notificationIds.map(nid => `gh api -X DELETE /notifications/threads/${nid}`).join(' && ') : null,
     waiting: it.waiting.map(m => ({ author: m.author, at: m.at, url: m.url, type: m.type, text: plain(m.body), body: m.body, thanks: !!m.thanks, isNew: m.isNew })),
     reply: howToReply(it, it.waiting[it.waiting.length - 1]), doneInTrustyShelf: it.done, conversation: it.messages.map(m => ({ author: m.author, at: m.at, type: m.type, url: m.url, text: plain(m.body) })) }));
   const promised = data.items.filter(it => it.promises.length);
@@ -541,7 +560,12 @@ const kindsFor = r => [...(r.has_issues ? ['issues'] : []), 'pulls', ...(r.has_d
     if (it.answered) T.push('Marked as answered on GitHub.', '');
     T.push(`Waiting: ${it.waiting.map(m => `${m.author} (${when(m.at)}${m.isNew ? ', new' : ''}${m.thanks ? ', a thanks' : ''})`).join(', ')}${it.lastMine ? ` · your last message: ${when(it.lastMine)}` : ' · you haven\'t written here yet'}`, '');
     T.push(it.done.length ? `(T)rustyShelf did: ${it.done.map(c => `${c.sha} "${esc(c.subject)}" (${day(c.date)}, ${c.release ? 'in ' + c.release : 'not released yet'})`).join('; ')}` : '(T)rustyShelf did: nothing that names this thread in a commit (check by hand: it may be done under another name).', '');
-    T.push(`Reply: \`${howToReply(it, last).command}\``, '', 'Conversation:', '');
+    T.push(`Reply: \`${howToReply(it, last).command}\``);
+    if (it.notificationIds && it.notificationIds.length) {
+      const cmds = it.notificationIds.map(nid => `gh api -X DELETE /notifications/threads/${nid}`).join(' && ');
+      T.push(`Notification: ${it.notificationIds.join(', ')} (mark done after replying: \`${cmds}\`)`);
+    }
+    T.push('', 'Conversation:', '');
     for (const m of it.messages) T.push(`- **${m.author}**${isMe(m.author) ? ' (you)' : ''}, ${when(m.at)}, ${m.type}${m.type === 'reply' ? ' (under a comment)' : ''}${m.path ? ` on ${m.path}` : ''}${it.waiting.includes(m) ? ' · **waiting**' : ''} · [link](${m.url})`, '', plain(m.body).split('\n').map(l => '  > ' + l).join('\n') || '  > (empty)', '');
   }
   if (notToldItems.length) {
