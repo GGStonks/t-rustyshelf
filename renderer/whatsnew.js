@@ -8,6 +8,24 @@
 //   sections: [{ h, items: [[headline, more]] }] }; newest first.
 window.BS_WHATSNEW = [
   {
+    version: '1.5.1.0', android: '1.5.1.0', date: '2026-11-10', title: "Citron Switch emulator crash fix and Linux environment cleanup",
+    highlights: [
+      "Nintendo Switch games boot reliably in Citron without crashing on launch",
+      "Automatic restoration of configured game directories when Citron exits",
+      "Sanitized AppImage environment variables for child processes on Linux"
+    ],
+    platforms: [
+      "Linux and Windows: Citron directory scanning race condition fix and automatic restoration.",
+      "Linux: child process environment sanitization preventing AppImage library pollution."
+    ],
+    sections: [
+      { h: "Consoles and emulators", items: [
+        ["Citron Switch launch fix", "Fixed a crash when launching Nintendo Switch games through Citron. Citron's background directory scanning threads previously raced with game booting and UI teardown when multiple game folders were configured; (T)rustyShelf now safely caps game directories to internal NAND at launch and transparently restores all configured game folders when the emulator exits."],
+        ["Child process environment sanitization", "On Linux, emulators and child processes launched from the (T)rustyShelf AppImage no longer inherit APPDIR and bundled library search paths, preventing dynamic linker and library conflicts."]
+      ] }
+    ]
+  },
+  {
     version: '1.5.0.0', android: '1.5.0.0', date: '2026-11-09', title: "Shared RetroArch setup, ScreenScraper login fallback, brighter museum and export fixes",
     highlights: [
       "Set your RetroArch executable once in Consoles settings across all retro systems",
