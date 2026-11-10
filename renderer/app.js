@@ -1822,8 +1822,8 @@ function inspectKey(e){
 (function(){
   const el=$("inspect");
   el.addEventListener("pointerdown",e=>{if(mode!=="inspect"||e.target.closest(".isp-hints"))return;if(rd.open){isp.drag={x:e.clientX,y:e.clientY,moved:false};return}if(isp.state===2)holdBegin();isp.drag={x:e.clientX,y:e.clientY,moved:false};el.classList.add("dragging")});
-  addEventListener("pointermove",e=>{if(!isp.drag)return;const dx=e.clientX-isp.drag.x,dy=e.clientY-isp.drag.y;if(Math.abs(dx)+Math.abs(dy)>4){isp.drag.moved=true;holdEnd(true)}if(isp.tz>1&&e.shiftKey)ispPan(dx,dy);else ispTurn(dx*.22,-dy*.16);isp.drag.x=e.clientX;isp.drag.y=e.clientY});
-  addEventListener("pointerup",e=>{if(!isp.drag)return;const click=!isp.drag.moved;isp.drag=null;el.classList.remove("dragging");if(!click&&!rd.open&&isp.tz<=1)ispSnap();const wasHolding=!!holdT;holdEnd(false);if(click&&mode==="inspect"&&!wasHolding){if(rd.open)rdTurn(e.clientX<innerWidth/2?-1:1);else ispAdvance()}});
+  addEventListener("pointermove",e=>{if(!isp.drag){if(mode==="inspect"&&window.Inspect3D&&Inspect3D.checkHover)Inspect3D.checkHover(e.clientX,e.clientY);return}const dx=e.clientX-isp.drag.x,dy=e.clientY-isp.drag.y;if(Math.abs(dx)+Math.abs(dy)>4){isp.drag.moved=true;holdEnd(true)}if(isp.tz>1&&e.shiftKey)ispPan(dx,dy);else ispTurn(dx*.22,-dy*.16);isp.drag.x=e.clientX;isp.drag.y=e.clientY});
+  addEventListener("pointerup",e=>{if(!isp.drag)return;const click=!isp.drag.moved;isp.drag=null;el.classList.remove("dragging");if(!click&&!rd.open&&isp.tz<=1)ispSnap();const wasHolding=!!holdT;holdEnd(false);if(click&&mode==="inspect"&&!wasHolding){if(rd.open)rdTurn(e.clientX<innerWidth/2?-1:1);else if(window.Inspect3D&&Inspect3D.hitBooklet&&Inspect3D.hitBooklet(e.clientX,e.clientY))openReader();else ispAdvance()}});
 })();
 
 // Freeze watch (shelf side): a frame that takes over a quarter second is logged with what was on screen, so a

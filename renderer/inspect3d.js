@@ -420,6 +420,8 @@ window.Inspect3D = (() => {
         
         const cartPivot = new THREE.Group();
         cart.position.set(0, 0, -0.0015);
+        cart.quaternion.set(0, 0, 0, 1);
+        cart.rotation.set(0, 0, 0);
         cartPivot.add(cart);
         media = cartPivot;
         mediaG.add(media);
@@ -916,7 +918,26 @@ window.Inspect3D = (() => {
   addEventListener('resize', () => { if (renderer && active) resize(); });
   // the lid's manual, when it arrives late ((T)rustyShelf's own booklet is drawn after the case opens)
   function setManual(url) { if (!manualPlane || !url || (cur && cur.manual)) return; const m = manualPlane.material, t = loadTex(url); m.map = t; m.color.set(0xffffff); m.needsUpdate = true; if (cur) cur.manual = url; }
-  return { setManual, kit: { interiorTexture, discBackTexture, discLift, coverRect, fitCover, coverCrop }, available, open, close, leave, setPose, setState, bump, setPaused, isActive: () => active,
+  function hitBooklet(cx, cy) {
+    if (!manualPlane || !camera || st.lid < 0.6) return false;
+    const THREE = T(); if (!THREE) return false;
+    const rect = canvas ? canvas.getBoundingClientRect() : null;
+    const w = rect ? rect.width : window.innerWidth;
+    const h = rect ? rect.height : window.innerHeight;
+    const left = rect ? rect.left : 0;
+    const top = rect ? rect.top : 0;
+    const mouse = new THREE.Vector2(((cx - left) / w) * 2 - 1, -((cy - top) / h) * 2 + 1);
+    const rc = new THREE.Raycaster();
+    rc.setFromCamera(mouse, camera);
+    const hits = rc.intersectObject(manualPlane, true);
+    return hits.length > 0;
+  }
+  function checkHover(cx, cy) {
+    if (!canvas) return;
+    if (hitBooklet(cx, cy)) canvas.style.cursor = 'pointer';
+    else canvas.style.cursor = '';
+  }
+  return { hitBooklet, checkHover, setManual, kit: { interiorTexture, discBackTexture, discLift, coverRect, fitCover, coverCrop }, available, open, close, leave, setPose, setState, bump, setPaused, isActive: () => active,
     busy: () => !paused && (phase === 'out' || phase === 'fade' || phase === 'wait' || phase === 'in'), _st: () => ({ phase, in: st.in, ry: st.ry, rotY: rot ? Math.round(rot.rotation.y / DEG) : null, ready, fade: !!fadeT0, pend: !!pend, op: canvas && canvas.style.opacity, on: !!(canvas && canvas.classList.contains('on')), from: cur && cur.from, standIn: !!standInTex, tok, disc: discPose(), spine: !!(spineM && spineM.parent && spineM.parent.parent) }) }; // (beta.11 spine: the printed spine is on the case)
   // (test hook) where the disc / cartridge is in the scene, and which way its face points
   function discPose() { if (!media) return null; const THREE = T(); media.updateWorldMatrix(true, false); const p = media.getWorldPosition(new THREE.Vector3()), n = new THREE.Vector3(0, 0, 1).transformDirection(media.matrixWorld); return { x: +p.x.toFixed(3), y: +p.y.toFixed(3), z: +p.z.toFixed(3), nz: +n.z.toFixed(3) }; }

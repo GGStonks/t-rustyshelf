@@ -82,6 +82,9 @@ check('HINTS and PAD_HINTS inspect button uses canInspect condition', /label:\s*
 // 12. Check cartridge centering pivot and canvas disposal protection
 check('Cartridge uses centered pivot container in mediaG', /cartPivot[\s\S]*?cart\.position\.set\(0,\s*0,\s*-0\.0015\)[\s\S]*?cartPivot\.add\(cart\)/.test(inspect3dSrc));
 check('Cover canvas releases GPU memory on disposal', /addEventListener\(['"]dispose['"],\s*\(\)\s*=>\s*\{\s*c\.width\s*=\s*c\.height\s*=\s*0;\s*\}\)/.test(inspect3dSrc));
+check('Cartridge resets to identity quaternion inside cartPivot', /cart\.quaternion\.set\(0,\s*0,\s*0,\s*1\)[\s\S]*?cart\.rotation\.set\(0,\s*0,\s*0\)/.test(inspect3dSrc));
+check('Inspect3D exports hitBooklet and checkHover for clickable booklet', /hitBooklet[\s\S]*?checkHover/.test(inspect3dSrc));
+check('Clicking booklet in inspect mode opens reader', /Inspect3D\.hitBooklet\(e\.clientX,\s*e\.clientY\)\s*\)\s*openReader\(\)/.test(appSrc));
 
 console.log(fails ? `${fails} failed` : "all passed");
 process.exit(fails ? 1 : 0);
