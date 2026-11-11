@@ -37,7 +37,8 @@ function ownNames(def, gs) { const G = cfg && cfg.games; if (!G) return gs;
 }
 const ownTitle = id => { const o = cfg && cfg.games && cfg.games[String(id)]; return o && o.title ? o.title : ''; }; // (PC games, by id)
 const artNameOf = id => { const o = cfg && cfg.games && cfg.games[String(id)]; return o && o.artName ? o.artName : ''; }; // ((T)rustyShelf issue #2) a console game's art match: the name its art is looked up under
-const { scanSteam, steamRoot, isMainSteam } = require('./main/steam');
+const { scanSteamAsync, steamRoot, steamRootAsync, isMainSteamAsync } = require('./main/steam');
+const stallwatch = require('./main/stallwatch'); // ((T)rustyShelf, Boxshelf beta issue 34) a stall logged while it lasts
 const steamart = require('./main/steamart');
 const pcgames = require('./main/pcgames'); // (beta.4) Epic, Quiver Launcher and games added by hand
 const linuxpc = require('./main/linuxpc'); // (Linux) Windows games through Wine / Proton, Epic Games through legendary
@@ -199,6 +200,7 @@ process.on('unhandledRejection', e => log('ERROR', e && e.stack || e));
 // ((T)rustyShelf) the version people see: a release build is A.B.C.DDDD (built as A.B.C+DDDD, the form npm accepts)
 function appVersion() { return app.getVersion().replace('+', '.'); }
 log('Starting (T)rustyShelf', appVersion());
+stallwatch.start(LOG); // ((T)rustyShelf, Boxshelf beta issue 34) a stall that never ends is logged while it lasts (main/stallwatch.js)
 if (linux.isLinux) { steamdeck.init({ log }); linuxpad.init({ log }); const d = steamdeck.info(); log('Linux start:', d.deck ? 'Steam Deck' : 'PC', '| started by Steam:', d.steam, '| Game Mode:', d.gameMode, '| options:', d.flags.join(' ') || 'none'); }
 
 // Only one (T)rustyShelf at a time: a second launch brings the first one forward.
@@ -613,7 +615,7 @@ function onExit(info) {
 // Freeze watch: if the main process is blocked for more than a quarter second, log it with what was going on
 // (a stall here freezes the shelf's input and window handling too)
 let lagAt = Date.now(), lastEvent = 'start';
-const markEvent = e => { lastEvent = e + ' @' + new Date().toISOString().slice(11, 19); };
+const markEvent = e => { lastEvent = e + ' @' + new Date().toISOString().slice(11, 19); stallwatch.mark(lastEvent); };
 setInterval(() => { const now = Date.now(), lag = now - lagAt - 100; lagAt = now; if (lag > 250) log('freeze watch: main process blocked', lag, 'ms (last:', lastEvent + ')'); }, 100).unref();
 // (beta.9) what the freeze watch can't see: a helper process of the screen that died (the graphics process above all: a
 // black flash or a stall on screen), and memory use every 15 minutes (a slow leak shows long before it ends in a crash)
@@ -660,19 +662,19 @@ async function buildLibrary() {
   const boxParts = id => { if (!id) return {}; const b = pccovers.consoleCover(id, 'back'), sp = pccovers.consoleCover(id, 'spine'); return { ...(b ? { back: fileUrl(b) } : {}), ...(sp ? { spine: fileUrl(sp) } : {}) }; }; // (its console box's back and spine)
   // (beta.10) Steam was only looked for in the first-run setup: one installed later, moved, or not found then never showed.
   // While Steam is on and its folder is unset or wrong, look again (once per session) and keep what's found
-  if (cfg.steam.enabled && !steamRoot(cfg.steam.path) && !steamLooked) { steamLooked = true;
-    try { const p = await findSteam(); if (p && steamRoot(p)) { cfg = persistCfg(config.normalize({ ...cfg, steam: { ...cfg.steam, path: p } })); log('Steam: found it, set as the Steam folder'); } else log('Steam: not found (not in the registry or the usual folders); choose its folder in Settings → PC games'); } catch (e) { log('Steam: looking for it failed', e.message); } }
+  markEvent('scan steam folder'); if (cfg.steam.enabled && !await steamRootAsync(cfg.steam.path) && !steamLooked) { steamLooked = true;
+    try { const p = await findSteam(); if (p && await steamRootAsync(p)) { cfg = persistCfg(config.normalize({ ...cfg, steam: { ...cfg.steam, path: p } })); log('Steam: found it, set as the Steam folder'); } else log('Steam: not found (not in the registry or the usual folders); choose its folder in Settings → PC games'); } catch (e) { log('Steam: looking for it failed', e.message); } }
   // (beta.10) the folder set is a library on another drive, not Steam's own: Steam's own folder is looked for once a
   // session too, so every drive's library, playtimes and covers come along
-  const steamGiven = cfg.steam.enabled && steamRoot(cfg.steam.path);
-  if (steamGiven && !isMainSteam(steamGiven) && steamMain === undefined) { steamMain = null; try { const p = await findSteam(); if (p && steamRoot(p) && isMainSteam(steamRoot(p))) { steamMain = p; log('Steam: the folder set is a library; using Steam\'s own folder for the list of libraries'); } } catch {} }
+  const steamGiven = cfg.steam.enabled && await steamRootAsync(cfg.steam.path);
+  if (steamGiven && !await isMainSteamAsync(steamGiven) && steamMain === undefined) { steamMain = null; try { const p = await findSteam(); const r = p && await steamRootAsync(p); if (r && await isMainSteamAsync(r)) { steamMain = p; log('Steam: the folder set is a library; using Steam\'s own folder for the list of libraries'); } } catch {} }
   // ((T)rustyShelf, Boxshelf beta issue 34) each step of the PC library is named for the freeze watch, given a breath
   // before it, and logged when slow, so a start that hangs on a drive says which step it waited on
   const step = async name => { markEvent('scan ' + name); await new Promise(r => setImmediate(r)); return Date.now(); }, slow = (name, t0) => { const ms = Date.now() - t0; if (ms > 1500) log(`library: ${name} took ${ms} ms`); };
   let tS = await step('steam');
   if (cfg.steam.enabled && cfg.steam.path) {
     // Steam's own cached art first, then anything (T)rustyShelf fetched from the Steam store for games Steam has no cover for
-    pcShelf = scanSteam(cfg.steam.path, { hideTools: cfg.steam.hideTools !== false, log, mainPath: steamMain || '' }).map(g => {
+    pcShelf = (await scanSteamAsync(cfg.steam.path, { hideTools: cfg.steam.hideTools !== false, log, mainPath: steamMain || '' })).map(g => {
       const l = steamart.local(g.appid);
       const chosen = pccovers.cover(g.id), box = !chosen && boxOn && pccovers.consoleCover(g.id);
       const cPlat = (box || chosen) ? pccovers.consolePlat(g.id) : null;
