@@ -83,4 +83,53 @@ function scan({ gamesDir, ownDir, programs = {}, skip = [] } = {}) {
   }
   return out.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }));
 }
-module.exports = { scan, programsIn };
+
+// ((T)rustyShelf, Boxshelf beta issue 34) the same scan without holding the main process up: every folder listing and file
+// check is awaited (a games folder on a sleeping HDD or a NAS used to freeze the window at startup, "not responding")
+const entriesA = async d => { try { return await fs.promises.readdir(d, { withFileTypes: true }); } catch { return []; } };
+const statA = async p => { try { return await fs.promises.stat(p); } catch { return null; } };
+const isExecA = async p => { const s = await statA(p); return !!s && s.isFile() && (s.mode & 0o111) !== 0; };
+async function isElfA(p) { let h; try { h = await fs.promises.open(p, 'r'); const b = Buffer.alloc(4); await h.read(b, 0, 4, 0); return b[0] === 0x7f && b.toString('latin1', 1, 4) === 'ELF'; } catch { return false; } finally { if (h) try { await h.close(); } catch {} } }
+async function linuxProgramsA(dir, folder) {
+  const ranked = [];
+  for (const e of await entriesA(dir)) {
+    const p = path.join(dir, e.name), n = e.name;
+    if (e.isDirectory() || HELPER.test(n)) continue;
+    if (n === 'AppRun' && await isExecA(p)) ranked.push([0, 0, n]);
+    else if (/\.sh$/i.test(n) && await isExecA(p)) ranked.push([1, n.length, n]);
+    else if (/\.appimage$/i.test(n) && await isExecA(p)) ranked.push([2, n.length, n]);
+    else if (!/\.[a-z0-9]{1,4}$/i.test(n.replace(/\.x86_64$/i, '')) && await isExecA(p) && await isElfA(p)) ranked.push([sharesWord(n, folder) ? 3 : 4, n.length, n]);
+  }
+  for (const e of await entriesA(dir)) {
+    if (!e.isDirectory() || SKIP_DIR.test(e.name)) continue;
+    for (const f of await entriesA(path.join(dir, e.name))) {
+      const p = path.join(dir, e.name, f.name);
+      if (f.isFile() && sharesWord(f.name, folder) && !HELPER.test(f.name) && await isExecA(p) && await isElfA(p)) ranked.push([5, f.name.length, path.join(e.name, f.name)]);
+    }
+  }
+  return ranked.sort((a, b) => a[0] - b[0] || a[1] - b[1]).map(r => ({ rel: r[2], native: true }));
+}
+async function windowsProgramsA(dir, folder) {
+  const found = [];
+  const walk = async (d, depth) => { for (const e of await entriesA(d)) { const p = path.join(d, e.name);
+    if (e.isFile() && WIN_PROGRAM.test(e.name) && !HELPER.test(e.name)) found.push({ rel: path.relative(dir, p), bat: /\.bat$/i.test(e.name) ? 1 : 0, depth, word: sharesWord(e.name, folder) ? 0 : 1, size: ((await statA(p)) || {}).size || 0 });
+    else if (e.isDirectory() && depth < 2 && !SKIP_DIR.test(e.name)) await walk(p, depth + 1); } };
+  await walk(dir, 0);
+  return found.sort((a, b) => a.bat - b.bat || a.depth - b.depth || a.word - b.word || b.size - a.size).slice(0, 40).map(f => ({ rel: f.rel, native: false }));
+}
+const programsInA = async (dir, folder) => [...(isLinux ? await linuxProgramsA(dir, folder) : []), ...await windowsProgramsA(dir, folder)];
+async function scanAsync({ gamesDir, ownDir, programs = {}, skip = [] } = {}) {
+  if (!gamesDir) return [];
+  const own = new Set((await entriesA(ownDir || '')).filter(e => e.isDirectory()).map(e => e.name)), out = [], used = new Set();
+  const real = async p => { try { return await fs.promises.realpath(p); } catch { return path.resolve(p); } }, taken = new Set(await Promise.all(skip.filter(Boolean).map(real)));
+  for (const e of (await entriesA(gamesDir)).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
+    if (!e.isDirectory() || e.name.startsWith('.')) continue;
+    const folder = e.name, mine = own.has(folder), dir = path.join(mine ? ownDir : gamesDir, folder);
+    if (await statA(path.join(gamesDir, folder, '.egstore')) || taken.has(await real(path.join(gamesDir, folder)))) continue;
+    const progs = await programsInA(dir, folder); if (!progs.length) continue;
+    const chosen = progs.find(p => p.rel === programs[folder]) || progs[0];
+    out.push({ id: idOf(folder, used), source: 'folder', title: folder, dir, exe: path.join(dir, chosen.rel), native: chosen.native, own: mine, programs: progs });
+  }
+  return out.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }));
+}
+module.exports = { scan, scanAsync, programsIn };

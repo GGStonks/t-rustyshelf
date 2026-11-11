@@ -666,6 +666,10 @@ async function buildLibrary() {
   // session too, so every drive's library, playtimes and covers come along
   const steamGiven = cfg.steam.enabled && steamRoot(cfg.steam.path);
   if (steamGiven && !isMainSteam(steamGiven) && steamMain === undefined) { steamMain = null; try { const p = await findSteam(); if (p && steamRoot(p) && isMainSteam(steamRoot(p))) { steamMain = p; log('Steam: the folder set is a library; using Steam\'s own folder for the list of libraries'); } } catch {} }
+  // ((T)rustyShelf, Boxshelf beta issue 34) each step of the PC library is named for the freeze watch, given a breath
+  // before it, and logged when slow, so a start that hangs on a drive says which step it waited on
+  const step = async name => { markEvent('scan ' + name); await new Promise(r => setImmediate(r)); return Date.now(); }, slow = (name, t0) => { const ms = Date.now() - t0; if (ms > 1500) log(`library: ${name} took ${ms} ms`); };
+  let tS = await step('steam');
   if (cfg.steam.enabled && cfg.steam.path) {
     // Steam's own cached art first, then anything (T)rustyShelf fetched from the Steam store for games Steam has no cover for
     pcShelf = scanSteam(cfg.steam.path, { hideTools: cfg.steam.hideTools !== false, log, mainPath: steamMain || '' }).map(g => {
@@ -678,19 +682,21 @@ async function buildLibrary() {
   // (beta.4) Epic's installs join the PC shelf; Quiver Launcher's apps and games added by hand get the Custom shelf. They
   // are PC games with a source (kind 'steam' keeps every shelf feature); covers come from the Steam app their title
   // matched (pcgames.matchSteam, never an appid the screen could launch: Play goes through launch:pc by id)
+  slow('Steam', tS);
   const pc = cfg.pc || {}, epic = [], mine = [];
   // (Linux: every game the Epic account owns; the ones not installed are greyed and Play offers to install them. They play
   // through Wine / Proton, main/linuxpc.js)
-  if (pc.epic !== false) try { epic.push(...(linux.isLinux ? linuxpc.epicOwned() : pcgames.epicGames())); epicRefresh(); } catch (e) { log('Epic library', e.message); }
+  tS = await step('epic'); if (pc.epic !== false) try { epic.push(...(linux.isLinux ? linuxpc.epicOwned() : pcgames.epicGames())); epicRefresh(); } catch (e) { log('Epic library', e.message); }
   // ((T)rustyShelf) Details → Installation: an Epic game set by hand to installed / not installed (Play then starts it, or offers to install it)
   for (const g of epic) { if (g.source !== 'epic') continue; const o = ((cfg.games || {})[g.id] || {}).install; if (o === 'installed') g.installed = true; else if (o === 'notinstalled') g.installed = false; }
   // the PC games folder (Settings → PC games): every folder in it is a game, native or through Wine (main/pcfolder.js).
   // Epic's installs there are already on the shelf
-  try { epic.push(...folderGames(epic)); } catch (e) { log('PC games folder', e.message); }
+  slow('Epic', tS); tS = await step('pc games folder');
+  try { epic.push(...await folderGamesAsync(epic)); } catch (e) { log('PC games folder', e.message); } slow('the PC games folder', tS);
   // (beta.7) GOG Galaxy, Ubisoft Connect, the EA app and Xbox / Game Pass join the PC shelf too, like Epic (store games)
-  try { epic.push(...await pcgames.storeGames(pc)); } catch (e) { log('PC stores', e.message); }
-  if (pc.quiver !== false) try { mine.push(...pcgames.quiverGames(pc.quiverPath)); } catch (e) { log('Quiver library', e.message); }
-  try { mine.push(...pcgames.customGames(pc.custom)); } catch (e) { log('Custom games', e.message); }
+  tS = await step('pc stores'); try { epic.push(...await pcgames.storeGames(pc)); } catch (e) { log('PC stores', e.message); } slow('the PC stores', tS);
+  tS = await step('quiver'); if (pc.quiver !== false) try { mine.push(...pcgames.quiverGames(pc.quiverPath)); } catch (e) { log('Quiver library', e.message); } slow('Quiver', tS);
+  tS = await step('custom games'); try { mine.push(...pcgames.customGames(pc.custom)); } catch (e) { log('Custom games', e.message); } slow('the custom games', tS);
   for (const g of [...epic, ...mine]) { const t = ownTitle(g.id); if (t) { g.fileTitle = g.title; g.title = t; } } // (beta.5: renamed in Details)
   pcgames.remember([...epic, ...mine]);
   // (Steam art by title only for Epic's store games: a recomp or a program added by hand often shares its name with an
@@ -732,6 +738,10 @@ async function buildLibrary() {
 }
 
 // the PC games folder's games (a player's own copies win over the shared ones), less the folders Epic installed into
+async function folderGamesAsync(epicGames) { // (beta issue 34: the library build's, awaited)
+  const pc = cfg.pc || {}, partial = linux.isLinux ? linuxpc.epicUnfinished() : [];
+  return pcfolder.scanAsync({ gamesDir: pc.gamesDir, ownDir: pc.userGamesDir, programs: pc.programs, skip: [...epicGames.map(g => g.dir), ...partial] });
+}
 function folderGames(epicGames) {
   const pc = cfg.pc || {};
   const partial = linux.isLinux ? linuxpc.epicUnfinished() : []; // (an Epic install still downloading, or stopped half way)
