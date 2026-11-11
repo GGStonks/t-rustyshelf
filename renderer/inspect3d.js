@@ -419,6 +419,7 @@ window.Inspect3D = (() => {
     const s = universalCase.scale;
     dockAnchor.position.set(0, discLift(o.kind, o.sys) / s.y, DISC_Z / s.z); universalCase.add(dockAnchor);
   }
+  const matNames = n => (Array.isArray(n.material) ? n.material : [n.material]).map(m => m && m.name);
   function applyUniversalModel(o) {
     if (!universalGltf || !caseG || !usesCaseModel(o.sys)) return;
     const THREE = T(); if (!THREE) return;
@@ -428,7 +429,15 @@ window.Inspect3D = (() => {
       caseBones = ['Rotate_Bone', 'Front_Bone'].map(b => universalCase.getObjectByName(b) || universalCase.getObjectByName(b.replace('_', ' '))).filter(Boolean);
       poseCaseBones(easeIO(st.lid));
       const coverTex = makeFullCoverTexture(o);
-      universalCase.traverse(n => { if (!n.isMesh) return; const m = caseMaterial(n, o, coverTex); if (m) n.material = m; });
+      // (Boxshelf beta issue 32) case.glb is a cartridge case: its frosted card holder ("PP Cloudy") is a cartridge's alone,
+      // so a disc case doesn't show one under the disc (a PS3 or GameCube case looked like a 3DS one inside)
+      // (Boxshelf beta issue 32) case.glb is a cartridge case: a disc case hides its frosted card holder ("PP Cloudy"), so it
+      // doesn't look like a 3DS case inside, and the opening the shell has under it shows the sheet's inside in the case's
+      // own plastic colour (it showed as a white cut-out); on an opaque case that's the only place the sheet's inside shows
+      const disc = o.kind !== 'cart';
+      universalCase.traverse(n => { if (!n.isMesh) return; const names = matNames(n), m = caseMaterial(n, o, coverTex); if (m) n.material = m;
+        if (disc && names.includes('PP Cloudy')) { n.visible = false; n.userData.cartOnly = true; }
+        if (disc && !isClearCase(o) && names.includes('Cover Inside')) n.material = new THREE.MeshPhysicalMaterial({ color: new THREE.Color(o.caseSide || o.caseColor || 0x222222), roughness: .42, metalness: .02, clearcoat: .35 }); });
       [spineG, backPivot, lidPivot].forEach(g => { if (g) g.visible = false; }); // the built case stays behind, hidden
       dockAnchor = new THREE.Object3D();
       const cart = universalCase.getObjectByName('Cartridge');
@@ -914,7 +923,7 @@ window.Inspect3D = (() => {
   // the shape the shelf box takes for a shelf (app.js boxShape): case.glb's, or null for the PC shelves' own
   const caseShape = sys => usesCaseModel(sys) ? CASE_GLB.shape : null;
   return { caseShape, paperOf, hitBooklet, checkHover, setManual, kit: { interiorTexture, discBackTexture, discLift, coverRect, fitCover, coverCrop }, available, open, close, leave, setPose, setState, bump, setPaused, isActive: () => active,
-    busy: () => !paused && (phase === 'out' || phase === 'fade' || phase === 'wait' || phase === 'in'), _st: () => ({ phase, in: st.in, ry: st.ry, rotY: rot ? Math.round(rot.rotation.y / DEG) : null, ready, fade: !!fadeT0, pend: !!pend, op: canvas && canvas.style.opacity, on: !!(canvas && canvas.classList.contains('on')), from: cur && cur.from, standIn: !!standInTex, tok, disc: discPose(), spine: !!(spineM && spineM.parent && spineM.parent.parent) }) }; // (beta.11 spine: the printed spine is on the case)
+    busy: () => !paused && (phase === 'out' || phase === 'fade' || phase === 'wait' || phase === 'in'), _parts: () => { const o = {}; if (universalCase) universalCase.traverse(n => { if (n.isMesh) { let v = true; for (let q = n; q; q = q.parent) if (q.visible === false) v = false; o[n.name] = { visible: v, color: n.material && n.material.color ? n.material.color.getHexString() : '' }; } }); return { kind: cur && cur.kind, sys: cur && cur.sys, parts: o }; }, _st: () => ({ phase, in: st.in, ry: st.ry, rotY: rot ? Math.round(rot.rotation.y / DEG) : null, ready, fade: !!fadeT0, pend: !!pend, op: canvas && canvas.style.opacity, on: !!(canvas && canvas.classList.contains('on')), from: cur && cur.from, standIn: !!standInTex, tok, disc: discPose(), spine: !!(spineM && spineM.parent && spineM.parent.parent) }) }; // (beta.11 spine: the printed spine is on the case)
   // (test hook) where the disc / cartridge is in the scene, and which way its face points
   function discPose() { if (!media) return null; const THREE = T(); media.updateWorldMatrix(true, false); const p = media.getWorldPosition(new THREE.Vector3()), n = new THREE.Vector3(0, 0, 1).transformDirection(media.matrixWorld); return { x: +p.x.toFixed(3), y: +p.y.toFixed(3), z: +p.z.toFixed(3), nz: +n.z.toFixed(3) }; }
 })();
