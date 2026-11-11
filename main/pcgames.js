@@ -279,11 +279,34 @@ function quiver4(root) {
   }
   return out;
 }
+// ((T)rustyShelf, issue 16) Quiver's apps folder: Quiver 3's AppsPath (else <root>\Apps), Quiver 4's apps-folder.json
+// (else <root>\apps)
+function quiverAppsDir(root) {
+  if (isFile(path.join(root, 'installs.json'))) { const af = readJson(path.join(root, 'apps-folder.json')); return af && typeof af.path === 'string' && af.path ? af.path : path.join(root, 'apps'); }
+  const s = readJson(path.join(root, 'settings.json')) || {}; return typeof s.AppsPath === 'string' && s.AppsPath.trim() ? s.AppsPath.trim() : path.join(root, 'Apps');
+}
+// ((T)rustyShelf, issue 16) an app Quiver has installed but its list doesn't show (not written there yet, or in a layout
+// read above only in part) still gets its case: every folder in the apps folder with a program in it, the ones the list
+// already gave (their program is inside) left out, so a rescan never doubles a game
+const NOT_APP = /^(\.|_)|^(temp|tmp|cache|downloads?|logs?|backups?|updates?)$/i;
+function quiverLoose(appsDir, listed) {
+  let ents = []; try { ents = fs.readdirSync(appsDir, { withFileTypes: true }); } catch { return []; }
+  const inside = listed.map(e => path.resolve(e).toLowerCase()), out = [];
+  for (const e of ents.slice(0, 2000)) {
+    if (!e.isDirectory() || NOT_APP.test(e.name)) continue;
+    const dir = path.resolve(appsDir, e.name), pre = dir.toLowerCase() + path.sep;
+    if (inside.some(x => x.startsWith(pre))) continue;
+    const exe = mainExe(dir); if (!exe) continue;
+    out.push({ key: e.name, title: e.name.replace(/[_.]+/g, ' ').replace(/\s+/g, ' ').trim() || titleFromExe(exe), exe, icon: '', tags: [] });
+  }
+  return out;
+}
 function quiverGames(chosen) {
   const out = [], seen = new Set();
   for (const root of quiverRoots(chosen)) {
     let list = [];
     try { list = isFile(path.join(root, 'installs.json')) ? quiver4(root) : quiver3(root); } catch (e) { log('Quiver read', e.message); }
+    try { const loose = quiverLoose(quiverAppsDir(root), list.map(g => g.exe)); if (loose.length) log('Quiver: ' + loose.length + ' app(s) in its apps folder that its list doesn\'t show'); list = list.concat(loose); } catch (e) { log('Quiver apps folder', e.message); }
     for (const g of list) { const id = 'quiver-' + slug(g.key || g.title); if (seen.has(id) || seen.has(g.exe.toLowerCase())) continue; seen.add(id); seen.add(g.exe.toLowerCase()); out.push({ id, source: 'quiver', ...g }); }
   }
   return out;
