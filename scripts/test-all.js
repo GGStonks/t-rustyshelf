@@ -34,7 +34,7 @@ const only = arg('only') && arg('only') !== true ? String(arg('only')).split(','
 const JOBS = Math.max(1, +arg('jobs') || 8), CAP = arg('cap') && arg('cap') !== true ? String(arg('cap')) : '12G';
 
 // the tests, by kind (the first of each is the slowest: they start first)
-const NODE = ['detect', 'pad', 'portable', 'dataexport', 'release-version', 'presence', 'epicdl', 'storage', 'windowmode', 'hoyoplay', 'music', 'looks', 'artmatch', 'fork-survey', 'addgames', 'ra-consoles', 'ytsearch', 'archive-speed', 'emu-names', 'screenscraper', 'retroarch-setting', 'museum-lighting', 'pc-boxart', 'switch-files', 'quiver', 'pc-console-plat', 'pcsx2-ra', 'pcfolder-async', 'steam-async', 'nup-build', 'xemu-detect'];
+const NODE = ['detect', 'pad', 'portable', 'dataexport', 'release-version', 'presence', 'epicdl', 'storage', 'windowmode', 'hoyoplay', 'music', 'looks', 'artmatch', 'fork-survey', 'addgames', 'ra-consoles', 'ytsearch', 'archive-speed', 'emu-names', 'screenscraper', 'retroarch-setting', 'museum-lighting', 'pc-boxart', 'switch-files', 'quiver', 'pc-console-plat', 'pcsx2-ra', 'pcfolder-async', 'steam-async', 'nup-build', 'xemu-detect', 'xbox-games'];
 const DESKTOP = ['app', 'pc', 'xbox', 'home', 'music-app', 'windowmode-app', 'epicdl-app', 'consolebox-app', 'artmatch-app', 'ngp', 'gamecom'];
 const DEMO = ['dscase', 'museumwrap', 'sortdrag', 'artresume', 'boxcolor', 'padfeed', 'android-artcard', 'android-pc', 'usermusic', 'windowmode', 'looks', 'artmatch', 'padnote', 'fanlift', 'media'];
 const GROUPS = ['screens', 'screens2', 'windows', 'thor3', 'thor2', 'thor', 'windows2']; // (the device test's seven parts, longest first: each 1.5-3.5 minutes)

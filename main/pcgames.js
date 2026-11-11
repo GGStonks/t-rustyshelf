@@ -161,33 +161,62 @@ function xboxRoots() {
   }
   return roots;
 }
+// ((T)rustyShelf, Boxshelf beta discussion 39) a package's family is its name and its publisher's id: the first 8 bytes of
+// the SHA-256 of the publisher (UTF-16), in Windows' own base 32. Worked out here when PowerShell doesn't answer
+function publisherId(pub) {
+  const h = require('crypto').createHash('sha256').update(Buffer.from(String(pub), 'utf16le')).digest().subarray(0, 8);
+  let bits = ''; for (const b of h) bits += b.toString(2).padStart(8, '0'); bits += '0';
+  const A = '0123456789abcdefghjkmnpqrstvwxyz'; let out = ''; for (let i = 0; i < 65; i += 5) out += A[parseInt(bits.slice(i, i + 5), 2)];
+  return out;
+}
+const xboxIo = { platform: () => process.platform, roots: () => xboxRoots(), run: (...a) => run(...a) }; // (swapped by the tests)
+const XBOX_RECHECK = 24 * 3600e3; // a game Windows said isn't installed is asked about again after a day (installed since, repaired)
 async function xboxGames() {
-  if (process.platform !== 'win32') return [];
-  const found = xboxScan(xboxRoots());
+  if (xboxIo.platform() !== 'win32') return [];
+  const found = xboxScan(xboxIo.roots());
   if (!found.length) return [];
   if (!xboxFam) xboxFam = readJson(xboxFile()) || {};
-  const missing = found.filter(f => !(f.name in xboxFam)).map(f => f.name); // ('' = asked, not installed: not asked again)
+  const asked = +xboxFam.__askedAt || 0, stale = Date.now() - asked > XBOX_RECHECK;
+  const missing = found.filter(f => !(f.name in xboxFam) || (xboxFam[f.name] === '' && stale)).map(f => f.name); // ('' = asked, not installed)
+  let guessed = null;
   if (missing.length) {
     const list = missing.map(n => "'" + n.replace(/'/g, "''") + "'").join(',');
-    const outp = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `Get-AppxPackage -Name ${list} | ForEach-Object { $_.Name + '|' + $_.PackageFamilyName }`], 30000);
-    for (const n of missing) xboxFam[n] = '';
-    for (const line of outp.split(/\r?\n/)) { const [n, fam] = line.trim().split('|'); if (n && fam) xboxFam[n] = fam; }
-    try { fs.mkdirSync(dataDir, { recursive: true }); fs.writeFileSync(xboxFile(), JSON.stringify(xboxFam)); } catch {}
+    // (the end mark tells an answer from a PowerShell that failed or timed out: that used to leave every game remembered
+    // as not installed for good, so the Xbox games never showed)
+    const outp = await xboxIo.run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `Get-AppxPackage -Name ${list} | ForEach-Object { $_.Name + '|' + $_.PackageFamilyName }; 'TS-END'`], 30000);
+    if (/^TS-END\s*$/m.test(outp)) {
+      for (const n of missing) xboxFam[n] = '';
+      for (const line of outp.split(/\r?\n/)) { const [n, fam] = line.trim().split('|'); if (n && fam) xboxFam[n] = fam; }
+      xboxFam.__askedAt = Date.now();
+      try { fs.mkdirSync(dataDir, { recursive: true }); fs.writeFileSync(xboxFile(), JSON.stringify(xboxFam)); } catch {}
+    } else {
+      guessed = new Set(missing); // no answer: this time each game's family is worked out from its publisher, nothing remembered
+      log('Xbox games: Windows didn\'t answer which are installed; showing the ones in the Xbox games folders');
+    }
   }
-  return found.filter(f => xboxFam[f.name]).map(f => ({ id: 'xbox-' + slug(f.name), source: 'xbox', title: f.title.trim(), shellApp: `${xboxFam[f.name]}!${f.appId}`, exe: '' }));
+  const famOf = f => guessed && guessed.has(f.name) ? (f.publisher ? f.name + '_' + publisherId(f.publisher) : '') : xboxFam[f.name];
+  return found.filter(f => famOf(f)).map(f => ({ id: 'xbox-' + slug(f.name), source: 'xbox', title: f.title.trim(), shellApp: `${famOf(f)}!${f.appId}`, exe: '' }));
 }
-// the games in these Xbox games folders: { name (its package), appId, title, dir }
+// a MicrosoftGame.config as text: UTF-8, or UTF-16 with its byte-order mark (some games ship it so, and were left out)
+function readConfigText(f) {
+  const b = fs.readFileSync(f);
+  if (b[0] === 0xff && b[1] === 0xfe) return b.subarray(2).toString('utf16le');
+  if (b[0] === 0xfe && b[1] === 0xff) { const c = Buffer.from(b.subarray(2)); c.swap16(); return c.toString('utf16le'); }
+  return b.toString('utf8').replace(/^\uFEFF/, '');
+}
+// the games in these Xbox games folders: { name (its package), publisher, appId, title, dir }
 function xboxScan(roots) {
   const found = [];
   for (const root of roots) {
     let ents = []; try { ents = fs.readdirSync(root, { withFileTypes: true }); } catch { continue; }
     for (const e of ents) {
       if (!e.isDirectory()) continue;
-      const cfgF = path.join(root, e.name, 'Content', 'MicrosoftGame.config'); let x = ''; try { x = fs.readFileSync(cfgF, 'utf8'); } catch { continue; } // (GameSave and other parts of the Xbox app have none)
-      const name = (/<Identity\s[^>]*\bName="([^"]+)"/i.exec(x) || [])[1], appId = (/<Executable\s[^>]*\bId="([^"]+)"/i.exec(x) || [])[1] || 'Game';
+      const cfgF = path.join(root, e.name, 'Content', 'MicrosoftGame.config'); let x = ''; try { x = readConfigText(cfgF); } catch { continue; } // (GameSave and other parts of the Xbox app have none)
+      const idTag = (/<Identity\s[^>]*>/i.exec(x) || [''])[0];
+      const name = (/\bName="([^"]+)"/i.exec(idTag) || [])[1], publisher = unxml((/\bPublisher="([^"]+)"/i.exec(idTag) || [])[1] || ''), appId = (/<Executable\s[^>]*\bId="([^"]+)"/i.exec(x) || [])[1] || 'Game';
       let title = unxml((/<ShellVisuals\s[^>]*\bDefaultDisplayName="([^"]+)"/i.exec(x) || [])[1] || '');
       if (!title || /^ms-resource:/i.test(title)) title = e.name;
-      if (name) found.push({ name, appId, title, dir: path.join(root, e.name) });
+      if (name) found.push({ name, publisher, appId, title, dir: path.join(root, e.name) });
     }
   }
   return found;
@@ -376,4 +405,4 @@ async function steamSearch(term, exact) {
 }
 
 module.exports = { init, epicGames, quiverGames, quiverFind, quiverRoots, customGames, titleFromExe, mainExe, remember, byId, all, steamIdOf, matchSteam, steamSearch, EPIC_DIR,
-  storeGames, gogGames, ubisoftGames, eaGames, xboxGames, hoyoGames, hoyoFromTree, HOYO, parseReg, xboxRoots, eaFromDirs, xboxScan };
+  storeGames, gogGames, ubisoftGames, eaGames, xboxGames, hoyoGames, hoyoFromTree, HOYO, parseReg, xboxRoots, eaFromDirs, xboxScan, publisherId, _xboxIo: xboxIo, _xboxReset: () => { xboxFam = null; } };
