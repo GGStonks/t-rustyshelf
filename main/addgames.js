@@ -103,29 +103,62 @@ async function mainExeAsync(dir, depth = 3) {
   found.sort((a, b) => score(b) - score(a));
   return { exe: found[0].p, others: found.slice(1, 4).map(x => x.p) };
 }
-async function scanFolderAsync(root, limit = 400) {
-  if (!(await statOr(root, st => st.isDirectory()))) return { root, games: [], error: 'That folder isn\'t there' };
-  const games = []; let ents = [];
-  try { ents = await fs.promises.readdir(root, { withFileTypes: true }); } catch (e) { return { root, games, error: e.code || e.message }; }
+// ((T)rustyShelf, issue 4) A folder of category folders ("Games\Racing\Blur", "Games\2D games\Dangerous Dave"): each
+// category used to count as one game (a program sits within three levels of it), so a whole genre came out as a single
+// entry. A folder is a category when it has no program of its own (at its top, or in a bin / x64 kind of folder) and at
+// least two of its folders do: the scan steps into it, up to three levels of categories. Folders that gave no game come
+// back in skipped, with the reason, so the list can say what was left out.
+async function progAtTop(d) { let ents = []; try { ents = await fs.promises.readdir(d, { withFileTypes: true }); } catch { return { ents, has: false }; }
+  return { ents, has: ents.some(e => e.isFile() && isExe(e.name) && !HELPER.test(e.name)) }; }
+async function looksLikeGame(dir) {
+  const { ents, has } = await progAtTop(dir); if (has) return true;
+  for (const e of ents) if (e.isDirectory() && GENERIC.test(e.name) && (await progAtTop(path.join(dir, e.name))).has) return true;
+  return false;
+}
+async function isCategory(dir, deeper = 2) { // (a category inside counts like a game: "2D games" holding "Retro" and "Celeste")
+  const { ents, has } = await progAtTop(dir); if (has) return false;
+  let n = 0;
   for (const e of ents) {
-    if (games.length >= limit) break;
-    await turn();
-    if (e.isDirectory() && !SKIP_DIR.test(e.name)) {
-      const gDir = path.join(root, e.name);
+    if (!e.isDirectory() || GENERIC.test(e.name) || SKIP_DIR.test(e.name) || e.name.startsWith('.')) continue;
+    await turn(); const d = path.join(dir, e.name);
+    if ((await looksLikeGame(d) || (deeper > 0 && await isCategory(d, deeper - 1))) && ++n >= 2) return true;
+  }
+  return false;
+}
+// why a folder gave no game: only an installer in it, only archives / disc images, or nothing that starts
+async function whyNot(dir) {
+  const { ents } = await progAtTop(dir), names = ents.filter(e => e.isFile()).map(e => e.name);
+  if (names.some(n => /^(setup|install).*\.exe$/i.test(n))) return 'only an installer';
+  if (names.some(n => /\.(zip|rar|7z|iso|vhdx?|img)$/i.test(n))) return 'an archive or disc image, not installed';
+  return 'no program found';
+}
+async function scanFolderAsync(root, limit = 2000) {
+  if (!(await statOr(root, st => st.isDirectory()))) return { root, games: [], error: 'That folder isn\'t there' };
+  const games = [], skipped = []; let top = [];
+  try { top = await fs.promises.readdir(root, { withFileTypes: true }); } catch (e) { return { root, games, error: e.code || e.message }; }
+  const walk = async (dir, ents, level) => {
+    for (const e of ents) {
+      if (games.length >= limit) return;
+      await turn();
+      if (!e.isDirectory() || SKIP_DIR.test(e.name) || e.name.startsWith('.')) continue;
+      const gDir = path.join(dir, e.name);
+      if (level < 3 && await isCategory(gDir)) { let sub = []; try { sub = await fs.promises.readdir(gDir, { withFileTypes: true }); } catch {} await walk(gDir, sub, level + 1); continue; }
       const m = await mainExeAsync(gDir);
       if (m) {
         const cov = folderCover(gDir) || (m.exe ? folderCover(m.exe) : null);
-        games.push({ folder: gDir, title: clean(e.name) || titleFor(m.exe, root), exe: m.exe, others: m.others, ...(cov ? { cover: cov } : {}) });
-      }
+        games.push({ folder: gDir, title: clean(e.name) || titleFor(m.exe, dir), exe: m.exe, others: m.others, ...(level ? { group: path.relative(root, dir) } : {}), ...(cov ? { cover: cov } : {}) });
+      } else if (skipped.length < 500) skipped.push({ folder: gDir, title: clean(e.name) || e.name, why: await whyNot(gDir) });
     }
-  }
-  const loose = ents.filter(e => e.isFile() && isExe(e.name) && !HELPER.test(e.name));
+  };
+  await walk(root, top, 0);
+  const loose = top.filter(e => e.isFile() && isExe(e.name) && !HELPER.test(e.name));
   for (const e of loose) {
     const lPath = path.join(root, e.name), cov = folderCover(lPath);
     games.push({ folder: root, title: clean(path.basename(e.name, path.extname(e.name))), exe: lPath, others: [], ...(cov ? { cover: cov } : {}) });
   }
   games.sort((a, b) => a.title.localeCompare(b.title));
-  return { root, games };
+  skipped.sort((a, b) => a.title.localeCompare(b.title));
+  return { root, games, skipped };
 }
 
 // ---------- Playnite ----------

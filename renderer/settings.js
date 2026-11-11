@@ -1205,14 +1205,14 @@ const ADD={list:null,pn:null,pnOn:{pc:true},pnPick:new Set(),busy:false,rows:nul
 const addSlug=s=>String(s||"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,60)||"game";
 function addReset(){ADD.rows=null;bump()}
 function addFound(items){const have=new Set(pcCfg().custom.map(c=>String(c.exe).toLowerCase()));ADD.pn=null;
-  ADD.list=items.map(x=>{const h=have.has(String(x.exe).toLowerCase());return {title:String(x.title||"Game").slice(0,120),exe:String(x.exe),on:!h,have:h}});
-  if(!ADD.list.length)toast("No games found there");addReset()}
+  ADD.list=items.map(x=>{const h=have.has(String(x.exe).toLowerCase());return {title:String(x.title||"Game").slice(0,120),exe:String(x.exe),on:!h,have:h,group:x.group?String(x.group):""}});
+  if(!ADD.list.length&&!(ADD.skipped||[]).length)toast("No games found there");addReset()}
 function addCommit(){const pc=pcCfg(),covers=[];let n=0;for(const x of (ADD.list||[]).filter(x=>x.on&&!x.have)){if(pc.custom.some(c=>String(c.exe).toLowerCase()===x.exe.toLowerCase()))continue;const id=Date.now().toString(36)+"-"+n;pc.custom.push({id,title:x.title,exe:x.exe,args:""});if(x.cover)covers.push({id,file:x.cover});n++}
   ADD.list=null;changed({rescan:true});if(covers.length&&api.gameCovers)api.gameCovers(covers).catch(()=>{});play("open");toast(n?`Added ${n} game${n===1?"":"s"} to the Custom shelf`:"Nothing new to add");addReset()}
 async function addSeveral(){const p=await pick({kind:"file",multi:true,title:"Choose the games' programs (hold Ctrl to pick several)",filters:[{name:"Programs",extensions:["exe"]}]});const L=(Array.isArray(p)?p:p?[p]:[]).map(x=>typeof x==="string"?x:x&&x.path).filter(Boolean);if(!L.length)return;
   const named=await Promise.resolve(api.gameTitles?api.gameTitles(L):L.map(e=>({exe:e,title:e.split(/[\\/]/).pop().replace(/\.exe$/i,"")}))).catch(()=>L.map(e=>({exe:e,title:e.split(/[\\/]/).pop().replace(/\.exe$/i,"")})));addFound(named)}
 async function addScan(){const p=await pick({kind:"folder",title:"Choose the folder your games are in (like D:\\Games)"}),root=typeof p==="string"?p:p&&p.path;if(!root||!api.scanGameFolder)return;
-  ADD.busy=true;ADD.list=null;addReset();try{const r=await api.scanGameFolder(root);if(r&&r.error)toast(r.error);addFound((r&&r.games)||[])}catch(e){toast(errMsg(e))}finally{ADD.busy=false;addReset()}}
+  ADD.busy=true;ADD.list=null;addReset();ADD.skipped=null;try{const r=await api.scanGameFolder(root);if(r&&r.error)toast(r.error);ADD.skipped=(r&&r.skipped)||[];addFound((r&&r.games)||[])}catch(e){toast(errMsg(e))}finally{ADD.busy=false;addReset()}}
 async function addOne(){const p=await pick({kind:"file",title:"Choose the game's program",filters:[{name:"Programs",extensions:["exe"]}]}),exe=typeof p==="string"?p:p&&p.path;if(!exe)return;const pc=pcCfg();
   if(pc.custom.some(c=>String(c.exe).toLowerCase()===String(exe).toLowerCase()))return toast("That game is already on the Custom shelf");
   const title=String(exe).split(/[\\/]/).pop().replace(/\.[^.]+$/,"").replace(/[_\-.]+/g," ").replace(/\s+/g," ").trim()||"Game";
@@ -1249,9 +1249,13 @@ function addRows(){if(ADD.rows)return ADD.rows;const R=[],win=!window.bsPlatform
     const anyUnticked=L.some(x=>!x.on&&!x.have);
     R.push(A(anyUnticked?"Select all":"Deselect all",anyUnticked?"All":"None","Ticks or unticks every game found that isn't already on the shelf.",()=>{const v=anyUnticked;L.forEach(x=>{if(!x.have)x.on=v});addReset()},{ns:true}));
     R.push(A("Add the ticked games",()=>{const n=L.filter(x=>x.on&&!x.have).length;return n?`Add ${n}`:"Add"},"Puts the ticked games on the Custom shelf. Covers are found for them like for any PC game, and each can be renamed or given another cover from its Details.",addCommit,{ns:true}));
-    L.forEach(x=>R.push({t:"toggle",label:x.title,info:x.exe,ns:true,nosave:true,get:()=>x.on&&!x.have,set:v=>{if(!x.have)x.on=!!v},sub:()=>({text:x.have?"Already on the Custom shelf":x.exe.split(/[\\/]/).pop()})}));
+    L.forEach(x=>R.push({t:"toggle",label:x.title,info:x.exe,ns:true,nosave:true,get:()=>x.on&&!x.have,set:v=>{if(!x.have)x.on=!!v},sub:()=>({text:x.have?"Already on the Custom shelf":(x.group?x.group+" · ":"")+x.exe.split(/[\\/]/).pop()})}));
     R.push(A("Add the ticked games",()=>{const n=L.filter(x=>x.on&&!x.have).length;return n?`Add ${n}`:"Add"},"Puts the ticked games on the Custom shelf. Covers are found for them like for any PC game, and each can be renamed or given another cover from its Details.",addCommit,{ns:true}),
       A("Clear this list","Clear","Forgets this list without adding anything.",()=>{ADD.list=null;addReset()},{ns:true}))}
+  // ((T)rustyShelf, issue 4) the folders the scan left out, and why (an installer not run yet, an archive), so nothing goes missing silently
+  if(ADD.skipped&&ADD.skipped.length&&!ADD.busy){const S=ADD.skipped;R.push(H(`Left out: ${S.length} folder${S.length===1?"":"s"}`,{em:()=>"no game to start in them"}));
+    S.slice(0,200).forEach(x=>R.push(infoRow(x.title,"",{text:x.why},{info:x.folder})));
+    R.push(A("Clear this list","Clear","Forgets the folders left out.",()=>{ADD.skipped=null;addReset()},{ns:true}))}
   if(ADD.pn){const P=ADD.pn,name=id=>((consoleList().find(c=>c.id===id)||{}).name||id);R.push(H("From Playnite",{em:()=>`${P.total} games in Playnite`}));
     R.push({t:"toggle",label:"PC games",info:"Games you added to Playnite by hand: each gets a case on the Custom shelf with its program, launch options and cover.",ns:true,nosave:true,get:()=>!!ADD.pnOn.pc,set:v=>{ADD.pnOn.pc=!!v;addReset()},sub:()=>({text:`${P.pc.length} game${P.pc.length===1?"":"s"}`})});
     for(const [sys,c] of Object.entries(P.consoles||{}))R.push({t:"toggle",label:`${name(sys)} games`,info:`Adds ${c.dirs.join(", ")} as ${name(sys)} games folders${c.emulatorDir?`, and Playnite's emulator if ${name(sys)} has none yet`:""}.`,ns:true,nosave:true,get:()=>!!ADD.pnOn[sys],set:v=>{ADD.pnOn[sys]=!!v},sub:()=>({text:`${c.count} game${c.count===1?"":"s"} · ${c.dirs.length} folder${c.dirs.length===1?"":"s"}`})});

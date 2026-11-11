@@ -33,6 +33,22 @@ const mk = (p, body) => { const f = path.join(tmp, p); fs.mkdirSync(path.dirname
     const gone = await ag.scanFolderAsync(path.join(tmp, 'nope'));
     check('A missing folder is reported, not thrown', gone.error && gone.games.length === 0, JSON.stringify(gone));
 
+    // (issue 4) a folder of category folders: each category is stepped into, its games are games of their own; a game whose
+    // program sits in bin\ or under its own subfolders stays one game; folders with only an installer are listed as skipped
+    mk('Lib/Racing/Blur/Blur.exe', 'b'.repeat(800)); mk('Lib/Racing/FlatOut 2/FlatOut2.exe', 'f'.repeat(800)); mk('Lib/Racing/Grip/bin/Grip.exe', 'g'.repeat(800));
+    mk('Lib/Racing/Unreal Racer/Engine/Binaries/Win64/CrashReportClient.exe', 'c'.repeat(90)); mk('Lib/Racing/Unreal Racer/Racer/Binaries/Win64/Racer-Win64-Shipping.exe', 'u'.repeat(900));
+    mk('Lib/Racing/FUEL-P2P/setup.exe', 's'); mk('Lib/Racing/FUEL-P2P/data-1.rar', 'r');
+    mk('Lib/2D games/Retro/Dangerous Dave/dave.exe', 'd'.repeat(300)); mk('Lib/2D games/Retro/Commander Keen/keen.exe', 'k'.repeat(300));
+    mk('Lib/2D games/Celeste/Celeste.exe', 'c'.repeat(300));
+    mk('Lib/Solo Game/Solo.exe', 's'.repeat(500)); mk('Lib/Solo Game/Tools/Editor/editor.exe', 'e'.repeat(50));
+    const cat = await ag.scanFolderAsync(path.join(tmp, 'Lib')), ct = cat.games.map(g => g.title).sort();
+    check('Category folders are stepped into: each game inside is its own entry, two levels deep too', ['Blur', 'Celeste', 'Commander Keen', 'Dangerous Dave', 'FlatOut 2', 'Grip', 'Solo Game', 'Unreal Racer'].every(t => ct.includes(t)) && !ct.includes('Racing') && !ct.includes('2D games') && !ct.includes('Retro'), JSON.stringify(ct));
+    const ur = cat.games.find(g => g.title === 'Unreal Racer');
+    check('A game with its program deep in its own folders stays one game, its real program picked', !!ur && /Racer-Win64-Shipping\.exe$/.test(ur.exe) && ct.length === 8, JSON.stringify(cat.games.map(g => [g.title, path.basename(g.exe)])));
+    check('A game found inside a category says which one (group)', (cat.games.find(g => g.title === 'Blur') || {}).group === 'Racing' && (cat.games.find(g => g.title === 'Commander Keen') || {}).group === path.join('2D games', 'Retro'), JSON.stringify(cat.games.map(g => [g.title, g.group])));
+    const sk = (cat.skipped || []).find(s => /FUEL/.test(s.folder));
+    check('A folder with only an installer is listed as skipped, with the reason', !!sk && sk.why === 'only an installer', JSON.stringify(cat.skipped));
+
     // a big folder: 400 game folders, each with a few nested folders and files
     const big = path.join(tmp, 'Big');
     for (let i = 0; i < 400; i++) { for (let j = 0; j < 4; j++) mk(`Big/Game ${i}/sub${j}/data${j}.pak`, 'p'); mk(`Big/Game ${i}/Game${i}.exe`, 'e'.repeat(1000 + i)); }
