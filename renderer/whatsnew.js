@@ -8,6 +8,25 @@
 //   sections: [{ h, items: [[headline, more]] }] }; newest first.
 window.BS_WHATSNEW = [
   {
+    version: '1.6.2.0', android: '1.6.2.0', date: '2026-11-12', title: "Xbox app games that show up, and disc cases that look like disc cases inside",
+    highlights: [
+      "Xbox app and Game Pass games no longer stay \"not installed\" after Windows didn't answer once",
+      "A disc game's 3D case no longer has a cartridge holder inside"
+    ],
+    platforms: [
+      "Windows: the Xbox app's games.",
+      "All platforms: the 3D case in Inspect."
+    ],
+    sections: [
+      { h: "PC games", items: [
+        ["Xbox app games", "If Windows didn't answer which Xbox games are installed (it can time out at startup), every game used to be remembered as not installed for good. Only a real answer is remembered now, a game Windows said isn't installed is asked about again a day later, and without an answer the games in the Xbox games folders show anyway. A game whose settings file is saved as UTF-16 is found too."]
+      ] },
+      { h: "Inspect", items: [
+        ["Disc cases inside", "The 3D case is a cartridge case underneath, and a disc game's case showed its card holder under the disc, like a 3DS case. Disc cases leave it out now, with plain plastic where it was; DS, 3DS and Switch cases keep the holder their cartridge sits in."]
+      ] }
+    ]
+  },
+  {
     version: '1.6.1.0', android: '1.6.1.0', date: '2026-11-11', title: "No more hang at launch on a sleeping drive, and DS boxes the size of their covers",
     highlights: [
       "A Steam library on a drive that's asleep or unplugged no longer freezes the window at launch",
