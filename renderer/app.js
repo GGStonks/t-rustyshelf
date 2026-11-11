@@ -225,7 +225,7 @@ function renderSort(){
 function pickSort(row,v){
   if(row===0){if(sortBy===v)return;sortBy=v}else{if(filterBy===v)return;filterBy=v}
   play_("tick",{dir:1});applyArrange();renderSort();
-  clearTimeout(spSaveT);spSaveT=setTimeout(()=>{spSaveT=0;if(!cfgInfo)return;cfgInfo.config.ui.sort=sortBy;cfgInfo.config.ui.filter=filterBy;api.saveConfig(cfgInfo.config).catch(()=>{})},500);
+  if(cfgInfo){cfgInfo.config.ui.sort=sortBy;cfgInfo.config.ui.filter=filterBy} /* (at once in memory: a rescan in the next half second read the old choice back, Custom stuck) */clearTimeout(spSaveT);spSaveT=setTimeout(()=>{spSaveT=0;if(!cfgInfo)return;cfgInfo.config.ui.sort=sortBy;cfgInfo.config.ui.filter=filterBy;api.saveConfig(cfgInfo.config).catch(()=>{})},500);
 }
 function sortStep(d){const list=spRow===0?SORTS:filterList(),curV=spRow===0?sortBy:filterBy;const i=list.findIndex(x=>x[0]===curV);pickSort(spRow,list[(i+d+list.length)%list.length][0])}
 function openSort(){if(sysBusy()||(mode!=="browse"&&mode!=="details"))return;closeDetails(true);mode="sort";spRow=0;renderSort();$("sortPanel").classList.add("on");$("sortPanel").setAttribute("aria-hidden","false");sfx.flip()}
@@ -426,7 +426,11 @@ function mount(s){
   if(isGame(g)){
     slot.setAttribute("draggable","true");
     slot.addEventListener("dragstart",e=>{
-      if(mode!=="browse")return;
+      // ((T)rustyShelf, manual sorting) a box is picked up only after a press held still for a moment: a quick drag scrolls
+      // the shelf, as it always did (it used to grab whatever box the press started on). Once picked up, the shelf's own
+      // drag-scroll stops: the browser sends no pointerup after a drag and drop, which left the shelf scrolling with the mouse
+      if(mode!=="browse"||!drag||performance.now()-drag.t0<HOLD_PICK){e.preventDefault();return}
+      drag=null;dragMoved=false;slot.classList.add("picked");
       e.dataTransfer.setData("text/plain",String(g.id));
       e.dataTransfer.effectAllowed="move";
     });
@@ -3700,12 +3704,15 @@ addEventListener("pointerdown",e=>{if(mode!=="museum"||window.Museum&&!Museum.is
 addEventListener("pointermove",e=>{if(!musDrag)return;const dx=e.clientX-musDrag.x,dy=e.clientY-musDrag.y;musDrag.x=e.clientX;musDrag.y=e.clientY;Museum.turn(dx*.07,-dy*.07)},{capture:true});
 addEventListener("pointerup",()=>{musDrag=null},{capture:true});
 addEventListener("pointercancel",()=>{musDrag=null},{capture:true});
-let drag=null,dragMoved=false;
-$("scene").addEventListener("pointerdown",e=>{if(mode!=="browse")return;const sl=e.target.closest(".slot");drag={x:e.clientX,onSel:!!(sl&&slots[sel]&&sl===slots[sel].el),last:e.clientX,acc:0,spin0:spin} /* spin0: a drag carries on from the angle the box already has (right stick, last drag) instead of snapping to the front */;dragMoved=false});
+let drag=null,dragMoved=false;const HOLD_PICK=350; // (ms held still before a box can be dragged to a new place)
+$("scene").addEventListener("pointerdown",e=>{if(mode!=="browse")return;const sl=e.target.closest(".slot");drag={x:e.clientX,t0:performance.now(),onSel:!!(sl&&slots[sel]&&sl===slots[sel].el),last:e.clientX,acc:0,spin0:spin} /* spin0: a drag carries on from the angle the box already has (right stick, last drag) instead of snapping to the front */;dragMoved=false});
 addEventListener("pointermove",e=>{if(!drag)return;const dx=e.clientX-drag.x;if(Math.abs(dx)>8)dragMoved=true;if(!dragMoved)return;
   if(drag.onSel){spin=drag.spin0+dx*.6;spinT=spin;slots[sel].box.classList.add("free");applyRotation()}
   else{drag.acc+=e.clientX-drag.last;drag.last=e.clientX;const step=bw*.3;while(Math.abs(drag.acc)>step){move(drag.acc>0?-1:1);drag.acc-=Math.sign(drag.acc)*step}}});
 addEventListener("pointerup",()=>{if(!drag)return;if(drag.onSel&&dragMoved){spinT=spin;const wasFlipped=flipped;if(!spinSettle()&&flipped!==wasFlipped)sfx.flip()} /* one flip sound: spinSettle plays it for a spine */drag=null;setTimeout(()=>dragMoved=false,0)});
+// a drag and drop that ended (dropped, cancelled, let go outside the window) or a pointer the browser took over: no shelf scroll left running
+const dragOver=()=>{drag=null;dragMoved=false;document.querySelectorAll(".slot.picked").forEach(x=>x.classList.remove("picked"))};
+addEventListener("dragend",dragOver);addEventListener("pointercancel",()=>{if(drag)dragOver()});
 
 /* ---------- touch hooks ----------
    The Android build's touch layer (android-app/web-extras/android-touch.js: swipe to go back, pinch to zoom) asks these
@@ -4451,6 +4458,10 @@ window.Shelf={
   pcCoverAuto:()=>pcCoverAuto(),pcCoverUndo:()=>pcCoverUndo(),coverUndoCount:()=>coverUndo.length,
   reshelf:()=>{reshelfWanted=true}, // (beta.11) Settings → Surprise me / Emulator case: the shelves are rebuilt the moment Settings closes (settingsClosed)
   // (beta.7) test hooks for the library pass: the filters on offer, picking one, the shelf's games and the one in view
+  // manual sorting test hooks (android-app/ci/sortdrag-test.js)
+  _sort:{state:()=>({sel,sort:sortBy,cfg:cfgInfo&&cfgInfo.config.ui.sort,custom:JSON.stringify((cfgInfo&&cfgInfo.config.ui.customSort)||{}),order:cur()?cur().items.map(g=>g.id).join(","):"",drag:!!drag}),
+    box:k=>{const s=slots[sel+k];if(!s||!s.el)return null;const r=s.el.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}},pick:v=>pickSort(0,v),
+    probe:held=>{const s=slots[sel].el,e=new Event("dragstart",{cancelable:true});e.dataTransfer={setData(){},effectAllowed:""};drag={x:0,t0:performance.now()-(held?600:0),last:0,acc:0,spin0:0};s.dispatchEvent(e);const r={prevented:e.defaultPrevented,after:!!drag};dispatchEvent(new Event("dragend"));return r}},
   _lib:{filters:()=>filterList(),filter:v=>pickSort(1,v),select:id=>{const i=cur()?cur().items.findIndex(g=>g.id===id):-1;if(i<0)return false;go(i);return true},cur:()=>{const g=curGame();return g?{id:g.id,title:g.title,kind:g.kind}:null},
     games:()=>(cur()?cur().items.filter(isGame):[]).map(g=>({id:g.id,year:yearOf(g),genres:genresOf(g)})),shelves:()=>shelves.map(s=>({id:s.id,name:s.name,col:!!s.col,ids:(s.items||[]).filter(isGame).map(g=>g.id),tiles:(s.items||[]).filter(g=>g.kind==="random"||g.kind==="emulator").map(g=>({id:g.id,kind:g.kind,title:g.title})),last:((s.items||[])[(s.items||[]).length-1]||{}).id||null,random:(s.items||[]).some(i=>i&&i.kind==="random")}))},
   // (beta.7) Settings changed your collections: their shelves are made again (the one you're on stays, if it still has games)
