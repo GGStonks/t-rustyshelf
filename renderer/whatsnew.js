@@ -8,6 +8,48 @@
 //   sections: [{ h, items: [[headline, more]] }] }; newest first.
 window.BS_WHATSNEW = [
   {
+    version: '1.6.0.0', android: '1.6.0.0', date: '2026-11-11', title: "A real 3D game case in Inspect, a lighter museum for big libraries, and PC box colours",
+    highlights: [
+      "Inspect opens a real 3D case: a booklet you can read, a cartridge that comes out, a clear Switch case",
+      "The museum stays quick with big libraries: long consoles continue on the shelves below",
+      "PC games in their console box can take one colour, or one per console",
+      "One press resumes a stopped box art download, or gets all missing art",
+      "A DualSense the shelf got nothing from over Bluetooth now works"
+    ],
+    platforms: [
+      "Windows: the PlayStation pad fallback, PCSX2's RetroAchievements sign-in in a moved Documents or business OneDrive folder.",
+      "Linux: PCSX2's sign-in in ~/.config and the Flatpak; the PC games folder read without holding the app up.",
+      "All platforms: the 3D case, the museum, PC box colours, box art resume, manual sorting, Quiver, Add games and the Switch fixes."
+    ],
+    sections: [
+      { h: "Inspect and the cases", items: [
+        ["A real 3D game case", "Inspect opens one case model for every console, closed the right way up: a white inside page, a booklet you can click and read, a cartridge you can take out and turn in place, and the disc docked inside. The shelf's box is drawn to match the case it turns into."],
+        ["Switch and PC cases", "The Switch case is clear plastic with its two hinges and the art wrapped round the spine; PC games keep a clean cover without a coloured frame, always say PC on the spine, and can be inspected too. Inspect is no longer offered on the emulator and Surprise me tiles."]
+      ] },
+      { h: "Museum", items: [
+        ["Big libraries stay quick", "A console with more than 120 games continues on the shelves below, split evenly, its plaque saying which part it is (PS2 · 2 of 3), so the wide view no longer pulls back across one endless row. Past ten shelves, three lights follow the row you're on instead of one per shelf, which keeps the room smooth."]
+      ] },
+      { h: "PC games", items: [
+        ["Console box colour", "Settings → PC games → Console box color: keep each console's own (PlayStation blue, Xbox green), give every PC game one colour (dark blue, black, white…), or set one per console in Box color per console."],
+        ["The case follows the cover", "A Steam or SteamGridDB cover chosen for a game that also had a console box no longer comes out in that console's case and proportions."],
+        ["Quiver apps", "Apps Quiver installed after the first import get their case: Quiver's apps folder is looked through too, without doubling anything."],
+        ["Add games from a folder", "A games folder sorted into category folders (Racing, 2D games…) is stepped into, each game inside its own entry, and the folders left out are listed with the reason (only an installer, an archive)."]
+      ] },
+      { h: "Box art", items: [
+        ["Resume or get all missing art", "Settings → Box art & manuals starts with one row: Resume box art download picks a stopped download up with the same consoles and parts; with nothing to resume, Get all missing art gets every console still missing covers, backs, spines or discs."]
+      ] },
+      { h: "Shelf and controllers", items: [
+        ["Manual sorting with the mouse", "A quick drag scrolls the shelf and no longer grabs a box; hold a box still for a moment to pick it up. The shelf no longer keeps scrolling after a drop, and Custom can be left for A–Z or the others at once."],
+        ["PlayStation pads over Bluetooth", "A DualSense Windows has but the shelf got nothing from is read directly by (T)rustyShelf's controller helper, so it moves the shelf; a pad the shelf sees itself turns that off."],
+        ["Switch games folder", "The .nca parts of a dump no longer show up as games of their own."]
+      ] },
+      { h: "Achievements and startup", items: [
+        ["PCSX2 sign-in found", "RetroAchievements shows PCSX2 as signed in when its settings live in a moved Documents folder, a business or translated OneDrive folder, ~/.config/PCSX2 or the Flatpak."],
+        ["No hang at launch", "The PC games folder is read without holding the app up (a sleeping hard drive or a NAS could leave the window not responding), and a slow startup step is named in the log."]
+      ] }
+    ]
+  },
+  {
     version: '1.5.2.0', android: '1.5.2.0', date: '2026-11-10', title: "Startup auto-update with automatic restart and startup trailer suppression",
     highlights: [
       "Optional automatic update check at startup with background download",
