@@ -20,7 +20,7 @@ const consoles=[
   {id:"gc",name:"GameCube",emulatorName:"Dolphin",exeNames:["Dolphin.exe"],extensions:["rvz","iso","gcm","ciso"],gameArgs:'-b -C Dolphin.Display.Fullscreen=True -C Dolphin.Interface.ConfirmStop=False -e "{rom}"'},
   {id:"wii",name:"Wii",emulatorName:"Dolphin",exeNames:["Dolphin.exe"],extensions:["rvz","iso","wbfs","wia"],gameArgs:'-b -C Dolphin.Display.Fullscreen=True -C Dolphin.Interface.ConfirmStop=False -e "{rom}"'},
   {id:"wiiu",name:"Wii U",emulatorName:"Cemu",exeNames:["Cemu.exe"],extensions:["wua","wud","wux","rpx"],gameArgs:'-f -g "{rom}"'},
-  {id:"sw",name:"Switch",emulatorName:"Eden",exeNames:["eden.exe"],extensions:["nsp","xci","nca","nro"],gameArgs:'-f -g "{rom}"'},
+  {id:"sw",name:"Switch",emulatorName:"Eden",exeNames:["eden.exe"],extensions:["nsp","xci","nro"],gameArgs:'-f -g "{rom}"'},
   {id:"psp",name:"PSP",emulatorName:"PPSSPP",exeNames:["PPSSPPWindows64.exe"],extensions:["iso","cso","chd","pbp"],gameArgs:'--fullscreen --pause-menu-exit "{rom}"'},
   {id:"ps3",name:"PS3",emulatorName:"RPCS3",exeNames:["rpcs3.exe"],extensions:["bin","iso"],gameArgs:'--no-gui --fullscreen "{rom}"'},
   {id:"n3ds",name:"3DS",emulatorName:"Azahar",exeNames:["azahar.exe"],extensions:["3ds","cci","cxi"],gameArgs:'-f "{rom}"'},

@@ -46,7 +46,7 @@ const CONSOLES = [
     exeNames: ['eden.exe', 'Eden.exe', 'citron.exe', 'Citron.exe', 'Ryujinx.exe', 'ryujinx.exe'], // (beta.8: Citron and Ryujinx too; Ryujinx gets its own options at launch)
     emulatorFolders: ['{app}\\Eden', '%LOCALAPPDATA%\\Programs\\Eden', '%ProgramFiles%\\Eden', '%APPDATA%\\Eden', '{app}\\Citron', '%LOCALAPPDATA%\\Programs\\Citron', '{app}\\Ryujinx', '%LOCALAPPDATA%\\Programs\\Ryujinx'],
     romFolderNames: ['switch', 'nsw', 'ns'],
-    extensions: ['nsp', 'xci', 'nca', 'nro'],
+    extensions: ['nsp', 'xci', 'nro'], // ((T)rustyShelf, beta issue 29: not .nca, the content archives a dump is split into, never a game on their own)
     // Eden comes from the yuzu family: -f = fullscreen, -g = game file.
     gameArgs: '-f -g "{rom}"',
     emulatorArgs: '',
