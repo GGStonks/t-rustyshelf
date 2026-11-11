@@ -204,25 +204,21 @@ async function saveConsole(id, buf, from, part = '', plat = '') {
   }
   return f;
 }
+// the console a game's box comes from ('ps5', 'xone'…, covers.js PC_BOX_PLATS), or null. ((T)rustyShelf, issue 1) Only the cover in use counts:
+// a cover you chose (data\pc-covers) is a console box only when it was picked as one (its .plat beside it); the
+// automatic console box (data\pc-console-covers) only while no cover is chosen. A Steam or SteamGridDB cover picked over
+// an automatic console box used to get that console's case (its proportions and colour), mixed up with the art.
+// The .from note is read by the platform name written before the address, never by letters anywhere in the address.
+const FROM_PLAT = [[/^(sony )?playstation 5\b/, 'ps5'], [/^(microsoft )?xbox series x/, 'xsx'], [/^(sony )?playstation 4\b/, 'ps4'], [/^(microsoft )?xbox one\b/, 'xone'], [/^nintendo switch\b/, 'sw']]; // (covers.js PC_BOX_PLATS names)
 function consolePlat(id) {
-  const sid = safeId(id);
-  const dirs = [dir(), boxDir()];
-  for (const d of dirs) {
-    const p = path.join(d, sid + '.plat');
-    if (isFile(p)) {
-      try { return fs.readFileSync(p, 'utf8').trim(); } catch {}
-    }
-    const fromFile = path.join(d, sid + '.from');
-    if (isFile(fromFile)) {
-      try {
-        const from = fs.readFileSync(fromFile, 'utf8').toLowerCase();
-        if (from.includes('playstation 5') || from.includes('ps5')) return 'ps5';
-        if (from.includes('series x') || from.includes('xsx')) return 'xsx';
-        if (from.includes('playstation 4') || from.includes('ps4')) return 'ps4';
-        if (from.includes('xbox one') || from.includes('xone')) return 'xboxone';
-        if (from.includes('switch') || from.includes('sw')) return 'sw';
-      } catch {}
-    }
+  const sid = safeId(id), chosen = !!cover(id);
+  const d = chosen ? dir() : boxDir();
+  const p = path.join(d, sid + '.plat');
+  if (isFile(p)) { try { return fs.readFileSync(p, 'utf8').trim() || null; } catch {} }
+  if (chosen) return null; // (a picture of yours, Steam's or SteamGridDB's: no console case)
+  const fromFile = path.join(d, sid + '.from');
+  if (isFile(fromFile)) {
+    try { const from = fs.readFileSync(fromFile, 'utf8').trim().toLowerCase(); const hit = FROM_PLAT.find(([re]) => re.test(from)); if (hit) return hit[1]; } catch {}
   }
   return null;
 }
