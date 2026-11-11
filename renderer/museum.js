@@ -1724,7 +1724,8 @@ window.Museum = (() => {
       const cm = new THREE.MeshStandardMaterial({ color: artT ? 0xffffff : 0x26272d, map: artT, roughness: .5 }), shell = new THREE.MeshStandardMaterial({ color: 0x24252b, roughness: .55 }); mats.push(cm, shell);
       const cw = w * .42, ch = cw * 1.1, ct = Math.min(.012, lt * .55, Dw * .8); /* thinner than the lid, so a closed (thin) Switch case never shows it through the cover */
       const c = mesh(new window.BS3D.RoundedBoxGeometry(cw, ch, ct, 2, Math.min(.006, ct * .45)), [shell, shell, shell, shell, cm, shell]); c.position.set(0, 0, ct / 2); M.add(c);
-      const pins = mesh(new THREE.BoxGeometry(cw * .7, ch * .1, ct + .001), new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: .8, roughness: .35 })); mats.push(pins.material); pins.position.set(0, -ch / 2 + ch * .07, ct / 2); M.add(pins);
+      // (the contacts on the back only: the label is the front, z = ct; Boxshelf beta issue 32)
+      const pins = mesh(new THREE.BoxGeometry(cw * .7, ch * .1, .0008), new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: .8, roughness: .35 })); mats.push(pins.material); pins.position.set(0, -ch / 2 + ch * .07, -.0003); pins.name = 'cartPins'; M.add(pins);
     } else {
       const TH = .0035, lab = new THREE.MeshStandardMaterial({ color: artT ? 0xffffff : 0xd9dde6, map: artT, metalness: artT ? .1 : .85, roughness: artT ? .35 : .18 }); mats.push(lab);
       const planar = (rg, Rr) => { const pa = rg.attributes.position, uv = rg.attributes.uv; for (let i = 0; i < pa.count; i++) uv.setXY(i, .5 + pa.getX(i) / (2 * Rr), .5 + pa.getY(i) / (2 * Rr)); return rg; };

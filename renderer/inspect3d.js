@@ -597,7 +597,9 @@ window.Inspect3D = (() => {
       const shell = new THREE.MeshPhysicalMaterial({ color: 0x24252b, roughness: .55, clearcoat: .2 });
       const cart = new THREE.Mesh(new RB(cw, ch, cd, 3, .008), [shell, shell, shell, shell, new THREE.MeshPhysicalMaterial({ map: labelMap, roughness: .45, clearcoat: .3 }), shell]);
       media = new THREE.Group(); media.add(cart);
-      const pins = new THREE.Mesh(new THREE.BoxGeometry(cw * .7, ch * .12, cd + .002), new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: .8, roughness: .35 })); pins.position.y = -ch / 2 + ch * .08; media.add(pins);
+      // the contacts on the back only, along the bottom (Boxshelf beta issue 32: the block went through the cart, so they
+      // showed over the label on the front too)
+      const pins = new THREE.Mesh(new THREE.BoxGeometry(cw * .7, ch * .12, .0012), new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: .8, roughness: .35 })); pins.position.set(0, -ch / 2 + ch * .08, -cd / 2 - .0005); pins.name = 'cartPins'; media.add(pins);
     } else {
       const R = o.ratio * o.size / 2;
       const label = new THREE.MeshPhysicalMaterial({ map: labelMap, roughness: .3, clearcoat: .6, clearcoatRoughness: .15 });
