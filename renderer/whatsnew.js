@@ -8,6 +8,31 @@
 //   sections: [{ h, items: [[headline, more]] }] }; newest first.
 window.BS_WHATSNEW = [
   {
+    version: '1.6.1.0', android: '1.6.1.0', date: '2026-11-11', title: "No more hang at launch on a sleeping drive, and DS boxes the size of their covers",
+    highlights: [
+      "A Steam library on a drive that's asleep or unplugged no longer freezes the window at launch",
+      "Switch 2 builds that open .nup games aren't greyed out any more",
+      "DS boxes are as wide as their covers, and DS cartridges have their contacts on the back only"
+    ],
+    platforms: [
+      "Windows and Linux: the Steam read at launch, the stall watch in the log, the Switch 2 build check.",
+      "All platforms: the DS box and cartridge."
+    ],
+    sections: [
+      { h: "Startup", items: [
+        ["No hang on a sleeping drive", "Steam's libraries are read without holding the window up, and a library on a drive that doesn't answer within a few seconds (asleep, unplugged, a network share gone) is left out until the next start, with a line in the log saying so."],
+        ["A stall says where it is", "If the app ever gets stuck, the log says so while it's happening, after 5 s, 15 s, 30 s and on, naming the step it was on, instead of nothing at all."]
+      ] },
+      { h: "Switch 2", items: [
+        ["Builds that open .nup", "Fortune's Eden and other builds that open .nup games but name the format differently inside their program are no longer greyed out at Play. A build (T)rustyShelf can't be sure about stays startable, marked \"may not open .nup games\"."]
+      ] },
+      { h: "DS", items: [
+        ["The box fits the cover", "DS boxes have the same proportions as the 3DS case they match in size, so a DS cover fills its front instead of losing its sides."],
+        ["The cartridge's contacts", "The gold contacts sit on the back of the cartridge only, in Inspect and in the museum, not over the label."]
+      ] }
+    ]
+  },
+  {
     version: '1.6.0.0', android: '1.6.0.0', date: '2026-11-11', title: "A real 3D game case in Inspect, a lighter museum for big libraries, and PC box colours",
     highlights: [
       "Inspect opens a real 3D case: a booklet you can read, a cartridge that comes out, a clear Switch case",
