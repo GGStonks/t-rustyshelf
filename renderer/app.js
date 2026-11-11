@@ -4476,6 +4476,7 @@ window.Shelf={
   // (beta.7) test hooks for the library pass: the filters on offer, picking one, the shelf's games and the one in view
   // a PC game in a console box: the case colours the shelf gives it (android-app/ci/boxcolor-test.js)
   _boxStyle:plat=>{const b=stOf({kind:"steam",artFrom:"console",boxPlat:plat});return {case:b.caseColor,side:b.caseSide}},
+  _caseOf:id=>{const os=STYLE[id];return os?{ratio:os.ratio,h:os.h||1,...boxShape(os,id)}:null}, // (tests: a console's box proportions as the shelf draws them)
   // manual sorting test hooks (android-app/ci/sortdrag-test.js)
   _sort:{state:()=>({sel,sort:sortBy,cfg:cfgInfo&&cfgInfo.config.ui.sort,custom:JSON.stringify((cfgInfo&&cfgInfo.config.ui.customSort)||{}),order:cur()?cur().items.map(g=>g.id).join(","):"",drag:!!drag}),
     box:k=>{const s=slots[sel+k];if(!s||!s.el)return null;const r=s.el.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}},pick:v=>pickSort(0,v),
