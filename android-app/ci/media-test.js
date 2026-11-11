@@ -43,7 +43,9 @@ server.listen(0, async () => {
     await r3(); await page.waitForTimeout(3000);
     const g0 = await insp();
     // the disc waits inside the shut case (it was hung off a turned bone of case.glb and floated off to the right)
-    const dock = await page.evaluate(() => Inspect3D._st().disc);
+    // (read once the case has landed: mid-flight it's still on its way from the shelf slot, which a slow run catches)
+    await page.waitForFunction(() => window.Inspect3D && Inspect3D._st().phase === 'shown', null, { timeout: 15000 }).catch(() => {});
+    const dock = await page.evaluate(() => ({ ...Inspect3D._st().disc, phase: Inspect3D._st().phase }));
     check('The disc is docked inside the 3D case', dock && Math.hypot(dock.x, dock.y) < .6 && Math.abs(dock.z) < .3, JSON.stringify(dock));
     await page.keyboard.press('Enter'); await page.waitForTimeout(1500); await page.keyboard.press('Enter'); await page.waitForTimeout(1800);
     const g2 = await insp();
