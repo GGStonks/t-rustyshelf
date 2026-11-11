@@ -88,6 +88,7 @@ const A=(label,btn,info,run,x={})=>({t:"action",label,btn,info,run,...x});
 const F=(label,path,kind,info,x={})=>({t:"path",label,kind,info,...bindv(path,""),d:undefined,...x});
 const X=(label,path,info,x={})=>({t:"text",label,info,...bindv(path,""),d:undefined,...x});
 const H=(text,x={})=>({t:"head",text,...x});
+const labelled=(fn,row)=>Object.defineProperty(row,"label",{get:fn,enumerable:true,configurable:true}); // a row whose name follows the state (rows are kept between redraws)
 // a sub-page inside a section (the rarely-used rows, so each page stays short): the row opens {kind:"more",id}, B comes
 // back to it. MORE is rebuilt with SECTIONS (build()); search and the deep links look inside these pages too.
 let MORE={};
@@ -347,6 +348,9 @@ function build(){
     T("Fetch box art for new games","ui.autoCovers",false,api.artStudio?"Covers, backs, spines and discs for new games, in the background, the way each console's shelf style asks. Searching sends game titles to LaunchBox, libretro, GameTDB and GamesDatabase.org; no accounts needed. With a SteamGridDB key, PC games with no cover get a poster from SteamGridDB too (their titles are sent there).":"Covers, backs, spines and discs for new games, in the background. Searching sends game titles to LaunchBox, libretro, GameTDB and GamesDatabase.org; no accounts needed. With a SteamGridDB key, PC games with no cover get a poster from SteamGridDB too (their titles are sent there).",{keys:"covers scrape download"}),
     ...(window.bsPlatform&&bsPlatform.os==="android"?[]:[T("Make missing backs and spines","ui.makeBacks",true,"A game with a cover but no scanned back or spine anywhere (most Switch 2 games, for now) gets them made: the back from its artwork, screenshots, description and rating, the spine in its console's style with the game's logo. A real scan replaces either as soon as one is found.",{keys:"back spine cover generate make missing switch 2"})]),
     // (Android swaps these two rows for its own by their old labels: android-api.js BS_SETTINGS_PATCH)
+    // ((T)rustyShelf, issue 14) one press to get all missing art, or to pick a stopped download up again
+    labelled(()=>artResumeOf()?"Resume box art download":"Get all missing art",A("Get all missing art",()=>AG.busy?"Running…":artResumeOf()?"Resume":"Get","One press: a box art download that stopped part way (cancelled, an update, the app closed) picks up where it was, with the same consoles and parts. With nothing to resume, every console still missing covers, backs, spines or discs gets them. Pictures you already have are kept.",agOneClick,
+      {when:()=>!!api.artCoverage&&!!api.downloadCovers,keys:"resume continue missing box art covers one click download all",sub:()=>{const r=artResumeOf();return AG.busy?{text:"Downloading…",cls:"warn"}:r?{text:`Stopped part way · ${Object.keys(r.plan).length} console${Object.keys(r.plan).length===1?"":"s"} to finish`,cls:"warn"}:null}})),
     M(window.bsPlatform&&bsPlatform.os==="android"?"Download box art now":"Download missing art now","art-get","Pick the consoles and what to get (covers, backs, spines, discs), then download with progress and Cancel.","Pick the consoles and what to get. Pictures you already have are kept, and each console follows its Art Studio style.",[{t:"dyn",fn:artGetRows}],{when:()=>!!api.artCoverage&&!!api.downloadCovers,keys:"download box art now covers scrape",sub:()=>AG.busy?{text:"Downloading…",cls:"warn"}:null}),
     H("Manuals"),
     T("Fetch manuals for new games","ui.autoManuals",false,"Finds the game's manual (archive.org and GamesDatabase.org) and turns it into pages you can read in Inspect.",{keys:"booklet"}),
@@ -667,14 +671,30 @@ function artGetRows(){dlHook();
 // (beta.10) a download that ends puts the cursor back on the first row only when its own page is the one you're on (not
 // editing, not searching): it used to land on whatever page was open, so the next A pressed the wrong row
 function dlShown(id){return isOpen&&!!sub&&sub.id===id&&focus==="page"&&!edit&&!results}
-async function agStart(){
+async function agStart(given){
   if(AG.busy||MG.busy||MC.busy){toast("A download is already running");return}
-  const pl=agPlan(),ids=(AG.cov||[]).filter(c=>c.total&&(pl[c.id]||[]).length).map(c=>c.id);if(!ids.length)return;
+  const pl=given&&typeof given==="object"&&!given.type?given:agPlan(),ids=(AG.cov||[]).filter(c=>c.total&&(pl[c.id]||[]).length).map(c=>c.id);if(!ids.length)return;
+  // ((T)rustyShelf, issue 14) what this download is getting, kept until it finishes: one stopped part way (Cancel, an update,
+  // the app closed) is offered again as Resume box art download, with the same consoles and parts
+  {const p={};ids.forEach(id=>{p[id]=pl[id]});cfg.ui.artResume={plan:p,at:Date.now()}}
   // (beta.10) busy at once, before the settings save: a quick second press used to start a second run
   Object.assign(AG,{busy:true,prog:{},stage:"Starting…",rep:null,err:null,started:Date.now(),ids});rowI=0;play("open");bump();dlClock();
   try{await save()}catch(e){AG.busy=false;toast("Box art: "+errMsg(e));if(isOpen)bump();return}
   try{const p={};ids.forEach(id=>{p[id]=pl[id]});AG.rep=await api.downloadCovers(ids,p,gp("ui.artHD")!==false)}catch(e){AG.err=errMsg(e)}
-  AG.busy=false;AG.cov=null;needRescan=true;if(dlShown("art-get"))rowI=0;toast(AG.err?"Box art: "+AG.err:AG.rep&&AG.rep.cancelled?"Box art download cancelled":"Box art download finished");if(isOpen)bump()}
+  if(!AG.err&&!(AG.rep&&AG.rep.cancelled)){delete cfg.ui.artResume;scheduleSave()}
+  AG.busy=false;AG.cov=null;needRescan=true;if(dlShown("art-get"))rowI=0;toast(AG.err?"Box art: "+AG.err:AG.rep&&AG.rep.cancelled?"Box art download cancelled · Resume picks it up again":"Box art download finished");if(isOpen)bump()}
+// ((T)rustyShelf, issue 14) one press: a download that stopped part way picks up again (same consoles and parts); otherwise
+// every console still missing a cover, back, spine or disc gets all four. What's already there is kept, as always
+const artResumeOf=()=>{const r=gp("ui.artResume");return r&&r.plan&&typeof r.plan==="object"&&Object.keys(r.plan).length?r:null};
+async function agOneClick(){
+  if(AG.busy){openSub({kind:"more",id:"art-get"});return}
+  if(AG.busy||MG.busy||MC.busy){toast("A download is already running");return}
+  let cov=AG.cov;if(!cov){try{cov=await api.artCoverage()}catch{cov=[]}AG.cov=Array.isArray(cov)?cov:[]}
+  const res=artResumeOf(),plan={};
+  if(res)for(const [id,parts] of Object.entries(res.plan)){if(AG.cov.some(c=>c.id===id&&c.total)&&Array.isArray(parts)&&parts.length)plan[id]=parts.filter(k=>PARTS4.some(x=>x[0]===k))}
+  else for(const c of AG.cov){if(c.total&&PARTS4.some(([k])=>(c[k]||0)<c.total))plan[c.id]=PARTS4.map(x=>x[0])}
+  if(!Object.keys(plan).length){delete cfg.ui.artResume;scheduleSave();toast("Every console has its box art already");bump();return}
+  openSub({kind:"more",id:"art-get"});agStart(plan)}
 // Get manuals: the same, one switch per console
 function mgLoad(){if(MG.loading||!api.manualCoverage)return;MG.loading=true;api.manualCoverage().then(c=>{MG.cov=Array.isArray(c)?c:[]}).catch(()=>{MG.cov=[]}).finally(()=>{MG.loading=false;if(isOpen)bump()})}
 function manGetRows(){dlHook();
