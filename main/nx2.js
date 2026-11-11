@@ -101,12 +101,22 @@ function setMemoFile(f) { memoFile = f; }
 function loadMemo() { if (memoLoaded) return; memoLoaded = true; try { const o = JSON.parse(fs.readFileSync(memoFile, 'utf8')); for (const [k, v] of Object.entries(o || {})) if (typeof v === 'boolean') nupMemo.set(k, v); } catch {} }
 // does a file contain this text? Read in 4 MB pieces (a build is 100+ MB: reading it whole held all of it in memory)
 async function fileHas(f, text) {
-  const needle = Buffer.from(text, 'latin1'), CH = 4 << 20; let fh;
+  // ((T)rustyShelf issue 18) the text as plain bytes or in UTF-16 (Windows and Qt programs keep their strings that way:
+  // Fortune's Eden opens .nup games and was greyed out, the plain text not being in its program)
+  const needles = [Buffer.from(text, 'latin1'), Buffer.from(text, 'utf16le')], CH = 4 << 20, over = Math.max(...needles.map(n => n.length)); let fh;
   try {
-    fh = await fs.promises.open(f, 'r'); const buf = Buffer.alloc(CH + needle.length); let pos = 0, keep = 0;
-    for (;;) { const { bytesRead } = await fh.read(buf, keep, CH, pos); if (!bytesRead) return false; const n = keep + bytesRead;
-      if (buf.subarray(0, n).includes(needle)) return true; keep = Math.min(needle.length - 1, n); buf.copy(buf, 0, n - keep, n); pos += bytesRead; }
+    fh = await fs.promises.open(f, 'r'); const buf = Buffer.alloc(CH + over); let pos = 0, keep = 0;
+    for (;;) { const { bytesRead } = await fh.read(buf, keep, CH, pos); if (!bytesRead) return false; const n = keep + bytesRead, part = buf.subarray(0, n);
+      if (needles.some(x => part.includes(x))) return true; keep = Math.min(over - 1, n); buf.copy(buf, 0, n - keep, n); pos += bytesRead; }
   } catch { return false; } finally { if (fh) await fh.close().catch(() => {}); }
+}
+// ((T)rustyShelf issue 18) the emulator's own libraries beside its program (a build can keep its file dialog in one), not
+// the runtimes every build carries (Qt, Visual C++, SDL, Vulkan / DirectX, ffmpeg…); a dozen at most
+const NOT_OWN_DLL = /^(qt\d|vcruntime|msvcp|concrt|vccorlib|api-ms-|ucrtbase|sdl\d|vulkan|d3d|dxcompiler|dxil|libcrypto|libssl|libcurl|av(codec|format|util|filter|device)|sw(scale|resample)|postproc|opengl|libgcc|libstdc|libwinpthread|zlib|openal|discord|steam_api|libusb|libEGL|libGLES)/i;
+async function ownDlls(exe) {
+  if (!/\.exe$/i.test(exe)) return [];
+  let ents = []; try { ents = await fs.promises.readdir(path.dirname(exe), { withFileTypes: true }); } catch { return []; }
+  return ents.filter(e => e.isFile() && /\.dll$/i.test(e.name) && !NOT_OWN_DLL.test(e.name)).slice(0, 12).map(e => path.join(path.dirname(exe), e.name));
 }
 // an AppImage (its runtime is an ELF with "AI" 0x02 at byte 8, or the name says so): the program is inside a compressed
 // SquashFS, so its text never shows in the file itself. Its own --appimage-extract unpacks the programs (usr/bin, else
@@ -135,10 +145,12 @@ async function appImageHas(exe, text) {
     return false;
   } finally { fs.promises.rm(dir, { recursive: true, force: true }).catch(() => {}); }
 }
-// (the key's v2: answers from before AppImages were looked into said "no" for every AppImage build)
+// (the key's v2: answers from before AppImages were looked into said "no" for every AppImage build; v3: before UTF-16
+// text and the DLLs beside the program were looked into, issue 18)
 async function opensNup(exe, st) {
-  loadMemo(); const key = 'v2|' + exe.toLowerCase() + '|' + Math.round(st.mtimeMs) + '|' + st.size; if (nupMemo.has(key)) return nupMemo.get(key);
+  loadMemo(); const key = 'v3|' + exe.toLowerCase() + '|' + Math.round(st.mtimeMs) + '|' + st.size; if (nupMemo.has(key)) return nupMemo.get(key);
   let yes = await isAppImage(exe) ? await appImageHas(exe, '.nup') : await fileHas(exe, '.nup');
+  if (yes === false) for (const d of await ownDlls(exe)) if (await fileHas(d, '.nup')) { yes = true; break; }
   // couldn't look: let the emulator decide rather than turn the game away
   if (yes === null) yes = true; else nupMemo.set(key, yes);
   if (memoFile) { const o = {}; for (const [k, v] of [...nupMemo].slice(-200)) o[k] = v; fs.promises.writeFile(memoFile, JSON.stringify(o)).catch(() => {}); }

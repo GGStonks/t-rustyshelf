@@ -1270,7 +1270,7 @@ function closeDetails(silent){if(mode!=="details")return;dMenuClose(true);pvStop
 
 /* ---------- Switch 2: which build ---------- */
 // People keep several Eglantine forks (a game can run better in one than another): Play on a Switch 2 game asks which
-// build to start it in, the game's last pick first. A build that can't open a .nup game is greyed out. Pad (up / down,
+// build to start it in, the game's last pick first. A build not seen to open .nup games is marked so. Pad (up / down,
 // A, B), keys (arrows, Enter, Esc), mouse and touch. Resolves to the exe, "" when there are no builds to choose from
 // (the shelf's emulator, as before), or null for Back.
 let bp=null,nextBuild=null;
@@ -1280,10 +1280,10 @@ async function pickBuild(g){
   let r=null;try{r=await api.sw2Builds(g.file)}catch{}
   if(!r||!r.builds||!r.builds.length)return "";
   if(bp||(mode!=="browse"&&mode!=="details"))return null;
-  // (1.82) a .nup game and no build that opens .nup: say so, instead of a picker where every row is greyed out
-  if(r.nup&&!r.builds.some(b=>b.nup)){play_("error");toast("None of your Switch 2 builds can open .nup games. Add a newer build of your Switch 2 emulator.");return null}
   // (beta.11) one more build without going to Settings: the last row picks its program, then the list comes back with it
-  const opts=r.builds.map(b=>{const off=r.nup&&!b.nup;return {value:b.exe,label:b.label,detail:off?"can't open .nup games":new Date(b.date).toLocaleDateString(undefined,{month:"short",day:"numeric"}),disabled:off}});
+  // ((T)rustyShelf issue 18) a build .nup wasn't seen in stays startable, only marked: that look inside its program is a
+  // guess (Fortune's Eden opens .nup and was greyed out, and Play refused the game when no build passed it)
+  const opts=r.builds.map(b=>{const unsure=r.nup&&!b.nup;return {value:b.exe,label:b.label,detail:unsure?"may not open .nup games":new Date(b.date).toLocaleDateString(undefined,{month:"short",day:"numeric"})}});
   if(api.sw2AddBuild&&api.pick)opts.push({value:BP_ADD,label:"+ Add another emulator…",detail:"eglantine.exe, lichii.exe…",cls:"bp-add"});
   // (1.82) start on the suggested build, or else the first that isn't greyed out (row 0 could be)
   const v=await chooseOne({title:"Start in which build?",label:"Choose a build",sub:g.title,foot:`${btnWord("a")} start · ${btnWord("back")} back`,first:r.first,options:opts});

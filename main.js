@@ -1560,7 +1560,8 @@ handle('sw2:builds', async ({ file }) => {
   const list = await sw2BuildList(file), id = 'sw2:' + file, low = p => path.resolve(p || '.').toLowerCase();
   const nup = /\.nup$/i.test(String(file || '')), ok = b => !nup || b.nup;
   const want = [((cfg.ui.sw2Last || {})[id]) || '', gameEmuOverride('sw2', file), emuPath((cfg.systems.sw2 || {}).emulator || '')].filter(Boolean).map(low);
-  const first = want.map(w => list.find(b => low(b.exe) === w && ok(b))).find(Boolean) || list.filter(ok).sort((a, b) => b.date - a.date)[0];
+  // (a .nup game: a build seen to open .nup first; with none, the game's own pick and the shelf's still come first, issue 18)
+  const first = want.map(w => list.find(b => low(b.exe) === w && ok(b))).find(Boolean) || list.filter(ok).sort((a, b) => b.date - a.date)[0] || want.map(w => list.find(b => low(b.exe) === w)).find(Boolean);
   return { builds: list, nup, first: first ? first.exe : '' };
 });
 handle('launch:game', async ({ systemId, file, emulator }) => {
