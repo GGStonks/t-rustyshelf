@@ -3598,6 +3598,16 @@ window.BS_padInfo=padInfo;
 const padSee={list:[],ver:0};let padSeeVer=-1,padSeeT=0;
 function padSeeAsk(){if(!api.padsPresent)return;clearTimeout(padSeeT);padSeeT=setTimeout(()=>api.padsPresent().then(l=>{l=Array.isArray(l)?l:[];if(JSON.stringify(l)!==JSON.stringify(padSee.list)){padSee.list=l;padSee.ver++}}).catch(()=>{}),1200)}
 addEventListener("gamepadconnected",padSeeAsk);addEventListener("gamepaddisconnected",padSeeAsk);if(!ANDROID)padSeeAsk();
+// ((T)rustyShelf, Boxshelf beta issue 1) a PlayStation pad that Windows has but Chromium never lists (some DualSense pads over
+// Bluetooth: the shelf got nothing, emulators worked): every few seconds while the shelf has the focus and no pad of its own,
+// a PlayStation pad among the real ones plugged in is read by the controller helper instead (main pad:feed), its buttons
+// pressed on the page as keys. Chromium seeing a pad turns that off at once (no double presses).
+let padFeedOn=false;
+function padFeedSet(on){if(on===padFeedOn)return;padFeedOn=on;api.padFeed(on).catch(()=>{})}
+function padFeedCheck(){if(ANDROID||!api.padFeed||!api.padsPresent)return;if(anyPad()){padFeedSet(false);return}if(!document.hasFocus())return;
+  api.padsPresent().then(l=>{const ps=Array.isArray(l)&&l.some(x=>x&&x.style==="ps");if(!anyPad())padFeedSet(ps)}).catch(()=>{})}
+if(!ANDROID){setInterval(padFeedCheck,6000);addEventListener("gamepadconnected",()=>padFeedSet(false))}
+window.BS_padFeed=()=>padFeedOn; // (the demo test)
 function padSeeReal(){const L=padSee.list;if(!L.length||L.some(x=>x.style==="xbox"))return null;const kinds=[...new Set(L.map(x=>x.style))];return kinds.length===1?L.find(x=>x.style===kinds[0]):null}
 function padStyleOf(id){const i=padInfo(id);if(!i.virtual)return i.style;const r=padSeeReal();return r?r.style:"xbox"}
 function padSeeName(id){if(!padInfo(id).virtual)return "";const r=padSeeReal();if(!r)return "";const n=(PAD_MODELS[r.vendor]||{})[r.product]||(PAD_MODELS[r.vendor]||{})["*"]||"Controller";return n+" (through Steam / DS4Windows)"}

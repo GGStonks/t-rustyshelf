@@ -794,10 +794,19 @@ function powerAction(kind) {
   } catch (e) { log('Power failed', e.message); }
 }
 // On the shelf the XInput helper still runs (lightly) so Guide can open the Home menu even though Chromium never sees it
+// ((T)rustyShelf, Boxshelf beta issue 1) a PlayStation pad Chromium never lists (some DualSense pads over Bluetooth): the
+// shelf asks for its buttons (pad:feed) and they arrive here from the controller helper, pressed on the page as the keys
+// the shelf already knows (arrows, Enter, Escape, I for Details, H for favourite, G for Sort, Z / C between sections)
+const PAD_KEYS = { up: 'Up', down: 'Down', left: 'Left', right: 'Right', a: 'Enter', b: 'Escape', x: 'i', y: 'h', start: 'g', lb: 'z', rb: 'c' };
+function padFeedKey(name, down) {
+  const k = PAD_KEYS[name]; if (!k || !alive() || launcher.isRunning() || homemenu.isOpen()) return;
+  try { win.webContents.sendInputEvent({ type: down ? 'keyDown' : 'keyUp', keyCode: k }); } catch (e) { log('pad feed', e.message); }
+}
+handle('pad:feed', ({ on } = {}) => { if (process.platform !== 'win32') return false; const want = !!on; if (want !== padwatch.feeding()) log('PlayStation pad: ' + (want ? 'the shelf gets nothing from it, reading it directly' : 'the shelf sees it again, direct reading off')); padwatch.setFeed(want); return want; });
 function watchShelf() {
   if (cfg.ui.homeMenu === false || launcher.isRunning()) return;
   padwatch.start('none', 900, () => {}, { home: true, backHome: false, taskbarHidden: tbHidden /* (beta.6: kept hidden until you leave the shelf) */, cmdFile: path.join(app.getPath('temp'), `trustyshelf-pad-${process.pid}.txt`),
-    onHome: () => { if (!closeTrailer()) openShelfMenu(); }, onButton: (b, d) => { if (d && (b === 'b' || b === 'back') && !homemenu.isOpen() && closeTrailer()) return; homemenu.button(b, d); }, isMenuOpen: () => homemenu.isOpen() });
+    onHome: () => { if (!closeTrailer()) openShelfMenu(); }, onButton: (b, d) => { if (d && (b === 'b' || b === 'back') && !homemenu.isOpen() && closeTrailer()) return; homemenu.button(b, d); }, isMenuOpen: () => homemenu.isOpen(), onPad: padFeedKey });
 }
 // With the Home menu off no shelf helper follows the game's, and Windows won't let (T)rustyShelf take the focus back by
 // itself: run a short-lived helper just to hand it over (bringBack's request is repeated by a new helper)

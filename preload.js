@@ -176,7 +176,7 @@ contextBridge.exposeInMainWorld('trustyshelf', {
   gameEmulator: id => call('game:emulator', { id }),
   onWiimote: fn => ipcRenderer.on('wiimote', (e, d) => fn(d)), // the Wii remote: { x, y, seen, b, hold } / { on }
   wmRumble: ms => ipcRenderer.send('wm:rumble', ms),
-  padsPresent: () => call('pads:present'), // the real controllers plugged in: [{ vendor, product, style }]
+  padsPresent: () => call('pads:present'), padFeed: on => call('pad:feed', { on: !!on }), // ((T)rustyShelf) a PlayStation pad the shelf gets nothing from: read it directly // the real controllers plugged in: [{ vendor, product, style }]
   onExited: fn => ipcRenderer.on('run:exited', (e, info) => fn(info)),
   onRunReady: fn => ipcRenderer.on('run:ready', () => fn()),
   onRunQuitting: fn => ipcRenderer.on('run:quitting', () => fn()),

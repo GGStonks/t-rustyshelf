@@ -337,6 +337,9 @@ $menu = $false; $fresh = $false; $backHeld = @(0,0,0,0,0,0); $homeCool = Get-Dat
 # otherwise, but the menu's buttons come from here: a DualSense or Switch pad couldn't move or close it). $hidLive / $hidMask:
 # a pad just seen keeps the buttons it already held out until they're let go (the PS press that opened the menu)
 $ninStart = [XI]::NinOn; $hidLive = @($false, $false); $hidMask = @(0, 0)
+# the shelf's feed of the PlayStation pad (FEED): its buttons last pass, its stick as a d-pad (x, y), what each bit is called
+$feed = $false; $fprev = -1; $fstick = @(0, 0)
+$feedNames = @{ 0x0001 = 'up'; 0x0002 = 'down'; 0x0004 = 'left'; 0x0008 = 'right'; 0x1000 = 'a'; 0x2000 = 'b'; 0x4000 = 'x'; 0x8000 = 'y'; 0x0010 = 'start'; 0x0020 = 'back'; 0x0100 = 'lb'; 0x0200 = 'rb' }
 $VKN = @{ 'esc'=0x1B; 'enter'=0x0D; 'space'=0x20; 'tab'=0x09; 'shift'=0x10; 'ctrl'=0x11; 'alt'=0x12 }
 1..12 | ForEach-Object { $VKN["f$_"] = 0x6F + $_ }
 65..90 | ForEach-Object { $VKN[[string][char]($_ + 32)] = $_ }; 48..57 | ForEach-Object { $VKN[[string][char]$_] = $_ }
@@ -439,7 +442,10 @@ while ($true) {
     $lines = @(Get-Content -LiteralPath $work -ErrorAction SilentlyContinue); Remove-Item -LiteralPath $work -ErrorAction SilentlyContinue
     foreach ($l in $lines) { $w = $l.Trim().Split(' ')
       # MENU 1: start from the buttons as they are now (no stale taps); FRONT: the game in front, the pointer parked in the corner
-      if ($w[0] -eq 'MENU') { $menu = ($w[1] -eq '1'); if ($menu) { $fresh = $true; $acc = @(0,0,0,0,0,0) }; if (-not $ninStart) { [XI]::NinOn = $menu } }
+      if ($w[0] -eq 'MENU') { $menu = ($w[1] -eq '1'); if ($menu) { $fresh = $true; $acc = @(0,0,0,0,0,0) }; if (-not $ninStart) { [XI]::NinOn = ($menu -or $feed) } }
+      # FEED 1/0 ((T)rustyShelf, Boxshelf beta issue 1): the shelf gets nothing from a PlayStation pad over Bluetooth that
+      # Windows has (Chromium never lists some DualSense pads): its buttons are read here and reported as PAD <name> 1/0
+      elseif ($w[0] -eq 'FEED') { $feed = ($w[1] -eq '1'); $fprev = -1; $fstick = @(0, 0); if (-not $ninStart) { [XI]::NinOn = ($menu -or $feed) } }
       # (FRONT keep: the Home menu closing over a media app, where the pointer is the user's own and stays put)
       elseif ($w[0] -eq 'FRONT') { FrontGame | Out-Null; $frontUntil = (Get-Date).AddSeconds(8); if (-not ($mouse -and $w[1] -eq 'keep')) { [XI]::SetCursorPos(32000, 32000) | Out-Null } }
       # FOCUS <hwnd>: give (T)rustyShelf's own window the keyboard focus (Windows refuses a background app asking for it itself;
@@ -456,7 +462,7 @@ while ($true) {
   if ($mouse -and $appPid -gt 0) { $front = ($fam -contains [int][XI]::FgPid()) }
   # the menu and the pointer act on every pad merged into one: the same Switch pad seen twice (BetterJoy's virtual Xbox pad
   # and straight from HID in slot 4) moved the menu two rows per press and double-clicked in pointer mode
-  $mb = 0; $mt = 0; $mlx = 0; $mly = 0; $mry = 0; $mlt = 0; $mrt = 0
+  $mb = 0; $mt = 0; $mlx = 0; $mly = 0; $mry = 0; $mlt = 0; $mrt = 0; $p5b = 0; $p5x = 0; $p5y = 0
   for ($i = 0; $i -lt 6; $i++) { # 0-3 XInput, 4 Nintendo pads, 5 PlayStation pads (HID)
     # no pad in this slot (during the last sample): a hold in progress starts over when it's back
     if ([int]$acc[$i] -lt 0 -and $passes -gt 0) { $held[$i] = 0; if ($backHeld[$i] -gt 0) { $backHeld[$i] = 0 }; if ($i -ge 4) { $hidLive[$i - 4] = $false }; continue }
@@ -478,11 +484,20 @@ while ($true) {
     # presses of Back made while holding something else added up to a Home)
     if (-not ($b -band 0x0020) -or ($b -ne 0x0020 -and $backHeld[$i] -gt 0)) { $backHeld[$i] = 0 }
     $prev[$i] = $b
+    if ($i -eq 5) { $p5b = $b; $p5x = [int]$g.sThumbLX; $p5y = [int]$g.sThumbLY }
     $mb = $mb -bor $b; $mt = $mt -bor $tapped; if ($g.bLeftTrigger -gt $mlt) { $mlt = [int]$g.bLeftTrigger }; if ($g.bRightTrigger -gt $mrt) { $mrt = [int]$g.bRightTrigger }
     if ([Math]::Abs([int]$g.sThumbLX) -gt [Math]::Abs($mlx)) { $mlx = [int]$g.sThumbLX }; if ([Math]::Abs([int]$g.sThumbLY) -gt [Math]::Abs($mly)) { $mly = [int]$g.sThumbLY }
     if ([Math]::Abs([int]$g.sThumbRY) -gt [Math]::Abs($mry)) { $mry = [int]$g.sThumbRY }
   }
   if ($clickDown -and ($menu -or -not $front)) { ReleaseClick }
+  if ($feed -and -not $menu) {
+    # the PlayStation pad's changes since the last pass (the first pass only learns what's held), the stick as a d-pad
+    if ($fprev -ge 0) { foreach ($bit in $feedNames.Keys) { $down = ($p5b -band $bit) -ne 0; $was = ($fprev -band $bit) -ne 0; if ($down -ne $was) { Write-Output ("PAD " + $feedNames[$bit] + " " + $(if ($down) { 1 } else { 0 })) } } }
+    $fprev = $p5b
+    $sx = if ($p5x -gt 16000) { 1 } elseif ($p5x -lt -16000) { -1 } else { 0 }; $sy = if ($p5y -gt 16000) { 1 } elseif ($p5y -lt -16000) { -1 } else { 0 }
+    if ($sx -ne $fstick[0]) { if ($fstick[0] -ne 0) { Write-Output ("PAD " + $(if ($fstick[0] -gt 0) { 'right' } else { 'left' }) + " 0") }; if ($sx -ne 0) { Write-Output ("PAD " + $(if ($sx -gt 0) { 'right' } else { 'left' }) + " 1") }; $fstick[0] = $sx }
+    if ($sy -ne $fstick[1]) { if ($fstick[1] -ne 0) { Write-Output ("PAD " + $(if ($fstick[1] -gt 0) { 'up' } else { 'down' }) + " 0") }; if ($sy -ne 0) { Write-Output ("PAD " + $(if ($sy -gt 0) { 'up' } else { 'down' }) + " 1") }; $fstick[1] = $sy }
+  }
   if ($menu) {
     # stick as d-pad for the menu
     $st = if ($mly -gt 16000) { 1 } elseif ($mly -lt -16000) { -1 } else { 0 }
@@ -581,6 +596,7 @@ function start(comboName, holdMs, onQuit, opts = {}) {
   cmdFile = opts.cmdFile || null; if (cmdFile) { try { require('fs').unlinkSync(cmdFile); } catch {} }
   if (focusWant && !opts.appPid && Date.now() - focusWant.at < 8000) setTimeout(() => focusWant && command('FOCUS ' + focusWant.h), 0);
   // a helper that (re)starts while the Home menu is still open must report the menu's buttons again (it starts with MENU 0)
+  if (feedOn && opts.onPad) setTimeout(() => command('FEED 1'), 0); // (the shelf's feed carries over to a helper that restarts)
   if (opts.isMenuOpen) setTimeout(() => { try { if (opts.isMenuOpen()) command('MENU 1'); } catch {} }, 0); /* asked just before the game's helper went away (only the shelf's helper repeats it, never a game's) */
   // The script runs from a temp file: passed inline (-EncodedCommand) it outgrew Windows' 32,767-character command
   // line and the helper silently never started (no Guide, no quit combo). UTF-8 with a BOM for Windows PowerShell 5.1.
@@ -603,6 +619,7 @@ function start(comboName, holdMs, onQuit, opts = {}) {
       if ((line === 'GAMEGONE' || line === 'GAMEBACK') && opts.onWindow) { try { opts.onWindow(line === 'GAMEBACK'); } catch (e) { log('padwatch onWindow', e.message); } }
       if (line.startsWith('TASKBAR-DONE')) { const f = tbWait; tbWait = null; if (f) f(true); }
       if ((line === 'HOME' || line.startsWith('HOME ')) && opts.onHome) { homeNin = line === 'HOME 4'; try { opts.onHome(line === 'HOME 5' ? 'ps' : line === 'HOME 4' ? 'nintendo' : ''); } catch (e) { log('padwatch onHome', e.message); } } // (the pad's prompts: slot 5 PlayStation, 4 Nintendo, XInput unknown)
+      if (line.startsWith('PAD ') && opts.onPad) { const [, name, d] = line.split(' '); try { opts.onPad(name, d === '1'); } catch {} }
       if (line.startsWith('BTN ') && opts.onButton) { const [, name, d] = line.split(' '); try { opts.onButton(name, d === '1'); } catch {} }
       if (line.startsWith('KEYS-DONE ') || line.startsWith('KEYS-FAIL ')) { const ok = line.startsWith('KEYS-DONE'), id = line.slice(10).trim(); const f = pendingKeys.get(id); if (f) { pendingKeys.delete(id); if (!ok) log('padwatch: the game window could not be brought to the front, keys not sent'); try { f(ok); } catch {} } }
       if (line.startsWith('FOCUSED ')) { if (line.endsWith('1')) focusWant = null; } if (line.startsWith('FOCUSED ')) log('padwatch: gave (T)rustyShelf the focus', line.endsWith('1') ? 'ok' : '(Windows refused)');
@@ -646,6 +663,10 @@ function sweepTemp() {
 let cmdFile = null, pendingKeys = new Map(), keySeq = 0; // each KEYS command carries an id, answered by KEYS-DONE <id>
 function command(line) { if (!proc || !cmdFile) return false; try { require('fs').appendFileSync(cmdFile, line + '\r\n'); return true; } catch (e) { log('padwatch command', e.message); return false; } }
 function setMenu(on) { return command('MENU ' + (on ? 1 : 0)); }
+// ((T)rustyShelf, Boxshelf beta issue 1) the shelf asks for a PlayStation pad's buttons when Chromium gets nothing from it
+let feedOn = false;
+function setFeed(on) { feedOn = !!on; return command('FEED ' + (on ? 1 : 0)); }
+const feeding = () => feedOn;
 let focusWant = null;
 // hwnd: a window handle as a decimal string. Also replayed once by the next helper that starts within a few seconds.
 function focusOnce(hwnd) { return hwnd ? command('FOCUS ' + String(hwnd)) : false; } // just now (not repeated for the next helper, unlike focusWindow)
@@ -717,4 +738,4 @@ const isRunning = () => !!proc;
 let selfHwnd = '0'; function setSelf(hwnd) { selfHwnd = String(hwnd || '0'); }
 // the last Home came from a Nintendo pad (slot 4): the Home menu then follows its A/B layout under Confirm "Match my controller"
 let homeNin = false; const homeFromNintendo = () => homeNin;
-module.exports = { init, start, stop, isRunning, setMenu, sendKeys, COMBOS, front, focusWindow, focusOnce, focusPending, homeFromNintendo, setSelf, cover, taskbar, taskbarSync, taskbarGuard };
+module.exports = { init, start, stop, isRunning, setMenu, setFeed, feeding, sendKeys, COMBOS, front, focusWindow, focusOnce, focusPending, homeFromNintendo, setSelf, cover, taskbar, taskbarSync, taskbarGuard };
