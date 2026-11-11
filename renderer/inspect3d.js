@@ -5,7 +5,7 @@
    Optional models: themes\<system>\cart.glb (Switch) or disc.glb / umd.glb replace the built-in media. */
 window.Inspect3D = (() => {
   const T = () => window.BS3D && window.BS3D.THREE;
-  let renderer, scene, camera, canvas, env, rot, caseG, lidPivot, backPivot, spineG, media, mediaG, manualPlane, spineM = null, dockAnchor = null, universalCase = null, universalGltf = null, universalLoading = false;
+  let renderer, scene, camera, canvas, env, rot, caseG, lidPivot, backPivot, spineG, media, mediaG, manualPlane, spineM = null, dockAnchor = null, universalCase = null, caseBones = [], universalGltf = null, universalLoading = false;
   let active = false, raf = 0, failed = false, tex = new Map(), cur = null, customMedia = null, customUrl = null;
   const st = { state: 0, lid: 0, lidT: 0, out: 0, outT: 0, bump: 0, spin: 0, rx: 0, ry: 0, zoom: 1, px: 0, py: 0, in: 0, lid0: 0, out0: 0, flip: 0, base: 0 };
   // The hand-off between the shelf and this canvas. phase: 'idle' | 'wait' (built, art decoding: the shelf box still shows) |
@@ -14,6 +14,19 @@ window.Inspect3D = (() => {
   let phase = 'idle', tok = 0, pend = null, ready = false, fadeT0 = 0, fadeFrom = 1, target = null, onDone = null, cvRect = null, coverMat = null, standInTex = null;
   const FADE_MS = 140;
   const DEG = Math.PI / 180;
+  // case.glb, the one game case every shelf but the PC ones opens into: modelled as a Switch case (0.1692 high, 0.618 times as
+  // wide), shown 1 high and as wide as the shelf's own ratio. Its printed sheet (Cover) is one 0.2111 x 0.16 texture, u running
+  // along the sheet: back | spine | front. SHAPE is the case closed, as fractions of its height (measured on the skinned mesh):
+  // how thick it is, the clear border round the sheet and the corner radius. The shelf box (app.js boxShape) is drawn to SHAPE,
+  // so the box you pick is the case that comes off the shelf.
+  const CASE_GLB = Object.freeze({ height: .1692, ratio: .618, sheet: Object.freeze({ w: .2111, h: .16 }), shape: Object.freeze({ depth: .066, edge: .024, rc: .02 }) });
+  const CASE_SCALE = 1 / CASE_GLB.height;
+  const SHEET = Object.freeze({ W: 2048, H: 1024, back: .47, spine: .06 }); // the cover canvas and where its parts sit (fractions of W)
+  const PC_SHELVES = new Set(['pc', 'custom']); // a plain black box, as the PC case on the shelf
+  const usesCaseModel = sys => !PC_SHELVES.has(sys);
+  const isClearCase = o => o.sys === 'sw' || [o.caseColor, o.caseSide].some(c => typeof c === 'string' && (c.startsWith('rgba') || c === 'transparent'));
+  // the printed sheet's own colour where no art covers it: white paper behind clear plastic, otherwise the case's colour
+  const paperOf = o => !isClearCase(o) && typeof o.caseColor === 'string' ? o.caseColor : '#ffffff';
 
   function available() { return !failed && !!T() && !!ensure(); }
   function ensure() {
@@ -48,7 +61,7 @@ window.Inspect3D = (() => {
     try { canvas && canvas.remove(); } catch {}
     tex.forEach(t => { try { t.dispose(); } catch {} }); tex = new Map(); mediaSeq++;
     genTex.forEach(t => { try { t.dispose(); } catch {} }); genTex.clear();
-    renderer = scene = camera = canvas = env = rot = caseG = lidPivot = backPivot = spineG = media = mediaG = manualPlane = spineM = dockAnchor = null; universalCase = null; cur = null; customMedia = null; customUrl = null; lost = false;
+    renderer = scene = camera = canvas = env = rot = caseG = lidPivot = backPivot = spineG = media = mediaG = manualPlane = spineM = dockAnchor = null; universalCase = null; caseBones = []; cur = null; customMedia = null; customUrl = null; lost = false;
     coverMat = null; if (standInTex) { try { standInTex.dispose(); } catch {} standInTex = null; } phase = 'idle'; pend = null; fadeT0 = 0; target = null; tok++;
     const cb = onDone; onDone = null; if (cb) try { cb(true); } catch {} // a box still hidden for a flight that can't finish now comes back
   }
@@ -99,7 +112,7 @@ window.Inspect3D = (() => {
       im.src = url;
     });
     tex.set(url, t);
-    if (tex.size > 64) {
+    if (tex.size > 64) { // the oldest scan goes: the last few dozen games' art stays on the GPU, not everything ever opened
       const [k, old] = tex.entries().next().value;
       tex.delete(k);
       try { old.dispose(); } catch {}
@@ -291,45 +304,50 @@ window.Inspect3D = (() => {
     });
     return clone;
   }
+  // a picture that can go on a canvas WebGL will still upload (decoded, and not from another origin)
+  const drawable = im => !!im && !!(im.naturalWidth || im.width) && untainted(im);
+  const texImage = url => { const t = url ? loadTex(url) : null; return t && drawable(t.image) ? t.image : null; };
+  // The spine with no spine art, drawn as the shelf box draws it (style.css .spine-band / .spine-title): the shelf's band on top
+  // (9% of the height), then the title running down from under it in the spine ink, on the sheet's paper.
+  function drawSpine(x, sx, sw, H, o) {
+    // a canvas pixel covers less of the sheet across than down (the canvas is 2:1, the sheet ~1.32:1): text is drawn in
+    // sheet-true units, then stretched across, so it isn't squashed on the case
+    const k = (SHEET.W / CASE_GLB.sheet.w) / (H / CASE_GLB.sheet.h), w = sw / k;
+    x.save(); x.translate(sx, 0); x.scale(k, 1);
+    const band = o.spineBand, bandH = band ? H * .09 : 0;
+    if (band) {
+      x.fillStyle = band.bg; x.fillRect(0, 0, w, bandH);
+      x.fillStyle = band.fg; x.font = `700 ${Math.round(w * .3)}px Lexend, system-ui, sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.fillText(band.label, w / 2, bandH / 2, w * .9);
+    }
+    const pad = w * .25, room = (H - bandH) * .88 - pad;
+    x.translate(w / 2, bandH + pad); x.rotate(Math.PI / 2); // vertical-rl: reads top to bottom
+    x.fillStyle = o.spineInk || '#ffffff'; x.font = `600 ${Math.round(w * .46)}px Lexend, system-ui, sans-serif`; x.textAlign = 'left'; x.textBaseline = 'middle';
+    let title = o.title || '';
+    if (x.measureText(title).width > room) { while (title && x.measureText(title + '…').width > room) title = title.slice(0, -1); title += '…'; }
+    x.fillText(title, 0, 0);
+    x.restore();
+  }
+  // The whole printed sheet for case.glb: back | spine | front on one canvas, redrawn as each scan arrives.
   function makeFullCoverTexture(o) {
     const THREE = T(); if (!THREE) return null;
-    const W = 2048, H = 1024, c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d');
+    const { W, H } = SHEET, c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d');
     const texture = new THREE.CanvasTexture(c); texture.colorSpace = THREE.SRGBColorSpace;
     texture.addEventListener('dispose', () => { c.width = c.height = 0; });
-    const drawFlippedY = (img, dx, dy, dw, dh) => {
-      if (!img || !(img.naturalWidth || img.width)) return;
-      if (!untainted(img)) return;
-      try {
-        x.save(); x.translate(dx, dy + dh); x.scale(1, -1); x.drawImage(img, 0, 0, dw, dh); x.restore();
-      } catch (err) {}
-    };
+    const backW = W * SHEET.back, spineW = W * SHEET.spine, frontX = backW + spineW, frontW = W - frontX;
     const redraw = () => {
       if (cur !== o) return;
-      const isSw = o.sys === 'sw' || (typeof o.caseColor === 'string' && (o.caseColor.startsWith('rgba') || o.caseColor === 'transparent'));
-      x.fillStyle = isSw ? '#ffffff' : (typeof o.caseColor === 'string' ? o.caseColor : '#ffffff');
-      x.fillRect(0, 0, W, H);
-      const ft = o.front ? loadTex(o.front) : null, bt = o.back ? loadTex(o.back) : null, stTex = o.spine ? loadTex(o.spine) : null;
-      const bw = W * 0.47;
-      if (bt && bt.image && (bt.image.naturalWidth || bt.image.width)) drawFlippedY(bt.image, 0, 0, bw, H);
-      else { x.fillStyle = 'rgba(0,0,0,0.06)'; x.fillRect(0, 0, bw, H); }
-      const sx = W * 0.47, sw = W * 0.06;
-      if (stTex && stTex.image && (stTex.image.naturalWidth || stTex.image.width)) drawFlippedY(stTex.image, sx, 0, sw, H);
-      else {
-        x.fillStyle = typeof o.caseColor === 'string' && !o.caseColor.startsWith('rgba') ? o.caseColor : '#e60012';
-        x.fillRect(sx, 0, sw, H);
-        x.save(); x.translate(sx + sw / 2, H / 2); x.rotate(Math.PI / 2); x.fillStyle = o.spineInk || '#ffffff'; x.font = '600 48px Lexend, system-ui, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
-        let title = o.title || ''; if (title.length > 25) title = title.slice(0, 23) + '…'; x.fillText(title, 0, 0); x.restore();
-      }
-      const fx = W * 0.53, fw = W * 0.47;
-      if (ft && ft.image && (ft.image.naturalWidth || ft.image.width)) drawFlippedY(ft.image, fx, 0, fw, H);
-      else if (o.standIn && o.standIn.naturalWidth) drawFlippedY(o.standIn, fx, 0, fw, H);
+      x.save(); x.setTransform(1, 0, 0, -1, 0, H); // the sheet's v runs bottom-up: draw it upside down and it reads upright on the case
+      x.fillStyle = paperOf(o); x.fillRect(0, 0, W, H);
+      const back = texImage(o.back), spine = texImage(o.spine), front = texImage(o.front) || (drawable(o.standIn) ? o.standIn : null);
+      if (back) x.drawImage(back, 0, 0, backW, H); else { x.fillStyle = 'rgba(0,0,0,0.06)'; x.fillRect(0, 0, backW, H); }
+      if (spine) x.drawImage(spine, backW, 0, spineW, H); else drawSpine(x, backW, spineW, H, o);
+      if (front) x.drawImage(front, frontX, 0, frontW, H);
+      x.restore();
       texture.needsUpdate = true;
     };
     redraw();
-    [o.front, o.back, o.spine].forEach(u => {
-      if (!u) return; const t = loadTex(u);
-      if (t && t.userData && t.userData.p) t.userData.p.then(redraw);
-    });
+    [o.front, o.back, o.spine].forEach(u => { const t = u && loadTex(u); if (t && t.userData.p) t.userData.p.then(redraw); });
     return texture;
   }
   function ensureUniversalModel() {
@@ -350,102 +368,72 @@ window.Inspect3D = (() => {
           }
         });
       });
-      if (cur && cur.sys !== 'pc' && caseG && !universalCase) applyUniversalModel(cur);
+      if (cur && caseG && !universalCase) applyUniversalModel(cur);
     }).catch(() => { universalLoading = false; });
   }
+  // the lid's hinge bones: k = how open (0 shut, 1 flat open)
+  function poseCaseBones(k) { const a = -(1 - k) * (Math.PI / 2); caseBones.forEach(b => { b.rotation.z = a; }); }
+  // a copy of a cached scan with settings of its own (a glTF label wants flipY off) that takes the picture when it arrives;
+  // not marked cached, so it's freed with the case
+  function liveCopy(url, set) {
+    const src = url && loadTex(url); if (!src) return null;
+    const t = src.clone(); t.userData = {}; Object.assign(t, set);
+    if (!src.userData.ok && src.userData.p) src.userData.p.then(ok => { if (ok && src.image && !t.userData.gone) { t.image = src.image; t.needsUpdate = true; } });
+    t.addEventListener('dispose', () => { t.userData.gone = true; });
+    return t;
+  }
+  // case.glb's parts, by mesh name (three names a glTF mesh's primitives <mesh>_1, _2 …; older exports used Plane001)
+  function caseMaterial(n, o, coverTex) {
+    const THREE = T(), physical = p => new THREE.MeshPhysicalMaterial(p), name = n.name;
+    if (name === 'Cover_1' || name === 'Cover' || name === 'Plane001') return coverMat = physical({ map: coverTex, roughness: .5, metalness: 0, clearcoat: .2 });
+    if (name === 'Cover_2' || name === 'Plane001_1' || name === 'Cover_Inside') return physical({ color: 0xffffff, roughness: .65, metalness: 0, clearcoat: .1 }); // the sheet's inside: plain paper
+    if (name === 'Cover_3' || name === 'Plane001_2') return physical({ color: 0xffffff, roughness: .65, metalness: 0 });
+    if (name === 'Booklet') { manualPlane = n; const map = o.manual ? loadTex(o.manual) : null; return new THREE.MeshStandardMaterial({ map, color: map ? 0xffffff : 0xf4f0e8, roughness: .8 }); }
+    if (name === 'Sleeve') return physical({ color: 0xffffff, roughness: .1, clearcoat: .9, clearcoatRoughness: .1, transmission: .9, ior: 1.49, transparent: true, opacity: .25, depthWrite: false }); // (no depth write: the film over the sheet never z-fights it)
+    if (name.startsWith('Case')) return isClearCase(o)
+      ? physical({ color: 0xffffff, roughness: .24, metalness: .01, transmission: .65, ior: 1.49, clearcoat: .8, transparent: true, opacity: .3 })
+      : physical({ color: new THREE.Color(o.caseSide || o.caseColor || 0x222222), roughness: .42, metalness: .02, clearcoat: .35 });
+    if (name === 'Cartridge') return physical({ color: 0x1e1f24, roughness: .55, clearcoat: .2 });
+    if (name.startsWith('Switch_PCB')) return new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: .85, roughness: .3 });
+    return null;
+  }
+  // A cartridge game: the case's own cartridge is what comes out. It moves into mediaG, inside a pivot at its middle so it turns
+  // in place; dockAnchor keeps the spot in the case it came from.
+  const OPEN_SHIFT = .33; // the open case's middle, from the shut case's (case.glb at its own ratio)
+  const CART_HALF_D = .0015; // half the cartridge's thickness (glb units)
+  function takeCartridge(cart, o) {
+    const THREE = T();
+    dockAnchor.position.copy(cart.position); dockAnchor.quaternion.copy(cart.quaternion); dockAnchor.scale.copy(cart.scale); cart.parent.add(dockAnchor);
+    if (media && media.parent === mediaG) { mediaG.remove(media); disposeGroup(media); }
+    cart.parent.remove(cart);
+    cart.position.set(0, 0, -CART_HALF_D); cart.quaternion.identity();
+    media = new THREE.Group(); media.add(cart); mediaG.add(media);
+    media.userData.scale = CASE_SCALE; media.userData.pivotZ = CART_HALF_D * CASE_SCALE; // (frame(): its size, and where its pivot sits off the dock)
+    const label = cart.getObjectByName('Cartridge_Cover_1') || cart.getObjectByName('Cartridge_Cover') || cart.getObjectByName('Plane');
+    if (label) label.material = new THREE.MeshPhysicalMaterial({ map: liveCopy(o.disc || o.front, { flipY: false }), roughness: .35, clearcoat: .5 });
+  }
+  // Any other media (a disc, a UMD) lies in the middle of the shut case's back, at the height the built case docks it, on top of
+  // the booklet (which lies in the back, 0.015-0.022 deep) and clear of the shut lid (~0.06)
+  const DISC_Z = .03; // case heights
+  function dockInCase(o) {
+    const s = universalCase.scale;
+    dockAnchor.position.set(0, discLift(o.kind, o.sys) / s.y, DISC_Z / s.z); universalCase.add(dockAnchor);
+  }
   function applyUniversalModel(o) {
-    if (!universalGltf || !caseG || o.sys === 'pc') return;
+    if (!universalGltf || !caseG || !usesCaseModel(o.sys)) return;
     const THREE = T(); if (!THREE) return;
     try {
       universalCase = cloneSkinned(universalGltf.scene);
-      const s = 1 / 0.1692; universalCase.scale.set(s * (o.ratio / 0.618), s, s);
-      universalCase.rotation.set(0, 0, 0); universalCase.position.set(0, 0, 0);
-      const rotBone = universalCase.getObjectByName('Rotate_Bone') || universalCase.getObjectByName('Rotate Bone');
-      const frontBone = universalCase.getObjectByName('Front_Bone') || universalCase.getObjectByName('Front Bone');
-      const angle = -(1 - easeIO(st.lid)) * (Math.PI / 2);
-      if (rotBone) rotBone.rotation.z = angle;
-      if (frontBone) frontBone.rotation.z = angle;
-      const fullCoverTex = makeFullCoverTexture(o);
-      const isClear = o.sys === 'sw' || (typeof o.caseColor === 'string' && (o.caseColor.startsWith('rgba') || o.caseColor === 'transparent'));
-      universalCase.traverse(n => {
-        if (n.isMesh) {
-          if (n.name === 'Cover_1' || n.name === 'Cover' || n.name === 'Plane001') {
-            const coverM = new THREE.MeshPhysicalMaterial({ map: fullCoverTex, roughness: 0.5, metalness: 0, clearcoat: 0.2 });
-            n.material = coverM;
-            coverMat = coverM;
-          } else if (n.name === 'Cover_2' || n.name === 'Plane001_1' || n.name === 'Cover_Inside') {
-            n.material = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.65, metalness: 0, clearcoat: 0.1 });
-          } else if (n.name === 'Cover_3' || n.name === 'Plane001_2') {
-            n.material = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.65, metalness: 0 });
-          } else if (n.name === 'Booklet') {
-            let manualTex = null;
-            if (o.manual) {
-              manualTex = loadTex(o.manual).clone();
-              const srcM = loadTex(o.manual);
-              if (srcM && srcM.userData && srcM.userData.p) {
-                srcM.userData.p.then(ok => { if (ok && srcM.image) { manualTex.image = srcM.image; manualTex.needsUpdate = true; } });
-              }
-            }
-            n.material = new THREE.MeshStandardMaterial({ map: manualTex, color: manualTex ? 0xffffff : 0xf4f0e8, roughness: 0.8 });
-            manualPlane = n;
-          } else if (n.name === 'Sleeve') {
-            n.material = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.1, clearcoat: 0.9, clearcoatRoughness: 0.1, transmission: 0.9, ior: 1.49, transparent: true, opacity: 0.25, depthWrite: false });
-          } else if (n.name.startsWith('Case')) {
-            if (isClear) n.material = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.24, metalness: 0.01, transmission: 0.65, ior: 1.49, clearcoat: 0.8, transparent: true, opacity: 0.3 });
-            else n.material = new THREE.MeshPhysicalMaterial({ color: new THREE.Color(o.caseSide || o.caseColor || 0x222222), roughness: 0.42, metalness: 0.02, clearcoat: 0.35 });
-          } else if (n.name === 'Cartridge') {
-            n.material = new THREE.MeshPhysicalMaterial({ color: 0x1e1f24, roughness: 0.55, clearcoat: 0.2 });
-          } else if (n.name.startsWith('Switch_PCB')) {
-            n.material = new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: 0.85, roughness: 0.3 });
-          }
-        }
-      });
-      if (spineG) spineG.visible = false;
-      if (backPivot) backPivot.visible = false;
-      if (lidPivot) lidPivot.visible = false;
-
+      universalCase.scale.set(CASE_SCALE * (o.ratio / CASE_GLB.ratio), CASE_SCALE, CASE_SCALE);
+      caseBones = ['Rotate_Bone', 'Front_Bone'].map(b => universalCase.getObjectByName(b) || universalCase.getObjectByName(b.replace('_', ' '))).filter(Boolean);
+      poseCaseBones(easeIO(st.lid));
+      const coverTex = makeFullCoverTexture(o);
+      universalCase.traverse(n => { if (!n.isMesh) return; const m = caseMaterial(n, o, coverTex); if (m) n.material = m; });
+      [spineG, backPivot, lidPivot].forEach(g => { if (g) g.visible = false; }); // the built case stays behind, hidden
+      dockAnchor = new THREE.Object3D();
       const cart = universalCase.getObjectByName('Cartridge');
-      if (o.kind === 'cart' && cart) {
-        dockAnchor = new THREE.Object3D();
-        cart.parent.add(dockAnchor);
-        dockAnchor.position.copy(cart.position);
-        dockAnchor.quaternion.copy(cart.quaternion);
-        dockAnchor.scale.copy(cart.scale);
-
-        if (media && media.parent === mediaG) {
-          mediaG.remove(media);
-          disposeGroup(media);
-        }
-        cart.parent.remove(cart);
-        
-        const cartPivot = new THREE.Group();
-        cart.position.set(0, 0, -0.0015);
-        cart.quaternion.set(0, 0, 0, 1);
-        cart.rotation.set(0, 0, 0);
-        cartPivot.add(cart);
-        media = cartPivot;
-        mediaG.add(media);
-        media.visible = true;
-
-        const cc = cart.getObjectByName('Cartridge_Cover_1') || cart.getObjectByName('Cartridge_Cover') || cart.getObjectByName('Plane');
-        if (cc) {
-          const labelTex = loadTex(o.disc || o.front).clone();
-          labelTex.flipY = false;
-          const src = loadTex(o.disc || o.front);
-          if (src && src.userData && src.userData.p) {
-            src.userData.p.then(ok => { if (ok && src.image) { labelTex.image = src.image; labelTex.needsUpdate = true; } });
-          }
-          cc.material = new THREE.MeshPhysicalMaterial({ map: labelTex, roughness: 0.35, clearcoat: 0.5 });
-        }
-      } else if (cart) {
-        cart.visible = false;
-        dockAnchor = new THREE.Object3D();
-        const rootBone = universalCase.getObjectByName('Root');
-        if (rootBone) {
-          rootBone.add(dockAnchor);
-          dockAnchor.position.set(0.0054, -0.3221, 0.0207);
-        }
-      }
+      if (cart && o.kind === 'cart') takeCartridge(cart, o);
+      else { if (cart) cart.visible = false; dockInCase(o); }
       caseG.add(universalCase);
     } catch (e) { console.warn(e); }
   }
@@ -454,9 +442,9 @@ window.Inspect3D = (() => {
   function build(o) {
     const THREE = T();
     if (customMedia && customMedia.parent === mediaG) mediaG.remove(customMedia);
-    disposeGroup(caseG); disposeGroup(mediaG); cur = o; universalCase = null;
+    disposeGroup(caseG); disposeGroup(mediaG); cur = o; universalCase = null; caseBones = [];
     const h = 1, w = o.ratio, lt = Math.max(.014, o.depth * .18), r = Math.min(.016, lt * .9);
-    if (o.sys === "pc") {
+    if (!usesCaseModel(o.sys)) {
       const D = Math.max(.045, o.depth * .55); cur._D = D;
       const ft = o.front ? loadTex(o.front) : null;
       const spineMap = o.spine ? loadTex(o.spine) : spineTexture(o.title, "#0a0a0a", "#ffffff");
@@ -475,7 +463,7 @@ window.Inspect3D = (() => {
       applyState(true);
       return;
     }
-    const isClear = o.sys === "sw" || (typeof o.caseColor === "string" && (o.caseColor.startsWith("rgba") || o.caseColor === "transparent")) || (typeof o.caseSide === "string" && (o.caseSide.startsWith("rgba") || o.caseSide === "transparent"));
+    const isClear = isClearCase(o);
     const plastic = (color, extra) => {
       let col = color, op = 1, tr = false;
       if (typeof color === "string" && color.startsWith("rgba")) {
@@ -756,19 +744,16 @@ window.Inspect3D = (() => {
     backPivot.rotation.y = -(1 - k) * (Math.PI / 2);
     const o = easeIO(st.out);
     const w = cur.ratio, D = cur._D || .05;
-    if (cur.sys === "pc") {
+    if (!usesCaseModel(cur.sys)) {
       caseG.position.set(0, 0, 0);
       caseG.rotation.set(0, 0, 0);
       caseG.visible = true;
     } else if (universalCase) {
-      caseG.position.set(k * 0.33 * (w / 0.618) - 2.6 * o, -0.3 * o, -0.6 * o);
+      // shut, it turns about its own middle (the model's back is at z 0); open, it slides over so the open case is centred
+      caseG.position.set(k * OPEN_SHIFT * (w / CASE_GLB.ratio) - 2.6 * o, -.3 * o, -(1 - k) * CASE_GLB.shape.depth / 2 - .6 * o);
       caseG.rotation.set(0, 30 * DEG * o, 0);
       caseG.visible = o < .995;
-      const rotBone = universalCase.getObjectByName('Rotate_Bone') || universalCase.getObjectByName('Rotate Bone');
-      const frontBone = universalCase.getObjectByName('Front_Bone') || universalCase.getObjectByName('Front Bone');
-      const angle = -(1 - k) * (Math.PI / 2);
-      if (rotBone) rotBone.rotation.z = angle;
-      if (frontBone) frontBone.rotation.z = angle;
+      poseCaseBones(k);
     } else {
       caseG.position.set(-(1 - k) * (w / 2) - 2.6 * o, -.3 * o, -(1 - k) * (D / 2) - .6 * o);
       caseG.rotation.y = (1 - k) * (Math.PI / 2) + 30 * DEG * o;
@@ -785,36 +770,30 @@ window.Inspect3D = (() => {
     const qMediaG = new THREE.Quaternion();
     mediaG.getWorldQuaternion(qMediaG);
     const dockLocalQuat = qMediaG.clone().invert().multiply(dockWorldQuat);
-    const dockPivotPos = (universalCase && cur.kind === "cart")
-      ? dockPosInMediaG.clone().add(new THREE.Vector3(0, 0, 0.0015).applyQuaternion(dockLocalQuat))
-      : dockPosInMediaG;
+    // (case.glb's cartridge turns about a pivot at its middle: in the dock that pivot sits half its thickness off the anchor)
+    const pivotZ = media.userData.pivotZ || 0, dockPos = pivotZ ? dockPosInMediaG.clone().add(new THREE.Vector3(0, 0, pivotZ).applyQuaternion(dockLocalQuat)) : dockPosInMediaG;
     const centerPos = new THREE.Vector3(0, 0, .25 + st.bump);
-    media.position.lerpVectors(dockPivotPos, centerPos, o);
-    const ms = (universalCase && cur.kind === "cart" ? (1 / 0.1692) : 1) * (1 + (cur.kind === "cart" ? .9 : .55) * o);
+    media.position.lerpVectors(dockPos, centerPos, o);
+    const ms = (media.userData.scale || 1) * (1 + (cur.kind === "cart" ? .9 : .55) * o);
     media.scale.set(ms, ms, ms);
 
     let rxE = st.rx, ryE = st.ry;
-    const idle = now - lastMove > 1500;
-    if (cur.kind !== "cart" && !st.own) {
+    if (cur.kind !== "cart") { // a disc out of its case spins slowly once you leave it alone
+      const idle = now - lastMove > 1500;
       st.spinV = sm(st.spinV || 0, (st.out > .95 && idle) ? .22 : 0, 1 - Math.exp(-dt * 2));
       st.spin += dt * st.spinV;
-    } else {
-      if (cur.kind !== "cart") {
-        st.spinV = sm(st.spinV || 0, (st.out > .95 && idle) ? .22 : 0, 1 - Math.exp(-dt * 2));
-        st.spin += dt * st.spinV;
-      }
-      const d = st.ry - st.base, dw = d - 360 * Math.round(d / 360), whole = d - dw, front = 360 * Math.round(st.base / 360);
+    }
+    const d = st.ry - st.base, dw = d - 360 * Math.round(d / 360);
+    if (cur.kind === "cart" || st.own) { // (not Windows' disc, which turns with the case as before)
+      const whole = d - dw, front = 360 * Math.round(st.base / 360);
       ryE = st.base + whole + dw * (1 - o) + (front - st.base) * o;
       rxE = st.rx * (1 - o); // out: the scene squares up, so the media faces you
     }
     if (o < 0.001) {
       media.quaternion.copy(dockLocalQuat);
     } else {
-      const targetQuat = new THREE.Quaternion();
-      const d = st.ry - st.base, dw = d - 360 * Math.round(d / 360);
       const spinZ = cur.kind === "cart" ? 0 : st.spin;
-      const euler = new THREE.Euler(-st.rx * o * DEG, (st.flip + dw) * o * DEG, spinZ, "YXZ");
-      targetQuat.setFromEuler(euler);
+      const targetQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(-st.rx * o * DEG, (st.flip + dw) * o * DEG, spinZ, "YXZ"));
       media.quaternion.slerpQuaternions(dockLocalQuat, targetQuat, o);
     }
     const perPx = (2 * 3.9 * Math.tan(camera.fov * DEG / 2)) / innerHeight;
@@ -907,7 +886,7 @@ window.Inspect3D = (() => {
     if (phase === 'shown') canvas.style.opacity = cur.from ? '1' : '1';
     phase = 'out'; target = cur.from ? tgt : null; onDone = done;
   }
-  // closed: only the shown game's art stays on the GPU (reopening it is instant); every other cached texture is freed
+  // closed: the art stays cached (loadTex keeps the last 64 scans), so reopening a recent game is instant
   function close() { active = false; cancelAnimationFrame(raf); raf = 0; phase = 'idle'; pend = null; fadeT0 = 0; if (canvas) canvas.classList.remove('on'); }
   let lastMove = 0;
   // flip: the disc turned over (degrees, eased by the caller); base: the turn (ry) it had when it came out of the case
@@ -918,26 +897,21 @@ window.Inspect3D = (() => {
   addEventListener('resize', () => { if (renderer && active) resize(); });
   // the lid's manual, when it arrives late ((T)rustyShelf's own booklet is drawn after the case opens)
   function setManual(url) { if (!manualPlane || !url || (cur && cur.manual)) return; const m = manualPlane.material, t = loadTex(url); m.map = t; m.color.set(0xffffff); m.needsUpdate = true; if (cur) cur.manual = url; }
+  // the booklet inside the open case under the pointer (client px): a click there opens the manual
+  let picker = null;
   function hitBooklet(cx, cy) {
-    if (!manualPlane || !camera || st.lid < 0.6) return false;
+    if (!manualPlane || !camera || !canvas || st.lid < .6) return false;
     const THREE = T(); if (!THREE) return false;
-    const rect = canvas ? canvas.getBoundingClientRect() : null;
-    const w = rect ? rect.width : window.innerWidth;
-    const h = rect ? rect.height : window.innerHeight;
-    const left = rect ? rect.left : 0;
-    const top = rect ? rect.top : 0;
-    const mouse = new THREE.Vector2(((cx - left) / w) * 2 - 1, -((cy - top) / h) * 2 + 1);
-    const rc = new THREE.Raycaster();
-    rc.setFromCamera(mouse, camera);
-    const hits = rc.intersectObject(manualPlane, true);
-    return hits.length > 0;
+    if (!picker) picker = { ray: new THREE.Raycaster(), at: new THREE.Vector2() };
+    const r = canvas.getBoundingClientRect(); if (!r.width || !r.height) return false;
+    picker.at.set((cx - r.left) / r.width * 2 - 1, -(cy - r.top) / r.height * 2 + 1);
+    picker.ray.setFromCamera(picker.at, camera);
+    return picker.ray.intersectObject(manualPlane, true).length > 0;
   }
-  function checkHover(cx, cy) {
-    if (!canvas) return;
-    if (hitBooklet(cx, cy)) canvas.style.cursor = 'pointer';
-    else canvas.style.cursor = '';
-  }
-  return { hitBooklet, checkHover, setManual, kit: { interiorTexture, discBackTexture, discLift, coverRect, fitCover, coverCrop }, available, open, close, leave, setPose, setState, bump, setPaused, isActive: () => active,
+  function checkHover(cx, cy) { if (canvas) canvas.style.cursor = hitBooklet(cx, cy) ? 'pointer' : ''; }
+  // the shape the shelf box takes for a shelf (app.js boxShape): case.glb's, or null for the PC shelves' own
+  const caseShape = sys => usesCaseModel(sys) ? CASE_GLB.shape : null;
+  return { caseShape, paperOf, hitBooklet, checkHover, setManual, kit: { interiorTexture, discBackTexture, discLift, coverRect, fitCover, coverCrop }, available, open, close, leave, setPose, setState, bump, setPaused, isActive: () => active,
     busy: () => !paused && (phase === 'out' || phase === 'fade' || phase === 'wait' || phase === 'in'), _st: () => ({ phase, in: st.in, ry: st.ry, rotY: rot ? Math.round(rot.rotation.y / DEG) : null, ready, fade: !!fadeT0, pend: !!pend, op: canvas && canvas.style.opacity, on: !!(canvas && canvas.classList.contains('on')), from: cur && cur.from, standIn: !!standInTex, tok, disc: discPose(), spine: !!(spineM && spineM.parent && spineM.parent.parent) }) }; // (beta.11 spine: the printed spine is on the case)
   // (test hook) where the disc / cartridge is in the scene, and which way its face points
   function discPose() { if (!media) return null; const THREE = T(); media.updateWorldMatrix(true, false); const p = media.getWorldPosition(new THREE.Vector3()), n = new THREE.Vector3(0, 0, 1).transformDirection(media.matrixWorld); return { x: +p.x.toFixed(3), y: +p.y.toFixed(3), z: +p.z.toFixed(3), nz: +n.z.toFixed(3) }; }

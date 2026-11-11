@@ -9,6 +9,7 @@ const check = (name, ok, detail) => {
 };
 
 const appSrc = fs.readFileSync(path.join(__dirname, '..', '..', 'renderer', 'app.js'), 'utf8');
+const styleSrc = fs.readFileSync(path.join(__dirname, '..', '..', 'renderer', 'style.css'), 'utf8');
 const settingsSrc = fs.readFileSync(path.join(__dirname, '..', '..', 'renderer', 'settings.js'), 'utf8');
 const pccoversSrc = fs.readFileSync(path.join(__dirname, '..', '..', 'main', 'pccovers.js'), 'utf8');
 const rebrandSrc = fs.readFileSync(path.join(__dirname, '..', '..', 'crates', 'img-tools', 'src', 'rebrand.rs'), 'utf8');
@@ -25,7 +26,7 @@ check('stOf enforces edge: 0 for PC games regardless of boxPlat', /isPcGame\s*=/
 check('stOf enforces spineBand PC for PC games regardless of boxPlat', /spineBand:\s*STYLE\.pc\.spineBand/.test(appSrc));
 
 // 3. Check 3D inspectability for PC games
-check('Details menu allows inspect for isGame (including PC games)', /\$\("dInspect"\)\.hidden\s*=\s*!isGame\(g\)/.test(appSrc));
+check('Details menu allows inspect for isGame (including PC games), as openInspect does', /\$\("dInspect"\)\.hidden\s*=\s*!canInspect\(rawItem\(\)\)/.test(appSrc) && /const canInspect=item=>[^\n]*isGame\(item\)/.test(appSrc));
 check('openInspect allows inspect for isGame (including PC games)', /openInspect\(\)[^}]*!isGame\(g\)/.test(appSrc));
 check('ispAdvance blocks opening case for PC games', /ispAdvance\(\)\s*\{[\s\S]*?g\.kind\s*===\s*"steam"[\s\S]*?return/.test(appSrc));
 check('renderIspHints omits Open case for PC games', /renderIspHints\(\)[\s\S]*?isPc\s*\?[\s\S]*?Open case/.test(appSrc));
@@ -52,7 +53,7 @@ check('Shelf spine-img respects top and bottom edge inset', /\.f-left\s+\.spine-
 // 8. Check 3D dual living hinge model and transparency in Inspect3D
 const inspect3dSrc = fs.readFileSync(path.join(__dirname, '..', '..', 'renderer', 'inspect3d.js'), 'utf8');
 check('Inspect3D has dual-hinge pivots (lidPivot, backPivot, spineG)', /lidPivot[\s\S]*?backPivot[\s\S]*?spineG/.test(inspect3dSrc));
-check('Inspect3D handles clear polypropylene transparency', /isClear\s*=\s*o\.sys\s*===\s*["']sw["']/.test(inspect3dSrc) && /transmission:/.test(inspect3dSrc));
+check('Inspect3D handles clear polypropylene transparency', /isClearCase\s*=\s*o\s*=>\s*o\.sys\s*===\s*["']sw["']/.test(inspect3dSrc) && /transmission:/.test(inspect3dSrc));
 check('Inspect3D interiorTexture has clearBg transparent clear mode', /clearBg\s*=\s*sys\s*===\s*["']sw["']/.test(inspect3dSrc));
 check('Inspect3D spine has top and bottom structural flap caps', /topCap[\s\S]*?btmCap/.test(inspect3dSrc));
 check('Inspect3D spine has two parallel living hinge score line grooves', /groove1[\s\S]*?groove2/.test(inspect3dSrc));
@@ -62,29 +63,38 @@ check('Inspect3D opens flat with dual-hinge book kinematics', /lidPivot\.rotatio
 
 
 // 9. Check PC black cuboid model and Universal case.glb integration
-check('Inspect3D PC model is black cuboid with front, spine and back covers', /o\.sys\s*===\s*["']pc["'][\s\S]*?BoxGeometry[\s\S]*?caseG\.add\(pcBox\)/.test(inspect3dSrc));
+check('Inspect3D PC model is black cuboid with front, spine and back covers', /PC_SHELVES\s*=\s*new Set\(\['pc',\s*'custom'\]\)/.test(inspect3dSrc) && /!usesCaseModel\(o\.sys\)[\s\S]*?BoxGeometry[\s\S]*?caseG\.add\(pcBox\)/.test(inspect3dSrc));
 check('Universal case.glb exists in renderer', fs.existsSync(path.join(__dirname, '..', '..', 'renderer', 'case.glb')));
 check('Universal case.blend exists in renderer', fs.existsSync(path.join(__dirname, '..', '..', 'renderer', 'case.blend')));
 check('Inspect3D uses universal case.glb model', /ensureUniversalModel\(\)[\s\S]*?loadAsync\(["']case\.glb["']\)/.test(inspect3dSrc));
 
 // 10. Check new features: booklet, white interior, singular vertical flip, cartridge extraction, flicker prevention
-check('Cover art draws each image flipped vertically singularly', /drawFlippedY\s*=/.test(inspect3dSrc) && /drawFlippedY\(bt\.image/.test(inspect3dSrc) && /drawFlippedY\(ft\.image/.test(inspect3dSrc));
+check('Cover sheet is drawn flipped vertically (its v runs bottom-up), art and drawn spine alike', /setTransform\(1,\s*0,\s*0,\s*-1,\s*0,\s*H\)[\s\S]*?drawImage\(back[\s\S]*?drawSpine\([\s\S]*?drawImage\(front[\s\S]*?x\.restore\(\)/.test(inspect3dSrc));
 check('Case interior has white page interior material for Cover_2', /Cover_2[\s\S]*?MeshPhysicalMaterial[\s\S]*?color:\s*0xffffff/.test(inspect3dSrc));
 check('Booklet material is supported inside case under clips', /Booklet[\s\S]*?MeshStandardMaterial/.test(inspect3dSrc));
 check('Sleeve uses depthWrite: false to prevent z-fighting and flickering', /Sleeve[\s\S]*?depthWrite:\s*false/.test(inspect3dSrc));
-check('Cartridge model from 3D case is extracted into mediaG with label', /o\.kind\s*===\s*["']cart["']\s*&&\s*cart[\s\S]*?mediaG\.add\(media\)[\s\S]*?Cartridge_Cover/.test(inspect3dSrc));
+check('Cartridge model from 3D case is extracted into mediaG with label', /cart\s*&&\s*o\.kind\s*===\s*["']cart["']\)\s*takeCartridge/.test(inspect3dSrc) && /function takeCartridge[\s\S]*?mediaG\.add\(media\)[\s\S]*?Cartridge_Cover/.test(inspect3dSrc));
 check('Geometries are protected from disposal to prevent black textures', /userData\.keep\s*=\s*true/.test(inspect3dSrc) && /!\(n\.geometry\.userData\s*&&\s*n\.geometry\.userData\.keep\)/.test(inspect3dSrc));
 
 // 11. Check removal of inspect button for emulator and shuffle cases
-check('canInspect hides inspect button for emulator and shuffle cases', /canInspect[\s\S]*?item\.kind\s*!==\s*"emulator"[\s\S]*?item\.kind\s*!==\s*"random"/.test(appSrc));
+check('canInspect hides inspect button for emulator and Surprise tiles (isGame: rom or steam only)', /const isGame=g=>g\.kind==="rom"\|\|g\.kind==="steam"/.test(appSrc) && /const canInspect=item=>!emptyShelf\(\)&&!!item&&isGame\(item\)/.test(appSrc));
 check('HINTS and PAD_HINTS inspect button uses canInspect condition', /label:\s*"Inspect",\s*when:\s*canInspect/.test(appSrc));
 
 // 12. Check cartridge centering pivot and canvas disposal protection
-check('Cartridge uses centered pivot container in mediaG', /cartPivot[\s\S]*?cart\.position\.set\(0,\s*0,\s*-0\.0015\)[\s\S]*?cartPivot\.add\(cart\)/.test(inspect3dSrc));
+check('Cartridge uses centered pivot container in mediaG', /cart\.position\.set\(0,\s*0,\s*-CART_HALF_D\)[\s\S]*?media\.add\(cart\)/.test(inspect3dSrc) && /media\.userData\.pivotZ\s*=\s*CART_HALF_D\s*\*\s*CASE_SCALE/.test(inspect3dSrc));
 check('Cover canvas releases GPU memory on disposal', /addEventListener\(['"]dispose['"],\s*\(\)\s*=>\s*\{\s*c\.width\s*=\s*c\.height\s*=\s*0;\s*\}\)/.test(inspect3dSrc));
-check('Cartridge resets to identity quaternion inside cartPivot', /cart\.quaternion\.set\(0,\s*0,\s*0,\s*1\)[\s\S]*?cart\.rotation\.set\(0,\s*0,\s*0\)/.test(inspect3dSrc));
+check('Cartridge resets to identity quaternion inside its pivot', /cart\.quaternion\.identity\(\)/.test(inspect3dSrc));
 check('Inspect3D exports hitBooklet and checkHover for clickable booklet', /hitBooklet[\s\S]*?checkHover/.test(inspect3dSrc));
 check('Clicking booklet in inspect mode opens reader', /Inspect3D\.hitBooklet\(e\.clientX,\s*e\.clientY\)\s*\)\s*openReader\(\)/.test(appSrc));
+
+
+// 13. The shelf box is drawn to the 3D case it turns into (case.glb), the spine as on the shelf, the disc inside the case
+check('Inspect3D exports the case shape and paper for the shelf box', /const caseShape = sys => usesCaseModel\(sys\) \? CASE_GLB\.shape : null/.test(inspect3dSrc) && /return \{ caseShape, paperOf,/.test(inspect3dSrc));
+check('The shelf box (measure and mount) takes its shape from boxShape', /function boxShape\(os,sys\)\{[\s\S]*?Inspect3D\.caseShape\(sys\)/.test(appSrc) && /const b=boxShape\(s,\(cur\(\)\|\|\{\}\)\.id\);/.test(appSrc) && /const b=boxShape\(os,\(shelfFor\(g\)\|\|\{\}\)\.id\)/.test(appSrc) && !/os\.ratio\*os\.depth\*sc/.test(appSrc));
+check('The shelf spine is the printed sheet (--paper) inside the case border', /--spine-bg:linear-gradient\(var\(--paper,var\(--case\)\),var\(--paper,var\(--case\)\)\) content-box,var\(--case\)/.test(styleSrc));
+check('The 3D spine with no art is drawn as the shelf draws it (band, then the title)', /function drawSpine\([\s\S]*?o\.spineBand[\s\S]*?x\.rotate\(Math\.PI \/ 2\)/.test(inspect3dSrc) && /spineBand:style\.spineBand/.test(appSrc));
+check('A disc docks inside case.glb (not off a bone)', /function dockInCase\(o\)[\s\S]*?universalCase\.add\(dockAnchor\)/.test(inspect3dSrc) && !/rootBone\.add\(dockAnchor\)/.test(inspect3dSrc));
+check('Hinge bones are looked up once per case, not every frame', /caseBones = \[/.test(inspect3dSrc) && (inspect3dSrc.match(/getObjectByName\(['"]Rotate/g) || []).length === 0);
 
 console.log(fails ? `${fails} failed` : "all passed");
 process.exit(fails ? 1 : 0);

@@ -14,7 +14,7 @@ const STYLE={
   gc:{id:"gc",rc:0.03,re:0.2,hue:258,ratio:.712,depth:.105,edge:.022,caseColor:"#16161b",caseSide:"#0b0b0e",spineInk:"#e8e8f0",band:{bg:"#26262e",fg:"#c3c3cf",label:"GAMECUBE"},spineBand:{bg:"#2c2c35",fg:"#c3c3cf",label:"GCN"},tint:["#3a2a86","#120d2c"],glow:"#9d8cff"},
   wii:{id:"wii",rc:0.04,re:0.22,hue:205,ratio:0.711,depth:0.104,edge:.03,caseColor:"#f2f3f5",caseSide:"#d9dbe0",spineInk:"#4a4f58",band:{bg:"#ffffff",fg:"#8e949e",label:"Wii"},spineBand:{bg:"#ffffff",fg:"#8e949e",label:"Wii"},tint:["#2f7bff","#0b2a7a"],glow:"#9fd0ff"},
   wiiu:{id:"wiiu",rc:0.04,re:0.22,hue:194,ratio:0.711,depth:0.104,edge:.03,caseColor:"#1d8fd1",caseSide:"#146ea6",spineInk:"#ffffff",band:{bg:"#1d8fd1",fg:"#ffffff",label:"Wii U"},spineBand:{bg:"#ffffff",fg:"#1d8fd1",label:"Wii U"},tint:["#0f6fb0","#04203a"],glow:"#6fd0ff"},
-  sw:{id:"sw",rc:0.06,re:0.28,hue:355,ratio:0.612,depth:0.096,edge:.035,wrap:1,caseColor:"rgba(255,255,255,0.22)",caseSide:"rgba(255,255,255,0.22)",spineInk:"#ffffff",band:{bg:"#d8101f",fg:"#ffffff",label:"SWITCH"},spineBand:{bg:"#d8101f",fg:"#ffffff",label:"SW"},tint:["#7a2bd6","#2a0b4e"],glow:"#ff6470"},
+  sw:{id:"sw",rc:0.06,re:0.28,hue:355,ratio:0.612,depth:0.096,edge:.035,wrap:1,caseColor:"rgba(255,255,255,0.22)",caseSide:"rgba(255,255,255,0.22)",spineInk:"#1f2024" /* on the white sheet behind the clear case */,band:{bg:"#d8101f",fg:"#ffffff",label:"SWITCH"},spineBand:{bg:"#d8101f",fg:"#ffffff",label:"SW"},tint:["#7a2bd6","#2a0b4e"],glow:"#ff6470"},
   sw2:{id:"sw2",rc:0.06,re:0.28,hue:352,ratio:0.612,depth:0.096,edge:.035,wrap:1,caseColor:"#e60012",caseSide:"#ad000d",spineInk:"#ffffff",band:{bg:"#e60012",fg:"#ffffff",label:"SWITCH 2"},spineBand:{bg:"#e60012",fg:"#ffffff",label:"SW2"},tint:["#16608f","#071a2e"],glow:"#ff5a66"}, // Switch 2: the brighter red case, "SWITCH 2" band; a blue backdrop (the Joy-Con 2 accents) tells it from the Switch shelf
   ps4:{id:"ps4",rc:0.065,re:0.26,hue:216,ratio:0.787,depth:0.089,edge:.03,caseColor:"#1d4ed8",caseSide:"#153a9e",spineInk:"#ffffff",band:{bg:"#1d4ed8",fg:"#ffffff",label:"PS4"},spineBand:{bg:"#1d4ed8",fg:"#ffffff",label:"PS4"},tint:["#1e3a8a","#0b1533"],glow:"#6aa6ff"},
   ps5:{id:"ps5",rc:0.065,re:0.26,hue:220,ratio:0.787,depth:0.089,edge:.03,caseColor:"#2b62d9",caseSide:"#1f4cb3",spineInk:"#111318",band:{bg:"#ffffff",fg:"#111318",label:"PS5"},spineBand:{bg:"#ffffff",fg:"#111318",label:"PS5"},tint:["#24345e","#0a0f1f"],glow:"#9ec2ff"}, // PS5: the blue case, a white band with the black PS5 logo
@@ -364,14 +364,25 @@ function measure(){
   const sScale=(cfgInfo&&cfgInfo.config&&cfgInfo.config.ui&&cfgInfo.config.ui.shelfScale&&cfgInfo.config.ui.shelfScale[s.id])||1;
   const bScale=uScale*sScale;
   bh=(vw<760?Math.min(vh*.32,vw*.42/s.ratio):Math.min(vh*.4,vw*.22/s.ratio,fxOn?620:520))*bScale;
-  bw=bh*s.ratio;bd=bw*s.depth;
-  const a=app.style;a.setProperty("--bw",bw+"px");a.setProperty("--bh",bh+"px");a.setProperty("--bd",bd+"px");a.setProperty("--edge",(bw*s.edge)+"px");
+  const b=boxShape(s,(cur()||{}).id);
+  bw=bh*s.ratio;bd=bh*b.depth;
+  const a=app.style;a.setProperty("--bw",bw+"px");a.setProperty("--bh",bh+"px");a.setProperty("--bd",bd+"px");a.setProperty("--edge",(bh*b.edge)+"px");
   // Cases are laid out OS× larger and scaled back down in their transform. Chrome rasterises a layer under
   // perspective at its layout size, so the selected case (pushed towards the camera) would otherwise be
   // magnified from a small raster and go soft; oversampling keeps covers crisp at the screen's real resolution.
-  OS=fxOn?1.4:1.15;a.setProperty("--cw",(bw*OS)+"px");a.setProperty("--ch",(bh*OS)+"px");a.setProperty("--cd",(bd*OS)+"px");a.setProperty("--ce",(bw*s.edge*OS)+"px");a.setProperty("--cei",(s.wrap?0:bw*s.edge*OS)+"px") /* (beta.11) wrap: the cover runs on round the spine, no border on that side */;a.setProperty("--crc",(bw*(s.rc||.03)*OS)+"px");a.setProperty("--cre",(bd*(s.re||.3)*OS)+"px");a.setProperty("--os",String(OS));
+  OS=fxOn?1.4:1.15;a.setProperty("--cw",(bw*OS)+"px");a.setProperty("--ch",(bh*OS)+"px");a.setProperty("--cd",(bd*OS)+"px");a.setProperty("--ce",(bh*b.edge*OS)+"px");a.setProperty("--cei",(bh*b.edgeIn*OS)+"px");a.setProperty("--crc",(bh*b.rc*OS)+"px");a.setProperty("--cre",(bh*b.re*OS)+"px");a.setProperty("--os",String(OS));
 }
-function applyCase(){const s=st(),a=app.style;a.setProperty("--case",s.caseColor);a.setProperty("--case-side",s.caseSide);a.setProperty("--spine-ink",s.spineInk)}
+function applyCase(){const s=st(),a=app.style;a.setProperty("--case",s.caseColor);a.setProperty("--case-side",s.caseSide);a.setProperty("--spine-ink",s.spineInk);a.setProperty("--paper",paperOf(s))}
+// A box's proportions, as fractions of its height. Shelves whose games open into the 3D case (Inspect3D's case.glb: all but
+// the PC ones) draw their boxes to that case's shape: as thick, the same clear border round the sheet, the same corners, the
+// sheet running round the spine. So the box you pick is the case that comes off the shelf. PC shelves keep their own.
+// sys: the shelf the game opens from in Inspect.
+function boxShape(os,sys){
+  const m=window.Inspect3D&&Inspect3D.caseShape(sys),depth=m?m.depth:os.ratio*os.depth,edge=m?m.edge:os.ratio*os.edge;
+  return {depth,edge,edgeIn:m||os.wrap?0:edge /* wrap: the sheet runs on round the spine, no border on that side */,rc:m?m.rc:os.ratio*(os.rc||.03),re:depth*(os.re||.3)};
+}
+// the printed sheet's colour where no art covers it (the 3D case prints its spine on it): white paper behind a clear case
+const paperOf=os=>window.Inspect3D?Inspect3D.paperOf({sys:os.id,caseColor:os.caseColor,caseSide:os.caseSide}):os.caseColor;
 // Only the cases near the selection exist in the DOM (like the windowed carousels in ES-DE / Big Box): slots[] holds a
 // light record per game and mount() builds a case's elements when it comes within WIN of the selection; cases that
 // drift past WIN+4 are taken down again, so a 500-game shelf costs the same as a 30-game one.
@@ -399,16 +410,10 @@ function mount(s){
   const os=stOf(g);
   const gScale=(cfgInfo&&cfgInfo.config&&cfgInfo.config.ui&&cfgInfo.config.ui.gameScale&&cfgInfo.config.ui.gameScale[g.id])||1;
   if(os!==sh||gScale!==1){
-    const sc=gScale;
-    slot.style.setProperty("--bw",`calc(var(--ch) * ${os.ratio*sc})`);
-    slot.style.setProperty("--bh",`calc(var(--ch) * ${sc})`);
-    slot.style.setProperty("--bd",`calc(var(--ch) * ${os.ratio*os.depth*sc})`);
-    slot.style.setProperty("--edge",`calc(var(--ch) * ${os.ratio*os.edge*sc})`);
-    slot.style.setProperty("--edge-in",`calc(var(--ch) * ${(os.wrap?0:os.ratio*os.edge)*sc})`);
-    slot.style.setProperty("--rc",`calc(var(--ch) * ${os.ratio*(os.rc||.03)*sc})`);
-    slot.style.setProperty("--re",`calc(var(--ch) * ${os.ratio*os.depth*(os.re||.3)*sc})`);
+    const b=boxShape(os,(shelfFor(g)||{}).id),size=f=>`calc(var(--ch) * ${f*gScale})`;
+    [["--bw",os.ratio],["--bh",1],["--bd",b.depth],["--edge",b.edge],["--edge-in",b.edgeIn],["--rc",b.rc],["--re",b.re]].forEach(([k,f])=>slot.style.setProperty(k,size(f)));
     if(os!==sh){
-      slot.style.setProperty("--case",os.caseColor);slot.style.setProperty("--case-side",os.caseSide);slot.style.setProperty("--spine-ink",os.spineInk);
+      slot.style.setProperty("--case",os.caseColor);slot.style.setProperty("--case-side",os.caseSide);slot.style.setProperty("--spine-ink",os.spineInk);slot.style.setProperty("--paper",paperOf(os));
     }
   }
   if(isFav(g))slot.classList.add("fav");
@@ -1043,7 +1048,7 @@ function fillDetails(){
   const how=$("dHow");if(how){how.textContent=g.kind==="rom"?`Plays in ${s.emulatorName}${s.bootOnLaunch&&!s.useIpl&&((themes[s.id]||{}).boot||s.insertAnim===false)?" after the boot "+((themes[s.id]||{}).boot?"video":"intro"):""}. Close the emulator to come back here.`:"";how.hidden=g.kind!=="rom"}
   raDetails(g);
   $("dPlay").textContent=g.kind==="rom"||g.kind==="steam"?"Play":"Open";
-  $("dInspect").hidden=!isGame(g)||!canInspect(g);$("dManual").hidden=g.kind!=="rom";$("dManual").querySelector("span").textContent=hasManual(g)?"Read manual":"Read booklet"; /* (beta.7: an icon button: only its label changes) */
+  $("dInspect").hidden=!canInspect(rawItem()); /* (what openInspect allows) */$("dManual").hidden=g.kind!=="rom";$("dManual").querySelector("span").textContent=hasManual(g)?"Read manual":"Read booklet"; /* (beta.7: an icon button: only its label changes) */
   $("dEmu").hidden=!(g.kind==="rom"&&s.hasEmulator);$("dEmu").textContent=`Open ${s.emulatorName||"emulator"}`;
   {const pc=g.kind==="steam"&&!!api.pcCoverOptions,b=$("dBoxArt"),p=$("dBoxArtPc");if(b)b.hidden=!(g.kind==="rom"&&api.artStudio&&g.file);if(p)p.hidden=!pc;} /* (beta.9) a PC game's Box art sits beside Play (it has no manual or Inspect), not in More */{const b=$("dRename");if(b)b.hidden=!(api.renameGame&&((g.kind==="rom"&&g.file)||g.kind==="steam"));} /* (beta.5: PC games too, through the cover picker) */
   {const b=$("dCols");if(b)b.hidden=!isGame(g)||g.kind==="app";}
@@ -1477,7 +1482,7 @@ function openInspect(){uiCrumb("Inspect");
     const from=slotPose(slots[sel]),hs=slots[sel];if(from&&hs&&hs.el){clearTimeout(hs.el._gl);hs.el.classList.add("glowfade","lift")}
     // the shelf box stays until the 3D case is drawn and ready to take its place; then both swap in the same frame
     const onStart=()=>{if(isp.tok!==tok||mode!=="inspect")return;if(hs&&hs.el){hs.el.classList.remove("unhold");hs.el.classList.add("held");isp.held=hs}app.classList.add("inspecting");el.classList.add("on")};
-    el.classList.add("gl");gl=Inspect3D.open({from,where:from?()=>slotPose(hs):null,standIn:from&&hs.img,onStart,sys:s.id,rc:style.rc||.04,ratio:style.ratio,depth:style.depth,caseColor:style.caseColor,caseSide:style.caseSide,spineInk:style.spineInk,edge:style.edge||0,wrap:!!style.wrap,title:g.title,kind:m.kind,form:m.form||"",size:m.size,
+    el.classList.add("gl");gl=Inspect3D.open({from,where:from?()=>slotPose(hs):null,standIn:from&&hs.img,onStart,sys:s.id,rc:style.rc||.04,ratio:style.ratio,depth:style.depth,caseColor:style.caseColor,caseSide:style.caseSide,spineInk:style.spineInk,spineBand:style.spineBand,edge:style.edge||0,wrap:!!style.wrap,title:g.title,kind:m.kind,form:m.form||"",size:m.size,
       // sized copies (still sharp up close): full-size scans cost ~70 MB of video memory per game and half a second to upload
       front:thumb(front,1536),back:g.art&&g.art.back?thumb(g.art.back,1536):null,spine:g.art&&g.art.spine?thumb(g.art.spine,1536):null,disc:g.art&&g.art.disc?thumb(g.art.disc,1024):null,manual:manualCover(g)?thumb(manualCover(g),2048):null,modelUrl:th.media||null,modelOpts:th.mediaOpts||null});
   }}catch(err){gl=false;console.warn("3D inspect failed",err);api.log&&api.log("3D inspect failed: "+(err&&err.stack||err))}
@@ -2650,7 +2655,7 @@ let shuffling=false;
 const shuffleAll=()=>!(cfgInfo&&cfgInfo.config.ui.shuffleAll===false);
 const isGame=g=>g.kind==="rom"||g.kind==="steam";
 const isHideable=g=>!!g&&(isGame(g)||g.kind==="random"||g.kind==="emulator"); // (supalii) what Hide from shelf works on
-const canInspect=g=>{const item=g||rawItem();return !emptyShelf()&&!!item&&isGame(item)&&item.kind!=="emulator"&&item.kind!=="random"&&item.kind!=="shuffle";};
+const canInspect=item=>!emptyShelf()&&!!item&&isGame(item); // a game's own box (not the emulator or Surprise tiles)
 // (beta.4) PC games carry their source: Steam, Epic, Quiver or added by hand (main/pcgames.js)
 const PC_SRC={epic:"Epic Games",folder:"PC games folder",quiver:"Quiver",custom:"Custom",gog:"GOG",ubisoft:"Ubisoft",ea:"EA",xbox:"Xbox",hoyoplay:"HoYoPlay"},PC_HOW={epic:"Starts through the Epic Games Launcher, so its sign-in, cloud saves and overlay work as usual.",quiver:"Installed with Quiver Launcher. (T)rustyShelf starts it from its own folder; updates stay in Quiver.",custom:"Added by you in Settings → Custom games. (T)rustyShelf starts it from its own folder.",folder:"A folder in your PC games folder (Settings → PC games). (T)rustyShelf starts it from there.",
   gog:"Installed with GOG Galaxy. GOG games have no copy protection: (T)rustyShelf starts it itself; updates stay in GOG Galaxy.",ubisoft:"Starts through Ubisoft Connect, so its sign-in and cloud saves work as usual.",ea:"Starts through the EA app, so its sign-in and cloud saves work as usual.",hoyoplay:"Installed with HoYoPlay. (T)rustyShelf starts the game itself, so HoYoPlay doesn't have to run; updates stay in HoYoPlay.",xbox:"An Xbox app game (Game Pass included). It starts like any Xbox app game, signed in with your Microsoft account."};

@@ -109,7 +109,7 @@ details.adv summary{cursor:pointer;font-size:13px;color:var(--ink-dim)}
 /* ---- depth: floor reflections, shaded spines and edges ---- */
 body.fx .slot.sel .f-front{-webkit-box-reflect:below 3px linear-gradient(transparent 58%,rgba(255,255,255,.3))}
 .f-left::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,rgba(0,0,0,.35),rgba(255,255,255,.06) 45%,rgba(0,0,0,.25))}
-.f-right.spine2{background:var(--case)!important;display:flex;flex-direction:column;align-items:center;overflow:hidden}
+.f-right.spine2{background:var(--spine-bg)!important;padding-top:var(--edge);padding-bottom:var(--edge);display:flex;flex-direction:column;align-items:center;overflow:hidden}
 .f-right.spine2::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,rgba(0,0,0,.25),rgba(255,255,255,.06) 55%,rgba(0,0,0,.35));z-index:3}
 
 .slot.sel .f-left::after{background:linear-gradient(90deg,rgba(0,0,0,.15),rgba(255,255,255,.14) 45%,rgba(0,0,0,.2))}

@@ -101,7 +101,9 @@ button:focus-visible{outline:2px solid var(--ink);outline-offset:3px;border-radi
 .dim{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none;z-index:1;transition:opacity .45s;will-change:opacity}
 .slot:not(.sel) .dim{opacity:.34} /* the same darkness the old filter + film gave */
 .f-left,.f-right{top:0;height:100%;width:var(--bd);left:calc(50% - var(--bd)/2)}
-.f-left{transform:rotateY(-90deg) translateZ(calc(var(--bw)/2));background:var(--case);display:flex;flex-direction:column;align-items:center;overflow:hidden;padding-top:var(--edge);padding-bottom:var(--edge)}
+/* a spine is the printed sheet (--paper) inside the case's border (the padding), as on the 3D case it turns into */
+.slot{--spine-bg:linear-gradient(var(--paper,var(--case)),var(--paper,var(--case))) content-box,var(--case)}
+.f-left{transform:rotateY(-90deg) translateZ(calc(var(--bw)/2));background:var(--spine-bg);display:flex;flex-direction:column;align-items:center;overflow:hidden;padding-top:var(--edge);padding-bottom:var(--edge)}
 .f-right{transform:rotateY(90deg) translateZ(calc(var(--bw)/2));background:var(--case-side)}
 .spine-band{width:100%;height:9%;flex:none;display:grid;place-items:center;font-size:calc(var(--bd)*.3);font-weight:700;letter-spacing:.02em}
 .spine-title{flex:1;writing-mode:vertical-rl;font-size:calc(var(--bd)*.46);font-weight:600;color:var(--spine-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:calc(8px*var(--os,1)) 0;max-height:88%}

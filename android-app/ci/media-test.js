@@ -1,6 +1,6 @@
 // Inspect's cases and media (ported from upstream beta.11, sassiestrhihno), on the demo page as Windows (?dos=1: DOS and
 // Xbox 360 shelves with games). Run (after node copy-web.js): node ci/media-test.js www ../out/media
-//   - Xbox 360: one printed sheet wraps front, spine and back (no border on the spine side); other cases keep theirs
+//   - Xbox 360 (and, since case.glb, every console case): one printed sheet wraps front, spine and back (no border on the spine side)
 //   - a disc out of its case spins about its own centre on Windows too ("Spin"), and the printed spine is on the 3D case
 //   - DOS games come on a 3.5" floppy disk: the case opens on a floppy ("Take out floppy disk", "Floppy out"), handled
 //     like a cartridge (it doesn't spin)
@@ -31,11 +31,20 @@ server.listen(0, async () => {
       if (!t) return null; t.click(); await w(1800); const s = document.querySelector('#track .slot:not(.far)'); if (!s) return { none: true };
       const cs = getComputedStyle(s); return { edgeIn: parseFloat(cs.getPropertyValue('--edge-in')) || 0, edge: parseFloat(cs.getPropertyValue('--edge')) || 0, padL: parseFloat(getComputedStyle(s.querySelector('.f-front') || s).paddingLeft) || 0 }; }, name);
     const x360 = await shelf('Xbox 360'), gc = await shelf('GameCube');
-    check('Xbox 360: the cover runs round the spine (no border on that side); GameCube keeps its border', x360 && x360.edge > 0 && x360.edgeIn === 0 && x360.padL === 0 && gc && gc.edgeIn > 0, JSON.stringify({ tabs, x360, gc }));
+    // (every console case is case.glb now, whose sheet runs round the spine: GameCube's too, no longer only the Xbox 360's)
+    check('Xbox 360 and GameCube: the cover runs round the spine (no border on that side), as on the 3D case', [x360, gc].every(b => b && b.edge > 0 && b.edgeIn === 0 && b.padL === 0), JSON.stringify({ tabs, x360, gc }));
     // Inspect on the GameCube shelf: open, disc out
     const insp = async () => page.evaluate(() => { const el = document.getElementById('inspect'); return { on: el.classList.contains('on'), cls: [...el.classList].filter(c => ['cart', 'floppy', 'umd'].includes(c)), step: (document.getElementById('ispStep') || {}).textContent, text: el.innerText.replace(/\s+/g, ' '), spine: window.Inspect3D && Inspect3D._st ? Inspect3D._st().spine : null }; });
+    // the GameCube box on the shelf is drawn to the 3D case it turns into (case.glb's shape, as fractions of its height)
+    const box = await page.evaluate(() => { const s = document.querySelector('#track .slot.sel') || document.querySelector('#track .slot:not(.far)'), cs = getComputedStyle(s), v = k => parseFloat(cs.getPropertyValue(k)) || 0, h = v('--bh');
+      return { depth: v('--bd') / h, rc: v('--rc') / h, edge: v('--edge') / h, model: Inspect3D.caseShape('gc') }; });
+    const near = (a, b) => Math.abs(a - b) < .002;
+    check('The shelf box is as thick as the 3D case, with its corners and border', box.model && near(box.depth, box.model.depth) && near(box.rc, box.model.rc) && near(box.edge, box.model.edge), JSON.stringify(box));
     await r3(); await page.waitForTimeout(3000);
     const g0 = await insp();
+    // the disc waits inside the shut case (it was hung off a turned bone of case.glb and floated off to the right)
+    const dock = await page.evaluate(() => Inspect3D._st().disc);
+    check('The disc is docked inside the 3D case', dock && Math.hypot(dock.x, dock.y) < .6 && Math.abs(dock.z) < .3, JSON.stringify(dock));
     await page.keyboard.press('Enter'); await page.waitForTimeout(1500); await page.keyboard.press('Enter'); await page.waitForTimeout(1800);
     const g2 = await insp();
     await page.screenshot({ path: path.join(OUT, 'gc-disc-out.png') });
