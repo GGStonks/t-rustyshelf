@@ -88,6 +88,9 @@ const A=(label,btn,info,run,x={})=>({t:"action",label,btn,info,run,...x});
 const F=(label,path,kind,info,x={})=>({t:"path",label,kind,info,...bindv(path,""),d:undefined,...x});
 const X=(label,path,info,x={})=>({t:"text",label,info,...bindv(path,""),d:undefined,...x});
 const H=(text,x={})=>({t:"head",text,...x});
+// ((T)rustyShelf, discussion 15) PC games' console box colours: the choices, and the consoles a PC game's box comes from
+const BOX_COLORS=[["","Each console's own"],["#14233f","Dark blue"],["#1d4ed8","Blue"],["#1b1f27","Black"],["#3a3f4a","Grey"],["#f2f3f5","White"],["#107c10","Green"],["#d8101f","Red"],["#5b2a86","Purple"],["#b8860b","Gold"]];
+const BOX_PLATS=[["ps5","PS5"],["ps4","PS4"],["xsx","Xbox Series X|S"],["xone","Xbox One"],["sw","Switch"]];
 const labelled=(fn,row)=>Object.defineProperty(row,"label",{get:fn,enumerable:true,configurable:true}); // a row whose name follows the state (rows are kept between redraws)
 // a sub-page inside a section (the rarely-used rows, so each page stays short): the row opens {kind:"more",id}, B comes
 // back to it. MORE is rebuilt with SECTIONS (build()); search and the deep links look inside these pages too.
@@ -166,6 +169,11 @@ function build(){
     T("Hide Steam tools","steam.hideTools",true,"Leaves Proton, Steamworks Common Redistributables and other tools off the shelf.",{rescan:true,keys:"redistributables proton steam"}),
     // ((T)rustyShelf, asked for in Boxshelf's discussions)
     T("Console box art","pc.consoleBox",false,"Each PC game shows the box of its newest console release (PS5, Xbox Series X|S, PS4, Xbox One or Switch), with a Steam band where the console's logo was. Made in the background from the box art database (box art downloads build it the first time). A cover you chose always comes first; games with no console release keep their own art.",{rescan:true,keys:"console box physical case ps5 xbox switch steam cover retail"}),
+    // ((T)rustyShelf, discussion 15) the colour of a PC game's console box: each console's own (PS blue, Xbox green…), one
+    // colour for every PC game, or one per console
+    C("Console box color","pc.boxColor",BOX_COLORS,"","The case colour of PC games shown in their console box. Each console's own keeps the PlayStation blue, Xbox green and Switch red; any other choice gives every PC game that one colour. Box color per console, below, sets one console's on its own.",{when:()=>!!gp("pc.consoleBox"),rescan:true,keys:"color colour case box console pc steam blue green single one"}),
+    M("Box color per console","pc-boxcolors","One case colour for the PC games in a given console's box (PS5, PS4, Xbox Series X|S, Xbox One, Switch).","Each console's PC games in a colour of your choice. Same as above follows Console box color.",
+      BOX_PLATS.map(([k,n])=>C(n,"pc.boxColors."+k,[["","Same as above"],...BOX_COLORS.slice(1)],"","The case colour of PC games shown in their "+n+" box.",{rescan:true,keys:"color colour "+n.toLowerCase()})),{when:()=>!!gp("pc.consoleBox"),keys:"color colour per console ps5 ps4 xbox switch"}),
     F("Steam folder","steam.path","folder","The folder that contains steam.exe. Found automatically; change it only if Steam lives somewhere unusual.",{ph:"C:\\Program Files (x86)\\Steam",rescan:true,want:"dir",pickTitle:"Choose your Steam folder"}),
     A("Get Steam","Open site","Opens Steam's download page in your browser.",()=>openLink(OFFICIAL.steam)),
     // (beta.4) Epic's installs join the PC shelf (main/pcgames.js reads its install list; Play goes through its launcher)

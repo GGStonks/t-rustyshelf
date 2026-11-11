@@ -52,11 +52,17 @@ const cur=()=>shelves[sysIdx];
 const st=()=>STYLE[(cur()||{}).id]||STYLE.media; // no shelves yet (empty library): the neutral look, never a TypeError
 const isPcGame=g=>!!(g&&(g.kind==="steam"||(shelfFor(g)&&(shelfFor(g).id==="pc"||shelfFor(g).id==="custom"))));
 const shelfFor=g=>(g&&g._shelf!=null&&allShelves[g._shelf])||cur();
+// ((T)rustyShelf, discussion 15) Settings → PC games → Console box color: a PC game in its console box takes the colour
+// chosen for that console, else the one for every PC game, else the console's own; the case's sides a shade darker
+const HEX6=/^#[0-9a-f]{6}$/i,darker=(h,k)=>"#"+[1,3,5].map(i=>Math.round(parseInt(h.slice(i,i+2),16)*k).toString(16).padStart(2,"0")).join("");
+function boxTint(g,base){const pc=cfgInfo&&cfgInfo.config&&cfgInfo.config.pc;if(!pc||!g||g.artFrom!=="console"||!g.boxPlat)return base;
+  const per=pc.boxColors&&pc.boxColors[g.boxPlat==="xboxone"?"xone":g.boxPlat],c=HEX6.test(per||"")?per:HEX6.test(pc.boxColor||"")?pc.boxColor:"";
+  return c?{...base,caseColor:c,caseSide:darker(c,.72)}:base}
 const stOf=g=>{
   const sh=shelfFor(g)||{};
   const base=(g&&g.artFrom==='console'&&g.boxPlat&&STYLE[g.boxPlat])||STYLE[sh.id]||STYLE.media;
   if(isPcGame(g)){
-    return {...base,edge:0,spineBand:STYLE.pc.spineBand};
+    return boxTint(g,{...base,edge:0,spineBand:STYLE.pc.spineBand});
   }
   return base;
 };
@@ -4458,6 +4464,8 @@ window.Shelf={
   pcCoverAuto:()=>pcCoverAuto(),pcCoverUndo:()=>pcCoverUndo(),coverUndoCount:()=>coverUndo.length,
   reshelf:()=>{reshelfWanted=true}, // (beta.11) Settings → Surprise me / Emulator case: the shelves are rebuilt the moment Settings closes (settingsClosed)
   // (beta.7) test hooks for the library pass: the filters on offer, picking one, the shelf's games and the one in view
+  // a PC game in a console box: the case colours the shelf gives it (android-app/ci/boxcolor-test.js)
+  _boxStyle:plat=>{const b=stOf({kind:"steam",artFrom:"console",boxPlat:plat});return {case:b.caseColor,side:b.caseSide}},
   // manual sorting test hooks (android-app/ci/sortdrag-test.js)
   _sort:{state:()=>({sel,sort:sortBy,cfg:cfgInfo&&cfgInfo.config.ui.sort,custom:JSON.stringify((cfgInfo&&cfgInfo.config.ui.customSort)||{}),order:cur()?cur().items.map(g=>g.id).join(","):"",drag:!!drag}),
     box:k=>{const s=slots[sel+k];if(!s||!s.el)return null;const r=s.el.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}},pick:v=>pickSort(0,v),
