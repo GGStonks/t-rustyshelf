@@ -202,7 +202,22 @@ function setIni(f, section, want, label) {
 }
 // The user's Documents folder(s): the usual one, and the OneDrive one Windows moves it to when OneDrive backs it up.
 // env: for tests (raemu passes its own)
-function docsDirs(env = process.env) { const home = env.USERPROFILE || os.homedir(); return [path.join(home, 'Documents'), path.join(home, 'OneDrive', 'Documents')]; }
+// ((T)rustyShelf, beta issue 28) also where Windows really keeps it: Documents can be moved anywhere (its Location tab, a
+// D:\ drive), and OneDrive's backup puts it under a business "OneDrive - Name" folder, or a translated one (Documenti,
+// Dokumente…). Electron asks Windows for the real one; BS_DOCUMENTS in env stands in for it in tests.
+const DOC_NAMES = ['Documents', 'Documenti', 'Dokumente', 'Documentos', 'Documenten', 'Dokumenty', 'Mes documents'];
+let docsReal; // (asked once)
+function realDocs(env) {
+  if (env.BS_DOCUMENTS) return env.BS_DOCUMENTS;
+  if (env !== process.env || process.platform !== 'win32') return null;
+  if (docsReal === undefined) { docsReal = null; try { const e = require('electron'); if (e && e.app && typeof e.app.getPath === 'function') docsReal = e.app.getPath('documents'); } catch {} }
+  return docsReal;
+}
+function docsDirs(env = process.env) {
+  const home = env.USERPROFILE || os.homedir(), real = realDocs(env), L = [...(real ? [real] : []), path.join(home, 'Documents'), path.join(home, 'OneDrive', 'Documents')];
+  try { for (const e of fs.readdirSync(home, { withFileTypes: true })) if (e.isDirectory() && /^OneDrive( - .+)?$/i.test(e.name)) for (const n of DOC_NAMES) L.push(path.join(home, e.name, n)); } catch {}
+  return [...new Set(L)];
+}
 // Dolphin's user folder, the way Dolphin itself picks it: portable.txt next to the exe, else Documents\Dolphin Emulator
 // if it already exists (older installs), else %APPDATA%\Dolphin Emulator
 function dolphinUserDirs(exe, env = process.env) {
@@ -218,6 +233,9 @@ function pcsx2Inis(exe, env = process.env, every = false) {
   const dir = path.dirname(exe || ''), c = [];
   if (exe && ['portable.ini', 'portable.txt'].some(f => fs.existsSync(path.join(dir, f)))) { c.push(path.join(dir, 'inis', 'PCSX2.ini')); if (!every) return c; }
   for (const d of docsDirs(env)) c.push(path.join(d, 'PCSX2', 'inis', 'PCSX2.ini'));
+  // ((T)rustyShelf, beta issue 28) PCSX2 on Linux: ~/.config/PCSX2 (or $XDG_CONFIG_HOME), and the Flatpak's own folder
+  if (process.platform === 'linux' || env.BS_LINUX) { const home = env.HOME || os.homedir(), xdg = env.XDG_CONFIG_HOME || path.join(home, '.config');
+    c.push(path.join(xdg, 'PCSX2', 'inis', 'PCSX2.ini'), path.join(home, '.var', 'app', 'net.pcsx2.PCSX2', 'config', 'PCSX2', 'inis', 'PCSX2.ini')); }
   return c;
 }
 function pcsx2Ini(exe) {
