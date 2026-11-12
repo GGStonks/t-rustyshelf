@@ -8,6 +8,42 @@
 //   sections: [{ h, items: [[headline, more]] }] }; newest first.
 window.BS_WHATSNEW = [
   {
+    version: '1.8.0.0', android: '1.8.0.0', date: '2026-11-12', title: "Minecraft and Store apps on the shelf, a smooth museum with a big library, and no hang at launch",
+    highlights: [
+      "No more endless hang at launch while Steam's files are read",
+      "Minecraft for Windows shows up, and any Microsoft Store app can be added by hand",
+      "The museum stays smooth with thousands of games, on wider, lower shelves",
+      "RetroArch is one of the choices for every console it runs, the PlayStation included",
+      "The box art check before a download is quick and shows where it is"
+    ],
+    platforms: [
+      "Windows and Linux: the launch fix, Quiver's app names, RetroArch for every console it runs, the quick box art check.",
+      "Windows: Minecraft for Windows and Microsoft Store apps.",
+      "All platforms: the museum with a big library, card boxes without a frame."
+    ],
+    sections: [
+      { h: "Starting up", items: [
+        ["No hang at launch", "Reading Steam's settings files could go round forever on a file with an unusual space character in it (a no-break space, for example), and the app stayed \"not responding\" right after \"Steam: found it\". The reader always moves forward now, so the app starts."]
+      ] },
+      { h: "PC games", items: [
+        ["Minecraft for Windows", "Older Microsoft Store games are installed in Windows' protected WindowsApps folder rather than an Xbox games folder, so they never showed. Minecraft for Windows is found now, and starts as its Store app."],
+        ["Microsoft Store apps by hand", "Settings → Custom games → Add games → Add Microsoft Store apps lists the Store apps on your PC: tick the games you want and they go on the Custom shelf, each started as the Store app it is."],
+        ["Quiver app names", "Apps Quiver installed after the first import got their folder's name and no box art. They now take the name Quiver's own list gives them (and the name you gave them in Quiver), so their covers are found like the others'."]
+      ] },
+      { h: "Consoles", items: [
+        ["RetroArch for every console it runs", "A console's page lists the RetroArch set in Settings too, wherever it's kept, so the PlayStation can go from DuckStation to RetroArch and its cores (SwanStation, Beetle PSX, PCSX ReARMed) in one press."],
+        ["Card boxes without a frame", "SNES, Game Boy Advance and the other consoles in printed card boxes no longer have a case-coloured frame round the cover: it runs right to the edges, like the real box. Plastic cases keep theirs."]
+      ] },
+      { h: "Box art", items: [
+        ["A quick check before the download", "Download missing art now no longer reads every games folder again before it starts: it uses the library (T)rustyShelf already has, says which console it's checking, and keeps going while you look at other pages."]
+      ] },
+      { h: "Museum", items: [
+        ["Smooth with a big library", "A row whose cases are small on screen is drawn as one block with a picture of its spines, instead of every case on its own: the wide view of a wall of thousands of games takes about 40 times fewer drawings a frame. Rows close by and the one you're on keep their real cases."],
+        ["Wider, lower shelves", "A console now fills up to 240 games a shelf before it continues below (120 before), so a big library makes a wider, lower wall."]
+      ] }
+    ]
+  },
+  {
     version: '1.7.0.0', android: '1.7.0.0', date: '2026-11-12', title: "A PS Vita shelf, Steam achievements, the emulator and core you want, and a quicker export",
     highlights: [
       "A PS Vita shelf, played in Vita3K",
