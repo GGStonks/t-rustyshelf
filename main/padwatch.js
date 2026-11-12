@@ -268,11 +268,15 @@ public class XI {
   [DllImport("user32.dll")] static extern bool ShowWindowAsync(IntPtr h, int cmd);
   // Windows 11 shows it again by itself on some focus changes (a game's window closing), so while it should stay hidden
   // this is called again and again: only a taskbar that's showing is touched (0 = nothing to do).
-  public static int Taskbar(bool show) {
+  // ((T)rustyShelf, issue 25) near: (T)rustyShelf's own window. Only the taskbar on its monitor (where the game opens too) is
+  // hidden; the other monitors keep theirs. IntPtr.Zero: every monitor's. Showing always shows them all.
+  public static int Taskbar(bool show) { return Taskbar(show, IntPtr.Zero); }
+  public static int Taskbar(bool show, IntPtr near) {
+    IntPtr mon = !show && near != IntPtr.Zero ? MonitorFromWindow(near, 2) : IntPtr.Zero;
     int n = 0; IntPtr t = FindWindowEx(IntPtr.Zero, IntPtr.Zero, "Shell_TrayWnd", null);
-    if (t != IntPtr.Zero && IsWindowVisible(t) != show) { ShowWindowAsync(t, show ? 8 : 0); n++; } // SW_SHOWNA / SW_HIDE
+    if (t != IntPtr.Zero && IsWindowVisible(t) != show && (mon == IntPtr.Zero || MonitorFromWindow(t, 2) == mon)) { ShowWindowAsync(t, show ? 8 : 0); n++; } // SW_SHOWNA / SW_HIDE
     IntPtr s = IntPtr.Zero;
-    for (int i = 0; i < 16; i++) { s = FindWindowEx(IntPtr.Zero, s, "Shell_SecondaryTrayWnd", null); if (s == IntPtr.Zero) break; if (IsWindowVisible(s) != show) { ShowWindowAsync(s, show ? 8 : 0); n++; } }
+    for (int i = 0; i < 16; i++) { s = FindWindowEx(IntPtr.Zero, s, "Shell_SecondaryTrayWnd", null); if (s == IntPtr.Zero) break; if (IsWindowVisible(s) != show && (mon == IntPtr.Zero || MonitorFromWindow(s, 2) == mon)) { ShowWindowAsync(s, show ? 8 : 0); n++; } }
     return n; }
   // the game still has a window (a minimized one counts: the player switched away, the game didn't end)
   public static bool HasWindow(int[] pids) {
@@ -330,7 +334,7 @@ $mask = __MASK__; [XI]::NinOn = __NIN__; $need = __NEED__; $mouse = __MOUSE__; $
 # cover is up (kept over the game's windows); $everFs / $goneAt / $goneSent: the game's window was up fullscreen, and
 # since when it has had none (the game closed from its own menu: (T)rustyShelf covers the screen until the emulator exits)
 $tbHid = __TBHIDE__; $coverOn = $false; $everFs = $false; $goneAt = 0; $goneSent = $false
-if ($tbHid) { [XI]::Taskbar($false) | Out-Null }
+if ($tbHid) { [XI]::Taskbar($false, $self) | Out-Null }
 function TbBack() { if ($script:tbHid) { [XI]::Taskbar($true) | Out-Null; $script:tbHid = $false } }
 $menu = $false; $fresh = $false; $backHeld = @(0,0,0,0,0,0); $homeCool = Get-Date
 # HID pads (slots 4-5) are read during a game; on the shelf only while the Home menu is open (the shelf reads them itself
@@ -396,7 +400,7 @@ while ($true) {
     $pp = Get-Process -Id $parentPid -ErrorAction SilentlyContinue; if (-not $pp) { ReleaseClick; TbBack; exit }
     try { if ($parentStart -and $pp.StartTime -ne $parentStart) { ReleaseClick; TbBack; exit } } catch {} }
   # the taskbar should stay hidden: Windows shows it again by itself on some focus changes, so hide it again (each pass)
-  if ($tbHid) { [XI]::Taskbar($false) | Out-Null }
+  if ($tbHid) { [XI]::Taskbar($false, $self) | Out-Null }
   # the black cover up (starting / closing): the game's windows or a taskbar that got over it go back under it at once
   if ($coverOn -and $appPid -gt 0 -and -not $menu) { [XI]::CoverOnTop($self, [int[]]$fam) | Out-Null }
   elseif (-not $coverOn -and $appPid -gt 0) { [XI]::Unpin($self) | Out-Null }
@@ -453,7 +457,7 @@ while ($true) {
       elseif ($w[0] -eq 'FOCUS') { $fh = [IntPtr][long]$w[1]; for ($k = 0; $k -lt 4; $k++) { [XI]::Tap([byte]0x87); [XI]::SetForegroundWindow($fh) | Out-Null; Start-Sleep -Milliseconds 60; if ([XI]::GetForegroundWindow() -eq $fh) { break } }
         Write-Output ("FOCUSED " + $(if ([XI]::GetForegroundWindow() -eq $fh) { 1 } else { 0 })) }
       # TASKBAR 0/1: hide / show the taskbar now (answered, so a launch can wait for it); COVER 1/0: (T)rustyShelf's black cover is up / lifted
-      elseif ($w[0] -eq 'TASKBAR') { if ($w[1] -eq '1') { [XI]::Taskbar($true) | Out-Null; $tbHid = $false } else { [XI]::Taskbar($false) | Out-Null; $tbHid = $true }; Write-Output ("TASKBAR-DONE " + $w[1]) }
+      elseif ($w[0] -eq 'TASKBAR') { if ($w[1] -eq '1') { [XI]::Taskbar($true) | Out-Null; $tbHid = $false } else { [XI]::Taskbar($false, $self) | Out-Null; $tbHid = $true }; Write-Output ("TASKBAR-DONE " + $w[1]) }
       elseif ($w[0] -eq 'COVER') { $coverOn = ($w[1] -eq '1'); $goneAt = 0; if ($coverOn) { $goneSent = $false } }
       elseif ($w[0] -eq 'KEYS') { $tag = $w[1]
         if (-not (FrontGame)) { Write-Output "KEYS-FAIL $tag" }
@@ -727,9 +731,10 @@ function taskbarGuard(parentPid, marker) {
 // the taskbar's hide / show in PowerShell: the cached helper DLL when there is one, else a few lines compiled on the spot
 function taskbarType() {
   const d = dllPath(), fs = require('fs'), on = v => v ? '$true' : '$false';
-  if (d && fs.existsSync(d)) return { load: `Add-Type -Path '${psq(d)}'`, call: v => `[void][XI]::Taskbar(${on(v)})` };
-  return { load: `Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class BxTb { [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr FindWindowEx(IntPtr p, IntPtr a, string c, string n); [DllImport("user32.dll")] static extern bool ShowWindowAsync(IntPtr h, int c); [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h); static void One(IntPtr h, bool show) { if (h != IntPtr.Zero && IsWindowVisible(h) != show) ShowWindowAsync(h, show ? 8 : 0); } public static void Set(bool show) { One(FindWindowEx(IntPtr.Zero, IntPtr.Zero, "Shell_TrayWnd", null), show); IntPtr s = IntPtr.Zero; for (int i = 0; i < 16; i++) { s = FindWindowEx(IntPtr.Zero, s, "Shell_SecondaryTrayWnd", null); if (s == IntPtr.Zero) break; One(s, show); } } }'`,
-    call: v => `[BxTb]::Set(${on(v)})` };
+  const near = () => `[IntPtr][long]${num(selfHwnd)}`; // ((T)rustyShelf, issue 25) hidden on (T)rustyShelf's monitor only
+  if (d && fs.existsSync(d)) return { load: `Add-Type -Path '${psq(d)}'`, call: v => `[void][XI]::Taskbar(${on(v)}, ${near()})` };
+  return { load: `Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class BxTb { [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr FindWindowEx(IntPtr p, IntPtr a, string c, string n); [DllImport("user32.dll")] static extern bool ShowWindowAsync(IntPtr h, int c); [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h); [DllImport("user32.dll")] static extern IntPtr MonitorFromWindow(IntPtr h, uint f); static void One(IntPtr h, bool show, IntPtr mon) { if (h != IntPtr.Zero && IsWindowVisible(h) != show && (mon == IntPtr.Zero || MonitorFromWindow(h, 2) == mon)) ShowWindowAsync(h, show ? 8 : 0); } public static void Set(bool show, IntPtr near) { IntPtr mon = !show && near != IntPtr.Zero ? MonitorFromWindow(near, 2) : IntPtr.Zero; One(FindWindowEx(IntPtr.Zero, IntPtr.Zero, "Shell_TrayWnd", null), show, mon); IntPtr s = IntPtr.Zero; for (int i = 0; i < 16; i++) { s = FindWindowEx(IntPtr.Zero, s, "Shell_SecondaryTrayWnd", null); if (s == IntPtr.Zero) break; One(s, show, mon); } } }''`,
+    call: v => `[BxTb]::Set(${on(v)}, ${near()})` };
 }
 function taskbarPs(show) { const t = taskbarType(); return `$ErrorActionPreference = 'SilentlyContinue'; ${t.load}; ${t.call(show)}`; }
 
@@ -738,4 +743,4 @@ const isRunning = () => !!proc;
 let selfHwnd = '0'; function setSelf(hwnd) { selfHwnd = String(hwnd || '0'); }
 // the last Home came from a Nintendo pad (slot 4): the Home menu then follows its A/B layout under Confirm "Match my controller"
 let homeNin = false; const homeFromNintendo = () => homeNin;
-module.exports = { init, start, stop, isRunning, setMenu, setFeed, feeding, sendKeys, COMBOS, front, focusWindow, focusOnce, focusPending, homeFromNintendo, setSelf, cover, taskbar, taskbarSync, taskbarGuard };
+module.exports = { _taskbarPs: taskbarPs, _script: () => SCRIPT, init, start, stop, isRunning, setMenu, setFeed, feeding, sendKeys, COMBOS, front, focusWindow, focusOnce, focusPending, homeFromNintendo, setSelf, cover, taskbar, taskbarSync, taskbarGuard };

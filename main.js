@@ -380,6 +380,7 @@ function createWindow() {
   // menu, minimized, windowed (see taskbarBack)
   for (const ev of ['blur', 'leave-full-screen', 'minimize', 'hide']) win.on(ev, () => taskbarLeave(ev));
   seamless.trackWindow(win); // (beta.12) Window mode remembers the window's place and size
+  selfHandle(); // ((T)rustyShelf, issue 25) known before the first game's taskbar hide
 }
 // (a blur that only went to one of (T)rustyShelf's own windows, a trailer, isn't leaving: that window is watched instead)
 function taskbarLeave(ev) {
@@ -577,10 +578,13 @@ function coverWhileStarting(seconds) {
   return seconds;
 }
 
+// the window's handle for the pad helper: it keeps the window below a running game, and ((T)rustyShelf, issue 25) the
+// taskbar is hidden on that window's monitor only
+function selfHandle() { try { if (alive()) { const b = win.getNativeWindowHandle(); padwatch.setSelf(b.length >= 8 ? b.readBigUInt64LE(0).toString() : String(b.readUInt32LE(0))); } } catch {} }
 function watchPad(opts) {
   opts = opts || {}; lastPadOpts = opts;
   // (the helper keeps (T)rustyShelf's see-through window below the running game: above it, the taskbar showed over the game)
-  try { if (alive()) { const b = win.getNativeWindowHandle(); padwatch.setSelf(b.length >= 8 ? b.readBigUInt64LE(0).toString() : String(b.readUInt32LE(0))); } } catch {}
+  selfHandle();
   const home = cfg.ui.homeMenu !== false && !!opts.home;
   if (cfg.ui.quitCombo === false && !(opts.mouse || opts.fullscreenKey || home)) return;
   // with the quit combo turned off, use a mask no pad can press so only the other duties remain
