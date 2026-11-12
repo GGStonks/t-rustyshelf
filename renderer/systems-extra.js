@@ -5,7 +5,7 @@
 // Case looks: ratio = width / height of the real box, depth = thickness / width.
 (function () {
   const S = (id, o) => Object.assign({ id, rc: 0.03, re: 0.2, edge: 0.025, depth: 0.1, spineInk: '#ffffff' }, o);
-  const cardboard = { rc: 0.01, re: 0.08, edge: 0.012 };   // printed card boxes: sharp corners
+  const cardboard = { rc: 0.01, re: 0.08, edge: 0 };   // printed card boxes: sharp corners, the cover printed right to the edges ((T)rustyShelf, beta issue 40: a case-coloured frame was drawn round it)
   const jewel = { rc: 0.012, re: 0.06, edge: 0.02, depth: 0.073 }; // CD jewel cases
   const clam = { rc: 0.04, re: 0.2, edge: 0.03, depth: 0.12 };     // Sega plastic clamshells
   window.BS_SYSTEMS_EXTRA = {
