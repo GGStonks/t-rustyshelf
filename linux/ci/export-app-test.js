@@ -54,7 +54,11 @@ const shot = async (p, name) => { try { const r = await p.send('Page.captureScre
     check('the progress counts bytes and files up to the total, with the time left', run.last.bytes === run.last.of && run.last.files === run.last.ofFiles && run.last.eta, JSON.stringify(run.last));
     fs.writeFileSync(path.join(HOME, 'TrustyShelf/Library/gc/Game 7/front.png'), 'changed');
     const again = await p.ev(`trustyshelf.exportData(${JSON.stringify(d1)}).then(r => ({ updated: r.updated, copied: r.copied, unchanged: r.unchanged, dir: r.dir }), e => ({ error: e.message }))`);
-    check('exporting into the same folder again updates that export, copying only what changed', again.updated && again.copied >= 1 && again.copied <= 3 && again.unchanged >= 398 && fs.readdirSync(d1).length === 1, JSON.stringify(again));
+    // (the app writes a few files of its own between the two exports, its log and caches, more when it really draws on the
+    // virtual screen: the changed cover has to be in the export, and only a handful of files copied, not the 400 again)
+    const walk = d => { try { return fs.readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]); } catch { return []; } };
+    const front7 = again.dir ? walk(again.dir).find(f => /gc[\\/]Game 7[\\/]front\.png$/.test(f)) : null;
+    check('exporting into the same folder again updates that export, copying only what changed', again.updated && again.copied >= 1 && again.copied <= 10 && again.unchanged >= 398 && fs.readdirSync(d1).length === 1 && !!front7 && fs.readFileSync(front7, 'utf8') === 'changed', (front7 ? '' : 'the changed cover is not in the export ') + JSON.stringify(again));
     const cancel = await p.ev(`(async () => { const job = trustyshelf.exportData(${JSON.stringify(d2)}); await trustyshelf.cancelData(); return job.then(() => 'finished', e => e.message); })()`);
     check('Cancel stops it, with a message', /cancelled/.test(cancel), cancel);
     const log = fs.readFileSync(path.join(HOME, 'TrustyShelf', 'data', 'trustyshelf.log'), 'utf8');
