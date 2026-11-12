@@ -217,6 +217,8 @@ window.trustyshelf={
   log:()=>{},uiBusy:()=>{},homeMeta:()=>{},shelfInfo:()=>{},openShelfMenu:()=>{},shelfMenuKey:()=>{},
   onLaunchStatus:()=>{},onRunReady:()=>{},onRunQuitting:()=>{},onRunAside:()=>{},onRaUnlocks:()=>{},onTvFound:()=>{},onShelfMenu:()=>{},onShelfMenuRequest:()=>{},onUiScale:()=>{},onArchiveProgress:()=>{},
   cachedLibrary:async()=>null,scanIfChanged:async()=>window.trustyshelf.scan(),
+  pcAchievements:async appid=>{await wait(200);if(appid!=="400000")return null;const L=[["First Light","Start a new run",1],["Night Shift","Finish chapter one",1],["Clean Hands","Finish without a crash",0],["Collector","Find every badge",0]]; /* ((T)rustyShelf discussion 22) a Steam game's achievements */
+    return {id:appid,title:"Cobalt Drift",source:"Steam",total:L.length,earned:2,points:0,pointsEarned:0,mastered:"",achievements:L.map(([t,d,e],i)=>({id:"1."+i,title:t,desc:d,points:0,badge:null,earned:!!e,hardcore:false,date:e?"2026-10-0"+(i+1)+" 20:00:00":null,rarity:null}))}},
   raEnabled:async()=>({enabled:false,systems:["gc","wii","psp","ps2"]}),raProfile:async()=>null,raShelf:async()=>({}),raProgress:async()=>null,
   
   openExternal:async()=>true,openSongsFolder:async()=>true,openLibraryFolder:async()=>true,openAppFolder:async()=>true,restoreEmuSettings:async()=>[],

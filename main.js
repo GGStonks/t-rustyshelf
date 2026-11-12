@@ -2215,6 +2215,12 @@ handle('manuals:find', async ({ systemIds }) => {
     finally { manualsBusy = false; }
   } finally { if (findToken === token) findToken = null; manualResumeSoon(); }
 });
+// ---------- ((T)rustyShelf, its discussions #22) a Steam game's achievements, from what Steam keeps on this PC (main/pcach.js) ----------
+handle('pc:achievements', ({ appid } = {}) => {
+  if (!/^\d{1,10}$/.test(String(appid || '')) || !cfg.steam || !cfg.steam.path) return null;
+  const root = steamMain || steamRoot(cfg.steam.path) || cfg.steam.path;
+  try { return require('./main/pcach').steamProgress(root, String(appid)); } catch (e) { log('Steam achievements:', appid, e.message); return null; }
+});
 // ---------- RetroAchievements ----------
 let lastLaunch = null;
 handle('ra:progress', ({ systemId, title, force }) => ra.progress(systemId, title, !!force));

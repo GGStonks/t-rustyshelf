@@ -2137,8 +2137,17 @@ function raFor(g){const s=shelfFor(g);if(!raHas(s)||!g||g.kind!=="rom")return nu
 // The row is there for every game on a shelf RetroAchievements covers: loading, the error (with Try again), no set, or progress
 function raRow(state,title,sub,btn){const box=$("dAch");box.hidden=false;box.dataset.state=state;$("dAchTitle").textContent=title;$("dAchSub").textContent=sub;
   const b=$("dAchBtn");b.hidden=!btn;if(btn)b.textContent=btn;if(state!=="ok"){$("dRing").style.setProperty("--p",0);$("dRingTxt").textContent=state==="load"?"…":state==="err"?"!":"–"}if(mode==="details")renderHints()}
+// ((T)rustyShelf, its discussions #22) a Steam game's achievements, read from what Steam keeps on this PC (main/pcach.js):
+// the same row and list as RetroAchievements, without points. Nothing shows for a game Steam has no achievements cached for.
+const steamAppOf=g=>g&&g.kind==="steam"&&(!g.source||g.source==="steam")?String(g.appid||(/^steam-(\d+)$/.exec(String(g.id||""))||[])[1]||""):"";
+const PCA=new Map(),isPcAch=g=>!!(api.pcAchievements&&/^\d+$/.test(steamAppOf(g)));
+async function pcAch(g,force){if(!force&&PCA.has(g.id))return PCA.get(g.id);let p=null;try{p=await api.pcAchievements(steamAppOf(g))}catch(e){console.warn("PC achievements",e)}PCA.set(g.id,p||false);return p||false}
+async function pcAchDetails(g,force){const box=$("dAch");const p=await pcAch(g,force);if(curGame()!==g||!p||!p.total)return;
+  box.dataset.state="ok";$("dAchBtn").hidden=false;$("dAchBtn").textContent="See all";const pct=Math.round(100*p.earned/p.total);
+  $("dRing").style.setProperty("--p",pct);$("dRingTxt").textContent=pct+"%";$("dAchTitle").textContent=p.earned===p.total?"Completed":"Achievements";
+  $("dAchSub").textContent=`${p.earned} of ${p.total} unlocked · ${p.source||"Steam"}`;box.hidden=false;if(mode==="details")renderHints()}
 async function raDetails(g,force){
-  const box=$("dAch");box.hidden=true;const s=shelfFor(g);if(!raHas(s)||!g||g.kind!=="rom")return;
+  const box=$("dAch");box.hidden=true;if(isPcAch(g))return pcAchDetails(g,force);const s=shelfFor(g);if(!raHas(s)||!g||g.kind!=="rom")return;
   const key=s.id+"|"+g.title;let p=force?undefined:RA.game.get(key);
   if(p===undefined){raRow("load","Achievements","Loading from RetroAchievements…");
     try{p=await api.raProgress(s.id,g.title,!!force);RA.game.set(key,p||false)}catch(e){console.warn("RA",e);if(curGame()===g)raRow("err","Achievements didn't load",e&&e.message||"RetroAchievements didn't answer.","Try again");return}}
@@ -2158,15 +2167,15 @@ function achAct(){if(!achReady())return false;if($("dAch").dataset.state==="err"
 const ach={open:false,items:[],all:[],sel:0,filter:"all",p:null};
 const ACH_TABS=[["all","All"],["got","Unlocked"],["locked","Locked"]];
 async function openAchievements(){
-  const g=curGame(),s=shelfFor(g);if(!raHas(s)||!g||g.kind!=="rom"||ach.open||ach.busy)return;
-  let p=RA.game.get(s.id+"|"+g.title);if(p===undefined){toast("Loading achievements…");ach.busy=true;try{p=await api.raProgress(s.id,g.title,true);RA.game.set(s.id+"|"+g.title,p||false)}catch(e){toast(e&&e.message||"RetroAchievements didn't answer");if(mode==="details"&&curGame()===g)raRow("err","Achievements didn't load",e&&e.message||"RetroAchievements didn't answer.","Try again");return}finally{ach.busy=false}
+  const g=curGame(),s=shelfFor(g),pc=isPcAch(g);if(!pc&&(!raHas(s)||!g||g.kind!=="rom")||ach.open||ach.busy)return;
+  let p=pc?(PCA.has(g.id)?PCA.get(g.id):await pcAch(g)):RA.game.get(s.id+"|"+g.title);if(pc&&!p)return;if(p===undefined){toast("Loading achievements…");ach.busy=true;try{p=await api.raProgress(s.id,g.title,true);RA.game.set(s.id+"|"+g.title,p||false)}catch(e){toast(e&&e.message||"RetroAchievements didn't answer");if(mode==="details"&&curGame()===g)raRow("err","Achievements didn't load",e&&e.message||"RetroAchievements didn't answer.","Try again");return}finally{ach.busy=false}
     if(mode==="details"&&curGame()===g)raDetails(g)} // the Details row catches up with what just came in
   if(!p){toast(`RetroAchievements has no set for ${g.title} yet`);return}
   if(curGame()!==g||(mode!=="browse"&&mode!=="details")||qm.open||sysBusy())return;
   ach.open=true;ach.p=p;ach.all=p.achievements;ach.filter="all";
   const ic=$("achIcon");if(p.icon){ic.src=p.icon;ic.hidden=false}else ic.hidden=true;
   $("achTitle").textContent=p.title;$("achBar").style.width=(p.total?100*p.earned/p.total:0)+"%";
-  $("achSub").textContent=`${p.earned} of ${p.total} unlocked · ${p.total-p.earned} still locked · ${p.pointsEarned} / ${p.points} points${p.mastered?" · "+p.mastered:""}`;
+  $("achSub").textContent=`${p.earned} of ${p.total} unlocked · ${p.total-p.earned} still locked${p.points?` · ${p.pointsEarned} / ${p.points} points`:""}${p.mastered?" · "+p.mastered:""}${p.source?" · "+p.source:""}`;
   achList(true);
   const el=$("achv");el.classList.add("on");el.setAttribute("aria-hidden","false");mode="achv";achHints();sfx.flip();achSelect();
 }
@@ -2183,10 +2192,10 @@ function achList(first){
   const list=$("achList");list.innerHTML="";list.scrollTop=0;
   if(!ach.items.length){const e=document.createElement("div");e.className="ach-empty";e.textContent=f==="got"?"Nothing unlocked yet. Every achievement is under Locked.":"All unlocked. Nothing left to earn here.";list.append(e);return}
   ach.items.forEach((a,i)=>{const row=document.createElement("div");row.className="ach"+(a.earned?"":" locked")+(i===ach.sel?" sel":"");row.dataset.i=i;
-    const im=new Image();im.src=a.badge;im.alt="";im.loading="lazy";
+    const im=new Image();if(a.badge)im.src=a.badge;im.alt="";im.loading="lazy";
     const main=document.createElement("div");main.className="ach-main";const b=document.createElement("b");b.textContent=a.title;const d=document.createElement("span");d.textContent=a.desc;
     const meta=document.createElement("div");meta.className="ach-meta";meta.textContent=(a.earned?"Unlocked "+(a.date?a.date.slice(0,10):"")+(a.hardcore?" · hardcore":""):"Locked")+(a.rarity!=null?` · ${a.rarity}% of players`:"");
-    main.append(b,d,meta);const pts=document.createElement("div");pts.className="ach-pts";pts.textContent=a.points+" pts";row.append(im,main,pts);row.addEventListener("click",()=>{ach.sel=i;achSelect()});list.append(row)});
+    main.append(b,d,meta);const pts=document.createElement("div");pts.className="ach-pts";pts.textContent=a.points?a.points+" pts":"";row.append(im,main,pts);row.addEventListener("click",()=>{ach.sel=i;achSelect()});list.append(row)});
 }
 function achTab(d){const i=ACH_TABS.findIndex(t=>t[0]===ach.filter);const n=Math.max(0,Math.min(ACH_TABS.length-1,i+d));if(n===i)return;ach.filter=ACH_TABS[n][0];achList();achSelect();play_("tick")}
 function achSelect(){const rows=$("achList").children;[...rows].forEach((r,i)=>r.classList.toggle("sel",i===ach.sel));const r=rows[ach.sel];if(r)r.scrollIntoView({block:"nearest"})}
