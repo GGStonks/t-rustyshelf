@@ -323,8 +323,8 @@ server.listen(0, async () => {
         Shelf.quickMenu(); for (let i = 0; i < 20 && !Shelf._qs().open; i++) await wait(150); await wait(300);
         const seq = [...document.querySelectorAll('.qm-list > *')].filter(e => !e.classList.contains('qm-hl') && !e.classList.contains('qm-acts')).map(e => e.classList.contains('qm-sep') ? '|' : ((e.querySelector('.qm-lbl') || {}).textContent || '').trim()).filter(Boolean); // (a row's sub-panel has no label of its own)
         const first = Shelf._qs().id; Shelf.homeButton(); await wait(400); return { seq: seq.join(','), first }; });
-      check('Quick menu (Thor): Museum, Art Studio, Trophies on top; then Customize, Assets, Sounds, Volume, Sort; the highlight starts on Museum',
-        /^Museum,Art Studio,Trophies,\|,Customize,Assets,Sounds,Volume,Sort & filter,\|,Settings,Power$/.test(qmo.seq) && qmo.first === 'mus', JSON.stringify(qmo));
+      check('Quick menu (Thor): Find a game, Museum, Art Studio, Trophies on top; then Customize, Assets, Sounds, Volume, Sort; the highlight starts on Museum',
+        /^Find a game,Museum,Art Studio,Trophies,\|,Customize,Assets,Sounds,Volume,Sort & filter,\|,Settings,Power$/.test(qmo.seq) && qmo.first === 'mus', JSON.stringify(qmo));
 
       await page.keyboard.press('s'); await page.waitForTimeout(2000); await page.keyboard.type('home'); await page.waitForTimeout(1200);
       const text = await page.evaluate(() => document.body.innerText);

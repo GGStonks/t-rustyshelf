@@ -878,7 +878,7 @@ function renderTabs(){
 /* ---------- actions ---------- */
 // moving along the shelf: idle-time jobs (perf.js) hold off until everything has settled (the slide is .55 s, the
 // backdrop's cross-fade ends ~.9 s after the last move) and you've paused a moment
-let shelfMovedAt=-1e9;window.BS_BUSY=()=>performance.now()-shelfMovedAt<1500;
+let shelfMovedAt=-1e9;window.BS_BUSY=()=>performance.now()-shelfMovedAt<1500;window.BS_SLIDING=()=>performance.now()-shelfMovedAt<650; // (upstream beta.12) just the slide itself and a frame or two (Find a game waits it out)
 function go(i){const n=slots.length;i=Math.max(0,Math.min(n-1,i));if(i===sel)return false;shelfMovedAt=performance.now();const dir=i>sel?1:-1;const prev=slots[sel];if(prev)prev.box.classList.remove("free");sel=i;flipped=false;spin=0;spinT=0;cancelAnimationFrame(spinRaf);spinRaf=0;layout();sfx.tick(dir);if(ANDROID){clearTimeout(go.saveT);go.saveT=setTimeout(save,700)}else save();return true} /* Android: the place is written once you stop, not on every step of a held stick */
 if(ANDROID)addEventListener("visibilitychange",()=>{if(document.hidden&&go.saveT){clearTimeout(go.saveT);go.saveT=0;save()}}); // a game launched straight after a step: written as (T)rustyShelf goes to the back
 const move=d=>{if(mode!=="browse"&&mode!=="details")return;if(!go(sel+d)&&d)bump(d)};
@@ -2420,6 +2420,8 @@ function qsSwatch(id){try{const g=curGame()||{hue:220};return THEMES[id].tint(sh
 // the rows; `lines` opens in place into lines of chips
 function qsRows(){const ui=qsUi(),r=qsAch(),g=qsGame(),out=[];
   if(g)out.push({id:"acts"});
+  /* (beta.12) Find a game (find.js): search every shelf by title; the first row on every platform */
+  if(window.BS_FIND)out.push({id:"find",icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>',lbl:"Find a game",val:()=>"Search every shelf",go:1});
   // Android: the Art Studio one press away (the quick menu needs a shortcut); Windows keeps its Box art button only
   if(ANDROID&&g&&g.kind==="rom"&&g.file&&api.artStudio)out.push({id:"studio",icon:QS_I.image,lbl:"Art Studio",val:()=>(shelfFor(g).name||"This console")+" · every game",go:1});
   out.push({id:"vol",icon:QS_I.vol,lbl:"Volume"});
@@ -2452,7 +2454,7 @@ function qsAndroidOrder(out,ui){const by=id=>out.find(x=>x.id===id),cust=by("cus
   if(cust){const all=cust.lines;cust.lines=()=>all().filter(l=>!/^(snd|song|music|mvol|boot)$/.test(l.k));cust.val=()=>qsName(QM_THEMES,qsThemeNow());
     out.push({id:"snds",icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 17.5V6l10-2v11.5"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="15.5" r="2.5"/></svg>',lbl:"Sounds",val:()=>qsSndNow(ui)==="off"?"Sounds off":qsName(QM_SOUNDS,qsSndNow(ui))+" · Music: "+qsName(QM_MUSIC,mmPick()),lines:()=>all().filter(l=>/^(snd|song|music|mvol|boot)$/.test(l.k))})}
   if(cz)cz.lbl="Assets";
-  const order=["mus","studio","ach",null,"cust","cz3d","snds","vol","sort"],rows=[...acts];
+  const order=["find","mus","studio","ach",null,"cust","cz3d","snds","vol","sort"],rows=[...acts];
   for(const id of order){if(id===null){rows.push({sep:1});continue}const x=by(id);if(x)rows.push(x)}
   out.length=0;out.push(...rows)}
 function qsRenderGame(){const box=qsEl.querySelector(".qm-game"),g=qsGame();box.hidden=!g;if(!g){box.innerHTML="";return}
@@ -2576,6 +2578,7 @@ function qsPick(){const x=qm.rows[qm.r];if(!x)return;const r=x.r;
   if(r.id==="vol"){const v=curVol();setVol(v>0?0:(volPrev||.7));if(curVol()>0)play_("tick",{dir:1});qsSoft();return}
   if(r.id==="set"){qmClose(true);play_("open");Setup.open();return}
   if(r.id==="mus"){qmClose(true);openMuseum();return}
+  if(r.id==="find"){qmClose(true);if(window.BS_FIND)BS_FIND.open();return} /* (beta.12) Find a game */
   if(r.id==="ach"&&RA.on){const g=qsGame(),s=g&&shelfFor(g);if(g&&g.kind==="rom"&&raHas(s)&&RA.game.get(s.id+"|"+g.title)!==false){qmClose(true);play_("open");openAchievements();return}} /* (upstream beta.11) signed in, on a console RetroAchievements covers: straight to this game's set, earned or not (the row opens only when there's nothing to show) */
   if(r.id==="studio"){const g=qsGame();qmClose(true);if(g&&ANDROID){play_("panel");Setup.open({page:"artstudio",systemId:shelfFor(g).id});return} /* (Android: the console's whole studio) */if(g)artStudioFor(g);return}
   if(r.id==="cz3d"){const e=qsCzShelf();qmClose(true);play_("open");if(e)custSel=e[0];czPick=null;openCustomize();return}
@@ -2768,6 +2771,7 @@ function companionStep(){const c=compPlay;if(!c)return;if(performance.now()>c.un
   if(mode==="launch"&&(runningKind==="steam"||runningKind==="error")&&!returnPrep){endLaunch();return again(300)} // "Running through Steam" / an error note: nothing to wait for
   if(mode==="launch"||mode==="boot"||mode==="homemenu"||sysBusy()||returnPrep||app.classList.contains("returning"))return again(300);
   if(mode==="setup"){if(window.Settings&&Settings.isOpen&&Settings.isOpen())Settings.close();else if(window.Setup)Setup.close();return again(450)}
+  if(window.BS_FIND&&BS_FIND.isOpen()){BS_FIND.close();return again(200)} /* (upstream beta.12) Find a game closes, then the game starts */
   if(mode==="museum"){closeMuseum();return again(500)}if(mode==="inspect"){closeInspect();return again(400)}
   if(mode==="sort"){closeSort();return again(200)}if(mode==="achv"){closeAchievements();return again(200)}if(mode==="customize"){closeCustomize();return again(300)}
   if(qm.open)qmClose(true);
@@ -3470,6 +3474,7 @@ const HINTS=[
   {act:()=>play(),pad:["x"],kbd:["Enter"],label:"Play"},
   {act:()=>openInspect(),pad:["R3"],kbd:["V"],label:"Inspect",when:canInspect},
   {act:()=>shuffle(),pad:["L3"],kbd:["R"],label:"Shuffle",when:notDet},
+  {act:()=>window.BS_FIND&&BS_FIND.open(),pad:["L3"],kbd:["/"],label:"Find",lo:ANDROID,when:notDet}, /* (upstream beta.12) Find a game (find.js); lo: Android's narrower bar leaves it out (the Search button is beside Menu there) */
   {act:()=>openMuseum(),pad:["⧉"],kbd:["M"],label:"Museum hold",when:notDet},
   {act:()=>openSort(),pad:["☰"],kbd:["G"],label:"Sort hold",when:notDet},
   {act:()=>Setup.open(),pad:["☰"],kbd:["S"],label:"Settings",when:notDet},
@@ -3486,6 +3491,7 @@ const PAD_HINTS=[
   {act:()=>play(),pad:["x"],label:"Play"},
   {act:()=>openInspect(),pad:["R3"],label:"Inspect",when:canInspect},
   {act:()=>shuffle(),pad:["L3"],label:"Shuffle",when:notDet},
+  {act:()=>window.BS_FIND&&BS_FIND.open(),pad:["L3"],label:"",hold:"Find",lo:ANDROID,when:notDet}, /* (upstream beta.12) the left stick's click held: Find a game (lo: on the Thor's narrower bar it gives way, as Shuffle does; the Search button is beside Menu there) */
   {act:()=>Setup.open(),pad:["⧉"],label:"Settings",when:notDet},
   {act:()=>openMuseum(),pad:["⧉"],label:"",hold:"Museum",when:notDet},
   {act:()=>qmOpen(),pad:["☰"],label:"Menu",when:notDet},
@@ -3937,6 +3943,8 @@ function pollBody(t){
   if(gp&&window.BS_TOUR&&BS_TOUR.on()){const vg=viewOf(gp);if(document.hasFocus()){if(vg.buttons.some(b=>b&&b.pressed))setInput("pad");BS_TOUR.pad(vg,t)}for(let i=0;i<vg.buttons.length;i++)prevBtn[i]=!!(vg.buttons[i]&&vg.buttons[i].pressed);prevBtn.v=prevBtn.h=true;held.dir=0;return}
   gp=viewOf(gp); // A/B swapped here when the confirm button is B (Settings → Controller), for every screen below
   if(gp&&document.hasFocus()&&dimPad(gp,t))return; // the press that lifted the dimmed screen does nothing else
+  /* (upstream beta.12) Find a game (find.js) has the controller while it's up; edges kept in step so nothing it pressed acts on the shelf after */
+  if(gp&&window.BS_FIND&&BS_FIND.isOpen()){const vg=viewOf(gp);if(document.hasFocus()){if(vg.buttons.some(b=>b&&b.pressed))setInput("pad");BS_FIND.pad(vg,t)}for(let i=0;i<vg.buttons.length;i++)prevBtn[i]=!!(vg.buttons[i]&&vg.buttons[i].pressed);prevBtn.v=prevBtn.h=true;prevBtn.b8At=prevBtn.b9At=prevBtn.b10At=Infinity;held.dir=0;return}
   if(smoothTest.on){if(gp&&gp.buttons.some(b=>b&&b.pressed)){smoothTest.stop=true;dimSwallowPad=true}return} // the smoothness test: hands off (any button stops it)
   if(gp&&document.hasFocus()){
     hintsWake();
@@ -4034,7 +4042,10 @@ function pollBody(t){
         if(!B(3)&&prevBtn[3]&&yAt){yAt=0;setInput("pad");flip()}
         prevBtn[3]=B(3);
       }
-      tap(gp,9,t,()=>{if(mode==="browse"||mode==="details")qmOpen()});if(B(9)&&!prevBtn.b9At)prevBtn.b9At=t;if(B(9)&&prevBtn.b9At&&t-prevBtn.b9At>650){prevBtn.b9At=0;tapAt[9]=0;setInput("pad");openSort()}if(!B(9))prevBtn.b9At=0;tap(gp,11,t,()=>openInspect());tap(gp,10,t,()=>shuffle());tap(gp,8,t,()=>{if(mode==="customize")closeCustomize();else if(mode==="browse"||mode==="details")Setup.open()});if(B(8)&&!prevBtn.b8At)prevBtn.b8At=t;if(B(8)&&prevBtn.b8At&&t-prevBtn.b8At>650){prevBtn.b8At=0;tapAt[8]=0;setInput("pad");openMuseum()}if(!B(8))prevBtn.b8At=0;
+      tap(gp,9,t,()=>{if(mode==="browse"||mode==="details")qmOpen()});if(B(9)&&!prevBtn.b9At)prevBtn.b9At=t;if(B(9)&&prevBtn.b9At&&t-prevBtn.b9At>650){prevBtn.b9At=0;tapAt[9]=0;setInput("pad");openSort()}if(!B(9))prevBtn.b9At=0;tap(gp,11,t,()=>openInspect());
+      /* (upstream beta.12) the left stick's click held for a moment, on its own: Find a game (find.js). A tap is still Shuffle; held together with the right stick's click it's the quit combo, never this */
+      if(B(10)&&B(11))prevBtn.b10At=Infinity;else if(B(10)&&!prevBtn.b10At)prevBtn.b10At=t;if(B(10)&&prevBtn.b10At&&t-prevBtn.b10At>600&&mode==="browse"&&window.BS_FIND){prevBtn.b10At=Infinity;tapAt[10]=0;setInput("pad");BS_FIND.open("pad")}if(!B(10))prevBtn.b10At=0;
+      tap(gp,10,t,()=>shuffle());tap(gp,8,t,()=>{if(mode==="customize")closeCustomize();else if(mode==="browse"||mode==="details")Setup.open()});if(B(8)&&!prevBtn.b8At)prevBtn.b8At=t;if(B(8)&&prevBtn.b8At&&t-prevBtn.b8At>650){prevBtn.b8At=0;tapAt[8]=0;setInput("pad");openMuseum()}if(!B(8))prevBtn.b8At=0;
       edge(gp,4,()=>letter(-1));edge(gp,5,()=>letter(1));edge(gp,6,()=>sysStep(-1));edge(gp,7,()=>sysStep(1));
       const rx=ax[2]||0;
       // right stick turns the box the way Inspect does: the stick sets a target, the box eases after it, and it settles on the nearest side when you let go
@@ -4543,6 +4554,20 @@ window.Shelf={
   openTvGuide:()=>{if(mode!=="browse"&&mode!=="details")return false;if(!musStyle().tv&&cfgInfo){const ui=cfgInfo.config.ui;ui.museumStyle=Object.assign({},ui.museumStyle||{},{tv:true});api.saveConfig(cfgInfo.config).catch(()=>{})}musGuideNext=true;openMuseum();if(mode!=="museum"){musGuideNext=false;return false}return true},
   config:()=>cfgInfo
 };
+/* (beta.12) Find a game (find.js). games(): every game once (its own console's shelf: Home and collections show it again,
+   so they aren't read), with the cover the shelf already has and when it was last played. go(id): the shelf goes straight
+   to that game's console and case, as the museum's Play does (no slide); a filter that hides it is lifted first. */
+window.Shelf._find={
+  pad:()=>showPad(),glyph:k=>glyph(k),can:()=>mode==="browse"&&!sysBusy()&&!smoothTest.on&&!app.classList.contains("launching")&&!app.classList.contains("returning")&&!document.querySelector("#insert.on,#launch.on"), /* (never over a game starting: the insert, the Starting… screen) */
+  thumb:u=>thumb(u,64),snd:(n,o)=>play_(n,o),
+  games:()=>{const out=[],seen=new Set();allShelves.forEach(sh=>{if(!sh||sh.kind==="home")return;(sh._base||sh.items||[]).forEach(g=>{if(!g||!isGame(g)||seen.has(g.id))return;seen.add(g.id);const h=histOf(g);
+    out.push({id:g.id,title:String(g.title||""),sys:sh.name||"",art:(g.art&&g.art.front)||"",hue:g.hue,last:(h&&h.count&&h.last)||0})})});return out},
+  go:id=>{if(mode!=="browse"||sysBusy())return false;let sh=null,g=null;
+    for(const s of allShelves){if(!s||s.kind==="home")continue;const x=(s._base||s.items||[]).find(y=>y&&isGame(y)&&String(y.id)===String(id));if(x){sh=s;g=x;break}}
+    if(!g)return false;if(sh.items.indexOf(g)<0&&filterBy!=="all"){pickSort(1,"all");toast("Showing all games again")}
+    const si=shelves.indexOf(sh),j=sh.items.indexOf(g);if(si<0||j<0)return false;
+    if(si===sysIdx)go(j);else{sysIdx=si;sel=j;flipped=false;spin=0;spinT=0;cancelAnimationFrame(spinRaf);spinRaf=0;build();tuneTo(cur());raShelfLoad();preloadModel();save()}
+    lastInputAt=performance.now();return true}};
 // Settings → a console's "Customize" button: switch the shelf to that console (the usual slide) and open Customize
 // for it once the switch has landed. Closes nothing else; false when there's no such shelf or the shelf isn't in view.
 window.Shelf.openCustomize=systemId=>{if(mode!=="browse"&&mode!=="details")return false;const i=shelves.findIndex(s=>s.id===systemId);if(i<0)return false;

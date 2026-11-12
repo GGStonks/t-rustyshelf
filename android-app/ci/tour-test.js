@@ -6,7 +6,7 @@
 'use strict';
 const path = require('path');
 
-const STEPS = ['Welcome', 'Consoles', 'Your games', 'Details', 'Inspect', 'Quick menu', 'Art Studio', 'Adding games', 'Done'];
+const STEPS = ['Welcome', 'Consoles', 'Your games', 'Find a game', 'Details', 'Inspect', 'Quick menu', 'Art Studio', 'Adding games', 'Done'];
 
 module.exports = async function tourPass({ browser, base, check, OUT }) {
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 900 } });
@@ -59,8 +59,8 @@ module.exports = async function tourPass({ browser, base, check, OUT }) {
     const after = await page.evaluate(() => ({ on: BS_TOUR.on(), mode: Shelf.getMode(), settings: Settings.isOpen(), qm: Shelf.quickMenuOpen(), done: !!((Shelf._tour.cfg() || {}).ui || {}).tourDone }));
     check('Tour (Windows): an install set up before this version doesn\'t get it on its own; Settings → Shelf → Show the tour starts it',
       !auto && row.found && row.on && !row.settings, JSON.stringify({ auto, row }));
-    check('Tour: nine steps in order, each opening its screen (Details, Inspect, the quick menu, the Art Studio, Settings)',
-      seen.map(s => s.k).join() === STEPS.join() && by('Details').mode === 'details' && by('Inspect').mode === 'inspect' && by('Quick menu').qm && by('Art Studio').settings && by('Adding games').settings && by('Done').mode === 'browse' && !by('Done').settings,
+    check('Tour: ten steps in order, each opening its screen (Find a game, Details, Inspect, the quick menu, the Art Studio, Settings)',
+      seen.map(s => s.k).join() === STEPS.join() && by('Find a game').mode === 'find' && by('Details').mode === 'details' && by('Inspect').mode === 'inspect' && by('Quick menu').qm && by('Art Studio').settings && by('Adding games').settings && by('Done').mode === 'browse' && !by('Done').settings,
       JSON.stringify(seen.map(s => [s.k, s.mode, s.settings ? 'S' : '', s.qm ? 'Q' : ''])));
     check('Tour: on the Inspect step the case turns by itself (a side every couple of seconds), and stops after', (by('Inspect').turns || 0) >= 1 && await page.evaluate(async () => { const n = window.__turns; await new Promise(r => setTimeout(r, 2600)); return window.__turns === n; }),
       JSON.stringify({ turns: by('Inspect').turns }));

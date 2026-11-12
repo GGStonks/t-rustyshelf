@@ -46,6 +46,7 @@
     const t = T(); if (!t) return;
     if (settingsOn()) { try { await Settings.close(); } catch {} await until(() => !settingsOn(), 1500); await wait(250); }
     if (t.qmOn()) { t.qmClose(); await wait(250); }
+    if (window.BS_FIND && BS_FIND.isOpen()) { BS_FIND.close(); await until(() => t.mode() === 'browse', 1000); await wait(200); } // (beta.12) Find a game
     if (t.mode() === 'inspect') { t.closeInspect(); await until(() => t.mode() === 'browse', 1500); await wait(200); }
     if (t.mode() === 'details') { t.closeDetails(); await until(() => t.mode() === 'browse', 1500); await wait(250); }
   }
@@ -58,11 +59,18 @@
       keys: [[{ pad: ['L2', 'R2'], kbd: ['↑', '↓'] }, 'Next or previous console'], [{ pad: ['L1', 'R1'], kbd: ['Z', 'C'] }, 'Jump by letter']] },
     { k: 'Your games', t: 'Pick a game', p: 'Move along the shelf with the stick, the d-pad or the arrow keys.', enter: toShelf, target: centreCase,
       keys: [[{ pad: ['x'], kbd: ['Enter'] }, 'Play'], [{ pad: ['tri'], kbd: ['F'] }, 'Flip to the back'], [{ pad: ['tri'], kbd: ['H'] }, { pad: 'Hold to favourite', kbd: 'Favourite' }]] },
+    // (beta.12) the search (find.js): opened for this step, closed again as the tour moves on or ends (toShelf)
+    { k: 'Find a game', t: 'Search every shelf', p: 'Type a few letters of a title and pick the game from the list. The shelf goes straight to it, whichever console it’s on. The magnifying glass beside Menu opens it too.',
+      enter: async () => { await toShelf(); if (window.BS_FIND) { BS_FIND.open(); await until(() => BS_FIND.isOpen(), 1500); await wait(250); } },
+      target: () => { const e = document.querySelector('#bsFind.on .fg-side'); return e && shown(e) ? box(e) : null; },
+      keys: [[{ pad: ['L3'], kbd: ['/'], padText: 'Hold' }, 'Find a game']] },
     { k: 'Details', t: 'Everything about a game', p: 'The trailer plays at the top. Below it: info, screenshots, the manual and achievements. Box art and Rename are under More.',
       enter: async () => { await toShelf(); T().openDetails(); await until(() => T().mode() === 'details', 1500); }, target: () => shown($('details')) ? box($('details')) : null,
-      keys: [[{ pad: ['sq'], kbd: ['I'] }, 'Open Details'], [{ pad: ['tri'] }, 'Trailer full screen'], [{ pad: ['L1', 'R1'], kbd: ['Q', 'E'] }, 'Switch tabs']] },
+      keys: [[{ pad: ['⧉'], kbd: ['I'] }, 'Open Details'], [{ pad: ['tri'] }, 'Trailer full screen'], [{ pad: ['L1', 'R1'], kbd: ['Q', 'E'] }, 'Switch tabs']] },
     // (spin: the case turns a side every 2.2 s while this step is up, to show what Inspect does)
+    // (only a console game has a case to hold: on a Steam or custom game the step is left out, as the Art Studio's is)
     { k: 'Inspect', t: 'Hold the case', p: 'Turn it round, zoom in, and open it to see the disc and the manual.', spin: true,
+      skip: () => { const t = T(), g = t && t.game(); return !(g && g.kind === 'rom'); },
       enter: async () => { await toShelf(); T().openInspect(); await until(() => T().mode() === 'inspect', 1500); await wait(900); }, target: inspectCase,
       keys: [[{ pad: ['R3'], kbd: ['V'] }, 'Inspect'], [{ pad: ['x'], kbd: ['Enter'] }, 'Open the case']] },
     { k: 'Quick menu', t: 'Art, looks and trophies', p: 'Box art opens this game in the Art Studio. Customize changes the theme and sounds. Trophies connects RetroAchievements.',
