@@ -306,23 +306,35 @@ function quiver3(root) {
   }
   return out;
 }
+// ((T)rustyShelf, issue 16) Quiver 4's catalog.json: the last catalog it saw, by app id ({ name, slug, artwork,
+// libraryArt, tags… }). Its library only points at these, so the names (and the box art found by them) come from here
+function quiverCatalog(root) {
+  const c = readJson(path.join(root, 'catalog.json')), out = {};
+  const L = Array.isArray(c) ? c : c && typeof c === 'object' ? Object.values(c) : [];
+  for (const e of L.slice(0, 20000)) if (e && typeof e === 'object' && typeof e.id === 'string' && typeof e.name === 'string' && e.name.trim()) out[e.id] = e;
+  return out;
+}
+const catIcon = e => { const a = e && e.libraryArt && typeof e.libraryArt === 'object' ? e.libraryArt : {}; const u = a.capsule || e.artwork || ''; return typeof u === 'string' && /^https:\/\//.test(u) ? u : ''; };
 function quiver4(root) {
   const inst = readJson(path.join(root, 'installs.json')), lib = readJson(path.join(root, 'library.json'));
   const af = readJson(path.join(root, 'apps-folder.json')), appsDir = af && typeof af.path === 'string' && af.path ? af.path : path.join(root, 'apps');
   const items = Array.isArray(lib) ? lib : lib && Array.isArray(lib.items) ? lib.items : lib && typeof lib === 'object' ? Object.values(lib) : [];
-  const byId = new Map(items.filter(x => x && x.id).map(x => [String(x.id), x]));
+  const byId = new Map(items.filter(x => x && x.id).map(x => [String(x.id), x])), cat = quiverCatalog(root);
   const entries = Array.isArray(inst) ? inst.map(x => [x && (x.id || x.app), x]) : inst && typeof inst === 'object' ? Object.entries(inst) : [];
   const out = [];
   for (const [id, i] of entries.slice(0, 2000)) {
     if (!i || typeof i !== 'object') continue;
-    const dir = typeof i.dir === 'string' && i.dir ? i.dir : typeof i.folder === 'string' && i.folder ? path.join(appsDir, i.folder) : '';
+    // ((T)rustyShelf, issue 16) an app Quiver 4 groups by console sits in <apps folder>/<group>/<folder> (group: "Ports/N64",
+    // "Emulators"): read without the group it was never found, and came back from the apps folder under its folder's name
+    const grp = typeof i.group === 'string' && i.group ? i.group.split(/[\\/]+/).filter(x => x && x !== '..' && x !== '.') : [];
+    const dir = typeof i.dir === 'string' && i.dir ? i.dir : typeof i.folder === 'string' && i.folder ? path.join(appsDir, ...grp, i.folder) : '';
     let exe = typeof i.program === 'string' && i.program ? (path.isAbsolute(i.program) ? i.program : path.join(dir, i.program)) : '';
     if (!exe && Array.isArray(i.executables) && i.executables.length) { const e = String(i.executables[0]); exe = path.isAbsolute(e) ? e : path.join(dir, e); }
     if (!exe || !isFile(exe)) exe = dir && isDir(dir) ? mainExe(dir) : null;
     if (!exe || !/\.exe$/i.test(exe)) continue;
-    const it = byId.get(String(id)) || {}, ov = it.overrides || {};
-    const title = String(ov.name || (it.custom && it.custom.name) || (it.local && it.local.name) || it.slug || i.folder || path.basename(path.dirname(exe))).trim();
-    out.push({ key: String(id), title, exe, icon: typeof ov.cover === 'string' && /^https:\/\//.test(ov.cover) ? ov.cover : '', tags: [] });
+    const it = byId.get(String(id)) || {}, ov = it.overrides || {}, ce = cat[String(id)] || {}; // (issue 16: the catalog's name, as Quiver shows it)
+    const title = String(ov.name || (it.custom && it.custom.name) || (it.local && it.local.name) || ce.name || it.slug || ce.slug || i.folder || path.basename(path.dirname(exe))).trim();
+    out.push({ key: String(id), title, exe, icon: typeof ov.cover === 'string' && /^https:\/\//.test(ov.cover) ? ov.cover : catIcon(ce), tags: Array.isArray(ce.tags) ? ce.tags.map(String).slice(0, 20) : [] });
   }
   return out;
 }
@@ -352,6 +364,8 @@ function quiverNames(root) {
     const v = { title, icon: typeof a.appIconUrl === 'string' && /^https:\/\//.test(a.appIconUrl) ? a.appIconUrl : '', tags: Array.isArray(a.tags) ? a.tags.map(String) : [] };
     for (const k of [a.folderName, a.project, repo.split('/').pop(), a.name]) put(k, v);
   }
+  // (issue 16) Quiver 4's catalog: by its slug, its name and the id's last part ("github:owner/repo" → repo)
+  for (const e of Object.values(quiverCatalog(root))) { const v = { title: e.name.trim(), icon: catIcon(e), tags: Array.isArray(e.tags) ? e.tags.map(String).slice(0, 20) : [] }; for (const k of [e.slug, e.id.split(/[:/]/).pop(), e.name]) put(k, v); }
   const lib = readJson(path.join(root, 'library.json')), items = Array.isArray(lib) ? lib : lib && Array.isArray(lib.items) ? lib.items : lib && typeof lib === 'object' ? Object.values(lib) : [];
   for (const it of items.slice(0, 5000)) {
     if (!it || typeof it !== 'object') continue; const ov = it.overrides || {};
@@ -361,12 +375,25 @@ function quiverNames(root) {
   }
   return m;
 }
-function quiverLoose(appsDir, listed, names) {
-  let ents = []; try { ents = fs.readdirSync(appsDir, { withFileTypes: true }); } catch { return []; }
+// ((T)rustyShelf, issue 16) Quiver 4 groups new apps by kind and console: Emulators, Tools, Games, Ports\<console>. Those
+// folders hold apps, they aren't apps (one was taken for an app named "Ports", with whatever program was inside)
+const Q_GROUP = /^(emulators|tools|games)$/i, Q_PORTS = /^ports$/i;
+function quiverAppDirs(appsDir, grouped) {
+  const kids = d => { try { return fs.readdirSync(d, { withFileTypes: true }).filter(e => e.isDirectory() && !NOT_APP.test(e.name)).map(e => path.join(d, e.name)); } catch { return []; } };
+  const out = [];
+  for (const d of kids(appsDir).slice(0, 2000)) {
+    const n = path.basename(d);
+    if (grouped && Q_PORTS.test(n)) { for (const c of kids(d).slice(0, 200)) out.push(...kids(c).slice(0, 2000)); }
+    else if (grouped && Q_GROUP.test(n)) out.push(...kids(d).slice(0, 2000));
+    else out.push(d);
+  }
+  return out.slice(0, 5000);
+}
+function quiverLoose(appsDir, listed, names, grouped) {
   const inside = listed.map(e => path.resolve(e).toLowerCase()), out = [];
-  for (const e of ents.slice(0, 2000)) {
-    if (!e.isDirectory() || NOT_APP.test(e.name)) continue;
-    const dir = path.resolve(appsDir, e.name), pre = dir.toLowerCase() + path.sep;
+  for (const d of quiverAppDirs(appsDir, grouped)) {
+    const e = { name: path.basename(d) };
+    const dir = path.resolve(d), pre = dir.toLowerCase() + path.sep;
     if (inside.some(x => x.startsWith(pre))) continue;
     const exe = mainExe(dir); if (!exe) continue;
     const hit = names && (names.get(qKey(e.name)) || names.get(qBare(e.name))); // (the id stays the folder's: a game already on the shelf keeps its settings)
@@ -379,7 +406,7 @@ function quiverGames(chosen) {
   for (const root of quiverRoots(chosen)) {
     let list = [];
     try { list = isFile(path.join(root, 'installs.json')) ? quiver4(root) : quiver3(root); } catch (e) { log('Quiver read', e.message); }
-    try { const loose = quiverLoose(quiverAppsDir(root), list.map(g => g.exe), quiverNames(root)); if (loose.length) log('Quiver: ' + loose.length + ' app(s) in its apps folder that its list doesn\'t show'); list = list.concat(loose); } catch (e) { log('Quiver apps folder', e.message); }
+    try { const loose = quiverLoose(quiverAppsDir(root), list.map(g => g.exe), quiverNames(root), isFile(path.join(root, 'installs.json'))); if (loose.length) log('Quiver: ' + loose.length + ' app(s) in its apps folder that its list doesn\'t show'); list = list.concat(loose); } catch (e) { log('Quiver apps folder', e.message); }
     for (const g of list) { const id = 'quiver-' + slug(g.key || g.title); if (seen.has(id) || seen.has(g.exe.toLowerCase())) continue; seen.add(id); seen.add(g.exe.toLowerCase()); out.push({ id, source: 'quiver', ...g }); }
   }
   return out;

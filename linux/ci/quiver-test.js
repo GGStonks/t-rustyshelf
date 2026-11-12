@@ -56,6 +56,21 @@ try {
   put(path.join(q4, 'library.json'), JSON.stringify([{ id: 'a1', slug: 'perfect-dark', overrides: { name: 'Perfect Dark' } }, { id: 'a2', slug: 'sonic-unleashed-recomp', local: { name: 'Sonic Unleashed' } }]));
   const g4 = pc.quiverGames('').filter(x => /QuiverApps/.test(x.exe)).map(x => x.title).sort();
   check('Quiver 4: the app installs.json doesn\'t show yet gets library.json\'s name', JSON.stringify(g4) === JSON.stringify(['Perfect Dark', 'Sonic Unleashed']), g4);
+  // (issue 16, a third time) Quiver 4 as it really keeps things: new apps grouped by console (Ports\N64\<folder>, with
+  // "group" in installs.json), and their names only in catalog.json (the library just points at the catalog's id)
+  const q4g = path.join(tmp, 'Quiver4g'), apps4g = path.join(tmp, 'QuiverApps4g');
+  put(path.join(q4g, 'apps-folder.json'), JSON.stringify({ path: apps4g }));
+  put(path.join(q4g, 'installs.json'), JSON.stringify({ 'github:Zelda64Recomp/Zelda64Recomp': { folder: 'Zelda64Recomp', group: 'Ports/N64', executables: ['Zelda64Recompiled.exe'] } }));
+  put(path.join(q4g, 'library.json'), JSON.stringify([{ id: 'github:Zelda64Recomp/Zelda64Recomp' }]));
+  put(path.join(q4g, 'catalog.json'), JSON.stringify({ 'github:Zelda64Recomp/Zelda64Recomp': { id: 'github:Zelda64Recomp/Zelda64Recomp', slug: 'zelda-64-recompiled', name: 'Zelda 64: Recompiled', libraryArt: { capsule: 'https://example.com/z64.jpg' }, tags: ['recomp'] },
+    'github:HarbourMasters/Starship': { id: 'github:HarbourMasters/Starship', slug: 'starship', name: 'Star Fox 64 (Starship)', tags: [] } }));
+  exe(path.join(apps4g, 'Ports', 'N64', 'Zelda64Recomp', 'Zelda64Recompiled.exe'));
+  exe(path.join(apps4g, 'Ports', 'N64', 'Starship', 'Starship.exe')); // (installed after installs.json was last read)
+  exe(path.join(apps4g, 'Emulators', 'ares', 'ares.exe'));
+  const g4g = pc.quiverGames(q4g).filter(x => x.exe.includes(apps4g)), t4g = g4g.map(x => x.title).sort();
+  check('Quiver 4: an app in a console group folder (Ports\\N64) is read from installs.json, with the catalog\'s name and art', g4g.some(x => x.title === 'Zelda 64: Recompiled' && /Zelda64Recompiled\.exe$/.test(x.exe) && x.icon === 'https://example.com/z64.jpg'), JSON.stringify(g4g));
+  check('Quiver 4: an app its installs.json doesn\'t show yet, inside a group folder, gets the catalog\'s name, not a folder\'s', t4g.includes('Star Fox 64 (Starship)') && t4g.includes('ares'), t4g);
+  check('Quiver 4: the group folders themselves (Ports, N64, Emulators) are never taken for apps, nothing twice', !t4g.some(t => /^(Ports|N64|Emulators)$/.test(t)) && g4g.length === 3, t4g);
 } catch (e) { check('ran without an error', false, e.stack); }
 finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 console.log(fails ? `\n${fails} check(s) failed` : '\nAll checks passed');
