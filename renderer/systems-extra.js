@@ -56,7 +56,7 @@
     media: {
       nes: { kind: 'cart', size: 0.5, drive: 'slot' }, snes: { kind: 'cart', size: 0.5, drive: 'slot' }, n64: { kind: 'cart', size: 0.5, drive: 'slot' },
       gb: { kind: 'cart', size: 0.45, drive: 'slot' }, gbc: { kind: 'cart', size: 0.45, drive: 'slot' }, gba: { kind: 'cart', size: 0.42, drive: 'slot' },
-      nds: { kind: 'cart', size: 0.42, drive: 'slot' }, megadrive: { kind: 'cart', size: 0.5, drive: 'slot' }, mastersystem: { kind: 'cart', size: 0.5, drive: 'slot' },
+      nds: { kind: 'cart', size: 0.29, drive: 'slot' } /* (a DS card is 33 x 35 mm in a 125 x 137 mm case) */, megadrive: { kind: 'cart', size: 0.5, drive: 'slot' }, mastersystem: { kind: 'cart', size: 0.5, drive: 'slot' },
       gamegear: { kind: 'cart', size: 0.45, drive: 'slot' }, pcengine: { kind: 'cart', size: 0.4, drive: 'slot' }, neogeo: { kind: 'cart', size: 0.55, drive: 'slot' },
       arcade: { kind: 'cart', size: 0.5, drive: 'slot' },
       psx: { kind: 'disc', size: 0.7, drive: 'top' }, dreamcast: { kind: 'disc', size: 0.7, drive: 'top' }, saturn: { kind: 'disc', size: 0.7, drive: 'top' },

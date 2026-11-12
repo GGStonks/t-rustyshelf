@@ -1799,7 +1799,8 @@ function renderIspHints(){
   const g=curGame(),isPc=g&&g.kind==="steam";
   const steps=["Closed","Open",flop?"Floppy out":cart?"Cartridge out":"Disc out"];
   $("ispStep").textContent=isPc?"Case":steps[isp.state];
-  const next=isp.state===0?"Open case":isp.state===1?(flop?"Take out floppy disk":cart?"Take out cartridge":"Take out disc"):"Hold to play";
+  const box=!!(g&&window.Inspect3D&&Inspect3D.caseForm&&Inspect3D.caseForm((pickShelf()||{}).id)==="box"); // (a cardboard box opens its flap, beta issue 32)
+  const next=isp.state===0?(box?"Open box":"Open case"):isp.state===1?(flop?"Take out floppy disk":cart?"Take out cartridge":"Take out disc"):"Hold to play";
   let items,acts;
   if(rd.open){$("ispStep").textContent=$("rdCount").textContent||"Manual";items=[[pad?["L","R"]:["←","→"],"Turn page"],[pad?["x"]:["Space"],"Next page"],[pad?["o"]:["Esc"],"Put manual back"]];acts=[()=>rdTurn(1),()=>rdTurn(1),closeReader];
     if(hasManual(curGame())){if(fixOn()){items=[[pad?["tri"]:["W"],"Wrong game: find the right one"],[pad?["sq"]:["R"],"Repair it (cover, pages)"],[pad?["o"]:["Esc"],"Cancel"]];acts=[wrongManual,repairManual,fixCancel]}
@@ -1847,7 +1848,7 @@ try{let lastLong=0;new PerformanceObserver(l=>{for(const e of l.getEntries()){if
 addEventListener("error",e=>{try{api.log&&api.log(`error: ${e.message} @${(e.filename||"").split("/").pop()}:${e.lineno}`)}catch{}});
 addEventListener("unhandledrejection",e=>{try{api.log&&api.log(`rejection: ${e.reason&&(e.reason.stack||e.reason.message)||e.reason}`)}catch{}});
 /* ---------- insert animation: case opens, disc goes into the drive ---------- */
-const MEDIA={gc:{kind:"disc",size:.62,drive:"top"},wii:{kind:"disc",size:.86,drive:"front"},wiiu:{kind:"disc",size:.84,drive:"front"},psp:{kind:"umd",size:.66,drive:"hatch"},sw:{kind:"cart",size:.5,drive:"slot"},sw2:{kind:"cart",size:.5,drive:"slot"},n3ds:{kind:"cart",size:.5,drive:"slot"},ps3:{kind:"disc",size:.78,drive:"front"},ps4:{kind:"disc",size:.78,drive:"front"},ps5:{kind:"disc",size:.78,drive:"front"},x360:{kind:"disc",size:.8,drive:"tray"},ps2:{kind:"disc",size:.8,drive:"tray"}};
+const MEDIA={gc:{kind:"disc",size:.62,drive:"top"},wii:{kind:"disc",size:.86,drive:"front"},wiiu:{kind:"disc",size:.84,drive:"front"},psp:{kind:"umd",size:.66,drive:"hatch"},sw:{kind:"cart",size:.5,drive:"slot"},sw2:{kind:"cart",size:.5,drive:"slot"},n3ds:{kind:"cart",size:.29,drive:"slot"},ps3:{kind:"disc",size:.78,drive:"front"},ps4:{kind:"disc",size:.78,drive:"front"},ps5:{kind:"disc",size:.78,drive:"front"},x360:{kind:"disc",size:.8,drive:"tray"},ps2:{kind:"disc",size:.8,drive:"tray"}};
 if(window.BS_SYSTEMS_EXTRA)Object.assign(MEDIA,BS_SYSTEMS_EXTRA.media||{});
 // (upstream beta.11) what a console's games come on, in words: DOS games on a floppy disk, cartridges, the PSP's UMD, or a disc
 function mediaWord(id){const m=MEDIA[id]||{};return m.form==="floppy"?"Floppy disk":m.kind==="cart"?"Cartridge":id==="psp"?"UMD":"Disc"}

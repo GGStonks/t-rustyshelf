@@ -23,7 +23,18 @@ window.Inspect3D = (() => {
   const CASE_SCALE = 1 / CASE_GLB.height;
   const SHEET = Object.freeze({ W: 2048, H: 1024, back: .47, spine: .06 }); // the cover canvas and where its parts sit (fractions of W)
   const PC_SHELVES = new Set(['pc', 'custom']); // a plain black box, as the PC case on the shelf
-  const usesCaseModel = sys => !PC_SHELVES.has(sys);
+  // ((T)rustyShelf, Boxshelf beta issue 32) the case each console's games really came in. case.glb is a keep case (the
+  // Switch's), right for the DVD / Blu-ray style consoles only: since 1.6.0 every console used it, so a PS1 game opened into a
+  // DVD case and a DS game held a Switch card. Jewel: a CD jewel case (clear, a black tray with its hub); box: a printed
+  // cardboard box whose top flap opens, the cartridge inside; hinged: the moulded plastic case built here (the DS and 3DS
+  // cases with their own cartridge, the Mega Drive / Genesis clamshells)
+  const KEEP_CASES = new Set(['gc', 'wii', 'wiiu', 'ps2', 'ps3', 'ps4', 'ps5', 'xbox', 'x360', 'xboxone', 'sw', 'sw2', 'psp']);
+  const JEWEL_CASES = new Set(['psx', 'dreamcast', 'saturn', 'pcengine']);
+  const BOXES = new Set(['nes', 'snes', 'n64', 'gb', 'gbc', 'gba', 'gamegear', 'neogeo', 'arcade', 'atari2600', 'atarilynx', 'wonderswan', 'dos', 'ngp', 'ngpc', 'gamecom']);
+  // modelled from the real cases (renderer/models/src/keepcases.py, Blender): Lid, Spine and Back on the hinged case's pivots
+  const CASE_MODELS = { ps2: 'models/case-ps2.glb', wii: 'models/case-wii.glb', wiiu: 'models/case-wiiu.glb', gc: 'models/case-gc.glb' };
+  const caseForm = sys => CASE_MODELS[sys] ? 'model' : PC_SHELVES.has(sys) ? 'pc' : KEEP_CASES.has(sys) ? 'keep' : JEWEL_CASES.has(sys) ? 'jewel' : BOXES.has(sys) ? 'box' : 'hinged';
+  const usesCaseModel = sys => caseForm(sys) === 'keep';
   const isClearCase = o => o.sys === 'sw' || [o.caseColor, o.caseSide].some(c => typeof c === 'string' && (c.startsWith('rgba') || c === 'transparent'));
   // the printed sheet's own colour where no art covers it: white paper behind clear plastic, otherwise the case's colour
   const paperOf = o => !isClearCase(o) && typeof o.caseColor === 'string' ? o.caseColor : '#ffffff';
@@ -453,7 +464,9 @@ window.Inspect3D = (() => {
     if (customMedia && customMedia.parent === mediaG) mediaG.remove(customMedia);
     disposeGroup(caseG); disposeGroup(mediaG); cur = o; universalCase = null; caseBones = [];
     const h = 1, w = o.ratio, lt = Math.max(.014, o.depth * .18), r = Math.min(.016, lt * .9);
-    if (!usesCaseModel(o.sys)) {
+    cur.caseForm = caseForm(o.sys); cur._model = false; boxFlap = null;
+    if (cur.caseForm === 'box') { buildBox(o); return; }
+    if (cur.caseForm === 'pc') {
       const D = Math.max(.045, o.depth * .55); cur._D = D;
       const ft = o.front ? loadTex(o.front) : null;
       const spineMap = o.spine ? loadTex(o.spine) : spineTexture(o.title, "#0a0a0a", "#ffffff");
@@ -472,7 +485,7 @@ window.Inspect3D = (() => {
       applyState(true);
       return;
     }
-    const isClear = isClearCase(o);
+    const jewel = cur.caseForm === 'jewel', isClear = isClearCase(o) || jewel; // (a jewel case: clear plastic, whatever the shelf's colours)
     const plastic = (color, extra) => {
       let col = color, op = 1, tr = false;
       if (typeof color === "string" && color.startsWith("rgba")) {
@@ -485,7 +498,7 @@ window.Inspect3D = (() => {
     // printed sleeve under clear plastic: the paper itself is matte (no broad haze over the art), the shine is a
     // tight clearcoat highlight that moves as you turn the case
     const sleeve = map => new THREE.MeshPhysicalMaterial({ map, color: 0xffffff, roughness: .62, metalness: 0, clearcoat: .55, clearcoatRoughness: .22, reflectivity: .3, envMapIntensity: .6 });
-    const side = plastic(o.caseSide), inner = plastic(o.caseSide, isClear ? { roughness: .28 } : { roughness: .55 });
+    const shellCol = jewel ? '#f4f6f8' : o.caseSide, side = plastic(shellCol), inner = plastic(shellCol, isClear ? { roughness: .28 } : { roughness: .55 });
     // Media first, so the tray is exactly deep enough for it (a cartridge needs more room than a disc)
     buildMedia(o, 0);
     // measure the media in its own space (the whole scene may be turned at this point; a world-space box would be far too deep)
@@ -526,7 +539,7 @@ window.Inspect3D = (() => {
 
     // Back cover (Right side in open view): slab, outer art, transparent inFace, perimeter ring, cartridge dock / disc hub
     const back = slab(w, h, rc, tb, side); back.position.set(w / 2, 0, -tb / 2); backPivot.add(back);
-    const inFaceMat = plastic(isClear ? o.caseSide : 0xffffff, { map: interiorCached(o.caseSide, o.kind, w - .02, h - .02, o.ratio * o.size / 2, o.sys), roughness: isClear ? .28 : .7, clearcoat: isClear ? .6 : .1, transparent: isClear, opacity: isClear ? .35 : 1, transmission: isClear ? .65 : 0 });
+    const inFaceMat = jewel ? new THREE.MeshPhysicalMaterial({ color: 0x141416, roughness: .45, clearcoat: .3 }) /* the jewel case's black tray */ : plastic(isClear ? o.caseSide : 0xffffff, { map: interiorCached(o.caseSide, o.kind, w - .02, h - .02, o.ratio * o.size / 2, o.sys), roughness: isClear ? .28 : .7, clearcoat: isClear ? .6 : .1, transparent: isClear, opacity: isClear ? .35 : 1, transmission: isClear ? .65 : 0 });
     const inFace = face(w - .02, h - .02, rc * .8, inFaceMat); inFace.position.set(w / 2, 0, .0004); backPivot.add(inFace);
     const eb = o.back ? Math.max(0, Math.min(.08, o.edge || 0)) * w : 0;
     if (eb > .0015) { const rimB = face(w - .004, h - .004, rc, plastic(o.caseColor)); rimB.rotation.y = Math.PI; rimB.position.set(w / 2, 0, -tb - .0003); backPivot.add(rimB); }
@@ -578,8 +591,86 @@ window.Inspect3D = (() => {
     if (o.manual) { const mt = man.material.map; let n = 0; const chk = () => { if (manualPlane !== man) return; const img = mt.image; if (!img || !(img.naturalWidth || img.width)) { if (n++ < 100) setTimeout(chk, 100); return; } fitCover(man, coverRect(img, false), w * .8, h * .86); }; chk(); }
     [[-.36, .34], [-.36, -.34]].forEach(([x, y]) => { const clip = new THREE.Mesh(new THREE.BoxGeometry(w * .08, h * .09, .006), side); clip.position.set(-w / 2 + x * w * .5, y * h, .005); lidPivot.add(clip); });
 
-    ensureUniversalModel();
-    if (universalGltf) applyUniversalModel(o);
+    if (cur.caseForm === 'model') { const g = ensureCaseModel(o.sys); if (g && g !== 'loading') applyCaseModel(o, g); }
+    else { ensureUniversalModel(); if (universalGltf) applyUniversalModel(o); }
+    st.lid = st.lidT = 0; st.out = st.outT = 0; st.spin = 0;
+    applyState(true);
+  }
+  // ((T)rustyShelf, Boxshelf beta issue 32) a console's own modelled case (CASE_MODELS): loaded once, then its Lid, Spine
+  // and Back take the built case's place on the same hinge pivots, its printed parts take the game's art, and the disc
+  // and booklet move to where the model seats them
+  const caseModels = new Map();
+  function ensureCaseModel(sys) {
+    const url = CASE_MODELS[sys]; if (!url) return null; if (caseModels.has(url)) return caseModels.get(url);
+    const THREE = T(); if (!THREE || !window.BS3D.GLTFLoader) return null;
+    caseModels.set(url, 'loading');
+    new window.BS3D.GLTFLoader().loadAsync(url).then(g => {
+      g.scene.traverse(n => { if (n.geometry) n.geometry.userData.keep = true; });
+      caseModels.set(url, g);
+      if (cur && caseG && CASE_MODELS[cur.sys] === url && !cur._model) { const keep = st.state; build(cur); st.state = keep; applyState(true); }
+    }).catch(e => { console.warn('case model', url, e); caseModels.delete(url); });
+    return 'loading';
+  }
+  function applyCaseModel(o, gltf) {
+    const THREE = T(); if (!THREE) return;
+    try {
+      const m = gltf.scene.clone(true), part = n => m.getObjectByName(n);
+      const L = part('Lid'), S = part('Spine'), B = part('Back'), disc = part('DiscDock'), book = part('BookletDock');
+      if (!L || !S || !B) return;
+      // the built case's own parts go (the booklet and the dock stay)
+      [lidPivot, backPivot, spineG].forEach(p => p.children.forEach(c => { if (c !== manualPlane && c !== dockAnchor) c.visible = false; }));
+      const sb = new THREE.Box3().setFromObject(part('Spine_Plate') || S), D = sb.max.x - sb.min.x; cur._D = D; cur._model = true;
+      lidPivot.position.x = -D / 2; backPivot.position.x = D / 2;
+      const ft = o.front ? loadTex(o.front) : null, bt = o.back ? loadTex(o.back) : null;
+      const sleeve = map => new THREE.MeshPhysicalMaterial({ map, color: 0xffffff, roughness: .6, metalness: 0, clearcoat: .55, clearcoatRoughness: .22 });
+      const paper = new THREE.MeshPhysicalMaterial({ color: new THREE.Color(paperOf(o)), roughness: .65 });
+      const mats = {};
+      const matFor = mt => { const name = mt && mt.name || ''; if (mats[name]) return mats[name];
+        let r;
+        if (name === 'CoverFront') r = coverMat = o.front ? sleeve(ft.userData.ok || !standInTex ? ft : standInTex) : paper;
+        else if (name === 'CoverBack') r = bt ? sleeve(bt) : paper;
+        else if (name === 'CoverSpine') r = sleeve(o.spine ? loadTex(o.spine) : spineTexture(o.title, o.caseColor, o.spineInk));
+        else r = new THREE.MeshPhysicalMaterial({ color: mt && mt.color ? mt.color.clone() : new THREE.Color(0x222222), roughness: name === 'Logo' ? .62 : .42, metalness: .02, clearcoat: name === 'Shell' ? .3 : .15, clearcoatRoughness: .4 });
+        return (mats[name] = r); };
+      m.traverse(n => { if (n.isMesh) n.material = Array.isArray(n.material) ? n.material.map(matFor) : matFor(n.material); });
+      const put = (node, pivot, dx) => { node.parent.remove(node); node.position.x += dx; pivot.add(node); };
+      put(L, lidPivot, D / 2); put(B, backPivot, -D / 2); put(S, spineG, 0);
+      // (the empties sit in Back / Lid, which only move along x on their pivots)
+      if (disc) dockAnchor.position.set(disc.position.x + B.position.x, disc.position.y + B.position.y, disc.position.z + B.position.z);
+      if (book && manualPlane) manualPlane.position.set(book.position.x + L.position.x, book.position.y + L.position.y, book.position.z + L.position.z);
+    } catch (e) { console.warn('case model', e); }
+  }
+  // ((T)rustyShelf, Boxshelf beta issue 32) a cartridge game's printed cardboard box: front, back, the spine on its left
+  // and right sides, a tuck flap on top hinged at the back, bare cardboard inside, and the cartridge standing in it.
+  // Front +z and spine -x, as the shelf box (and the PC box above); opening lifts the flap (frame()).
+  let boxFlap = null;
+  function buildBox(o) {
+    const THREE = T(), h = 1, w = o.ratio, D = Math.max(.07, Math.min(.36, o.ratio * (o.depth || .15))); cur._D = D;
+    manualPlane = null; // (no booklet to read in a box: hitBooklet stays off)
+    const card = (map, color) => new THREE.MeshPhysicalMaterial({ map: map || null, color: map ? 0xffffff : new THREE.Color(color || o.caseColor || '#d9d9de'), roughness: .7, metalness: 0, clearcoat: .2, clearcoatRoughness: .5 });
+    const ft = o.front ? loadTex(o.front) : null, bt = o.back ? loadTex(o.back) : null, spineMap = o.spine ? loadTex(o.spine) : spineTexture(o.title, o.caseColor, o.spineInk);
+    const frontMat = card(ft ? (ft.userData.ok || !standInTex ? ft : standInTex) : null); coverMat = o.front ? frontMat : null;
+    const body = new THREE.Group(); caseG.add(body);
+    const plane = (W, H, mat, pos, rot, parent) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(W, H), mat); m.position.set(pos[0], pos[1], pos[2]); if (rot) m.rotation.set(rot[0], rot[1], rot[2]); (parent || body).add(m); return m; };
+    plane(w, h, frontMat, [0, 0, D / 2]);
+    plane(w, h, card(bt), [0, 0, -D / 2], [0, Math.PI, 0]);
+    plane(D, h, card(spineMap), [-w / 2, 0, 0], [0, -Math.PI / 2, 0]);
+    plane(D, h, card(spineMap), [w / 2, 0, 0], [0, Math.PI / 2, 0]);
+    plane(w, D, card(null, o.caseSide), [0, -h / 2, 0], [Math.PI / 2, 0, 0]);
+    // the inside, bare cardboard (drawn from inside only: its top is open, its floor and walls show when you look in)
+    body.add(new THREE.Mesh(new THREE.BoxGeometry(w - .003, h - .003, D - .003), new THREE.MeshStandardMaterial({ color: 0x9a8264, roughness: .95, side: THREE.BackSide })));
+    // the top flap and its tuck tab, hinged along the top of the back
+    boxFlap = new THREE.Group(); boxFlap.position.set(0, h / 2, -D / 2); body.add(boxFlap);
+    const top = plane(w, D, card(null, o.caseColor), [0, 0, D / 2], [-Math.PI / 2, 0, 0], boxFlap);
+    plane(w, D, new THREE.MeshStandardMaterial({ color: 0x9a8264, roughness: .95 }), [0, -.0008, D / 2], [Math.PI / 2, 0, 0], boxFlap); // (its underside)
+    const tabH = Math.min(.08, D * .6); plane(w * .96, tabH, new THREE.MeshStandardMaterial({ color: 0x9a8264, roughness: .95, side: THREE.DoubleSide }), [0, -tabH / 2, D - .002], null, boxFlap);
+    top.userData.flap = true;
+    // the hinged case's parts aren't used: empty groups for frame()
+    lidPivot = new THREE.Group(); backPivot = new THREE.Group(); spineG = new THREE.Group(); caseG.add(lidPivot, backPivot, spineG);
+    // the cartridge (or floppy) standing on the floor of the box, facing out
+    buildMedia(o, 0);
+    const mb = localBox(media), mh = mb.isEmpty() ? .3 : mb.max.y - mb.min.y;
+    dockAnchor = new THREE.Object3D(); dockAnchor.position.set(0, -h / 2 + mh / 2 + .01, 0); body.add(dockAnchor);
     st.lid = st.lidT = 0; st.out = st.outT = 0; st.spin = 0;
     applyState(true);
   }
@@ -755,10 +846,16 @@ window.Inspect3D = (() => {
     backPivot.rotation.y = -(1 - k) * (Math.PI / 2);
     const o = easeIO(st.out);
     const w = cur.ratio, D = cur._D || .05;
-    if (!usesCaseModel(cur.sys)) {
+    if (cur.caseForm === 'pc') {
       caseG.position.set(0, 0, 0);
       caseG.rotation.set(0, 0, 0);
       caseG.visible = true;
+    } else if (cur.caseForm === 'box') {
+      // the top flap opens backwards and the box tips toward you, so you look into it; the cartridge then rises out of the top
+      if (boxFlap) boxFlap.rotation.x = -k * 1.95;
+      caseG.position.set(-2.6 * o, -.3 * o - k * .04, -.6 * o);
+      caseG.rotation.set(k * 26 * DEG, 30 * DEG * o, 0);
+      caseG.visible = o < .995;
     } else if (universalCase) {
       // shut, it turns about its own middle (the model's back is at z 0); open, it slides over so the open case is centred
       caseG.position.set(k * OPEN_SHIFT * (w / CASE_GLB.ratio) - 2.6 * o, -.3 * o, -(1 - k) * CASE_GLB.shape.depth / 2 - .6 * o);
@@ -785,6 +882,7 @@ window.Inspect3D = (() => {
     const pivotZ = media.userData.pivotZ || 0, dockPos = pivotZ ? dockPosInMediaG.clone().add(new THREE.Vector3(0, 0, pivotZ).applyQuaternion(dockLocalQuat)) : dockPosInMediaG;
     const centerPos = new THREE.Vector3(0, 0, .25 + st.bump);
     media.position.lerpVectors(dockPos, centerPos, o);
+    if (cur.caseForm === 'box' && o > 0 && o < 1) media.position.y += Math.sin(Math.PI * Math.min(1, o * 1.6)) * .85; // (out of a box: up through its open top first)
     const ms = (media.userData.scale || 1) * (1 + (cur.kind === "cart" ? .9 : .55) * o);
     media.scale.set(ms, ms, ms);
 
@@ -922,7 +1020,7 @@ window.Inspect3D = (() => {
   function checkHover(cx, cy) { if (canvas) canvas.style.cursor = hitBooklet(cx, cy) ? 'pointer' : ''; }
   // the shape the shelf box takes for a shelf (app.js boxShape): case.glb's, or null for the PC shelves' own
   const caseShape = sys => usesCaseModel(sys) ? CASE_GLB.shape : null;
-  return { caseShape, paperOf, hitBooklet, checkHover, setManual, kit: { interiorTexture, discBackTexture, discLift, coverRect, fitCover, coverCrop }, available, open, close, leave, setPose, setState, bump, setPaused, isActive: () => active,
+  return { caseShape, caseForm, paperOf, _models: () => ({ sys: cur && cur.sys, form: cur && cur.caseForm, model: !!(cur && cur._model), D: cur && cur._D }), hitBooklet, checkHover, setManual, kit: { interiorTexture, discBackTexture, discLift, coverRect, fitCover, coverCrop }, available, open, close, leave, setPose, setState, bump, setPaused, isActive: () => active,
     busy: () => !paused && (phase === 'out' || phase === 'fade' || phase === 'wait' || phase === 'in'), _parts: () => { const o = {}; if (universalCase) universalCase.traverse(n => { if (n.isMesh) { let v = true; for (let q = n; q; q = q.parent) if (q.visible === false) v = false; o[n.name] = { visible: v, color: n.material && n.material.color ? n.material.color.getHexString() : '' }; } }); return { kind: cur && cur.kind, sys: cur && cur.sys, parts: o }; }, _st: () => ({ phase, in: st.in, ry: st.ry, rotY: rot ? Math.round(rot.rotation.y / DEG) : null, ready, fade: !!fadeT0, pend: !!pend, op: canvas && canvas.style.opacity, on: !!(canvas && canvas.classList.contains('on')), from: cur && cur.from, standIn: !!standInTex, tok, disc: discPose(), spine: !!(spineM && spineM.parent && spineM.parent.parent) }) }; // (beta.11 spine: the printed spine is on the case)
   // (test hook) where the disc / cartridge is in the scene, and which way its face points
   function discPose() { if (!media) return null; const THREE = T(); media.updateWorldMatrix(true, false); const p = media.getWorldPosition(new THREE.Vector3()), n = new THREE.Vector3(0, 0, 1).transformDirection(media.matrixWorld); return { x: +p.x.toFixed(3), y: +p.y.toFixed(3), z: +p.z.toFixed(3), nz: +n.z.toFixed(3) }; }
