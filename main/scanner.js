@@ -19,6 +19,7 @@ const Titles = require('../shared/titles');
 const Arcade = require('./arcadenames');
 // BIOS sets that sit beside the games, hidden even before the arcade list has arrived (main/arcadenames.js knows them all)
 const ARCADE_BIOS = new Set(['neogeo', 'pgm', 'skns', 'stvbios', 'decocass', 'cpzn1', 'cpzn2', 'taitofx1', 'konamigx', 'nss', 'naomi', 'awbios', 'hod2bios', 'f355bios', 'airlbios', 'megaplay', 'megatech', 'playch10', 'qsound', 'neocdz', 'isgsm', 'nmk004', 'ym2608', 'bubsys', 'cchip', 'sp-cpu']);
+const gamelist = require('./gamelist'); // ((T)rustyShelf) Batocera / RetroBat gamelist.xml names and art
 function cleanTitle(file) { return Titles.cleanTitle(path.basename(file)); }
 
 // (beta.10) the walk and the scan ask for each folder listing and file check (yield [op, path]) and their caller answers:
@@ -257,6 +258,11 @@ function withArt(list, sysCfg, pre) { // pre: listings read ahead (scanSystemAsy
   const artDirs = artDirsFor(sysCfg);
   return list.map(g => { const { _art, ...o } = g, a = findArt(g.file, _art.title, artDirs), fg = _art.fg;
     if (fg) { if (!a.front && fg.icon) a.front = fg.icon; if (fg.hero) a.hero = fg.hero; if (!a.disc && fg.icon) a.disc = fg.icon; }
+    // ((T)rustyShelf, beta discussion 35) a Batocera / RetroBat / EmulationStation gamelist.xml beside the games: its name for
+    // the game, and its pictures and manual where (T)rustyShelf has none of its own (art you added or downloaded comes first)
+    const gl = o.file ? gamelist.lookup(o.file, sysCfg && sysCfg.romDirs) : null;
+    if (gl) { if (gl.name) o.title = gl.name.replace(/[™®]/g, '').replace(/\s+/g, ' ').trim() || o.title;
+      for (const k of ['front', 'back', 'disc', 'manualPdf']) if (!a[k] && gl[k]) a[k] = gl[k]; if (!a.hero && gl.hero) a.hero = gl.hero; }
     o.art = a; if (Array.isArray(o.discs)) o.discs = o.discs.slice(); return o; }); // (art keeps its place among the keys)
 }
 function* scanFilesG(sysDef, sysCfg) {
