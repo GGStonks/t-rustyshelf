@@ -106,6 +106,7 @@ contextBridge.exposeInMainWorld('trustyshelf', {
   manualCoverage: () => call('manuals:coverage'),
   artCoverage: () => call('covers:coverage'),
   onCoversProgress: fn => ipcRenderer.on('covers:progress', (e, info) => fn(info)),
+  onCoversChecking: fn => ipcRenderer.on('covers:checking', (e, info) => fn(info)), // ((T)rustyShelf, issue 24)
   onCoversAuto: fn => ipcRenderer.on('covers:auto', (e, info) => fn(info)), // the background art check (first-run Done screen)
   onLibraryChanged: fn => ipcRenderer.on('library:changed', (e, info) => fn(info)),
   onShelfMenu: fn => ipcRenderer.on('shelf:menu', (e, d) => fn(d)),

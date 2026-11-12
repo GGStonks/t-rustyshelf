@@ -2151,7 +2151,15 @@ handle('covers:download', async ({ systemIds, types, hd }) => {
 let coversUserCancel = false;
 handle('covers:cancel', (a) => { if (a && a.auto) { const st = autoState; if (st) { st.stopped = true; st.paused = false; clearInterval(st.t); } covers.cancel('auto'); return true; } // (beta.10) the art card: only the background run
   coversUserCancel = true; covers.cancel(); return true; });
-handle('covers:coverage', async () => { const out = []; for (const s of sysList(CONSOLES.map(c => c.id))) { await yieldNow(); out.push(...(await covers.coverage([s]))); } return out; }); // (beta.9: a console at a time, with a breath between: every console's pictures in one go froze Settings' Box art page; beta.10: coverage is async)
+// ((T)rustyShelf, issue 24) the check before a box art download takes each console's games from the library as last found
+// (reading every games folder again took ages on a big library on a NAS), says which console it's on (covers:checking),
+// and runs on in the background while Settings shows other pages
+const shelfGames = () => { if (lastLib) return lastLib; try { return JSON.parse(fs.readFileSync(libCacheFile(), 'utf8')); } catch { return null; } };
+handle('covers:coverage', async () => { const out = [], list = sysList(CONSOLES.map(c => c.id)), lib = shelfGames(), shelves = Array.isArray(lib) ? lib : lib && Array.isArray(lib.shelves) ? lib.shelves : [];
+  const games = def => { const sh = shelves.find(x => x && x.id === def.id && Array.isArray(x.games)); const l = sh ? sh.games.filter(g => g && typeof g.file === 'string' && g.file) : []; return l.length ? l : null; };
+  const tell = p => { if (alive()) win.webContents.send('covers:checking', p); };
+  for (const [i, s] of list.entries()) { await yieldNow(); out.push(...(await covers.coverage([s], { games, progress: p => tell({ ...p, console: i + 1, consoles: list.length }) }))); }
+  tell({ finished: true }); return out; }); // (beta.9: a console at a time, with a breath between: every console's pictures in one go froze Settings' Box art page; beta.10: coverage is async)
 // New games while (T)rustyShelf is open: watch the game folders, and once nothing has changed in them for 8 s (a big copy is
 // finished) tell the shelf to look again. A new game then shows up on the shelf, and in the museum it arrives as a parcel.
 // Never during a game (it waits), and at most one rescan per quiet spell.

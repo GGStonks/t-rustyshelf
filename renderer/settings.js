@@ -362,7 +362,7 @@ function build(){
     // ((T)rustyShelf, issue 14) one press to get all missing art, or to pick a stopped download up again
     labelled(()=>artResumeOf()?"Resume box art download":"Get all missing art",A("Get all missing art",()=>AG.busy?"Running…":artResumeOf()?"Resume":"Get","One press: a box art download that stopped part way (cancelled, an update, the app closed) picks up where it was, with the same consoles and parts. With nothing to resume, every console still missing covers, backs, spines or discs gets them. Pictures you already have are kept.",agOneClick,
       {when:()=>!!api.artCoverage&&!!api.downloadCovers,keys:"resume continue missing box art covers one click download all",sub:()=>{const r=artResumeOf();return AG.busy?{text:"Downloading…",cls:"warn"}:r?{text:`Stopped part way · ${Object.keys(r.plan).length} console${Object.keys(r.plan).length===1?"":"s"} to finish`,cls:"warn"}:null}})),
-    M(window.bsPlatform&&bsPlatform.os==="android"?"Download box art now":"Download missing art now","art-get","Pick the consoles and what to get (covers, backs, spines, discs), then download with progress and Cancel.","Pick the consoles and what to get. Pictures you already have are kept, and each console follows its Art Studio style.",[{t:"dyn",fn:artGetRows}],{when:()=>!!api.artCoverage&&!!api.downloadCovers,keys:"download box art now covers scrape",sub:()=>AG.busy?{text:"Downloading…",cls:"warn"}:null}),
+    M(window.bsPlatform&&bsPlatform.os==="android"?"Download box art now":"Download missing art now","art-get","Pick the consoles and what to get (covers, backs, spines, discs), then download with progress and Cancel.","Pick the consoles and what to get. Pictures you already have are kept, and each console follows its Art Studio style.",[{t:"dyn",fn:artGetRows}],{when:()=>!!api.artCoverage&&!!api.downloadCovers,keys:"download box art now covers scrape",sub:()=>AG.busy?{text:"Downloading…",cls:"warn"}:AG.loading?{text:"Checking what you have"+(AG.chk?" · "+AG.chk.name:"")+"…"}:null}),
     H("Manuals"),
     T("Fetch manuals for new games","ui.autoManuals",false,"Finds the game's manual (archive.org and GamesDatabase.org) and turns it into pages you can read in Inspect.",{keys:"booklet"}),
     T("Only sure English manuals","ui.manualSure",true,"Skips manuals (T)rustyShelf isn't sure about when you download them below. Off takes the best match for every game.",{keys:"language unsure"}),
@@ -652,7 +652,12 @@ function dlClock(){clearTimeout(dlTick);if(!(AG.busy||MG.busy))return;dlTick=set
 function agPlan(){const pl=gp("ui.artPlan");if(pl&&typeof pl==="object")return {...pl};const o={};consoleList().forEach(c=>{o[c.id]=PARTS4.map(x=>x[0])});return o}
 // the parts every ticked console gets (none ticked: the last ones chosen here, else all four)
 function agParts(sys,pl){const on=sys.filter(c=>(pl[c.id]||[]).length);if(!on.length)return AG.parts?[...AG.parts]:PARTS4.map(x=>x[0]);return PARTS4.map(x=>x[0]).filter(k=>on.every(c=>(pl[c.id]||[]).includes(k)))}
-function agLoad(){if(AG.loading||!api.artCoverage)return;AG.loading=true;api.artCoverage().then(c=>{AG.cov=Array.isArray(c)?c:[]}).catch(()=>{AG.cov=[]}).finally(()=>{AG.loading=false;if(isOpen)bump()})}
+// ((T)rustyShelf, issue 24) the check runs on in main while you're on other pages (AG.loading keeps it from starting twice);
+// covers:checking says which console it's on, shown here and on the page's row in the list
+let chkHooked=false;
+function chkHook(){if(chkHooked||!api.onCoversChecking)return;chkHooked=true;api.onCoversChecking(p=>{AG.chk=p&&!p.finished?p:null;if(isOpen)bump()})}
+const chkText=()=>{const c=AG.chk;return c?`${c.name} · console ${c.console} of ${c.consoles}`+(c.total?` · ${Math.min(c.done,c.total)} of ${c.total} games`:""):""};
+function agLoad(){if(AG.loading||!api.artCoverage)return;chkHook();AG.loading=true;AG.chk=null;api.artCoverage().then(c=>{AG.cov=Array.isArray(c)?c:[]}).catch(()=>{AG.cov=[]}).finally(()=>{AG.loading=false;AG.chk=null;if(isOpen)bump()})}
 function artGetRows(){dlHook();
   if(AG.busy){const L=[H("Getting box art",{em:()=>took(AG.started)})];
     if(!Object.keys(AG.prog).length)L.push(infoRow(AG.stage||"Starting…",""));
@@ -670,7 +675,7 @@ function artGetRows(){dlHook();
         L.push(infoRow(x.name||x.id,parts.length?parts.join(", "):"Nothing new",miss?{text:`${miss} not found${kinds?` (${kinds})`:""}`,cls:"warn"}:{text:x.upgraded?`${x.upgraded} made sharper`:"Complete",cls:"ok"},{info:miss?"Not found anywhere: "+(x.missed||[]).slice(0,12).join(", ")+(miss>12?"…":"")+(fix.btn?". Open them in Art Studio to choose another version or use a picture of your own.":""):"",...fix}))});
       if(r.launchboxError)L.push(infoRow("LaunchBox couldn't be reached","",{text:"Only libretro covers were tried this time",cls:"warn"}));}
     L.push(H(""),A("Back to the list","Back","Your consoles and what they still need.",()=>{AG.rep=null;AG.err=null;AG.cov=null;agLoad()},{ns:true}));return L}
-  if(!AG.cov){agLoad();return [infoRow("Checking what you have…","")]}
+  if(!AG.cov){agLoad();return [infoRow("Checking what you have…","",{text:chkText()||"Starting…"},{info:"Keeps going while you look at other pages; the list is here when you come back."})]}
   const sys=AG.cov.filter(c=>c.total>0);
   if(!sys.length)return [infoRow("No games yet","",{text:"Add a games folder for a console first (Consoles)"})];
   const hd=gp("ui.artHD")!==false,pl=agPlan(),parts=agParts(sys,pl),chosen=sys.filter(c=>(pl[c.id]||[]).length);

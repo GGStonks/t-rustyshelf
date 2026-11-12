@@ -671,12 +671,16 @@ async function isLowA(file, key) { const z = await sizeOfAsync(file); return !!z
 // per console: how many games, and for each kind how many have it / how many of those are low-res (header reads only)
 // (beta.10) async: the art folders listed once (artLister) instead of up to 16 stats per game, header reads with
 // fs.promises, and a breath every 25 ms inside a console (a big library or a NAS held the main process up here)
-async function coverage(systems) {
-  const out = [], ls = artLister(); let t0 = Date.now();
+// ((T)rustyShelf, issue 24) opts.games(def): the console's games as the library last found them (null: read its folders
+// again, which takes ages for a big library on a NAS); opts.progress({ id, name, done, total }): how far the check is
+async function coverage(systems, opts = {}) {
+  const out = [], ls = artLister(); let t0 = Date.now(), told = 0;
   for (const { def, cfg } of systems) {
-    const games = await scanSystemAsync(def, cfg), r = { id: def.id, name: def.name, total: games.length };
-    KINDS.forEach(([k]) => { r[k] = 0; r[k + 'Low'] = 0; });
-    for (const g of games) { if (Date.now() - t0 > 25) { await new Promise(res => setImmediate(res)); t0 = Date.now(); }
+    const known = typeof opts.games === 'function' ? opts.games(def) : null;
+    const games = known || await scanSystemAsync(def, cfg), r = { id: def.id, name: def.name, total: games.length };
+    KINDS.forEach(([k]) => { r[k] = 0; r[k + 'Low'] = 0; }); let done = 0;
+    const say = () => { if (typeof opts.progress === 'function') { told = Date.now(); opts.progress({ id: def.id, name: def.name, done, total: games.length }); } }; say();
+    for (const g of games) { if (Date.now() - t0 > 25) { await new Promise(res => setImmediate(res)); t0 = Date.now(); } if (Date.now() - told > 250) say(); done++;
       const dir = artDirFor(cfg, g.file), base = artBase(g.file);
       for (const [k, suf] of KINDS) { const f = await artFileA(ls, dir, base, suf); if (f) { r[k]++; if (await isLowA(f, k)) r[k + 'Low']++; } } }
     out.push(r);
