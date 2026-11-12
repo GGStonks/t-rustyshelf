@@ -71,6 +71,12 @@ const shot = async (p, name) => { try { const r = await p.send('Page.captureScre
     const two = await run();
     check('a core that isn\'t one of the NES\'s is ignored: the usual one (Mesen)', !!two.a && two.a.includes(mesen), JSON.stringify(two));
     const errs = p.events.filter(e => e.method === 'Runtime.exceptionThrown').map(e => (e.params.exceptionDetails.exception || {}).description || e.params.exceptionDetails.text);
+    // (disc 10, again) the RetroArch set in Settings, kept outside every folder searched, is offered for the PlayStation too
+    // (DuckStation is its first choice), and never for a console RetroArch doesn't run
+    const oddRa = mk('Odd Place/RetroArch/retroarch', fs.readFileSync(ra, 'utf8'), true);
+    await p.ev(`(async () => { const c = (await trustyshelf.getConfig()).config; c.retroarch = ${JSON.stringify(oddRa)}; await trustyshelf.saveConfig(c); })()`); await sleep(500);
+    const psx = await p.ev(`trustyshelf.emulatorsFound('psx')`).catch(e => ({ error: e.message })), ps2 = await p.ev(`trustyshelf.emulatorsFound('ps2')`).catch(e => ({ error: e.message }));
+    check('the RetroArch set in Settings is listed for the PlayStation, even outside the folders searched; not for the PS2', Array.isArray(psx) && psx.includes(oddRa) && Array.isArray(ps2) && !ps2.includes(oddRa), JSON.stringify([psx, ps2]));
     check('no script errors', !errs.length, errs.slice(0, 3).join(' | '));
   } catch (e) { check('the test ran to the end', false, e && e.stack || e); }
   finally {

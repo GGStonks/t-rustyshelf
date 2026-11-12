@@ -944,7 +944,11 @@ function applyCfg(next) { const prev = cfg, hadMenu = cfg.ui.homeMenu !== false;
 handle('detect', () => detectAll());
 // ((T)rustyShelf) Settings → Consoles → Find emulators in a folder: the emulator programs in a folder the player picked
 // ((T)rustyShelf, its discussions #10) every copy of this console's emulators found (Settings lists them on the console's page)
-handle('detect:emulators', ({ systemId } = {}) => { const s = CONSOLES.find(c => c.id === systemId); return s && !s.standalone ? require('./main/detect').findAllExe(s.emulatorFolders, s.exeNames) : []; });
+// (disc 10, again) a console that runs in RetroArch always lists the RetroArch set in Settings too: one kept outside the
+// usual folders was never found by the search, so the PlayStation (DuckStation first) had no way over to RetroArch
+handle('detect:emulators', ({ systemId } = {}) => { const s = CONSOLES.find(c => c.id === systemId); if (!s || s.standalone) return [];
+  const found = require('./main/detect').findAllExe(s.emulatorFolders, s.exeNames), ra = s.retro && cfg.retroarch ? emuPath(cfg.retroarch) : '';
+  return ra && paths.isFile(ra) && !found.some(x => x.toLowerCase() === ra.toLowerCase()) ? [...found, ra] : found; });
 handle('detect:folder', ({ dir } = {}) => require('./main/detect').emulatorsIn(typeof dir === 'string' ? dir.slice(0, 1024) : ''));
 // The last scan is kept on disk so the next launch can show the shelves immediately (as console UIs do) while a fresh
 // scan runs behind them; the renderer only rebuilds if something actually changed.
