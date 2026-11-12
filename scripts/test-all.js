@@ -38,7 +38,7 @@ const JOBS = Math.max(1, +arg('jobs') || 8), CAP = arg('cap') && arg('cap') !== 
 // the tests, by kind (the first of each is the slowest: they start first)
 const NODE = ['detect', 'pad', 'portable', 'dataexport', 'release-version', 'presence', 'epicdl', 'storage', 'windowmode', 'hoyoplay', 'music', 'looks', 'artmatch', 'fork-survey', 'addgames', 'ra-consoles', 'ytsearch', 'archive-speed', 'emu-names', 'screenscraper', 'retroarch-setting', 'museum-lighting', 'pc-boxart', 'switch-files', 'quiver', 'pc-console-plat', 'pcsx2-ra', 'pcfolder-async', 'steam-async', 'nup-build', 'xemu-detect', 'xbox-games', 'raportable', 'gamelist', 'pcach', 'vdf'];
 const DESKTOP = ['app', 'pc', 'xbox', 'home', 'music-app', 'windowmode-app', 'epicdl-app', 'consolebox-app', 'artmatch-app', 'ngp', 'gamecom', 'vita', 'keepawake', 'emuchoice', 'export-app'];
-const DEMO = ['lamppool', 'caseinside', 'dscase', 'museumwrap', 'sortdrag', 'artresume', 'boxcolor', 'padfeed', 'android-artcard', 'android-pc', 'usermusic', 'windowmode', 'looks', 'artmatch', 'padnote', 'fanlift', 'media', 'bootvolume', 'pcach'];
+const DEMO = ['lamppool', 'caseinside', 'dscase', 'museumwrap', 'sortdrag', 'artresume', 'boxcolor', 'padfeed', 'android-artcard', 'android-pc', 'usermusic', 'windowmode', 'looks', 'artmatch', 'padnote', 'fanlift', 'media', 'bootvolume', 'pcach', 'cardboard'];
 const GROUPS = ['screens', 'screens2', 'windows', 'thor3', 'thor2', 'thor', 'windows2']; // (the device test's seven parts, longest first: each 1.5-3.5 minutes)
 // not tests of their own: run by a device group, or a probe
 const NOT_STANDALONE = new Set(['heat-probe.js', 'web-device-test.js', 'device-test-parallel.js']);
@@ -158,10 +158,16 @@ process.on('SIGINT', () => process.exit(130)); process.on('SIGTERM', () => proce
   if (needWeb) prep.push((async () => { const t = Date.now(); const c = await sh(process.execPath, ['copy-web.js'], path.join(ROOT, 'android-app')); if (c !== 0) { console.log('demo page: copy-web.js failed'); process.exit(2); } console.log(`demo page: copied in ${secs(t)}`); ready.web = true; })());
   console.log(`${jobs.length} jobs, ${JOBS} at a time${only ? ' (only ' + only.join(', ') + ')' : ''}`);
 
+  // Every job runs headless, never on the screen in use: the desktop tests get xvfb-run's virtual X screen, but on a Wayland
+  // session Electron (39 and later) opens its windows on Wayland whenever WAYLAND_DISPLAY is set, so they showed up on the
+  // real desktop. The Wayland variables are left out and Electron is told to use X11 (the virtual screen); the browsers the
+  // demo and device tests start are headless already.
+  const HEADLESS_ENV = { ...process.env, ELECTRON_OZONE_PLATFORM_HINT: 'x11', XDG_SESSION_TYPE: 'x11' };
+  for (const k of ['WAYLAND_DISPLAY', 'WAYLAND_SOCKET']) delete HEADLESS_ENV[k];
   const queue = jobs.slice(); let lastStart = 0;
   const start = j => new Promise(res => {
     const t = Date.now(), log = fs.createWriteStream(path.join(logDir, j.name + '.log'));
-    const p = spawn(j.cmd, j.args, { cwd: j.cwd, env: { ...process.env, ...j.env }, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const p = spawn(j.cmd, j.args, { cwd: j.cwd, env: { ...HEADLESS_ENV, ...j.env }, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
     running.add(p); let out = '';
     p.stdout.on('data', d => { out += d; log.write(d); }); p.stderr.on('data', d => log.write(d));
     p.on('error', e => { log.write('could not start: ' + e.message); });
