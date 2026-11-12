@@ -12,7 +12,7 @@ const snes = require(path.join(ROOT, 'main', 'systems.js')).CONSOLES.find(c => c
 const { scanSystem } = require(path.join(ROOT, 'main', 'scanner.js'));
 const T = fs.mkdtempSync(path.join(os.tmpdir(), 'ts-gamelist-')), dir = path.join(T, 'roms', 'snes');
 const mk = (rel, body) => { const f = path.join(dir, rel); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, body == null ? 'x' : body); return f; };
-try {
+(async () => { try {
   mk('smw.sfc'); mk('Hacks/kaizo.sfc'); mk('zelda3.sfc'); mk('Plain Game (USA).sfc');
   mk('images/smw-thumb.png'); mk('images/smw-image.png'); mk('images/smw-boxback.png'); mk('images/smw-cartridge.png'); mk('manuals/smw-manual.pdf');
   mk('images/kaizo-image.png'); mk('images/zelda3-thumb.png');
@@ -29,10 +29,13 @@ try {
   check('a picture the gamelist names but that isn\'t there is left out (the screenshot stands in for the box)', /kaizo-image\.png$/.test(g['Hacks/kaizo.sfc'].art.front || ''), g['Hacks/kaizo.sfc'].art.front);
   check('art (T)rustyShelf already has comes first', /covers[\\/]zelda3\.png$/.test(g['zelda3.sfc'].art.front || ''), g['zelda3.sfc'].art.front);
   check('a game the gamelist doesn\'t list is named and found as before', g['Plain Game (USA).sfc'] && /^Plain Game/.test(g['Plain Game (USA).sfc'].title) && !g['Plain Game (USA).sfc'].art.front, JSON.stringify(g['Plain Game (USA).sfc']));
+  // the scan that never holds the main process up reads the gamelist ahead, and gives the same
+  const asy = await require(path.join(ROOT, 'main', 'scanner.js')).scanSystemAsync(snes, { romDirs: [dir] }, true), ga = Object.fromEntries(asy.map(x => [path.relative(dir, x.file).replace(/\\/g, '/'), x]));
+  check('the async scan gives the same names and art', ga['smw.sfc'].title === g['smw.sfc'].title && ga['smw.sfc'].art.front === g['smw.sfc'].art.front && ga['smw.sfc'].art.manualPdf === g['smw.sfc'].art.manualPdf && ga['Hacks/kaizo.sfc'].art.front === g['Hacks/kaizo.sfc'].art.front, JSON.stringify([ga['smw.sfc'].title, ga['smw.sfc'].art.front, ga['Hacks/kaizo.sfc'].art.front]));
   fs.writeFileSync(path.join(dir, 'gamelist.xml'), xml('Super Mario World (renamed)')); const t = new Date(Date.now() + 5000); fs.utimesSync(path.join(dir, 'gamelist.xml'), t, t);
   g = byFile();
   check('a changed gamelist.xml is read again', g['smw.sfc'].title === 'Super Mario World (renamed)', g['smw.sfc'].title);
 } catch (e) { check('ran without an error', false, e.stack); }
 finally { fs.rmSync(T, { recursive: true, force: true }); }
 console.log(fails ? `\n${fails} check(s) failed` : '\nAll checks passed');
-process.exit(fails ? 1 : 0);
+process.exit(fails ? 1 : 0); })();

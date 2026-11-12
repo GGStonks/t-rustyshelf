@@ -245,7 +245,8 @@ async function scanSystemAsync(sysDef, sysCfg, fresh) {
     if (!p) { const gen = scanGen; p = runAsync(scanFilesG(sysDef, sysCfg)).then(list => { const v = { at: now, list }; if (gen === scanGen) scanMemo.set(k, v); return v; });
       if (!fresh) { scanFlight.set(k, p); p.then(() => {}, () => {}).then(() => { if (scanFlight.get(k) === p) scanFlight.delete(k); }); } }
     m = await p; }
-  return withArt(m.list, sysCfg, await artListings(artDirsFor(sysCfg)));
+  const [pre, glReady] = await Promise.all([artListings(artDirsFor(sysCfg)), gamelist.preload(m.list.map(g => g.file).filter(Boolean), sysCfg && sysCfg.romDirs)]);
+  return withArt(m.list, sysCfg, pre, glReady);
 }
 function forget() { scanMemo.clear(); scanFlight.clear(); scanGen++; }
 // the art folders' listings read ahead with fs.promises (withArt then looks everything up in memory)
@@ -253,14 +254,14 @@ async function artListings(dirs) { const pre = new Map();
   await Promise.all([...new Set(dirs)].map(d => fs.promises.readdir(d).then(names => { const m = new Map(); for (const n of names) m.set(n.toLowerCase(), n); pre.set(d, m); }, () => pre.set(d, null))));
   return pre; }
 // the art for each game, fresh: new objects every time, so a caller changing a game never changes the kept list
-function withArt(list, sysCfg, pre) { // pre: listings read ahead (scanSystemAsync)
+function withArt(list, sysCfg, pre, glReady) { // pre: listings read ahead (scanSystemAsync); glReady: the gamelist folders read ahead
   dirCache.clear(); manualCache.clear(); if (pre) for (const [d, m] of pre) dirCache.set(d, m);
   const artDirs = artDirsFor(sysCfg);
   return list.map(g => { const { _art, ...o } = g, a = findArt(g.file, _art.title, artDirs), fg = _art.fg;
     if (fg) { if (!a.front && fg.icon) a.front = fg.icon; if (fg.hero) a.hero = fg.hero; if (!a.disc && fg.icon) a.disc = fg.icon; }
     // ((T)rustyShelf, beta discussion 35) a Batocera / RetroBat / EmulationStation gamelist.xml beside the games: its name for
     // the game, and its pictures and manual where (T)rustyShelf has none of its own (art you added or downloaded comes first)
-    const gl = o.file ? gamelist.lookup(o.file, sysCfg && sysCfg.romDirs) : null;
+    const gl = o.file ? gamelist.lookup(o.file, sysCfg && sysCfg.romDirs, glReady) : null;
     if (gl) { if (gl.name) o.title = gl.name.replace(/[™®]/g, '').replace(/\s+/g, ' ').trim() || o.title;
       for (const k of ['front', 'back', 'disc', 'manualPdf']) if (!a[k] && gl[k]) a[k] = gl[k]; if (!a.hero && gl.hero) a.hero = gl.hero; }
     o.art = a; if (Array.isArray(o.discs)) o.discs = o.discs.slice(); return o; }); // (art keeps its place among the keys)
