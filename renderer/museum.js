@@ -688,7 +688,9 @@ window.Museum = (() => {
   // pulled back until all of it fitted (every case on screen at once, text unreadable) and the walk along it took ages.
   // A row of more than ROW_MAX games now continues on the shelves below it, split evenly; the console and its 3D model
   // stand at the end of the last one, and each plaque says which part it is ("PS2 · 2 of 3").
-  const ROW_MAX = 120;
+  // (issue 17 again) 240 a shelf, not 120: a big library made a wall far taller than wide. Long rows are cheap now: far away,
+  // a row is one block (lodUpdate)
+  const ROW_MAX = 240;
   function wrapRows(data) {
     const out = [];
     for (const r of data) { const g = r.games || []; if (g.length <= ROW_MAX) { out.push(r); continue; }
@@ -805,6 +807,7 @@ window.Museum = (() => {
       if (!r.cont) { const si = standIn(st, consoleW, H * .34, DEPTH * .7); si.position.y = H * .17; cg.add(si); } /* (issue 17: a row continued below has its console at the end of the last part) */
       if (r.console && r.console.model) loadModel(row);
       const ptex = plaqueTex(row); const pl = new THREE.Mesh(new THREE.PlaneGeometry(1.5, .56), new THREE.MeshStandardMaterial({ map: ptex, roughness: .6, metalness: .1, emissive: 0xffffff, emissiveMap: ptex, emissiveIntensity: 0 })); row.plaque = pl; pl.position.set(x + .3 + consoleW + .12 + .75, -H / 2 + .3, -DEPTH / 2 + .06); group.add(pl);
+      row.lodInfo = { cy, z: mesh0z(w), plain }; // (issue 17 again: the row's stand-in, see lodUpdate)
       rows.push(row);
     });
     // the selection spotlight: one narrow, soft-edged beam that follows the case you're on (made with the wall so the
@@ -2236,7 +2239,56 @@ window.Museum = (() => {
       l.position.set(s.position.x, s.position.y + y, s.position.z); l.target.position.set(s.target.position.x, s.target.position.y + y, s.target.position.z);
       l.intensity = s.visible === false ? 0 : s.intensity * POOL_LIFT; l.color.copy(s.color); l.angle = s.angle; l.penumbra = s.penumbra; l.distance = s.distance; l.decay = s.decay; });
   }
-  function drawFrame() { if (window.__musNoDraw) return; if (lampPooled() && wall) poolLamps(); renderer.render(scene, camera); } // (__musNoDraw: profiling in a software-GL browser times the frame's own work without the draw)
+  // ((T)rustyShelf, issue 17 again) Every case is a mesh of its own, drawn in four parts (cover, back, sides, spine) plus its
+  // shrink-wrap: a wall of thousands of games was tens of thousands of drawings a frame, and the frame rate fell through the
+  // floor however far away the cases were. A row whose cases are small on screen (under LOD_PX tall) is drawn as one block
+  // instead, a picture of its spines side by side painted on its front: one drawing for the whole row. Rows close by, the
+  // row you're on and any row with a case moving keep their real cases. The picture is painted again when its spines change.
+  const LOD_PX = 46;
+  let lodT = 0;
+  function lodBusy(row) { return row.boxes.some(b => { const u = b.userData; return u.mail || u.slide || u.p || b.position.distanceToSquared(u.home) > 1e-8; }); }
+  function lodSig(row) { return row.boxes.map(b => { const u = b.userData, m = u.spine && u.spine.map; return m ? m.id + ':' + m.version : u.mail ? 'm' : '-'; }).join(','); }
+  function lodPaint(row) {
+    const THREE = T(), L = row.lodInfo, B = row.boxes, n = B.length, first = B[0].userData.home.x, last = B[n - 1].userData.home.x, len = last - first + row.d;
+    const W = Math.min(4096, Math.max(64, n * 14)), Hp = 256, px = W / len;
+    let st = row.lodStand;
+    if (!st) {
+      const atlas = document.createElement('canvas'); atlas.width = W; atlas.height = Hp;
+      const map = new THREE.CanvasTexture(atlas); if ('colorSpace' in map) map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4;
+      const face = fillify(new THREE.MeshStandardMaterial({ map, roughness: .4, metalness: .03 }), row.fillU);
+      st = new THREE.Mesh(new THREE.BoxGeometry(len, row.ch, row.w), [L.plain, L.plain, L.plain, L.plain, face, L.plain]);
+      st.position.set(first - row.d / 2 + len / 2, L.cy, L.z); st.visible = false; st.userData.lod = true; row.group.add(st); row.lodStand = st;
+    }
+    const c = st.material[4].map.image, x = c.getContext('2d'), base = '#' + new THREE.Color(row.style.caseColor || '#202020').getHexString();
+    x.fillStyle = 'rgba(8,6,4,1)'; x.fillRect(0, 0, W, Hp);
+    B.forEach(b => { const u = b.userData; if (u.mail) return; const x0 = (u.home.x - row.d / 2 - (first - row.d / 2)) * px, sw = Math.max(1, row.d * px - .5);
+      const m = u.spine && u.spine.map, img = m && m.image;
+      try { if (img && (img.width || img.videoWidth)) x.drawImage(img, x0, 0, sw, Hp); else { x.fillStyle = u.spine ? '#' + u.spine.color.getHexString() : base; x.fillRect(x0, 0, sw, Hp); } }
+      catch { x.fillStyle = base; x.fillRect(x0, 0, sw, Hp); } });
+    st.material[4].map.needsUpdate = true; row.lodSig = lodSig(row);
+  }
+  function lodSet(row, far) {
+    if (far && (!row.lodStand || row.lodSig !== lodSig(row))) lodPaint(row);
+    row.lodFar = far; if (row.lodStand) row.lodStand.visible = far;
+    row.boxes.forEach(b => { b.visible = !far && !b.userData.mail; });
+  }
+  const lodA = { x: 0, y: 0, z: 0 };
+  function lodUpdate() {
+    const now = performance.now(); if (!rows.length || !camera || now - lodT < 150) return; lodT = now;
+    const THREE = T(), Hpx = (renderer.domElement && renderer.domElement.height) || 720, k = Hpx / (2 * Math.tan(camera.fov * Math.PI / 360));
+    const cp = camera.position, a = new THREE.Vector3(), b = new THREE.Vector3();
+    rows.forEach((row, ri) => {
+      if (!row.boxes.length || !row.lodInfo || !row.group) return;
+      a.copy(row.boxes[0].userData.home); row.group.localToWorld(a); b.copy(row.boxes[row.boxes.length - 1].userData.home); row.group.localToWorld(b);
+      const t = Math.max(0, Math.min(1, ((cp.x - a.x) * (b.x - a.x) + (cp.z - a.z) * (b.z - a.z)) / Math.max(1e-6, (b.x - a.x) ** 2 + (b.z - a.z) ** 2)));
+      lodA.x = a.x + (b.x - a.x) * t; lodA.y = a.y; lodA.z = a.z + (b.z - a.z) * t;
+      const dist = Math.hypot(cp.x - lodA.x, cp.y - lodA.y, cp.z - lodA.z), tall = row.ch * k / Math.max(.01, dist);
+      const far = !window.__musNoLod && tall < LOD_PX && !(ri === rowI && !wide) && !lodBusy(row); // (__musNoLod: the tests compare with every case drawn)
+      if (far !== !!row.lodFar || (far && row.lodSig !== lodSig(row) && now - (row.lodAt || 0) > 1000)) { row.lodAt = now; lodSet(row, far); }
+      else if (far) row.boxes.forEach(b => { if (b.visible) b.visible = false; }); // (anything that showed a case again while its row is a block)
+    });
+  }
+  function drawFrame() { if (window.__musNoDraw) return; if (lampPooled() && wall) poolLamps(); try { lodUpdate(); } catch {} renderer.render(scene, camera); } // (__musNoDraw: profiling in a software-GL browser times the frame's own work without the draw)
   // A case box's six faces as four draws instead of six: the cover (+x), the back (-x, where the back-cover art goes
   // when you pick a case up), the top, bottom and far end together, and the spine (+z). The box's faces come in the order
   // +x, -x, +y, -y, +z, -z; the rounded box is non-indexed, so an index listing its vertices in the new order is added.
@@ -2321,5 +2373,5 @@ window.Museum = (() => {
     hooks.onSelect && hooks.onSelect(current()); return true; }
   function glStats() { if (!renderer) return null; const i = renderer.info; let lights = 0, shadowL = 0; scene && scene.traverse(o => { if (o.isLight && o.visible && o.intensity > 0) { lights++; if (o.castShadow) shadowL++; } }); return { calls: i.render.calls, tris: i.render.triangles, geos: i.memory.geometries, texs: i.memory.textures, progs: (i.programs || []).length, progNames: (i.programs || []).map(p => p.name + '#' + p.id), lights, shadowL, pr: renderer.getPixelRatio(), aa: !!(renderer.getContext().getContextAttributes() || {}).antialias, shadows: renderer.shadowMap.enabled }; }
   return { _wall: () => ({ rows: rows.map(r => ({ id: r.id, name: r.name, n: r.boxes.length })), lights: (() => { let n = 0; if (scene) scene.traverse(o => { if (o.isSpotLight && o.parent && o.visible !== false) n++; }); return n; })(), pooled: lampPooled(), rowI, wide, wideSel, pool: lampPool ? lampPool.map(l => ({ x: +l.position.x.toFixed(3), y: +l.position.y.toFixed(3), on: l.intensity > 0 })) : null, want: rows[rowI] && rows[rowI].lamp && rows[rowI].group ? { x: +rows[rowI].lamp.position.x.toFixed(3), y: +(rows[rowI].lamp.position.y + rows[rowI].group.position.y).toFixed(3) } : null }), // (issue 17's test: the shelves and how many spot lights light them)
-    _perf: reset => { const o = Object.assign({}, facc), r = rows[rowI]; o.pending = r ? r.boxes.filter((b, i) => Math.abs(i - colI) <= 4 && !b.userData.mail && !b.userData.frontLoaded).length : -1; if (reset) Object.keys(facc).forEach(k => facc[k] = 0); return o; }, stats: glStats, tvShow, tvCard, tvStatic, tvOff, tvVolume, watchTv, tvMeta: () => tv && tv.power ? tv.meta : null, tvPower: on => { tvPower(!!on); hooks.onSelect && hooks.onSelect(current()); }, tvPowered: () => !!(tv && tv.power), tvAvail: () => !!tv, showTv, _tv: () => tv && { mode: tv.mode, power: tv.power, pow: tv.pow, gain: tv.gain, gt: tv.gT, base: tv.base, vol: tv.video ? tv.video.volume : null, box: [tv.box.min.x, tv.box.max.x, tv.box.min.y, tv.box.max.y], card: tv.card && tv.card.title, crt: tvM && tvM.U.uCrt.value, prog: tv.screen.material === (tvM && tvM.screenV) ? 'video' : 'still' }, lightFade: () => lightK, _dv: () => delivery && { rot: delivery.rot, shown: delivery.shown, ot: delivery.open && delivery.open.t }, skipDelivery, setHoldA: v => { holdA = !!v; }, resealAll, opened: () => unwrapped.size, preloadModel, _snapCam: () => { snapCam = true; }, _cam: () => ({ x: camP.x, y: camP.y, z: camP.z, tx: lastTg ? lastTg.x : 0, ty: lastTg ? lastTg.y : 0, tz: lastTg ? lastTg.z : 0, on: tw.on, s: tw.s, t: tw.t, d: tw.d, zoom: tw.zoom, key: twKey, pre: preOn ? preRow : -1, fk: wideFrame ? wideFrame.userData.k : 0, up: fst.up, fr: fst.fr, sp: fst.sp, sh: fst.sh, row: fst.row, js: fst.jsMs, upQ: upQ.length }), setRoomView: on => { roomView = !!on; lastInput = woke(); }, setGuideView: on => { guideView = !!on; lastInput = woke(); }, setLibrary, consoleFit, setConsoleFit, toConsole, setRoom, room: () => Object.assign({}, room), handX, handY, handState, wrapPull, unwrapHeld, zoomHand, panHand, leanHand, turnPage, readerZoom, readerPan, lights: () => Object.entries(LIGHTS).map(([id, l]) => [id, l.name]), setLighting, lighting: () => lightId, _rows: () => rows, _rack: () => rack && rack.items, available, open, close, warm, _lights: () => { let n = 0, spots = 0; if (scene) scene.traverseVisible(o => { if (o.isLight) { n++; if (o.isSpotLight) spots++; } }); return { n, spots }; }, setPaused: (p, why = 'x') => { if (p) pauseWhy.add(why); else pauseWhy.delete(why); paused = pauseWhy.size > 0; if (!paused && active && !raf) { lastT = 0; raf = requestAnimationFrame(frame); } }, wake: () => { if (window.bsPlatform && window.bsPlatform.os === 'android') lastInput = woke(); } /* a change from outside (the bottom screen, the Room menu) counts as input: woken, and not straight back to sleep */, sleeping: () => pauseWhy.has('idle') /* (the reader and the dimmed screen each hold their own pause: waking from a dim mustn't unpause under an open magazine) */, setShadows: on => { window.__musNoShadows = !on; if (renderer) { renderer.shadowMap.enabled = wantShadows(); renderer.shadowMap.needsUpdate = true; rows.forEach(r => { r.lamp.castShadow = false; }); shadowRow = -1; } }, move, jump, activate, back, bottomRow, pickCol, pickAt, unwrapCol, refreshArt, turn, release, skipFill, current, fanLift /* (beta.11) Y in a file box's fan */, isActive: () => active, isHolding: () => !!holding || !!heldCase || !!libHeld, isHoldingCase: () => !!heldCase, isFilling: () => intro.on, isWide: () => wide, setRow: i => { rowI = Math.max(0, i | 0); colI = 0; } };
+    _perf: reset => { const o = Object.assign({}, facc), r = rows[rowI]; o.pending = r ? r.boxes.filter((b, i) => Math.abs(i - colI) <= 4 && !b.userData.mail && !b.userData.frontLoaded).length : -1; if (reset) Object.keys(facc).forEach(k => facc[k] = 0); return o; }, stats: glStats, _lod: () => ({ far: rows.filter(r => r.lodFar).length, near: rows.filter(r => !r.lodFar).length, rows: rows.length }), tvShow, tvCard, tvStatic, tvOff, tvVolume, watchTv, tvMeta: () => tv && tv.power ? tv.meta : null, tvPower: on => { tvPower(!!on); hooks.onSelect && hooks.onSelect(current()); }, tvPowered: () => !!(tv && tv.power), tvAvail: () => !!tv, showTv, _tv: () => tv && { mode: tv.mode, power: tv.power, pow: tv.pow, gain: tv.gain, gt: tv.gT, base: tv.base, vol: tv.video ? tv.video.volume : null, box: [tv.box.min.x, tv.box.max.x, tv.box.min.y, tv.box.max.y], card: tv.card && tv.card.title, crt: tvM && tvM.U.uCrt.value, prog: tv.screen.material === (tvM && tvM.screenV) ? 'video' : 'still' }, lightFade: () => lightK, _dv: () => delivery && { rot: delivery.rot, shown: delivery.shown, ot: delivery.open && delivery.open.t }, skipDelivery, setHoldA: v => { holdA = !!v; }, resealAll, opened: () => unwrapped.size, preloadModel, _snapCam: () => { snapCam = true; }, _cam: () => ({ x: camP.x, y: camP.y, z: camP.z, tx: lastTg ? lastTg.x : 0, ty: lastTg ? lastTg.y : 0, tz: lastTg ? lastTg.z : 0, on: tw.on, s: tw.s, t: tw.t, d: tw.d, zoom: tw.zoom, key: twKey, pre: preOn ? preRow : -1, fk: wideFrame ? wideFrame.userData.k : 0, up: fst.up, fr: fst.fr, sp: fst.sp, sh: fst.sh, row: fst.row, js: fst.jsMs, upQ: upQ.length }), setRoomView: on => { roomView = !!on; lastInput = woke(); }, setGuideView: on => { guideView = !!on; lastInput = woke(); }, setLibrary, consoleFit, setConsoleFit, toConsole, setRoom, room: () => Object.assign({}, room), handX, handY, handState, wrapPull, unwrapHeld, zoomHand, panHand, leanHand, turnPage, readerZoom, readerPan, lights: () => Object.entries(LIGHTS).map(([id, l]) => [id, l.name]), setLighting, lighting: () => lightId, _rows: () => rows, _rack: () => rack && rack.items, available, open, close, warm, _lights: () => { let n = 0, spots = 0; if (scene) scene.traverseVisible(o => { if (o.isLight) { n++; if (o.isSpotLight) spots++; } }); return { n, spots }; }, setPaused: (p, why = 'x') => { if (p) pauseWhy.add(why); else pauseWhy.delete(why); paused = pauseWhy.size > 0; if (!paused && active && !raf) { lastT = 0; raf = requestAnimationFrame(frame); } }, wake: () => { if (window.bsPlatform && window.bsPlatform.os === 'android') lastInput = woke(); } /* a change from outside (the bottom screen, the Room menu) counts as input: woken, and not straight back to sleep */, sleeping: () => pauseWhy.has('idle') /* (the reader and the dimmed screen each hold their own pause: waking from a dim mustn't unpause under an open magazine) */, setShadows: on => { window.__musNoShadows = !on; if (renderer) { renderer.shadowMap.enabled = wantShadows(); renderer.shadowMap.needsUpdate = true; rows.forEach(r => { r.lamp.castShadow = false; }); shadowRow = -1; } }, move, jump, activate, back, bottomRow, pickCol, pickAt, unwrapCol, refreshArt, turn, release, skipFill, current, fanLift /* (beta.11) Y in a file box's fan */, isActive: () => active, isHolding: () => !!holding || !!heldCase || !!libHeld, isHoldingCase: () => !!heldCase, isFilling: () => intro.on, isWide: () => wide, setRow: i => { rowI = Math.max(0, i | 0); colI = 0; } };
 })();
