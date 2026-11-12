@@ -45,7 +45,8 @@ function installedState(st, lib) {
 
 function libraryFolders(steamPath) {
   // the same folder spelled differently ("C:\Steam\" vs "c:\steam") is one library: keyed by its normalised path
-  const out = new Map(), add = p => { const k = path.resolve(p).replace(/[\\/]+$/, '').toLowerCase(); if (!out.has(k)) out.set(k, p); };
+  const fold = s => process.platform === 'win32' ? s.toLowerCase() : s; // (beta.12: Linux folders differ by case)
+  const out = new Map(), add = p => { const k = fold(path.resolve(p).replace(/[\\/]+$/, '')); if (!out.has(k)) out.set(k, p); };
   add(steamPath);
   const lf = readVdf(path.join(steamPath, 'steamapps', 'libraryfolders.vdf'));
   const root = lf && (vdf.get(lf, 'libraryfolders') || vdf.get(lf, 'LibraryFolders'));
@@ -113,7 +114,7 @@ function scanSteam(givenPath, opts = {}) {
   const main = steamRoot(opts.mainPath), steamPath = isMainSteam(given) || !main ? given : main;
   const stats = userStats(steamPath);
   const games = [], seen = new Set(); let manifests = 0, notInstalled = 0, tools = 0;
-  const libs = libraryFolders(steamPath); if (steamPath !== given && !libs.some(l => path.resolve(l).toLowerCase() === path.resolve(given).toLowerCase())) libs.push(given);
+  const libs = libraryFolders(steamPath); if (steamPath !== given && !libs.some(l => process.platform === 'win32' ? path.resolve(l).toLowerCase() === path.resolve(given).toLowerCase() : path.resolve(l) === path.resolve(given))) libs.push(given);
   for (const lib of libs) {
     const apps = path.join(lib, 'steamapps');
     for (const ent of readDir(apps)) {
@@ -246,4 +247,4 @@ async function scanSteamAsync(givenPath, opts = {}) {
   return games;
 }
 
-module.exports = { scanSteam, scanSteamAsync, isTool, steamRoot, steamRootAsync, isMainSteam, isMainSteamAsync, _io: io, _silent: silent };
+module.exports = { scanSteam, scanSteamAsync, isTool, steamRoot, steamRootAsync, isMainSteam, isMainSteamAsync, _io: io, _silent: silent, libraryFolders }; // (upstream beta.12: libraryFolders for main/gamewatch.js)

@@ -167,7 +167,12 @@ window.trustyshelf={
   launchGame:async()=>{setTimeout(()=>onExit({code:0}),4000);return {}},
   launchEmulator:async()=>{setTimeout(()=>onExit({code:0}),3000);return {}},
   launchApp:async()=>{setTimeout(()=>onExit({code:0}),3000);return {}},
-  launchSteam:async()=>true,
+  // (beta.12) ?watch=1: Seamless play watches the Steam game (it "ends" 3 s later, or ?watch=giveup: it never shows up),
+  // as main/seamless.js does; Seamless play off (or no ?watch): handed to Steam, as before
+  launchSteam:async appid=>{const w=window.__watchMode||(/[?&]watch=(\w+)/.exec(location.search)||[])[1];if(!w||(config.ui&&config.ui.seamless===false))return true;window.__watched=(window.__watched||[]).concat(String(appid));
+    if(w==="giveup")setTimeout(()=>{if(window.__gaveUp)window.__gaveUp()},2500);else setTimeout(()=>onExit({code:0,watched:true}),3000);return {watching:true,cover:3}},
+  setScreenMode:async m=>{(window.__screenModes=window.__screenModes||[]).push(m);config.ui.screenMode=m;return m},
+  watchCancel:async()=>({cancelled:false}),onWatchGaveUp:fn=>{window.__gaveUp=fn},
   stopRunning:async()=>{},
   themes:async()=>(window.__mockThemes||{}),
   // (1.76) custom themes: one pretend picture theme (an SVG sky); "Make a theme from a picture" adds a second; tests can

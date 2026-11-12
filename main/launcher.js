@@ -2,6 +2,7 @@
 // main/launcher.js; modified for (T)rustyShelf (see the git history).
 // Starts emulators, Steam games and media apps, and reports when they close.
 const { spawn } = require('child_process');
+const EventEmitter = require('events');
 const path = require('path');
 const fs = require('fs');
 const { shell } = require('electron');
@@ -92,6 +93,8 @@ let forceTimer = null;
 // Returns false when nothing is running, else true (same as before).
 function closeRunning(forceAfterMs = 8000, onForce) {
   if (!running) return false;
+  // (beta.12, Seamless play) a watched game (adopt below): its watcher asks the game's own processes, never its launcher
+  if (running.bsWatch) { try { Promise.resolve(running.bsWatch.close(forceAfterMs, onForce)).catch(() => {}); } catch {} return true; }
   const pid = running.pid, child = running;
   if (process.platform === 'win32') quiet('taskkill', ['/PID', String(pid)]);
   // (Linux: the whole process group, which detached started: a Flatpak's launcher, an AppImage's runtime and the emulator
@@ -111,4 +114,25 @@ function closeRunning(forceAfterMs = 8000, onForce) {
   return true;
 }
 
-module.exports = { buildArgs, launchGame, launchEmulator, launchApp, launchCommand, launchSteam, needsAdmin, elevatedScript, isRunning, runningName, setRunningName, busyMessage, stopRunning, closeRunning };
+// (beta.12, Seamless play) A game the shelf didn't start itself but watches (main/gamewatch.js: a Steam or store game). It
+// counts as the running game like one the shelf started, so the busy check, the Home menu's Quit, the quit cover and the
+// return to the shelf all work the same. watcher: { close(forceAfterMs, onForce) }. Returns { setPid(pid), finish(info):
+// it ended (onExit runs, as for a started game), release(): let go without onExit (watching gave up) }.
+function adopt(name, watcher, onExit) {
+  if (running) throw new Error(busyMessage());
+  const me = new EventEmitter();
+  Object.assign(me, { pid: 0, exitCode: null, signalCode: null, bsName: String(name || '').slice(0, 120), bsWatch: watcher, kill: () => { try { Promise.resolve(watcher.close(0)).catch(() => {}); } catch {} } });
+  running = me; const started = Date.now(); let done = false;
+  const end = () => { if (done) return false; done = true; if (running === me) running = null; return true; };
+  return {
+    setPid: pid => { me.pid = +pid || 0; try { onEvent('process started', me.pid); } catch {} },
+    finish: info => { if (!end()) return; me.exitCode = 0; me.emit('exit', 0); onExit({ code: 0, ...(info || {}), ms: Date.now() - started }); },
+    release: () => { end(); },
+    isCurrent: () => running === me
+  };
+}
+// (beta.12) what happens to a launch, for the launch timeline in the log (main/seamless.js): onEvent(what, pid)
+let onEvent = () => {};
+function setEventHook(fn) { onEvent = typeof fn === 'function' ? fn : () => {}; }
+
+module.exports = { buildArgs, launchGame, launchEmulator, launchApp, launchCommand, launchSteam, needsAdmin, elevatedScript, isRunning, runningName, setRunningName, busyMessage, stopRunning, closeRunning, adopt, setEventHook };

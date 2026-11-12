@@ -2010,11 +2010,11 @@ async function launchNow(g,underInsert){if(g&&g.installed===false){offerInstall(
     // (beta.4) PC games that aren't Steam's: Epic's are handed to its launcher (like Steam's: Back returns to the shelf);
     // Quiver's and the ones added by hand are started by (T)rustyShelf (like an app: the Home menu, and Back waits for them)
     // (beta.7) Ubisoft Connect, the EA app and the Xbox app too (PC_EXT): handed over the same way
-    if(g.kind==="steam"&&PC_EXT[g.source]){const L=PC_EXT[g.source];showLaunch("Starting through "+L,g.title,L);await wait(650);if(mode!=="launch"||!launchCtx||launchCtx.g!==g)return;await api.launchPc(g.id);if(api.historyTouch)api.historyTouch(g.id).catch(()=>{});
+    if(g.kind==="steam"&&PC_EXT[g.source]){const L=PC_EXT[g.source];showLaunch("Starting through "+L,g.title,L);await wait(650);if(mode!=="launch"||!launchCtx||launchCtx.g!==g)return;const r=await api.launchPc(g.id);if(api.historyTouch)api.historyTouch(g.id).catch(()=>{});if(r&&r.watching){watchStarted(g,r,"the "+L);return} /* (beta.12: Seamless play watches it) */
       clearTimeout(launchTimer);launchTimer=setTimeout(()=>note(["Running through the "+L+". Press ",{b:btnWord("back")}," or ",{b:"Esc"}," to return to the shelf."]),1800);return}
     if(g.kind==="steam"&&g.source&&g.source!=="steam"){runningKind="app";showLaunch(g.source==="quiver"?"Starting from Quiver":g.source==="gog"?"Starting from GOG":g.source==="epic"?"Starting from Epic Games":"Starting",g.title,g.title);await wait(650);if(mode!=="launch"||!launchCtx||launchCtx.g!==g)return;const r=await api.launchPc(g.id);sendHomeMeta(g);if(r&&r.notice)setTimeout(()=>toast(r.notice),2500);if(api.historyTouch)api.historyTouch(g.id).catch(()=>{});
       if(r&&r.cover){const bar=$("launch").querySelector(".l-bar i");bar.style.animation="none";void bar.offsetWidth;bar.style.animation=`load ${Math.min(r.cover,8)}s cubic-bezier(.5,0,.2,1) forwards`}}
-    else if(g.kind==="steam"){showLaunch("Starting through Steam",g.title,`steam://rungameid/${g.appid}`);await wait(650);if(mode!=="launch"||!launchCtx||launchCtx.g!==g)return; /* backed out during the fade */await api.launchSteam(g.appid);if(api.historyTouch)api.historyTouch(g.id).catch(()=>{});
+    else if(g.kind==="steam"){showLaunch("Starting through Steam",g.title,`steam://rungameid/${g.appid}`);await wait(650);if(mode!=="launch"||!launchCtx||launchCtx.g!==g)return; /* backed out during the fade */const r=await api.launchSteam(g.appid);if(api.historyTouch)api.historyTouch(g.id).catch(()=>{});if(r&&r.watching){watchStarted(g,r,"Steam");return} /* (beta.12: Seamless play watches it) */
       clearTimeout(launchTimer);launchTimer=setTimeout(()=>note(["Running through Steam. Press ",{b:btnWord("back")}," or ",{b:"Esc"}," to return to the shelf."]),1800);return}
     else if(g.kind==="app"){showLaunch("Opening app",g.title,quote(g.path));await wait(650);const r=await api.launchApp(g.appId,g.link);sendHomeMeta(g);if(r&&r.cover){const bar=$("launch").querySelector(".l-bar i");bar.style.animation="none";void bar.offsetWidth;bar.style.animation=`load ${Math.min(r.cover,8)}s cubic-bezier(.5,0,.2,1) forwards`}}
     else if(g.kind==="emulator"){showLaunch(`Opening ${s.emulatorName}`,"Emulator settings",quote(s.emulator));await wait(650);await api.launchEmulator(s.id)}
@@ -2023,6 +2023,21 @@ async function launchNow(g,underInsert){if(g&&g.installed===false){offerInstall(
     clearTimeout(launchTimer);launchTimer=setTimeout(()=>note(cfgInfo&&cfgInfo.config.ui.homeMenu===false?"Playing · close the game to come back here":`Playing · press ${padWord("guide")} for the Home menu`),1800);
   }catch(err){clearTimeout(insertT);clearTimeout(launchTimer);hideInsert();note([String(err&&err.message||err)," ",{br:1},"Press ",{b:btnWord("back")}," or ",{b:"Esc"}," to go back."],true);runningKind="error"}
 }
+// (upstream beta.12) Seamless play: a Steam or store game the shelf watches (main/gamewatch.js). The starting screen stays up
+// until the game's window shows, then it plays like any other game (the Home menu, the shelf back when it ends). Before it
+// shows up, B / Esc / a click goes back (watchBack). It never showed up: the old "Running through …" note (onWatchGaveUp).
+let watchVia="";
+function watchStarted(g,r,via){runningKind="watch";watchVia=via;sendHomeMeta(g);
+  if(r.cover){const bar=$("launch").querySelector(".l-bar i");bar.style.animation="none";void bar.offsetWidth;bar.style.animation=`load ${Math.min(r.cover,8)}s cubic-bezier(.5,0,.2,1) forwards`}
+  clearTimeout(launchTimer);launchTimer=setTimeout(()=>{if(mode==="launch"&&runningKind==="watch")note(["Starting through "+via+". Press ",{b:btnWord("back")}," or ",{b:"Esc"}," to go back to the shelf."])},4000)}
+/* (beta.12) twice to stop waiting: Steam turns a controller it has taken over into keys (B is Esc), so one press while it
+   was still preparing the game took the app back to the shelf with the game on its way. The first press only asks */
+let watchAskAt=0;
+function watchBack(){const t=performance.now();if(t-watchAskAt>4000){watchAskAt=t;toast("Still starting. Press again to stop waiting for it");return}watchAskAt=0;
+  if(!api.watchCancel){endLaunch();sfx.back();return}
+  Promise.resolve(api.watchCancel()).then(r=>{if(r&&r.cancelled)sfx.back();else toast("Close the game or app to come back")}).catch(()=>{})}
+api.onWatchGaveUp&&api.onWatchGaveUp(()=>{if(mode!=="launch"||runningKind!=="watch")return;runningKind="steam";clearTimeout(launchTimer);document.body.classList.remove("aside");$("launch").classList.remove("ready");
+  note(["Running through "+watchVia+". Press ",{b:btnWord("back")}," or ",{b:"Esc"}," to return to the shelf."])});
 // a step before the game starts (a 3DS .cia being installed into Azahar) shows on the boot slide and the launch screen
 if(api.onLaunchStatus)api.onLaunchStatus(t=>{if(mode!=="launch")return;const b=$("bsEmu"),l=$("lEmu");if(b)b.textContent=t;if(l)l.textContent=t});
 function endLaunch(){pollResume();clearTimeout(launchTimer);clearTimeout(insertT);hideInsert();app.classList.remove("launching");mode="browse";runningKind=null;ambient(true);loadHistory();musLaunchBack()}
@@ -2078,6 +2093,7 @@ function back(){
   if(mode==="achv"){closeAchievements();return}
   if(mode==="boot"){endBoot(true);return}
   if(mode==="customize"){if(!czClosePick())closeCustomize();return}
+  if(mode==="launch"&&runningKind==="watch"){watchBack();return} // (beta.12) Seamless play: a watched game not up yet
   if(mode==="launch"){if(runningKind==="steam"||runningKind==="error"){endLaunch();sfx.back()}else toast("Close the game or app to come back");return}
   if(mode==="details"){if(!$("dMenu").hidden){dMenuClose();return}closeDetails();return} // (beta.7: B closes the More menu first)
   if(flipped)flip();else if((mode==="browse"||mode==="details")&&(Math.abs(spin)>1||Math.abs(spinT)>1)){spinT=0;spinEase();sfx.flip()} // resting on a spine: B turns it to the front too

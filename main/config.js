@@ -241,6 +241,11 @@ function sanitize(cfg) {
   cfg.emuSeen = Array.isArray(cfg.emuSeen) ? [...new Set(cfg.emuSeen.filter(x => typeof x === 'string' && x && x.length <= 1024))].slice(0, 20) : [];
   for (const [k, list] of Object.entries(ONE_OF)) if (!list.includes(ui[k])) ui[k] = d[k];
   for (const k of ['clock24', 'reduceMotion']) if (typeof ui[k] !== 'boolean') ui[k] = d[k];
+  // (upstream beta.12) Seamless play (main/seamless.js): on unless turned off; the screen mode ('' = never chosen: Start in
+  // fullscreen decides); Window mode's last place and size
+  if (typeof ui.seamless !== 'boolean') ui.seamless = true;
+  if (!['', 'full', 'window'].includes(ui.screenMode)) ui.screenMode = '';
+  { const b = ui.windowBounds; ui.windowBounds = isObj(b) && ['x', 'y', 'width', 'height'].every(k => Number.isFinite(b[k]) && Math.abs(b[k]) < 100000) && b.width >= 200 && b.height >= 150 ? { x: Math.round(b.x), y: Math.round(b.y), width: Math.round(b.width), height: Math.round(b.height) } : null; }
   ui.display = typeof ui.display === 'string' || typeof ui.display === 'number' ? String(ui.display).slice(0, 64) : '';
   ui.audioOut = typeof ui.audioOut === 'string' ? ui.audioOut.slice(0, 512) : '';
   { const n = +ui.safeArea; ui.safeArea = Number.isFinite(n) && ui.safeArea !== null && ui.safeArea !== '' ? Math.min(100, Math.max(90, Math.round(n))) : 100; }

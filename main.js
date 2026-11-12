@@ -49,6 +49,8 @@ const wiiumanual = require('./main/wiiumanual');
 const manualcoll = require('./main/manualcoll');
 const manualstudio = require('./main/manualstudio'); // Manual Studio: every manual for a game side by side, per-game locks, per-console language / region
 const launcher = require('./main/launcher');
+const gamewatch = require('./main/gamewatch'); // (beta.12) Seamless play: Steam and store games watched
+const seamless = require('./main/seamless'); // (beta.12) Seamless play: screen mode, Go to desktop, the launch timeline
 const themes = require('./main/themes');
 const customThemes = require('./main/customthemes'); // (1.76) picture themes the user makes: Custom themes\<name>\
 const library = require('./main/library');
@@ -341,8 +343,8 @@ function gameFile(systemId, file) {
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 1600, height: 900, ...startBounds(), // Settings → Display: opens on the TV chosen there (the main display when it isn't connected)
-    fullscreen: !WINDOWED && cfg.ui.startFullscreen,
+    width: 1600, height: 900, ...(seamless.savedBounds() || startBounds()), // Settings → Display: opens on the TV chosen there (the main display when it isn't connected); (upstream beta.12) in Seamless play's Window mode, where it was left
+    fullscreen: !WINDOWED && seamless.startFullscreen(cfg.ui.startFullscreen), // (upstream beta.12: Seamless play's Screen mode when it's on)
     backgroundColor: '#07070c',
     show: false, // shown once its first frame (the logo) is painted: no empty or half-drawn window while it starts
     autoHideMenuBar: true,
@@ -377,6 +379,7 @@ function createWindow() {
   // (beta.6) the taskbar hidden for a game comes back the moment you leave the fullscreen shelf: another app, the Start
   // menu, minimized, windowed (see taskbarBack)
   for (const ev of ['blur', 'leave-full-screen', 'minimize', 'hide']) win.on(ev, () => taskbarLeave(ev));
+  seamless.trackWindow(win); // (beta.12) Window mode remembers the window's place and size
 }
 // (a blur that only went to one of (T)rustyShelf's own windows, a trailer, isn't leaving: that window is watched instead)
 function taskbarLeave(ev) {
@@ -394,7 +397,7 @@ const alive = () => win && !win.isDestroyed(); // the window can be gone already
 // Quitting a game: put (T)rustyShelf's (black) screen in front *before* the emulator closes, so the Windows desktop never
 // shows in between; the shelf then fades in as usual once the emulator has exited (onExit → bringBack).
 function coverForQuit() {
-  markEvent('coverForQuit'); quitAt = Date.now(); quitSeq++;
+  markEvent('coverForQuit'); quitAt = Date.now(); quitSeq++; seamless.mark('quit: cover up');
   if (!alive()) return;
   // quit while the loading screen was still up: its pending lift must not step (T)rustyShelf aside in the middle of the quit
   if (coverTimer) { clearInterval(coverTimer.keep); clearTimeout(coverTimer); coverTimer = null; }
@@ -439,7 +442,7 @@ function clearQuitCover() { if (quitCover) { clearInterval(quitCover); quitCover
 // back if (T)rustyShelf crashes or is ended, and the next start does too. Settings → Display → Screen & motion turns it off.
 let tbHidden = false;
 const tbMark = () => path.join(app.getPath('userData'), 'taskbar-hidden');
-const tbWanted = () => process.platform === 'win32' && cfg.ui.hideTaskbar !== false;
+const tbWanted = () => process.platform === 'win32' && cfg.ui.hideTaskbar !== false && !seamless.windowMode(); // (beta.12: never in Seamless play's Window mode)
 async function taskbarHide() {
   if (!tbWanted() || tbHidden) return;
   tbHidden = true; try { fs.writeFileSync(tbMark(), String(Date.now())); padwatch.taskbarGuard(process.pid, tbMark()); } catch {} // (the guard: back even if (T)rustyShelf crashes)
@@ -468,7 +471,7 @@ let goneCover = false;
 function onGameWindow(back) {
   if (!back) {
     if (!launcher.isRunning() || quitCover || coverTimer || homemenu.isOpen()) return;
-    log('Game window closed, the emulator still running: covering the screen until it exits'); coverForQuit(); goneCover = true; return;
+    log('Game window closed, the emulator still running: covering the screen until it exits'); coverForQuit(); goneCover = true; seamless.windowGone(); return; /* (beta.12: a watched game's end is looked for at once) */
   }
   if (!goneCover || !quitCover || !launcher.isRunning()) return;
   log('Game window back: stepping aside again'); clearQuitCover(); quitAt = 0;
@@ -493,6 +496,7 @@ function stepIn() {
 // the game's window is fullscreen: lift the cover a beat later (its first frame), never sooner than 0.8 s in
 function liftCover() {
   const t = coverTimer; if (!t || !t.lift) return;
+  seamless.mark('window up');
   const wait = Math.max(350, (t.minMs || 800) - (Date.now() - t.at));
   setTimeout(() => { if (coverTimer === t) { log('game window ready: lifting the loading screen'); t.lift(); } }, wait);
 }
@@ -516,7 +520,7 @@ function bringBack() {
     if (!alive() || launcher.isRunning()) { clearInterval(backKeep); backKeep = null; return; }
     const el = Date.now() - t0, focused = win.isFocused();
     if ((focused && el > 400) || el > 5000) {
-      clearInterval(backKeep); backKeep = null; try { win.setAlwaysOnTop(false); win.moveTop(); } catch {}
+      clearInterval(backKeep); backKeep = null; seamless.mark('shelf back'); try { win.setAlwaysOnTop(false); win.moveTop(); } catch {}
       if (!focused) log('Back on the shelf without the focus (Windows refused it)');
       taskbarBack(focused);
       return; }
@@ -534,6 +538,7 @@ function coverWhileStarting(seconds) {
   if (coverTimer && coverTimer.keep) clearInterval(coverTimer.keep);
   clearTimeout(coverTimer);
   if (!win || !(seconds > 0)) return 0;
+  seamless.mark('cover up');
   // In a window, the emulator's windows show around our edges: go fullscreen for the cover, then back
   const wasWindowed = !win.isFullScreen();
   if (wasWindowed) { try { win.setFullScreen(true); } catch {} }
@@ -562,7 +567,7 @@ function coverWhileStarting(seconds) {
     // appeared after the first one
     padwatch.front();
     // step aside without the minimize animation (the game is already fullscreen behind us); bringBack shows us again
-    stepAside();
+    stepAside(); seamless.mark('cover down');
     homemenu.ready(); setTimeout(() => { if (launcher.isRunning()) { padwatch.front(); homemenu.raise(); } }, 1500);
     }, 300);
   };
@@ -611,6 +616,24 @@ function onExit(info) {
   if (alive()) win.webContents.send('run:exited', info);
   if (pendingPower) { const p = pendingPower; pendingPower = null; if (Date.now() - p.at < 20000) { setTimeout(() => powerAction(p.kind), 800); setTimeout(() => { if (alive() && !launcher.isRunning()) watchShelf(); }, 15000); return; } /* a cancelled shutdown still needs Guide back */ log('Power: dropped a stale', p.kind); } // a game that took ages to close: don't shut the PC down out of the blue later
   setTimeout(watchShelf, 1500);
+}
+// ---------- (beta.12) Seamless play: what main/seamless.js needs from here ----------
+// the latest the loading cover waits, from now (a watched game's process has just appeared: its window gets this long)
+function coverDeadline(seconds) {
+  const t = coverTimer; if (!t || !t.lift || !(seconds > 0)) return;
+  clearTimeout(t); const n = setTimeout(t.lift, seconds * 1000);
+  Object.assign(n, { keep: t.keep, lift: t.lift, at: t.at, minMs: t.minMs }); coverTimer = n;
+}
+// a watched game's playtime (its launch was already counted by history:touch: only the time is added, at onExit)
+function historyTrack(id) { histOpen = { id: String(id).slice(0, 1024), at: Date.now(), prev: null }; }
+// a Steam / store game that never showed up within 90 s: today's behaviour, the shelf with "Running through Steam"
+function watchGaveUp() {
+  clearQuitCover(); padwatch.stop(); homemenu.end(); linuxpad.end(); // (beta.12: the Linux pad watcher a watched Steam game started)
+  if (coverTimer) { clearInterval(coverTimer.keep); clearTimeout(coverTimer); coverTimer = null; }
+  if (coverWindowed && alive()) { try { win.setFullScreen(false); } catch {} coverWindowed = false; }
+  padwatch.cover(false); bringBack();
+  if (alive()) win.webContents.send('run:watchGaveUp');
+  setTimeout(() => { if (!launcher.isRunning()) watchShelf(); }, 1500);
 }
 
 // Freeze watch: if the main process is blocked for more than a quarter second, log it with what was going on
@@ -777,8 +800,19 @@ homemenu.init({ padwatch, log, getWin: () => (alive() ? win : null), getUi: () =
     // power actions: hand the shelf back first, so after waking (or a cancelled shutdown) it takes input again
     if (['sleep', 'restart', 'shutdown'].includes(action)) { if (alive()) win.webContents.send('shelf:menu', { open: false, action: 'resume' }); return powerAction(action); }
     if (action === 'quitapp') { log('Quit: Exit (T)rustyShelf chosen in the Home menu'); return app.quit(); }
+    // (upstream beta.12, Seamless play) Go to desktop: (T)rustyShelf minimised (Guide or the taskbar brings it back, see openShelfMenu)
+    if (action === 'desktop') { if (alive()) win.webContents.send('shelf:menu', { open: false, action }); if (!(alive() && seamless.goToDesktop(win))) bringBack(); return; }
     if (alive()) { win.webContents.send('shelf:menu', { open: false, action }); bringBack(); }
   } });
+// (beta.12) Seamless play (main/seamless.js): what it uses from here. Off (Settings → Display), nothing of it runs.
+seamless.init({ cfg: () => cfg, log, platform: process.platform, runningName: () => launcher.runningName(),
+  saveUi: patch => { cfg = persistCfg(config.normalize({ ...cfg, ui: { ...cfg.ui, ...patch } })); },
+  busyCheck: () => busyCheck(), setLaunching: v => { launching = !!v; }, taskbarHide: () => taskbarHide(), taskbarShow: why => taskbarShow(why),
+  beginRun: () => { runKind = 'watch'; pendingPower = null; }, onExit: info => onExit(info), launcher,
+  homeBegin: meta => { if (cfg.ui.homeMenu !== false) homemenu.begin(meta); }, homeMeta: m => homemenu.setMeta(m),
+  watchPad: o => watchPad(o), coverAgain: () => { if (coverTimer || quitCover) padwatch.cover(true); }, coverWhileStarting: s => coverWhileStarting(s), coverDeadline: s => coverDeadline(s),
+  historyTrack: id => historyTrack(id), gaveUp: () => watchGaveUp() });
+launcher.setEventHook(what => seamless.mark(what)); // (the launch timeline: when the game's process started)
 // Sleep / Restart / Shut down the PC from the couch
 let pendingPower = null, lastPadOpts = null, runKind = null;
 // Media apps close at once (and some only hide to the tray): force them sooner than emulators, which may be saving
@@ -831,11 +865,12 @@ function focusOnlyHelper() {
 }
 // from Guide: only when (T)rustyShelf itself is what you're looking at; from the shelf's Home key: always
 function openShelfMenu(fromKey) {
+  if (alive() && !launcher.isRunning() && seamless.backFromDesktop(win)) { log('Guide: back from the desktop'); bringBack(); return; } // (beta.12, Seamless play: after Go to desktop)
   if (!alive() || homemenu.isOpen() || launcher.isRunning() || (!fromKey && (!win.isFocused() || cfg.ui.homeMenu === false))) return;
   // Guide: ask the shelf first — it only accepts on the shelf or the details panel (not Inspect, museum, Settings, starting a game)
   if (!fromKey) { win.webContents.send('shelf:menuRequest'); return; }
   if (!padwatch.isRunning()) watchShelf(); // buttons inside the menu come from the helper
-  if (homemenu.openShelf({ title: 'Home', system: '(T)rustyShelf', subtitle: shelfSummary, accent: '#9d8cff', glyphs: shelfGlyphs, layout: cfg.ui.homeLayout === 'center' ? 'center' : 'side', confirmButton: shelfSwap ? 'b' : 'a', audioOut: typeof cfg.ui.audioOut === 'string' ? cfg.ui.audioOut : '' }))
+  if (homemenu.openShelf({ ...(seamless.on() ? { actions: seamless.shelfActions() } : {}), title: 'Home', system: '(T)rustyShelf', subtitle: shelfSummary, accent: '#9d8cff', glyphs: shelfGlyphs, layout: cfg.ui.homeLayout === 'center' ? 'center' : 'side', confirmButton: shelfSwap ? 'b' : 'a', audioOut: typeof cfg.ui.audioOut === 'string' ? cfg.ui.audioOut : '' }))
     win.webContents.send('shelf:menu', { open: true });
 }
 // ---------- the Wii remote on the shelf (Windows) ----------
@@ -907,7 +942,7 @@ ipcMain.on('shelf:info', (e, i) => { if (i && typeof i === 'object') { shelfSumm
 ipcMain.on('shelf:openMenu', () => openShelfMenu(true));
 ipcMain.on('shelf:menuKey', (e, k) => { const map = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Enter: 'ok', Escape: 'cancel', Backspace: 'cancel', Home: 'home' } /* keys mean select / back whichever face button confirms */; const b = map[k && k.key]; if (b) homemenu.button(b, !!k.down); });
 // the overlay reports the chosen action; the shelf adds what it knows about the game (title, cover, colour, prompts)
-const HOME_ACTIONS = ['resume', 'save', 'load', 'shot', 'quit', 'sleep', 'restart', 'shutdown', 'quitapp', 'shelfhome', 'museum', 'settings'];
+const HOME_ACTIONS = ['resume', 'save', 'load', 'shot', 'quit', 'sleep', 'restart', 'shutdown', 'quitapp', 'shelfhome', 'museum', 'settings', 'desktop']; // (beta.12: desktop = Seamless play's Go to desktop)
 ipcMain.on('home:act', (e, a) => homemenu.act(HOME_ACTIONS.includes(a) ? a : 'resume')); // anything unexpected still closes the menu properly
 ipcMain.on('home:meta', (e, m) => { if (!m || typeof m !== 'object') return; const str = v => typeof v === 'string' ? v.slice(0, 4000000) : undefined;
   homemenu.setMeta({ title: str(m.title), cover: str(m.cover), accent: /^#[0-9a-f]{3,8}$/i.test(m.accent || '') ? m.accent : undefined, glyphs: glyphsOf(m.glyphs), layout: cfg.ui.homeLayout === 'center' ? 'center' : 'side' }); });
@@ -930,9 +965,10 @@ handle('clipboard:text', () => { const { clipboard } = require('electron'); retu
 const builtinModels = (() => { try { return { pc: fs.existsSync(path.join(__dirname, 'renderer', 'models', 'pc.glb')) }; } catch { return {}; } })();
 handle('config:get', () => ({ config: cfg, consoles: CONSOLES, apps: APPS, appRoot: paths.appRoot(), version: appVersion(), hasInfo: covers.hasInfo(), settingsBlocked: config.blocked(), builtinModels }));
 // (1.82) Settings → About: the newest beta (force: ask GitHub now, not the answer from this start) and the page's links
+// (upstream beta.12) the screen mode and the window's place are main's own (F11, Settings → Screen mode): a screen's older copy saved later doesn't undo them
 handle('app:updateCheck', ({ force } = {}) => updates.check(appVersion(), !!force).then(r => ({ ...r, links: updates.LINKS })));
 handle('app:relaunch', () => updates.relaunchApp());
-handle('config:save', next => { if (!next || typeof next !== 'object' || !next.systems || !next.ui) throw new Error('Bad settings.'); scanForget(); return applyCfg({ ...next, art: cfg.art, games: cfg.games, emuSetup: { ...(next.emuSetup || {}), pending: (cfg.emuSetup || {}).pending || [] }, ui: { ...next.ui, sw2Last: cfg.ui.sw2Last } }); }); // Art Studio styles and locks change through art:* only: a Settings save with its older copy mustn't undo them. (beta.8) The same for what main itself keeps: each game's own name and emulator (Details → Rename / Emulator), Set up for me's waiting list and Switch 2's last build: a screen's older copy saved later used to undo a rename, or bring back a setup that was already done
+handle('config:save', next => { if (!next || typeof next !== 'object' || !next.systems || !next.ui) throw new Error('Bad settings.'); scanForget(); return applyCfg({ ...next, art: cfg.art, games: cfg.games, emuSetup: { ...(next.emuSetup || {}), pending: (cfg.emuSetup || {}).pending || [] }, ui: { ...next.ui, sw2Last: cfg.ui.sw2Last, screenMode: cfg.ui.screenMode, windowBounds: cfg.ui.windowBounds } }); }); // Art Studio styles and locks change through art:* only: a Settings save with its older copy mustn't undo them. (beta.8) The same for what main itself keeps: each game's own name and emulator (Details → Rename / Emulator), Set up for me's waiting list and Switch 2's last build: a screen's older copy saved later used to undo a rename, or bring back a setup that was already done
 // settings saved (or restored from a backup): store them and put every change into effect now
 function applyCfg(next) { const prev = cfg, hadMenu = cfg.ui.homeMenu !== false; next = rememberEmus(prev, next); const x = o => o && o.systems && o.systems.x360 && o.systems.x360.emulator; if (x(next) !== x(prev)) next = fixXenia(next); /* (the folder walk only when that path changed) */ cfg = persistCfg(config.normalize(next)); i18nMain.setActive(cfg.ui.language === 'pt'); presence.configure({ enabled: cfg.ui.discordPresence, appId: cfg.ui.discordAppId, logger: log }); applyArtLibrary(); applyScale(); setTimeout(watchRoms, 0); if (cfg.ui.wiimote === false) wiimote.stop(); else if (wmReady) wmStart(); /* (Settings → Controller → Wii remote, at once) */
   // Home menu switched on/off: start or stop the shelf's Guide watcher now (not after the next game)
@@ -940,6 +976,7 @@ function applyCfg(next) { const prev = cfg, hadMenu = cfg.ui.homeMenu !== false;
   ra.setCredentials(cfg.ra && cfg.ra.enabled !== false ? cfg.ra.user : '', cfg.ra && cfg.ra.key);
   try { cfgChanged(prev, cfg); } catch (e) { log('settings change', e.message); }
   if ((prev.ui.keepAwake !== false) !== (cfg.ui.keepAwake !== false) && awakeJobs.size) awakeApply(); // (switched while a job runs)
+  try { seamless.applied(prev.ui, cfg.ui, alive() && !launcher.isRunning() ? win : null); } catch {} // (upstream beta.12: Seamless play turned off: the screen as before)
   return cfg; }
 handle('detect', () => detectAll());
 // ((T)rustyShelf) Settings → Consoles → Find emulators in a folder: the emulator programs in a folder the player picked
@@ -1738,7 +1775,15 @@ handle('launch:app', async ({ appId, link }) => {
   const cover = coverWhileStarting(a.fullscreen === false ? 4 : (+a.coverSeconds || 15));
   return { ...r, cover };
 });
-handle('launch:steam', ({ appid }) => launcher.launchSteam(appid));
+// (beta.12) Seamless play on: the Steam game is watched (main/seamless.js: the loading cover, Home menu, playtime and the
+// return to the shelf); off: handed to Steam as before
+handle('launch:steam', ({ appid }) => {
+  if (seamless.on() && /^\d{1,10}$/.test(String(appid))) return seamless.launchWatched({ kind: 'steam', id: 'steam-' + appid, appid: String(appid), dir: gamewatch.steamInstallDir([steamMain, cfg.steam.path], appid), title: pcTitleOf('steam-' + appid, 'Steam game'), systemName: 'Steam', start: () => launcher.launchSteam(appid) });
+  return launcher.launchSteam(appid);
+});
+// (beta.12) a PC game's title from the last scan (for the log and the Home menu; never a path)
+function pcTitleOf(id, def) { try { for (const s of lastLib || []) { const g = (s.games || []).find(x => x.id === id); if (g && g.title) return String(g.title).slice(0, 120); } } catch {} return def; }
+const STORE_NAME = { epic: 'Epic Games', ubisoft: 'Ubisoft', ea: 'EA', xbox: 'Xbox', gog: 'GOG' };
 // (beta.4) a PC game that isn't Steam's, named by id only: Epic's go through its launcher's link; Quiver's and the ones
 // added by hand start their own program in its own folder (recomps read their files from there), with the Home menu and
 // the quit buttons like any app
@@ -1747,6 +1792,10 @@ handle('launch:pc', async ({ id }) => {
   if (g.installed === false) throw new Error(`${g.title} isn't installed. Install it first.`); // (the shelf offers that before asking)
   // (Linux) Epic's games, the PC games folder's and Windows programs are started by (T)rustyShelf itself (Wine / Proton for Windows ones)
   if (linux.isLinux && (g.source === 'epic' || g.source === 'folder' || linuxpc.isWindowsProgram(g.exe))) return launchLinuxPc(g);
+  // (upstream beta.12) Seamless play on (Windows): a store game (Epic, Ubisoft, EA, Xbox) is still started through its store, and watched
+  if (seamless.on() && ((g.uri && /^(com\.epicgames\.launcher|uplay|origin2):\/\//i.test(g.uri)) || (g.shellApp && /^[\w.-]+_[a-z0-9]+![\w.-]+$/i.test(g.shellApp))))
+    return seamless.launchWatched({ kind: g.source, id: g.id, dir: g.dir || '', exe: g.exe || '', title: g.title, systemName: STORE_NAME[g.source] || 'PC',
+      start: () => { if (g.uri) return shell.openExternal(g.uri); const p = spawn('explorer.exe', ['shell:AppsFolder\\' + g.shellApp], { detached: true, stdio: 'ignore' }); p.on('error', e => log('Xbox launch', e.message)); p.unref(); } });
   // through its store's launcher (Epic, and from beta.7 Ubisoft Connect and the EA app: their sign-in, cloud saves, overlay)
   if (g.uri && /^(com\.epicgames\.launcher|uplay|origin2):\/\//i.test(g.uri)) { busyCheck(); log('PC launch:', g.source, g.title); return shell.openExternal(g.uri).then(() => ({ external: true })); }
   // (beta.7) an Xbox / Game Pass game is a Windows app: started as one (its package family and app id, from pcgames.xboxGames)
@@ -1761,6 +1810,7 @@ handle('launch:pc', async ({ id }) => {
   if (cfg.ui.homeMenu !== false) homemenu.begin({ systemId: onCon ? onCon.id : 'pc', exe: g.exe, systemName: onCon ? onCon.name : g.shelf === 'pc' ? 'PC' : PC_SYSTEM[g.source] || 'Custom', title: g.title, hotkeys: {} });
   if (winMode === 'borderless') windowmode.borderless(r.pid, g.dir || path.dirname(g.exe), log); // (its frame off, over the screen, while it runs)
   log('PC launch window mode:', winMode || 'the game\'s own');
+  if (seamless.on()) historyTrack(g.id); // (upstream beta.12, Seamless play: its playtime too)
   watchPad({ mouse: false, appPid: r.pid, fullscreenKey: null, home: true });
   return { ...r, cover: coverWhileStarting(10) };
 });
@@ -2644,7 +2694,10 @@ handle('app:winMode', async ({ mode } = {}) => {
     if (mode === 'max') win.maximize(); else { if (win.isMaximized()) win.unmaximize(); const a = screen.getDisplayMatching(win.getBounds()).workArea; win.setBounds({ x: a.x + Math.round(a.width / 4), y: a.y + Math.round(a.height / 4), width: Math.round(a.width / 2), height: Math.round(a.height / 2) }); } }
   return win.isFullScreen();
 });
-handle('app:fullscreen', () => { if (alive()) win.setFullScreen(!win.isFullScreen()); return alive() && win.isFullScreen(); });
+handle('app:fullscreen', () => { if (alive()) { const to = !win.isFullScreen(); win.setFullScreen(to); seamless.fullscreenToggled(to); /* (beta.12: F11 sets Seamless play's screen mode) */ } return alive() && win.isFullScreen(); });
+// (beta.12) Seamless play: Settings → Screen mode, and B on the starting screen of a watched game (main/seamless.js)
+handle('seamless:screenMode', ({ mode } = {}) => seamless.setScreenMode(alive() ? win : null, String(mode || ''), launcher.isRunning()));
+handle('seamless:cancel', () => seamless.cancel(launcher));
 
 // The RetroAchievements key is kept encrypted for this Windows user (DPAPI via safeStorage), not as plain text in
 // config.json: a copied or shared (T)rustyShelf folder doesn't carry a usable key

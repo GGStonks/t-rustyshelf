@@ -172,6 +172,9 @@ contextBridge.exposeInMainWorld('trustyshelf', {
   findIpl: systemId => call('dolphin:ipl', { systemId }),
   openIplFolder: (systemId, region) => call('dolphin:iplFolder', { systemId, region }),
   toggleFullscreen: () => call('app:fullscreen'),
+  setScreenMode: mode => call('seamless:screenMode', { mode: String(mode || '') }), // (beta.12) Seamless play: 'full' | 'window'
+  watchCancel: () => call('seamless:cancel'), // (beta.12) B before a watched Steam / store game showed up: { cancelled }
+  onWatchGaveUp: fn => ipcRenderer.on('run:watchGaveUp', () => fn()), // (beta.12) it never showed up: the old "Running through" note
   winMode: mode => call('app:winMode', { mode: String(mode || '') }), // the smoothness test: 'full' | 'max' | 'half'
   quit: why => call('app:quit', { why: typeof why === 'string' ? why : '' }),
   power: kind => call('app:power', kind),

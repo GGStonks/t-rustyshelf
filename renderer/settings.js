@@ -86,6 +86,9 @@ const C=(label,path,opts,def,info,x={})=>({t:"choice",label,opts,info,...bindv(p
 const T=(label,path,def,info,x={})=>({t:"toggle",label,info,...bindb(path,def),...x});
 const S=(label,path,def,min,max,step,fmt,info,x={})=>({t:"slider",label,min,max,step,fmt,info,...bindv(path,def),...x});
 const A=(label,btn,info,run,x={})=>({t:"action",label,btn,info,run,...x});
+// (upstream beta.12) Seamless play (Windows, main/seamless.js): on unless turned off; the screen mode (never chosen: Start in fullscreen decides)
+const smOn=()=>!!(window.bsPlatform&&bsPlatform.has("winMode"))&&gp("ui.seamless")!==false;
+const smMode=()=>{const m=gp("ui.screenMode");return m==="window"||m==="full"?m:gp("ui.startFullscreen")===false?"window":"full"};
 const F=(label,path,kind,info,x={})=>({t:"path",label,kind,info,...bindv(path,""),d:undefined,...x});
 const X=(label,path,info,x={})=>({t:"text",label,info,...bindv(path,""),d:undefined,...x});
 const H=(text,x={})=>({t:"head",text,...x});
@@ -230,10 +233,16 @@ function build(){
     // (beta.11, Android) how big everything is: the page's layout width (android-early.js). Automatic: by the screen's
     // size and Android's font size. A change redraws the page (settings saved first)
     ...(window.bsPlatform&&bsPlatform.os==="android"?[C("Text size","ui.textSize",[["auto","Automatic"],["normal","Normal"],["large","Large"],["larger","Larger"]],"auto","How big the text and everything else is. Automatic goes by your screen's size and Android's font size.",{keys:"text size font bigger larger small read zoom scale accessibility",live:v=>{try{localStorage.setItem("bs-textsize",v)}catch{}const cur=window.__bsLayoutW||1440;toast("Resizing…");Promise.resolve(save()).catch(()=>{}).then(()=>setTimeout(()=>{if(({normal:1440,large:1280,larger:1152})[v]!==cur||v==="auto")location.reload()},350))}})]:[]),
+    // (upstream beta.12) Seamless play (Windows only)
+    H("Games",{when:()=>!!(window.bsPlatform&&bsPlatform.has("winMode"))}),
+    T("Seamless play","ui.seamless",true,"Starting and closing any game feels like a console. Steam, Epic, Ubisoft, EA and Xbox games get the loading screen until their window shows, the Home menu, playtime and the way back to the shelf too. The Home menu gets Go to desktop, and Screen & TV gets a window mode. Off: games start and close as they did before.",{keys:"seamless console steam epic ubisoft ea xbox store launcher home menu desktop playtime flicker flash window screen mode",when:()=>!!(window.bsPlatform&&bsPlatform.has("winMode"))}),
     H("More"),
     M("Screen & motion","display-more","Which screen, fullscreen, fitting the picture to your TV, reduce motion and the box shine.","Set these once for your TV.",[
-      T("Start in fullscreen","ui.startFullscreen",true,"Opens (T)rustyShelf fullscreen. Press F11 any time to switch.",{keys:"full screen window"}),
-      T("Hide the taskbar during games","ui.hideTaskbar",true,"Nothing but (T)rustyShelf and your game on screen: the Windows taskbar is hidden while a game starts, runs and closes, and comes back on the shelf.",{keys:"taskbar windows bar immersion flash desktop start menu"}),
+      {t:"choice",label:"Screen mode",opts:[["full","Full screen"],["window","Window"]],path:"ui.screenMode",d:"full",get:()=>smMode(),set:v=>sp("ui.screenMode",v),
+        info:"Full screen: like a console, with the taskbar hidden while games run. Window: (T)rustyShelf in a window you can move and size (it opens where you left it) and the taskbar always there, so you can click away any time. F11 switches too.",
+        keys:"screen mode full screen fullscreen window windowed taskbar f11 desktop",when:smOn,live:v=>{if(api.setScreenMode)Promise.resolve(api.setScreenMode(v)).catch(e=>toast(errMsg(e)))}}, // (upstream beta.12, Seamless play)
+      T("Start in fullscreen","ui.startFullscreen",true,"Opens (T)rustyShelf fullscreen. Press F11 any time to switch.",{keys:"full screen window",when:()=>!smOn()}),
+      T("Hide the taskbar during games","ui.hideTaskbar",true,"Nothing but (T)rustyShelf and your game on screen: the Windows taskbar is hidden while a game starts, runs and closes, and comes back on the shelf.",{keys:"taskbar windows bar immersion flash desktop start menu",when:()=>!(smOn()&&smMode()==="window")}),
       C("Screen","ui.display",()=>displays,"","Which screen (T)rustyShelf opens on, for a PC with both a monitor and a TV. Games open on the same screen.",{when:()=>!!(displays&&displays.length),keys:"monitor tv hdmi output display second",live:v=>{if(api.moveToDisplay){const d=(displays||[]).find(x=>x[0]===v);Promise.resolve(api.moveToDisplay(v||(d&&d[2])||"")).catch(e=>toast(errMsg(e)))}}}),
       S("Fit to TV","ui.safeArea",100,90,100,1,v=>v+"%","Shrinks everything slightly if your TV cuts off the edges of the picture (overscan). Watch the corners of the screen while you change it.",{keys:"overscan safe area edges cut off zoom",live:v=>{applyUi({safeArea:v});fit()}}),
       T("Reduce motion","ui.reduceMotion",false,"Tones down the startup ripple, the museum walk-in and the moving theme backgrounds.",{keys:"animation accessibility motion sickness",live:v=>{applyUi({reduceMotion:v});document.body.classList.toggle("bss-reduce",!!v)}}),

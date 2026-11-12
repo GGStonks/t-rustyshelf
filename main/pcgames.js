@@ -124,7 +124,7 @@ async function ubisoftGames() {
   for (const [k, v] of await regTree('HKLM\\SOFTWARE\\WOW6432Node\\Ubisoft\\Launcher\\Installs')) {
     const id = (/\\Installs\\(\d+)$/i.exec(k) || [])[1], dir = String(v.installdir || '').replace(/[\\/]+$/, '').replace(/\//g, '\\');
     if (!id || !dir || !isDir(dir)) continue;
-    out.push({ id: 'ubisoft-' + id, source: 'ubisoft', title: path.basename(dir), uri: `uplay://launch/${id}/0`, exe: mainExe(dir) || '' });
+    out.push({ id: 'ubisoft-' + id, source: 'ubisoft', title: path.basename(dir), uri: `uplay://launch/${id}/0`, exe: mainExe(dir) || '', dir });
   }
   return out;
 }
@@ -145,7 +145,7 @@ function eaFromDirs(dirs) {
     if (!ids.length) continue;
     const en = /<gameTitle\s+locale="en_US"\s*>([^<]+)</i.exec(x), title = unxml(en ? en[1] : xmlText(x, 'gameTitle')) || path.basename(d);
     const id = 'ea-' + slug(ids[0]); if (seen.has(id)) continue; seen.add(id);
-    out.push({ id, source: 'ea', title: title.trim(), uri: 'origin2://game/launch?offerIds=' + encodeURIComponent(ids.join(',')) + '&autoDownload=1', exe: mainExe(d) || '' });
+    out.push({ id, source: 'ea', title: title.trim(), uri: 'origin2://game/launch?offerIds=' + encodeURIComponent(ids.join(',')) + '&autoDownload=1', exe: mainExe(d) || '', dir: d });
   }
   return out;
 }
@@ -213,7 +213,7 @@ async function xboxGames() {
     }
   }
   const famOf = f => guessed && guessed.has(f.name) ? (f.publisher ? f.name + '_' + publisherId(f.publisher) : '') : xboxFam[f.name];
-  return found.filter(f => famOf(f)).map(f => ({ id: 'xbox-' + slug(f.name), source: 'xbox', title: f.title.trim(), shellApp: `${famOf(f)}!${f.appId}`, exe: '' }));
+  return found.filter(f => famOf(f)).map(f => ({ id: 'xbox-' + slug(f.name), source: 'xbox', title: f.title.trim(), shellApp: `${famOf(f)}!${f.appId}`, exe: '', dir: f.dir })); // (upstream beta.12 dir: Seamless play watches the game there, main/gamewatch.js)
 }
 // a MicrosoftGame.config as text: UTF-8, or UTF-16 with its byte-order mark (some games ship it so, and were left out)
 function readConfigText(f) {

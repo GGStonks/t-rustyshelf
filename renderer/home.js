@@ -2,7 +2,7 @@
 // renderer/home.js apart from the app's name ((T)rustyShelf).
 // The Home menu overlay, used two ways:
 //  • in a game: Resume, Save/Load state, Screenshot, Power, Quit to shelf (only what that emulator supports)
-//  • on the shelf: Home shelf, Museum, Settings, Power
+//  • on the shelf: Home shelf, Museum, Settings, (upstream beta.12, Seamless play) Go to desktop, Power
 // Power opens a sub-list in place (Sleep, Restart, Shut down, Quit (T)rustyShelf). The main process opens the menu,
 // forwards controller buttons (from the XInput helper) and carries out whatever is chosen here.
 (() => {
@@ -24,10 +24,11 @@
     restart: P('M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7'),
     shutdown: P('M12 3v8M6.3 6.8a8 8 0 1 0 11.4 0'),
     quitapp: P('M6 6l12 12M18 6L6 18'),
+    desktop: P('M3 5h18v11H3zM8 20h8M12 16v4'), // (beta.12) Seamless play: Go to desktop
     back: P('M15 5l-7 7 7 7')
   };
   const LABEL = { resume: 'Resume', save: 'Save state', load: 'Load state', shot: 'Screenshot', quit: 'Quit to shelf', power: 'Power',
-    shelfhome: 'Home shelf', museum: 'Museum', settings: 'Settings',
+    shelfhome: 'Home shelf', museum: 'Museum', settings: 'Settings', desktop: 'Go to desktop',
     sleep: 'Sleep', restart: 'Restart', shutdown: 'Shut down', quitapp: 'Quit (T)rustyShelf', back: 'Back' };
   const HOLD = new Set(['quit', 'restart', 'shutdown', 'quitapp']); // these need A held, so a stray press never does them
   const SEP_BEFORE = new Set(['power', 'quit']);
