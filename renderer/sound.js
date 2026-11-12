@@ -59,7 +59,7 @@ window.Sound = (() => {
   function setSink(id) { sinkId = typeof id === 'string' && id !== 'default' ? id : ''; applySink(); }
   let sat, ambBus, amb = null, duckT = 0;
   // overall cue level: every voice goes through this so the whole set can be nudged together (0.5 was too loud)
-  const TRIM = .27;
+  const TRIM0 = .27; let TRIM = TRIM0; // (TRIM drops for the boot alone when the boot sound has its own volume: set({ bootVolume }))
   function satCurve(k) { const n = 2048, c = new Float32Array(n); for (let i = 0; i < n; i++) { const x = i / (n - 1) * 2 - 1; c[i] = Math.tanh(x * k) / Math.tanh(k); } return c; }
   // Duck the menu music a little while a cue plays, then let it back in (gently: it's music, not a bed)
   function duck(amount, holdMs) { if (!ambBus || !amb) return; const t = ctx.currentTime; ambBus.gain.cancelScheduledValues(t); ambBus.gain.setTargetAtTime(amb.level * (1 - amount * .6), t, .03); ambBus.gain.setTargetAtTime(amb.level, t + holdMs / 1000, .25); }
@@ -219,7 +219,10 @@ window.Sound = (() => {
   // console's own key (so a GameCube boot and a Wii boot are related, not identical). A soft power-on thump, a breath of
   // air sweeping up, four clear bell notes rising (root, fifth, sixth, octave) and a bright open chord that rings out
   // over a warm pad, with two tiny sparkles at the top. Crisp attacks, short room, everything done by ~3 s.
-  function bootSig() { if (BOOTS[bootPick]) return BOOTS[bootPick](); return bootChime(); }
+  // ((T)rustyShelf, beta discussion 36) the boot's own volume (Settings → Sound → Boot sound volume, 0-1), on top of the
+  // interface volume: every voice of the boot is scheduled right here, so it's scaled while they are
+  let bootLevel = 1;
+  function bootSig() { TRIM = TRIM0 * bootLevel; try { if (BOOTS[bootPick]) return BOOTS[bootPick](); return bootChime(); } finally { TRIM = TRIM0; } }
   function bootChime() {
     const bell = [[1, 1, 1], [2, .28, .55], [3, .1, .38], [4.16, .05, .28], [5.4, .02, .2]];
     hit({ freq: deg(0, -2), dur: .5, vol: .2, attack: .004, sub: .8, bright: 500, verb: .25, noise: 0, breath: 0, duck: 0 });
@@ -699,6 +702,7 @@ window.Sound = (() => {
     if (o.volume != null) { volume = Math.max(0, Math.min(1, +o.volume)); if (master) master.gain.setTargetAtTime(volume, ctx.currentTime, .02); }
     if (o.enabled != null) { enabled = !!o.enabled; if (!enabled) { roomStop(true); ambientStop(true); } }
     if (o.boot) bootPick = o.boot;
+    if (o.bootVolume != null && isFinite(+o.bootVolume)) bootLevel = Math.max(0, Math.min(1, +o.bootVolume));
     if (o.key !== undefined) { keyShift = +o.key || 0; keyScale = o.scale || null; }
     if (o.builtInSongs !== undefined) { useBuiltIn = o.builtInSongs !== false; songOrder = []; songPos = -1; }
     if (BAKE && (o.theme || o.key !== undefined)) primeTicks();

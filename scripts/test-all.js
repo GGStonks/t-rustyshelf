@@ -8,6 +8,7 @@
 //   node scripts/test-all.js --skip-build    reuse the builds in dist/ts-unpacked and dist/ts-appimage as they are (nothing in the app changed)
 //   node scripts/test-all.js --jobs 6        how many run at the same time (default 8)
 //   node scripts/test-all.js --list          what would run, and nothing else
+//   node scripts/test-all.js --quiet         only failures and the totals (no line for each job that passed)
 //   node scripts/test-all.js --changed       only what the changes can affect: the files changed since what's pushed (and what isn't
 //                                            committed yet), each mapped to the tests that cover it (it prints why); for each change
 //                                            on its way. The full run is for releases. --changed <commit>: since that commit instead
@@ -31,12 +32,13 @@ const fs = require('fs'), os = require('os'), path = require('path');
 const ROOT = path.join(__dirname, '..');
 const arg = n => { const i = process.argv.indexOf('--' + n); return i < 0 ? null : (process.argv[i + 1] && !process.argv[i + 1].startsWith('--') ? process.argv[i + 1] : true); };
 const only = arg('only') && arg('only') !== true ? String(arg('only')).split(',') : null;
+const QUIET = !!arg('quiet');
 const JOBS = Math.max(1, +arg('jobs') || 8), CAP = arg('cap') && arg('cap') !== true ? String(arg('cap')) : '12G';
 
 // the tests, by kind (the first of each is the slowest: they start first)
 const NODE = ['detect', 'pad', 'portable', 'dataexport', 'release-version', 'presence', 'epicdl', 'storage', 'windowmode', 'hoyoplay', 'music', 'looks', 'artmatch', 'fork-survey', 'addgames', 'ra-consoles', 'ytsearch', 'archive-speed', 'emu-names', 'screenscraper', 'retroarch-setting', 'museum-lighting', 'pc-boxart', 'switch-files', 'quiver', 'pc-console-plat', 'pcsx2-ra', 'pcfolder-async', 'steam-async', 'nup-build', 'xemu-detect', 'xbox-games'];
 const DESKTOP = ['app', 'pc', 'xbox', 'home', 'music-app', 'windowmode-app', 'epicdl-app', 'consolebox-app', 'artmatch-app', 'ngp', 'gamecom', 'vita'];
-const DEMO = ['lamppool', 'caseinside', 'dscase', 'museumwrap', 'sortdrag', 'artresume', 'boxcolor', 'padfeed', 'android-artcard', 'android-pc', 'usermusic', 'windowmode', 'looks', 'artmatch', 'padnote', 'fanlift', 'media'];
+const DEMO = ['lamppool', 'caseinside', 'dscase', 'museumwrap', 'sortdrag', 'artresume', 'boxcolor', 'padfeed', 'android-artcard', 'android-pc', 'usermusic', 'windowmode', 'looks', 'artmatch', 'padnote', 'fanlift', 'media', 'bootvolume'];
 const GROUPS = ['screens', 'screens2', 'windows', 'thor3', 'thor2', 'thor', 'windows2']; // (the device test's seven parts, longest first: each 1.5-3.5 minutes)
 // not tests of their own: run by a device group, or a probe
 const NOT_STANDALONE = new Set(['heat-probe.js', 'web-device-test.js', 'device-test-parallel.js']);
@@ -171,7 +173,7 @@ process.on('SIGINT', () => process.exit(130)); process.on('SIGTERM', () => proce
       // a headless browser that couldn't start properly while many others were starting (not a failed check): once more, later
       if (!ok && !j.retried && HARNESS.test(out)) { j.retried = true; console.log(`again ${j.name.padEnd(22)} (the browser failed to start: ${(HARNESS.exec(out) || [''])[0]}), once more`); queue.push(j); return res(); }
       const r = { name: j.name + (j.retried ? ' (2nd try)' : ''), kind: j.kind, ok, code, secs: secs(t), passed: good, failed: unknown, known };
-      results.push(r); console.log(`${ok ? 'ok  ' : 'FAIL'} ${j.name.padEnd(24)} ${r.secs.padStart(5)}${good ? '  ' + good + ' checks' : ''}${known ? '  (' + known + ' known)' : ''}${ok ? '' : '  exit ' + code}`);
+      results.push(r); if (!ok || !QUIET) console.log(`${ok ? 'ok  ' : 'FAIL'} ${j.name.padEnd(24)} ${r.secs.padStart(5)}${good ? '  ' + good + ' checks' : ''}${known ? '  (' + known + ' known)' : ''}${ok ? '' : '  exit ' + code}`);
       for (const l of unknown.slice(0, 6)) console.log('       ' + l.slice(0, 220));
       res();
     });
