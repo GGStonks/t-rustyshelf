@@ -47,6 +47,18 @@ const NOT_STANDALONE = new Set(['heat-probe.js', 'web-device-test.js', 'device-t
 const HARNESS = /Unable to capture screenshot|Target page, context or browser has been closed|browserType\.launch: |Navigation timeout of \d+ ms exceeded|No such process/;
 const KNOWN = []; // (the Thor's museum-companion check passes since the missing 3D PC model is no longer asked for)
 
+// Tests run fully in the background (asked for 2026-11-12): no window on the desktop in use, no crash report. A test that
+// sends SIGTERM to the app's whole process group makes its main process abort, so every run raised dozens of "crashed"
+// notifications; one that starts a browser with headless: false shows a window. Either one stops the run before it starts.
+function noisy() {
+  const out = [];
+  for (const [dir, f] of [...fs.readdirSync(path.join(ROOT, 'linux', 'ci')).map(f => ['linux/ci', f]), ...fs.readdirSync(path.join(ROOT, 'android-app', 'ci')).map(f => ['android-app/ci', f])]) {
+    if (!/\.js$/.test(f)) continue; const src = fs.readFileSync(path.join(ROOT, dir, f), 'utf8');
+    if (/process\.kill\(\s*-[^,]+,\s*['"]SIGTERM['"]/.test(src)) out.push(`${dir}/${f}: SIGTERM to the app's process group (send it to the main process, app.pid, then SIGKILL the group)`);
+    if (/headless\s*:\s*false/.test(src)) out.push(`${dir}/${f}: a browser with headless: false (it opens a window on the desktop)`);
+  }
+  return out;
+}
 function unlisted() { // test files this script doesn't know
   const out = [];
   for (const f of fs.readdirSync(path.join(ROOT, 'linux', 'ci'))) if (/-test\.js$/.test(f) && ![...NODE, ...DESKTOP].includes(f.replace(/-test\.js$/, ''))) out.push('linux/ci/' + f);
@@ -139,6 +151,7 @@ process.on('SIGINT', () => process.exit(130)); process.on('SIGTERM', () => proce
 (async () => {
   fs.mkdirSync(logDir, { recursive: true });
   const u = unlisted(); if (u.length) console.log('WARNING: tests this script does not know (add them to its lists): ' + u.join(', '));
+  const nz = noisy(); if (nz.length) { console.log('STOPPED: these would show up on the desktop while the tests run:\n  ' + nz.join('\n  ')); process.exit(1); }
   const needApp = jobs.some(j => j.wait.includes('app')), needWeb = jobs.some(j => j.wait.includes('web')), needImg = jobs.some(j => j.wait.includes('appimage'));
   const ready = { app: !needApp, web: !needWeb, appimage: !needImg };
   const build = (what, args, out) => sh('npx', ['electron-builder', '--linux', ...args, '--publish', 'never', '--config.directories.output=' + out], ROOT);
