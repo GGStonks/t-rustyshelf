@@ -76,6 +76,19 @@ const CONSOLES = [
     coverSeconds: 2
   },
   {
+    // ((T)rustyShelf, asked for in its discussions, #21) the PS Vita, in Vita3K: the games Vita3K has installed
+    // (ux0\app\<title id>, with eboot.bin and sce_sys\param.sfo; detection adds that folder), or .vpk files Vita3K installs
+    // when they're played. main/vita3k.js turns a game into Vita3K's options: -F -r <title id> (an installed game)
+    id: 'psvita', name: 'PS Vita', emulatorName: 'Vita3K',
+    exeNames: ['Vita3K.exe', 'vita3k.exe'],
+    emulatorFolders: ['{app}\\Vita3K', '{app}\\vita3k', '{app}\\Emulators\\Vita3K', '%LOCALAPPDATA%\\Programs\\Vita3K', '%ProgramFiles%\\Vita3K', '%APPDATA%\\Vita3K'],
+    romFolderNames: ['psvita', 'vita', 'ps vita', 'playstation vita', 'vita3k'],
+    extensions: ['bin'], gameFile: 'eboot.bin', alsoFiles: ['vpk'], hint: "Vita3K's installed games (ux0\\app), or .vpk",
+    gameArgs: '-F -r "{rom}"',
+    emulatorArgs: '',
+    coverSeconds: 6
+  },
+  {
     id: 'ps2', name: 'PS2', emulatorName: 'PCSX2',
     exeNames: ['pcsx2-qt.exe', 'pcsx2-qtx64.exe', 'pcsx2-qtx64-avx2.exe', 'pcsx2.exe'],
     emulatorFolders: ['{app}\\PCSX2', '{app}\\pcsx2', '%ProgramFiles%\\PCSX2', '%ProgramFiles%\\PCSX2 1.7.0'],
@@ -272,6 +285,7 @@ const LINUX_EMU = {
   wiiu: ['cemu', 'info.cemu.Cemu', 're:^cemu.*\\.appimage$'],
   sw: ['eden', 're:^eden.*\\.appimage$', 'citron', 're:^citron.*\\.appimage$', 'Ryujinx', 'ryujinx', 'org.ryujinx.Ryujinx', 're:^(ryujinx|ryubing).*\\.appimage$'], // (beta.8: EmuDeck installs Citron or Ryujinx)
   sw2: ['eglantine', 're:^eglantine.*\\.appimage$'],
+  psvita: ['Vita3K', 'vita3k', 're:^vita3k.*\\.appimage$'],
   psp: ['PPSSPPSDL', 'PPSSPPQt', 'ppsspp', 'org.ppsspp.PPSSPP', 're:^ppsspp.*\\.appimage$'],
   ps2: ['pcsx2-qt', 'net.pcsx2.PCSX2', 're:^pcsx2.*\\.appimage$'],
   ps3: ['rpcs3', 'net.rpcs3.RPCS3', 're:^rpcs3.*\\.appimage$'],

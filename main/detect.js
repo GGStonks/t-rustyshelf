@@ -5,6 +5,7 @@ const path = require('path');
 const { execFile } = require('child_process');
 const { CONSOLES, APPS, SEARCH_ROOTS, ROM_ROOT_NAMES } = require('./systems');
 const { expand, isFile, isDir, readDir, findFile, appRoot } = require('./paths');
+const vita3k = require('./vita3k');
 
 // (1.82) Each folder searched is listed once, two folders deep, and every console and app looks its program names up in
 // that list: the same answer as findFile (the first match, breadth first), without walking the Desktop, Downloads and
@@ -115,15 +116,17 @@ async function detectAll() {
   for (const s of CONSOLES) {
     const emu = findExe(s.emulatorFolders, s.exeNames, index);
     if (!foundRetroarch && s.retro && emu && /retroarch/i.test(path.basename(emu))) foundRetroarch = emu;
-    systems[s.id] = { emulator: emu, romDirs: findRomDirs(s) };
+    systems[s.id] = { emulator: emu, romDirs: withOwnDirs(s, emu, findRomDirs(s)) };
   }
   const apps = {};
   for (const a of APPS) apps[a.id] = { path: findExe(a.folders, a.exeNames, index) };
   return { systems, apps, steam: { path: await findSteam() }, appRoot: appRoot(), retroarch: foundRetroarch };
 }
 
+// ((T)rustyShelf) games an emulator keeps in its own folders: Vita3K's installed games (ux0\app)
+function withOwnDirs(s, emu, dirs) { if (s.id === 'psvita') for (const d of vita3k.appDirs(emu)) if (!dirs.includes(d)) dirs.push(d); return dirs; }
 // one console's emulator and games folders (a console added in an update, found once as setup would have)
-function detectSystem(id) { const s = CONSOLES.find(c => c.id === id); return s ? { emulator: findExe(s.emulatorFolders, s.exeNames), romDirs: findRomDirs(s) } : null; }
+function detectSystem(id) { const s = CONSOLES.find(c => c.id === id); if (!s) return null; const emu = findExe(s.emulatorFolders, s.exeNames); return { emulator: emu, romDirs: withOwnDirs(s, emu, findRomDirs(s)) }; }
 
 // ((T)rustyShelf, asked for in Boxshelf's discussions) portable emulators kept anywhere: the emulator programs in a folder
 // the player picks (four folders deep), per console: { systems: { <console id>: program } }

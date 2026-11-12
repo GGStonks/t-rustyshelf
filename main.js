@@ -63,7 +63,8 @@ const ytclips = require('./main/ytclips'); // (beta.8) console trailers: YouTube
 const addgames = require('./main/addgames'); // (beta.7) Add games: several at once, a folder, Playnite
 const x360 = require('./main/x360');
 const n3ds = require('./main/n3ds');
-const kyty = require('./main/kyty'); // PS5: Kyty's launch settings and the KytyJets preset
+const kyty = require('./main/kyty');
+const vita3k = require('./main/vita3k'); // ((T)rustyShelf) PS Vita: Vita3K's installed games and its launch options // PS5: Kyty's launch settings and the KytyJets preset
 const nx2 = require('./main/nx2');
 const emuName = require('./shared/emuname'); // "Lichii · K code AI": an emulator program's emulator and build, for labels // Switch 2: unpacked games and their newest update
 const wiimote = require('./main/wiimote'); // the Wii remote on the shelf (through a DolphinBar)
@@ -1622,6 +1623,8 @@ async function launchGameNow(systemId, file, sc) {
   emucfg.beforeLaunch(systemId, sc.emulator, { quitCombo: cfg.ui.quitCombo === false ? null : (cfg.ui.quitComboKeys || 'l3+r3') }); extra.push(...emucfg.launchArgs(systemId, sc.emulator)); // Dolphin: borderless + no stop question for this run only
   // 3DS .cia: installed into Azahar the first time (the boot slide shows how far), then the installed copy is booted
   let rom = systemId === 'n3ds' ? await n3ds.bootFile(file, sc.emulator, t => { if (alive()) win.webContents.send('launch:status', String(t)); }) : file;
+  // ((T)rustyShelf) PS Vita: an installed game is started by its title id (-r), a .vpk is installed and run by Vita3K
+  if (systemId === 'psvita') { const v = vita3k.launchSpec(file), d0 = CONSOLES.find(c => c.id === 'psvita'); rom = v.rom; if (!sc.gameArgs || sc.gameArgs === d0.gameArgs) sc = { ...sc, gameArgs: v.args }; log('PS Vita launch:', rom); }
   if (systemId === 'sw2') { rom = nx2.bootFile(file); log('Switch 2 launch:', path.basename(nx2.gameRoot(file)), rom !== file ? '(newest update)' : ''); } // (an unpacked game: its newest update's exefs\main)
   // PS5 (Kyty): the game's folder, with the Kyty launcher's settings, the game's patch file and the build's preset
   let env = null;

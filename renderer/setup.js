@@ -23,6 +23,7 @@ const CONSOLE_HELP={
   sw:"A Switch emulator runs Switch games: Eden, Citron or Ryujinx (other yuzu forks work too). Point to its program (eden.exe, citron.exe, Ryujinx.exe, or its AppImage on Linux).",
   sw2:"A Switch 2 emulator runs Switch 2 games: Eglantine or any fork of it (Lichii, Orchid…). Point to its program (eglantine.exe, lichii.exe…, or its AppImage on Linux). Games can be unpacked folders (exefs + romfs, or base + updates): the newest update is started.",
   psp:"PPSSPP runs PSP games. Point to PPSSPPWindows64.exe.",
+  psvita:"Vita3K runs PS Vita games. Point to Vita3K.exe. Install the PS Vita firmware and your games in Vita3K first: (T)rustyShelf finds the games Vita3K has installed (its ux0\\app folder) and starts them straight in. A .vpk in a games folder is installed by Vita3K the first time you play it.",
   wiiu:"Cemu runs Wii U games. Point to Cemu.exe. Games can be .wua files (Cemu's one-file format, best), .wud / .wux disc images, or extracted game folders (the shelf finds code\\*.rpx and reads the title from meta\\meta.xml). Disc images need your keys.txt set up in Cemu. Install updates and DLC inside Cemu (File → Install game title).",
   ps2:"PCSX2 runs PS2 games. Point to pcsx2-qt.exe. Games are .iso, .chd, .cso or .zso images. PCSX2 needs a PS2 BIOS of its own (set it up in PCSX2 once). RetroAchievements works here too: log in inside PCSX2 (Settings → Achievements).",
   xbox:"xemu runs original Xbox games (.iso disc images). Point to xemu.exe. xemu needs its BIOS, MCPX boot ROM and hard disk image set up first, in xemu → Machine → System.",
@@ -223,7 +224,7 @@ function renderBody(){
 // (beta.4) download pages rather than home pages, checked against each project's own GitHub; Switch 2 added. Eden lives
 // only at eden-emu.dev (look-alike sites serve fakes)
 const OFFICIAL={gc:[["Dolphin","https://dolphin-emu.org/download/"]],wii:[["Dolphin","https://dolphin-emu.org/download/"]],wiiu:[["Cemu","https://cemu.info/"]],sw:[["Eden","https://eden-emu.dev/downloads"]],sw2:[["Eglantine","https://github.com/Djihads80/Eglantine/releases"]],
-  psp:[["PPSSPP","https://www.ppsspp.org/download/"]],ps2:[["PCSX2","https://pcsx2.net/downloads/"]],ps3:[["RPCS3","https://rpcs3.net/download"]],ps4:[["shadPS4","https://shadps4.net/downloads"]],ps5:[["KytyPS5","https://github.com/Jetsku/KytyPS5/releases"]],n3ds:[["Azahar","https://azahar-emu.org/pages/download/"]],
+  psp:[["PPSSPP","https://www.ppsspp.org/download/"]],psvita:[["Vita3K","https://vita3k.org/"]],ps2:[["PCSX2","https://pcsx2.net/downloads/"]],ps3:[["RPCS3","https://rpcs3.net/download"]],ps4:[["shadPS4","https://shadps4.net/downloads"]],ps5:[["KytyPS5","https://github.com/Jetsku/KytyPS5/releases"]],n3ds:[["Azahar","https://azahar-emu.org/pages/download/"]],
   xbox:[["xemu","https://xemu.app/"]],
   gamecom:[["MAME","https://www.mamedev.org/release.html"]],
   x360:[["Xenia","https://xenia.jp/download/"],["Xenia Manager","https://github.com/xenia-manager/xenia-manager"]],
@@ -301,7 +302,7 @@ function pickCard(x,big){
     el("span",{class:"wz2-tick","aria-hidden":"true"}),el("span",{class:"wz2-name",text:x.name}),el("span",{class:"wz2-st"+(x.found()?" ok":""),text:x.status()}));
 }
 // (beta.7) the folded "More consoles" list: small tick chips grouped by maker, so 30-odd consoles stay a tidy page
-const PICK_FAMILIES=[["Nintendo",["nes","snes","n64","gc","wii","wiiu","sw","sw2","gb","gbc","gba","nds","n3ds"]],["PlayStation",["psx","ps2","ps3","ps4","ps5","psp"]],
+const PICK_FAMILIES=[["Nintendo",["nes","snes","n64","gc","wii","wiiu","sw","sw2","gb","gbc","gba","nds","n3ds"]],["PlayStation",["psx","ps2","ps3","ps4","ps5","psp","psvita"]],
   ["Sega",["mastersystem","megadrive","segacd","sega32x","saturn","dreamcast","gamegear"]],["Retro & arcade",[]],["Xbox, PC & apps",["xbox","x360","steam"]]];
 function pickFamily(id){if(/^app:/.test(id))return "Xbox, PC & apps";for(const[f,ids]of PICK_FAMILIES)if(ids.includes(id))return f;return "Retro & arcade"}
 function pickChip(x){const on=x.on();

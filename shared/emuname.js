@@ -17,7 +17,7 @@
   const KNOWN = [['eglantine', 'Eglantine'], ['lichii', 'Lichii'], ['orchid', 'Orchid'], ['citron', 'Citron'], ['sudachi', 'Sudachi'], ['ryujinx', 'Ryujinx'], ['ryubing', 'Ryubing'],
     ['eden', 'Eden'], ['yuzu', 'yuzu'], ['suyu', 'Suyu'], ['dolphin', 'Dolphin'], ['cemu', 'Cemu'], ['pcsx2', 'PCSX2'], ['rpcs3', 'RPCS3'], ['shadps4', 'shadPS4'],
     ['ppsspp', 'PPSSPP'], ['xenia', 'Xenia'], ['azahar', 'Azahar'], ['lime3ds', 'Lime3DS'], ['citra', 'Citra'], ['duckstation', 'DuckStation'], ['retroarch', 'RetroArch'],
-    ['melonds', 'melonDS'], ['mgba', 'mGBA'], ['desmume', 'DeSmuME'], ['visualboyadvance', 'VisualBoyAdvance-M'], ['vbam', 'VisualBoyAdvance-M'], ['flycast', 'Flycast'], ['rmg', 'RMG'], ['kyty', 'Kyty'], ['xemu', 'xemu'], ['mame', 'MAME'], ['blastem', 'BlastEm'], ['stremio', 'Stremio'], ['nuvio', 'Nuvio']];
+    ['melonds', 'melonDS'], ['mgba', 'mGBA'], ['desmume', 'DeSmuME'], ['visualboyadvance', 'VisualBoyAdvance-M'], ['vbam', 'VisualBoyAdvance-M'], ['flycast', 'Flycast'], ['rmg', 'RMG'], ['kyty', 'Kyty'], ['xemu', 'xemu'], ['vita3k', 'Vita3K'], ['mame', 'MAME'], ['blastem', 'BlastEm'], ['stremio', 'Stremio'], ['nuvio', 'Nuvio']];
   // words that say nothing about the build: platforms, packaging, the program's role
   const NOISE = /^(windows?|win(32|64)?|x86|x86_64|64|x64|amd64|arm64|aarch64|linux|appimage|exe|qt|qt6|sdl2?|setup|portable|release|stable|bin|emu|emulator|cli|msvc|mingw)$/i;
   // words of a name: split at spaces, _ - ( ) [ ] and dots that aren't inside a version number (2.1.0 stays whole); a

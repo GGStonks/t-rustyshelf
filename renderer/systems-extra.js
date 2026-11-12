@@ -40,6 +40,8 @@
       ngpc: S('ngpc', { ...cardboard, hue: 215, ratio: 0.8, depth: 0.2, caseColor: '#e9edf2', caseSide: '#c7cfd8', spineInk: '#1b2f63', band: { bg: '#1f4bb5', fg: '#ffffff', label: 'NEO GEO POCKET COLOR' }, spineBand: { bg: '#1f4bb5', fg: '#ffffff', label: 'NGPC' }, tint: ['#1f4bb5', '#06102b'], glow: '#9cb8ff' }),
       // ((T)rustyShelf) Tiger's Game.com: its card box, deep blue with the yellow logo band (MAME)
       gamecom: S('gamecom', { ...cardboard, hue: 250, ratio: 0.78, depth: 0.2, caseColor: '#1c1747', caseSide: '#100d2b', band: { bg: '#2a1f7a', fg: '#ffd400', label: 'GAME.COM' }, spineBand: { bg: '#2a1f7a', fg: '#ffd400', label: 'G.COM' }, tint: ['#2a1f7a', '#0a0720'], glow: '#ffe666' }),
+      // ((T)rustyShelf) the PS Vita: its small blue case (about 105 x 135 mm) with the PS Vita band (Vita3K)
+      psvita: S('psvita', { rc: 0.05, re: 0.22, edge: 0.03, depth: 0.11, hue: 218, ratio: 0.78, caseColor: '#2b5aa8', caseSide: '#1b3c76', band: { bg: '#0b3a8f', fg: '#ffffff', label: 'PS Vita' }, spineBand: { bg: '#0b3a8f', fg: '#ffffff', label: 'PS Vita' }, tint: ['#1f4fa8', '#060f24'], glow: '#9cc0ff' }),
       // ((T)rustyShelf) the original Xbox: a black DVD-sized case with its green XBOX band (xemu)
       xbox: S('xbox', { rc: 0.04, re: 0.22, edge: 0.03, depth: 0.104, hue: 95, ratio: 0.711, caseColor: '#161816', caseSide: '#0c0d0c', band: { bg: '#1b1b1b', fg: '#9bd23c', label: 'XBOX' }, spineBand: { bg: '#1b1b1b', fg: '#9bd23c', label: 'XBOX' }, tint: ['#2d5a12', '#081304'], glow: '#b6f06a' }),
     },
@@ -51,7 +53,7 @@
       pcengine: ['TurboGrafx-16', 'Home console'], neogeo: ['Neo Geo', 'Arcade'], arcade: ['Arcade', 'Coin-op'],
       segacd: ['Sega CD', 'Home console'], sega32x: ['32X', 'Home console'], atari2600: ['Atari 2600', 'Home console'], atarilynx: ['Lynx', 'Handheld'],
       wonderswan: ['WonderSwan', 'Handheld'], dos: ['DOS', 'PC classics'], xbox: ['Xbox', 'Home console'],
-      ngp: ['Neo Geo Pocket', 'Handheld'], ngpc: ['Neo Geo Pocket Color', 'Handheld'], gamecom: ['Game.com', 'Handheld']
+      ngp: ['Neo Geo Pocket', 'Handheld'], ngpc: ['Neo Geo Pocket Color', 'Handheld'], gamecom: ['Game.com', 'Handheld'], psvita: ['PS Vita', 'Handheld']
     },
     media: {
       nes: { kind: 'cart', size: 0.5, drive: 'slot' }, snes: { kind: 'cart', size: 0.5, drive: 'slot' }, n64: { kind: 'cart', size: 0.5, drive: 'slot' },
@@ -62,7 +64,7 @@
       psx: { kind: 'disc', size: 0.7, drive: 'top' }, dreamcast: { kind: 'disc', size: 0.7, drive: 'top' }, saturn: { kind: 'disc', size: 0.7, drive: 'top' },
       segacd: { kind: 'disc', size: 0.7, drive: 'top' }, sega32x: { kind: 'cart', size: 0.5, drive: 'slot' }, atari2600: { kind: 'cart', size: 0.5, drive: 'slot' },
       atarilynx: { kind: 'cart', size: 0.42, drive: 'slot' }, wonderswan: { kind: 'cart', size: 0.42, drive: 'slot' }, dos: { kind: 'cart', form: 'floppy', size: 0.5, drive: 'slot' } /* (beta.11) a 3.5" floppy, not a CD: handled like a cartridge (no spin), drawn as a floppy */, xbox: { kind: 'disc', size: 0.7, drive: 'front' },
-      ngp: { kind: 'cart', size: 0.4, drive: 'slot' }, ngpc: { kind: 'cart', size: 0.4, drive: 'slot' }, gamecom: { kind: 'cart', size: 0.42, drive: 'slot' }
+      ngp: { kind: 'cart', size: 0.4, drive: 'slot' }, ngpc: { kind: 'cart', size: 0.4, drive: 'slot' }, gamecom: { kind: 'cart', size: 0.42, drive: 'slot' }, psvita: { kind: 'cart', size: 0.36, drive: 'slot' }
     }
   };
   Object.assign(window.BS_SYSTEMS_EXTRA.wordmarks, window.BS_WORDMARK_OVERRIDES || {}); // a platform can rename a shelf (Android: Media → Apps)

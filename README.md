@@ -88,6 +88,9 @@ is fine: (T)rustyShelf launches the Canary build from its `Emulators` folder. Wi
 core, with their own box art, manuals and cases; on Android too. Tiger's **Game.com** has a shelf too (`.tgc` or `.bin`
 games in a `gamecom` or `Game.com` folder), played in MAME (`mame gamecom -cart1 <game>`); MAME needs the Game.com's own system
 file, `gamecom.zip` from a MAME BIOS set, in its `roms` folder first. (Windows and Linux.)
+The **PS Vita** has a shelf in Vita3K: the games Vita3K has installed (its `ux0/app` folder, found by itself) are named from
+their `param.sfo` and started with `-F -r <title id>`; a `.vpk` in a `psvita` folder is handed to Vita3K, which installs and runs it.
+(Windows and Linux.)
 
 ## Art, manuals and game info
 
