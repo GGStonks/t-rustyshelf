@@ -1477,6 +1477,7 @@ handle('games:scanFolder', async ({ root }) => {
 });
 handle('games:titleFor', ({ exes }) => (Array.isArray(exes) ? exes : []).slice(0, 500).map(e => ({ exe: String(e), title: addgames.titleFor(String(e)) })));
 let pnPlan = null;
+handle('pc:storeApps', () => pcgames.storeApps()); // (beta discussion 39) the Store apps in the Start menu, to add one by hand
 handle('playnite:find', ({ dir } = {}) => process.platform === 'win32' ? addgames.find(dir ? String(dir) : '') : null);
 handle('playnite:plan', async ({ dir } = {}) => {
   const found = addgames.find(dir ? String(dir) : ''); if (!found) throw new Error('Playnite wasn\'t found. Choose its folder (the one with Playnite.DesktopApp.exe).');

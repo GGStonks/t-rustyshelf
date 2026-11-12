@@ -170,11 +170,26 @@ function publisherId(pub) {
   return out;
 }
 const xboxIo = { platform: () => process.platform, roots: () => xboxRoots(), run: (...a) => run(...a) }; // (swapped by the tests)
+// a Windows app's address in shell:AppsFolder (<package family>!<app id>): the only form launch:pc starts as an app
+const isShellApp = a => typeof a === 'string' && /^[\w.-]+_[a-z0-9]+![\w.-]+$/i.test(a);
+// (beta discussion 39) Settings → Custom games → Add games → Microsoft Store apps: every Store app in the Start menu
+// ({ title, app }), for putting one Windows never lists as a game on the shelf by hand
+async function storeApps() {
+  if (xboxIo.platform() !== 'win32') return [];
+  const out = await xboxIo.run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', "Get-StartApps | ForEach-Object { $_.Name + '|' + $_.AppID }; 'TS-END'"], 30000);
+  if (!/^TS-END\s*$/m.test(out)) return null; // (no answer: the page says so)
+  const seen = new Set(), list = [];
+  for (const line of out.split(/\r?\n/)) { const i = line.lastIndexOf('|'); if (i < 1) continue; const title = line.slice(0, i).trim(), app = line.slice(i + 1).trim();
+    if (!isShellApp(app) || seen.has(app.toLowerCase())) continue; seen.add(app.toLowerCase()); list.push({ title: title.slice(0, 120), app }); }
+  return list.sort((a, b) => a.title.localeCompare(b.title));
+}
 const XBOX_RECHECK = 24 * 3600e3; // a game Windows said isn't installed is asked about again after a day (installed since, repaired)
+// (beta discussion 39) older Store games: Windows installs them in its protected WindowsApps folder, not in an Xbox games
+// folder, so the scan never sees them. These are asked about by name like the others ({ name: its package, appId, title })
+const STORE_GAMES = [{ name: 'Microsoft.MinecraftUWP', appId: 'App', title: 'Minecraft for Windows', publisher: '' }];
 async function xboxGames() {
   if (xboxIo.platform() !== 'win32') return [];
-  const found = xboxScan(xboxIo.roots());
-  if (!found.length) return [];
+  const scanned = xboxScan(xboxIo.roots()), found = [...scanned, ...STORE_GAMES.filter(s => !scanned.some(f => f.name === s.name))];
   // (1.6.3: answers saved by the lookup that asked for every game at once are thrown away: Windows refused that whenever
   // more than one game was installed, so they all got saved as not installed)
   if (!xboxFam) { xboxFam = readJson(xboxFile()) || {}; if (xboxFam.__v !== 2) xboxFam = { __v: 2 }; }
@@ -346,8 +361,11 @@ function quiverGames(chosen) {
 
 // ---------- games added by hand (cfg.pc.custom: [{ id, title, exe, args }]) ----------
 function customGames(list) {
-  return (Array.isArray(list) ? list : []).filter(c => c && typeof c.exe === 'string' && c.exe && isFile(c.exe)).slice(0, 500)
-    .map(c => ({ id: 'custom-' + slug(c.id || c.title || path.basename(c.exe)), source: 'custom', title: String(c.title || path.basename(c.exe, '.exe')).trim().slice(0, 120), exe: c.exe, args: typeof c.args === 'string' ? c.args.slice(0, 1000) : '', ...(ON_SHELF.has(c.shelf) ? { shelf: c.shelf } : {}) })); // (beta.10: shelf 'pc' = shown on the PC shelf instead of Custom; supalii: or a console's)
+  // (beta discussion 39) or a Microsoft Store app added by hand (shellApp: <package family>!<app id>, started as the Windows
+  // app it is, like the Xbox games)
+  return (Array.isArray(list) ? list : []).filter(c => c && (typeof c.exe === 'string' && c.exe && isFile(c.exe) || isShellApp(c.shellApp))).slice(0, 500)
+    .map(c => { const app = !(typeof c.exe === 'string' && c.exe) && isShellApp(c.shellApp), exe = app ? '' : c.exe;
+      return { id: 'custom-' + slug(c.id || c.title || path.basename(exe || c.shellApp)), source: 'custom', title: String(c.title || path.basename(exe, '.exe') || 'Game').trim().slice(0, 120), exe, ...(app ? { shellApp: c.shellApp } : {}), args: typeof c.args === 'string' ? c.args.slice(0, 1000) : '', ...(ON_SHELF.has(c.shelf) ? { shelf: c.shelf } : {}) }; }); // (beta.10: shelf 'pc' = shown on the PC shelf instead of Custom; supalii: or a console's)
 }
 // a title from a program's name: "SoH-Ship-of-Harkinian.exe" → "SoH Ship of Harkinian"
 const titleFromExe = exe => path.basename(String(exe || ''), path.extname(String(exe || ''))).replace(/[_\-.]+/g, ' ').replace(/\s+/g, ' ').trim() || 'Game';
@@ -408,4 +426,4 @@ async function steamSearch(term, exact) {
 }
 
 module.exports = { init, epicGames, quiverGames, quiverFind, quiverRoots, customGames, titleFromExe, mainExe, remember, byId, all, steamIdOf, matchSteam, steamSearch, EPIC_DIR,
-  storeGames, gogGames, ubisoftGames, eaGames, xboxGames, hoyoGames, hoyoFromTree, HOYO, parseReg, xboxRoots, eaFromDirs, xboxScan, publisherId, _xboxIo: xboxIo, _xboxReset: () => { xboxFam = null; } };
+  storeGames, storeApps, isShellApp, gogGames, ubisoftGames, eaGames, xboxGames, hoyoGames, hoyoFromTree, HOYO, parseReg, xboxRoots, eaFromDirs, xboxScan, publisherId, _xboxIo: xboxIo, _xboxReset: () => { xboxFam = null; } };

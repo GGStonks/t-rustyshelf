@@ -44,7 +44,23 @@ const put = (rel, buf) => { const f = path.join(T, rel); fs.mkdirSync(path.dirna
     let cmd = ''; io.run = async (c, a) => { cmd = a.join(' '); return ps(cmd); };
     g = await pcg.xboxGames();
     check('answers saved by the old all-at-once lookup are thrown away, and both games are asked about again', /SunriseBaseGame/.test(cmd) && /Chelan/.test(cmd), cmd);
-    check('two installed games are both found (one name per Get-AppxPackage, as PowerShell wants)', g.length === 2 && g.every(x => /_8wekyb3d8bbwe!Game$/.test(x.shellApp)), cmd + ' ' + JSON.stringify(g));
+    check('two installed games are both found (one name per Get-AppxPackage, as PowerShell wants)', g.filter(x => /_8wekyb3d8bbwe!Game$/.test(x.shellApp)).length === 2, cmd + ' ' + JSON.stringify(g));
+    // (beta discussion 39, again) Minecraft for Windows lives in WindowsApps, not an Xbox games folder: asked about by name too,
+    // and started as its Store app
+    const mc = g.find(x => x.title === 'Minecraft for Windows');
+    check('Minecraft for Windows (no Xbox games folder of its own) is asked about and found, started as its Store app', /MinecraftUWP/.test(cmd) && mc && mc.shellApp === 'Microsoft.MinecraftUWP_8wekyb3d8bbwe!App', JSON.stringify(mc));
+    fs.rmSync(root, { recursive: true, force: true }); fs.rmSync(f, { force: true }); pcg._xboxReset(); io.roots = () => [];
+    g = await pcg.xboxGames();
+    check('…even on a PC with no Xbox games folder at all', g.length === 1 && g[0].title === 'Minecraft for Windows', JSON.stringify(g));
+    // Settings → Add games → Microsoft Store apps: the Start menu's Store apps (programs and duplicates left out), and a
+    // custom game that is a Store app
+    io.run = async () => 'Calculator|Microsoft.WindowsCalculator_8wekyb3d8bbwe!App\r\nNotepad++|C:\\Program Files\\Notepad++\\notepad++.exe\r\nA Store Game|Publisher.AStoreGame_abc123xyz!Game\r\nCalculator|Microsoft.WindowsCalculator_8wekyb3d8bbwe!App\r\nTS-END\r\n';
+    const apps = await pcg.storeApps();
+    check('the Store apps in the Start menu are listed by name, sorted, without plain programs or doubles', JSON.stringify(apps) === JSON.stringify([{ title: 'A Store Game', app: 'Publisher.AStoreGame_abc123xyz!Game' }, { title: 'Calculator', app: 'Microsoft.WindowsCalculator_8wekyb3d8bbwe!App' }]), JSON.stringify(apps));
+    io.run = async () => '';
+    check('Windows not answering: no list (the page says so) rather than an empty one', await pcg.storeApps() === null);
+    const cg = pcg.customGames([{ id: 's1', title: 'A Store Game', exe: '', shellApp: 'Publisher.AStoreGame_abc123xyz!Game' }, { id: 's2', title: 'Bad', exe: '', shellApp: 'shell:evil & calc' }]);
+    check('a Store app added by hand is a custom game started as that app; a malformed address is left out', cg.length === 1 && cg[0].shellApp === 'Publisher.AStoreGame_abc123xyz!Game' && cg[0].exe === '' && cg[0].title === 'A Store Game', JSON.stringify(cg));
   } catch (e) { check('ran without an error', false, e.stack); }
   finally { fs.rmSync(T, { recursive: true, force: true }); }
   console.log(fails ? `\n${fails} check(s) failed` : '\nAll checks passed');
