@@ -191,6 +191,7 @@ contextBridge.exposeInMainWorld('trustyshelf', {
   reportProblem: () => call('app:reportProblem'),
   exportData: dest => call('data:export', { dest }), importData: src => call('data:import', { src }), // ((T)rustyShelf) Export / Import everything
   onDataProgress: fn => ipcRenderer.on('data:progress', (e, s) => fn(s)),
+  dataSize: () => call('data:size'), pauseData: paused => call('data:pause', { paused }), cancelData: () => call('data:cancel'), // ((T)rustyShelf issue 6) the export's size first, pause / resume, cancel
   awakeState: () => call('awake:state'), onAwake: fn => ipcRenderer.on('awake:state', (e, s) => fn(s)), // ((T)rustyShelf issue 7) the PC kept awake during a long job
   clearHistory: () => call('history:clear'),
   onHistoryChanged: fn => ipcRenderer.on('history:changed', (e, info) => fn(info)),

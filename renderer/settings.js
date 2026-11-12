@@ -428,7 +428,10 @@ function build(){
     A("Back up settings","Save","Saves your settings, favourites and play history to a file you can restore later or on a new PC. Keys and passwords aren't included.",backup,{when:()=>!!api.backupSettings,keys:"backup export"}),
     A("Restore settings","Open","Loads a backup file. Your current keys and passwords are kept.",restoreBackup,{when:()=>!!api.restoreSettings,keys:"backup import restore"}),
     // ((T)rustyShelf, Boxshelf's issue 18) a big collection's art and manuals, carried to another PC whole
-    A("Export everything",()=>dataBusy==="export"?"Exporting…":"Export","Your settings, favourites and play history, everything (T)rustyShelf downloaded (box art, manuals, the box art database) and the art kept next to your games, copied into a folder you choose. Take it to another PC and use Import everything there. Sign-ins aren't included.",exportEverything,{when:()=>!!api.exportData,keys:"export copy move transfer another pc all art manuals downloads"}),
+    A("Export everything",()=>dataBusy==="export"?"Exporting…":"Export","Your settings, favourites and play history, everything (T)rustyShelf downloaded (box art, manuals, the box art database) and the art kept next to your games, copied into a folder you choose. Take it to another PC and use Import everything there. Sign-ins aren't included. Choose the same folder again later and the earlier export is updated: only what's new or changed is copied.",exportEverything,{when:()=>!!api.exportData,keys:"export copy move transfer another pc all art manuals downloads backup differential update size",sub:()=>dataSub("export")}),
+    // ((T)rustyShelf issue 6) a running export or import: pause / resume, cancel
+    A("Pause or resume",()=>dataProg&&dataProg.paused?"Resume":"Pause",`Holds the ${dataBusy||"export"} where it is (nothing is lost), and carries on from there.`,dataPause,{when:()=>!!dataBusy&&!!api.pauseData,ns:true,sub:()=>dataSub(dataBusy)}),
+    A("Cancel",()=>"Cancel",`Stops the ${dataBusy||"export"} between two files. What was copied stays where it is; exporting into the same folder again carries on from there.`,()=>twice("datacancel",dataCancel,"Press again to cancel"),{when:()=>!!dataBusy&&!!api.cancelData,ns:true,ask:"datacancel"}),
     A("Import everything",()=>dataBusy==="import"?"Importing…":"Import","Copies an export into this (T)rustyShelf: its settings and downloads replace these (your current settings are kept beside them as a backup file), art goes back next to your games, then (T)rustyShelf starts again. Account keys may need entering again.",importEverything,{when:()=>!!api.importData,ask:"dataimport",keys:"import restore move transfer another pc all art manuals downloads"}),
     A("Smoothness test","Run","Scrolls the shelf by itself for about 45 seconds, switching effects off one at a time, and writes how smooth each was to the log. Leave the controller alone while it runs; Esc stops it.",async()=>{await close();setTimeout(()=>{if(window.Shelf&&Shelf.smoothTest)Shelf.smoothTest()},900)},{when:()=>!!(window.Shelf&&Shelf.smoothTest),keys:"performance fps frame rate lag stutter smooth benchmark"}),
     A("Report a problem","Create","Bundles the log and settings (keys removed) into one file on your Desktop, ready to send.",report,{when:()=>!!api.reportProblem,keys:"bug log help support"}),
@@ -1133,13 +1136,23 @@ async function runFolderDetect(){if(detecting||!api.emulatorsIn)return;const p=a
     if(set.length)changed({rescan:true})}
   catch(e){toast(e&&e.message||"Couldn't look through that folder")}finally{detecting=false;bump()}}
 // ((T)rustyShelf) Export / Import everything (main/dataexport.js); each step is said as it goes
-let dataBusy="";if(api.onDataProgress)api.onDataProgress(s=>{if(s&&s.of)toast(`${s.what==="export"?"Exporting":"Importing"} ${s.i} of ${s.of}: ${s.label}`)});
+// ((T)rustyShelf issue 6) its size before a folder is chosen, its progress (bytes, files, time left) on the row, Pause / Cancel
+let dataBusy="",dataProg=null,dataSz=null,dataSzBusy=false;if(api.onDataProgress)api.onDataProgress(s=>{if(!s)return;if(s.bytes!=null){dataProg=s;bump()}});
 const dataSize=b=>b>=1073741824?(b/1073741824).toFixed(1)+" GB":Math.max(1,Math.round(b/1048576))+" MB";
+const dataEta=t=>t==null?"":t<90?"about a minute left":t<5400?`about ${Math.round(t/60)} min left`:`about ${(t/3600).toFixed(1)} h left`;
+function dataSub(what){
+  if(dataBusy&&dataBusy===what){const p=dataProg;if(!p)return {text:"Getting ready…"};return {text:`${dataSize(p.bytes)} of ${dataSize(p.of)} · ${Number(p.files||0).toLocaleString()} of ${Number(p.ofFiles||0).toLocaleString()} files${p.paused?" · paused":p.eta!=null?" · "+dataEta(p.eta):""}${p.awake&&!p.paused?" · PC kept awake":""}`}}
+  if(what==="export"&&!dataBusy&&api.dataSize){if(dataSz==null&&!dataSzBusy){dataSzBusy=true;Promise.resolve(api.dataSize()).then(r=>{dataSz=r||false},()=>{dataSz=false}).finally(()=>{dataSzBusy=false;bump()})}
+    return dataSz?{text:`About ${dataSize(dataSz.bytes)} · ${Number(dataSz.files).toLocaleString()} files`}:dataSzBusy?{text:"Working out the size…"}:null}
+  return null}
+async function dataPause(){if(!dataBusy||!api.pauseData)return;const want=!(dataProg&&dataProg.paused);try{const r=await api.pauseData(want);if(r&&r.ok){dataProg={...(dataProg||{}),paused:r.paused};bump()}}catch(e){toast(errMsg(e))}}
+async function dataCancel(){if(!dataBusy||!api.cancelData)return;try{await api.cancelData();toast("Stopping…")}catch(e){toast(errMsg(e))}}
 async function exportEverything(){if(dataBusy||!api.exportData)return;const p=await pick({kind:"folder",title:"Choose where to put the export"}),dir=typeof p==="string"?p:p&&p.path;if(!dir)return;
-  await save();dataBusy="export";bump();toast("Exporting… (a big collection takes a while)");
-  try{const r=await api.exportData(dir);toast(`Exported ${dataSize(r.bytes)} (${r.files.toLocaleString()} files) to ${folderName(r.dir)}`)}catch(e){toast(errMsg(e)||"The export didn't finish")}finally{dataBusy="";bump()}}
+  await save();dataBusy="export";dataProg=null;bump();toast("Exporting… (a big collection takes a while)");
+  try{const r=await api.exportData(dir);toast(r.updated?`Updated ${folderName(r.dir)}: ${Number(r.copied||0).toLocaleString()} new or changed files (${dataSize(r.copiedBytes||0)}), ${Number(r.unchanged||0).toLocaleString()} already there`:`Exported ${dataSize(r.bytes)} (${r.files.toLocaleString()} files) to ${folderName(r.dir)}`)}
+  catch(e){toast(/cancelled/i.test(errMsg(e)||"")?"Export cancelled. What was copied stays in the folder: export there again to carry on.":errMsg(e)||"The export didn't finish")}finally{dataBusy="";dataProg=null;dataSz=null;bump()}}
 function importEverything(){if(dataBusy||!api.importData)return;twice("dataimport",async()=>{const p=await pick({kind:"folder",title:"Choose the (T)rustyShelf export folder"}),dir=typeof p==="string"?p:p&&p.path;if(!dir)return;
-  dataBusy="import";bump();toast("Importing…");
+  dataBusy="import";dataProg=null;bump();toast("Importing…");
   try{const r=await api.importData(dir);toast(`Imported${r.skipped&&r.skipped.length?` (${r.skipped.length} art folder${r.skipped.length===1?"":"s"} had nowhere to go: see the log)`:""}. (T)rustyShelf starts again in a moment…`)}catch(e){toast(errMsg(e)||"The import didn't finish");dataBusy="";bump()}},"Press again: the export's settings and downloads replace these")}
 async function runDetect(){if(detecting||!api.detect)return;detecting=true;bump();const my=openId;
   try{const d0=await api.detect();

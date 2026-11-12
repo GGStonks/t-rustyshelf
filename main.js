@@ -2817,23 +2817,31 @@ let reporting = null;
 handle('app:reportProblem', () => reporting || (reporting = makeReport().finally(() => { reporting = null; })));
 // ((T)rustyShelf, Boxshelf's issue 18) Settings → System → Export everything / Import everything (main/dataexport.js): the
 // settings, the downloads (art, manuals, the box art database …) and the art kept next to the games, carried to another PC
-let dataMoving = null;
+let dataMoving = null, dataCtl = null; // dataCtl: the running export / import's { paused, cancelled } ((T)rustyShelf issue 6)
 const dataStep = (what) => s => { try { if (alive()) win.webContents.send('data:progress', { what, ...s }); } catch {} };
+// ((T)rustyShelf issue 6) the progress in bytes and files (main/dataexport.js onProgress), and whether the PC is kept awake
+const dataProgress = s => { try { if (alive()) win.webContents.send('data:progress', { ...s, awake: awakeId != null }); } catch {} };
+const dataArgs = () => ({ appRoot: paths.appRoot(), dataDir: app.getPath('userData'), cfg, artDirsFor: paths.artDirsFor, artLib: paths.artLibrary() });
+handle('data:size', () => require('./main/dataexport').exportSize(dataArgs())); // how big an export would be, before a folder is chosen
+handle('data:pause', ({ paused } = {}) => { if (!dataCtl) return { ok: false }; dataCtl.paused = !!paused; log(paused ? 'Export / import paused' : 'Export / import resumed'); return { ok: true, paused: dataCtl.paused }; });
+handle('data:cancel', () => { if (!dataCtl) return { ok: false }; dataCtl.cancelled = true; log('Export / import cancelled'); return { ok: true }; });
 handle('data:export', ({ dest } = {}) => {
   if (dataMoving) throw new Error('An export or import is already running.');
+  dataCtl = { paused: false, cancelled: false };
   return (dataMoving = (async () => { await persistCfg(cfg); log('Export everything to', dest);
-    const r = await whileAwake('export', () => require('./main/dataexport').exportAll({ dest: String(dest || ''), appRoot: paths.appRoot(), dataDir: app.getPath('userData'), cfg, artDirsFor: paths.artDirsFor, artLib: paths.artLibrary(), version: appVersion(), onStep: dataStep('export') }));
-    log('Exported:', r.files, 'files,', Math.round(r.bytes / 1048576), 'MB'); return r; })().finally(() => { dataMoving = null; }));
+    const r = await whileAwake('export', () => require('./main/dataexport').exportAll({ ...dataArgs(), dest: String(dest || ''), version: appVersion(), onStep: dataStep('export'), onProgress: dataProgress, control: dataCtl }));
+    log(r.updated ? 'Export updated:' : 'Exported:', r.files, 'files,', Math.round(r.bytes / 1048576), 'MB', r.updated ? `(${r.copied} new or changed, ${Math.round(r.copiedBytes / 1048576)} MB copied)` : ''); return r; })().finally(() => { dataMoving = null; dataCtl = null; }));
 });
 handle('data:import', ({ src } = {}) => {
   if (dataMoving) throw new Error('An export or import is already running.');
   if (launcher.isRunning()) throw new Error('Close the game first.');
+  dataCtl = { paused: false, cancelled: false };
   return (dataMoving = (async () => { log('Import everything from', src);
-    const r = await whileAwake('import', () => require('./main/dataexport').importAll({ src: String(src || ''), appRoot: paths.appRoot(), dataDir: app.getPath('userData'), artDirsFor: paths.artDirsFor, artLib: paths.artLibrary(), readCfg: () => { try { return config.load(); } catch { return null; } }, onStep: dataStep('import') }));
+    const r = await whileAwake('import', () => require('./main/dataexport').importAll({ src: String(src || ''), appRoot: paths.appRoot(), dataDir: app.getPath('userData'), artDirsFor: paths.artDirsFor, artLib: paths.artLibrary(), readCfg: () => { try { return config.load(); } catch { return null; } }, onStep: dataStep('import'), onProgress: dataProgress, control: dataCtl }));
     log('Imported', r.parts, 'parts', r.skipped.length ? `(no place for: ${r.skipped.join('; ')})` : '');
     // the imported settings take over: start again (an AppImage from its own file: the mounted copy goes away on exit)
     setTimeout(() => { try { app.relaunch(process.env.APPIMAGE ? { execPath: process.env.APPIMAGE } : undefined); } catch {} app.exit(0); }, 2500);
-    return r; })().finally(() => { dataMoving = null; }));
+    return r; })().finally(() => { dataMoving = null; dataCtl = null; }));
 });
 async function makeReport() {
   let desk; try { desk = app.getPath('desktop'); } catch {} if (!desk || !fs.existsSync(desk)) desk = require('os').homedir();

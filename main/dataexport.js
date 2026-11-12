@@ -9,6 +9,11 @@
 //                  Magazines and Songs, and an art library kept elsewhere as app/Library-elsewhere
 //   rom-art/<console>/<n>/   art and manuals kept next to the games (each console's covers / manuals folders)
 //   manifest.json  what's where, and where it came from
+// ((T)rustyShelf issue 6) exportSize() says how big an export is before a folder is chosen. An export said in bytes and files
+// as it goes (onProgress: done / total, files, the step, time left), and it can be paused, resumed and cancelled (control:
+// { paused, cancelled }, read between files). Exporting into a folder that already holds an export (or into the export
+// itself) updates that export: only files that are new or changed (another size or time) are copied, so the second run of a
+// big collection is quick. Nothing is ever deleted from an export.
 // An import copies an export back: nothing is deleted, files of the same name are replaced (config.json is kept as
 // config-before-import-<date>.json first); art from next to the games goes to the same folder if this PC has it, else
 // to the same console's folder in the same place on the list. The app then starts again on the imported settings.
@@ -31,33 +36,48 @@ async function ensureDir(d) {
 }
 
 async function size(p) { let n = 0, files = 0; const walk = async d => { let ents; try { ents = await fsp.readdir(d, { withFileTypes: true }); } catch { return; } for (const e of ents) { const f = path.join(d, e.name); if (e.isDirectory()) await walk(f); else if (e.isFile()) { try { n += (await fsp.stat(f)).size; files++; } catch {} } } }; if (isDir(p)) await walk(p); else { try { n = (await fsp.stat(p)).size; files = 1; } catch {} } return { bytes: n, files }; }
-async function copy(src, dst, filter = () => true) {
-  const st = await fsp.stat(src).catch(() => null);
-  if (!st || !filter(src)) return;
-  if (st.isFile()) {
-    await ensureDir(path.dirname(dst));
-    try { await fsp.copyFile(src, dst); } catch (e) {
-      if (['EBUSY', 'EPERM', 'EACCES', 'ETXTBSY'].includes(e.code)) return;
-      throw e;
-    }
-    return;
-  }
-  if (st.isDirectory()) {
-    await ensureDir(dst);
-    let ents; try { ents = await fsp.readdir(src, { withFileTypes: true }); } catch { return; }
+// every file under src that the filter lets through: [{ src, rel, size, mtimeMs }] (a single file: rel '')
+async function list(src, filter = () => true) {
+  const out = [], st = await fsp.stat(src).catch(() => null);
+  if (!st || !filter(src)) return out;
+  if (st.isFile()) { out.push({ src, rel: '', size: st.size, mtimeMs: st.mtimeMs }); return out; }
+  const walk = async (d, rel) => {
+    let ents; try { ents = await fsp.readdir(d, { withFileTypes: true }); } catch { return; }
     for (const ent of ents) {
-      const srcChild = path.join(src, ent.name), dstChild = path.join(dst, ent.name);
-      if (!filter(srcChild)) continue;
-      if (ent.isDirectory()) {
-        await copy(srcChild, dstChild, filter);
-      } else if (ent.isFile()) {
-        try { await fsp.copyFile(srcChild, dstChild); } catch (e) {
-          if (['EBUSY', 'EPERM', 'EACCES', 'ETXTBSY'].includes(e.code)) continue;
-          throw e;
-        }
-      }
+      const f = path.join(d, ent.name), r = rel ? path.join(rel, ent.name) : ent.name;
+      if (!filter(f)) continue;
+      if (ent.isDirectory()) await walk(f, r);
+      else if (ent.isFile()) { try { const s2 = await fsp.stat(f); out.push({ src: f, rel: r, size: s2.size, mtimeMs: s2.mtimeMs }); } catch {} }
     }
+  };
+  if (st.isDirectory()) await walk(src, '');
+  return out;
+}
+const CANCELLED = 'The export was cancelled.';
+// a copy job: steps of [label, files, destination root]; copied one file at a time, pausable and cancellable between files.
+// same (differential): a file already there with the same size and time is left as it is
+function job({ control = {}, onProgress = () => {}, same = false, what = 'export' }) {
+  const t0 = Date.now(); let done = 0, files = 0, copied = 0, copiedBytes = 0, total = 0, ofFiles = 0, paused = 0, lastSay = 0, label = '';
+  const say = force => { const now = Date.now(); if (!force && now - lastSay < 250) return; lastSay = now;
+    const spent = (now - t0 - paused) / 1000, rate = spent > 2 && done > 0 ? done / spent : 0;
+    onProgress({ what, bytes: done, of: total, files, ofFiles, label, copied, paused: !!control.paused, eta: rate ? Math.round((total - done) / rate) : null }); };
+  async function gate() {
+    if (control.paused && !control.cancelled) { const p0 = Date.now(); say(true); while (control.paused && !control.cancelled) await new Promise(r => setTimeout(r, 150)); paused += Date.now() - p0; say(true); }
+    if (control.cancelled) { const e = new Error(what === 'import' ? 'The import was cancelled.' : CANCELLED); e.cancelled = true; throw e; }
   }
+  async function one(f, dst) {
+    await gate();
+    if (same) { const d = await fsp.stat(dst).catch(() => null); if (d && d.isFile() && d.size === f.size && Math.abs(d.mtimeMs - f.mtimeMs) < 2000) { done += f.size; files++; say(); return; } }
+    await ensureDir(path.dirname(dst));
+    try { await fsp.copyFile(f.src, dst); const t = new Date(f.mtimeMs); await fsp.utimes(dst, t, t).catch(() => {}); /* (the file's own time kept: the next export into it compares by it) */ copied++; copiedBytes += f.size; }
+    catch (e) { if (!['EBUSY', 'EPERM', 'EACCES', 'ETXTBSY'].includes(e.code)) throw e; }
+    done += f.size; files++; say();
+  }
+  return {
+    plan(steps) { total = steps.reduce((a, s) => a + s.files.reduce((b, f) => b + f.size, 0), 0); ofFiles = steps.reduce((a, s) => a + s.files.length, 0); },
+    async run(step) { label = step.label; say(true); for (const f of step.files) await one(f, f.rel ? path.join(step.to, f.rel) : step.to); },
+    end() { say(true); return { copied, copiedBytes, unchanged: files - copied }; }
+  };
 }
 
 // the art kept next to each console's games: [{ console, n, path }] (not what's already inside the app folder or the library)
@@ -73,23 +93,41 @@ function romArt(cfg, artDirsFor, appRoot, artLib) {
   return out;
 }
 
-// → { dir, bytes, files, parts }
-async function exportAll({ dest, appRoot, dataDir, cfg, artDirsFor, artLib, version, onStep = () => {} }) {
+// what goes into an export: [{ label, src, to (relative to the export), filter, part / art }]
+function parts({ appRoot, dataDir, cfg, artDirsFor, artLib }) {
+  const out = [{ label: 'Settings and downloads', src: dataDir, to: 'data', filter: topSkip(dataDir), part: 'data' }];
+  for (const name of APP_DIRS) { const p = path.join(appRoot, name); if (isDir(p)) out.push({ label: name, src: p, to: path.join('app', name), part: 'app/' + name }); }
+  if (artLib && isDir(artLib) && !inside(artLib, appRoot)) out.push({ label: 'Art library', src: artLib, to: path.join('app', 'Library-elsewhere'), part: 'app/Library-elsewhere', artLib: true });
+  for (const a of romArt(cfg, artDirsFor, appRoot, artLib)) out.push({ label: `${a.console} art next to the games`, src: a.path, to: path.join('rom-art', a.console, String(a.n)), art: a });
+  return out;
+}
+// → { bytes, files }: how big an export of this install would be (before a folder is chosen)
+async function exportSize(o) { let bytes = 0, files = 0; for (const p of parts(o)) for (const f of await list(p.src, p.filter)) { bytes += f.size; files++; } return { bytes, files }; }
+const isExport = d => { try { return /\(T\)rustyShelf/.test(JSON.parse(fs.readFileSync(path.join(d, 'manifest.json'), 'utf8')).app || ''); } catch { return false; } };
+// the earlier export to update: dest itself, else the newest "(T)rustyShelf export …" folder in it
+function earlier(dest) {
+  if (isExport(dest)) return dest;
+  let ents = []; try { ents = fs.readdirSync(dest, { withFileTypes: true }); } catch {}
+  return ents.filter(e => e.isDirectory() && /^\(T\)rustyShelf export /.test(e.name)).map(e => path.join(dest, e.name)).filter(isExport).sort().pop() || null;
+}
+// → { dir, bytes, files, parts, updated, copied, copiedBytes, unchanged }
+async function exportAll({ dest, appRoot, dataDir, cfg, artDirsFor, artLib, version, onStep = () => {}, onProgress, control }) {
   if (!dest || !isDir(dest)) throw new Error('Choose a folder to export to.');
-  const dir = path.join(dest, `(T)rustyShelf export ${stamp()}`); await ensureDir(dir);
+  const prev = earlier(dest), dir = prev || path.join(dest, `(T)rustyShelf export ${stamp()}`); await ensureDir(dir);
   const manifest = { app: '(T)rustyShelf', version: version || '', at: new Date().toISOString(), from: { appRoot, dataDir }, parts: [], romArt: [] };
-  const steps = [], art = romArt(cfg, artDirsFor, appRoot, artLib);
-  steps.push(['Settings and downloads', async () => { await copy(dataDir, path.join(dir, 'data'), topSkip(dataDir)); manifest.parts.push('data'); }]);
-  for (const name of APP_DIRS) { const p = path.join(appRoot, name); if (isDir(p)) steps.push([name, async () => { await copy(p, path.join(dir, 'app', name)); manifest.parts.push('app/' + name); }]); }
-  if (artLib && isDir(artLib) && !inside(artLib, appRoot)) steps.push(['Art library', async () => { await copy(artLib, path.join(dir, 'app', 'Library-elsewhere')); manifest.parts.push('app/Library-elsewhere'); manifest.artLib = artLib; }]);
-  for (const a of art) steps.push([`${a.console} art next to the games`, async () => { const rel = path.join('rom-art', a.console, String(a.n)); await copy(a.path, path.join(dir, rel)); manifest.romArt.push({ ...a, rel }); }]);
-  for (let i = 0; i < steps.length; i++) { onStep({ i: i + 1, of: steps.length, label: steps[i][0] }); await steps[i][1](); }
+  if (prev) { try { const m = JSON.parse(await fsp.readFile(path.join(dir, 'manifest.json'), 'utf8')); manifest.first = m.first || m.at; } catch {} }
+  const j = job({ control, onProgress, same: !!prev, what: 'export' }), steps = [];
+  for (const p of parts({ appRoot, dataDir, cfg, artDirsFor, artLib })) steps.push({ ...p, to: path.join(dir, p.to), files: await list(p.src, p.filter) });
+  j.plan(steps);
+  for (let i = 0; i < steps.length; i++) { const st = steps[i]; onStep({ i: i + 1, of: steps.length, label: st.label }); await j.run(st);
+    if (st.part) manifest.parts.push(st.part); if (st.artLib) manifest.artLib = artLib; if (st.art) manifest.romArt.push({ ...st.art, rel: path.relative(dir, st.to) }); }
   await fsp.writeFile(path.join(dir, 'manifest.json'), JSON.stringify(manifest, null, 2));
-  const s = await size(dir); return { dir, ...s, parts: manifest.parts.length + manifest.romArt.length };
+  const s = await size(dir); return { dir, ...s, parts: manifest.parts.length + manifest.romArt.length, updated: !!prev, ...j.end() };
 }
 
 // → { files, parts, skipped: [what had nowhere to go] }
-async function importAll({ src, appRoot, dataDir, artDirsFor, artLib, readCfg, onStep = () => {} }) {
+async function importAll({ src, appRoot, dataDir, artDirsFor, artLib, readCfg, onStep = () => {}, onProgress, control }) {
+  const j = job({ control, onProgress, what: 'import' }), copy = async (from, to, filter) => { await j.run({ label: '', to, files: await list(from, filter) }); };
   let manifest; try { manifest = JSON.parse(await fsp.readFile(path.join(src, 'manifest.json'), 'utf8')); } catch { throw new Error('That folder isn\'t a (T)rustyShelf export (no manifest.json in it).'); }
   if (manifest.app !== '(T)rustyShelf' && manifest.app !== 'Boxshelf') throw new Error('That folder isn\'t a (T)rustyShelf export.');
   const steps = [], skipped = [];
@@ -113,8 +151,9 @@ async function importAll({ src, appRoot, dataDir, artDirsFor, artLib, readCfg, o
       await copy(from, to);
     }]);
   }
+  j.plan([{ files: [{ size: (await size(src)).bytes }] }]);
   for (let i = 0; i < steps.length; i++) { onStep({ i: i + 1, of: steps.length, label: steps[i][0] }); await steps[i][1](); }
-  return { parts: steps.length, skipped, from: manifest.at };
+  return { parts: steps.length, skipped, from: manifest.at, ...j.end() };
 }
 
-module.exports = { exportAll, importAll, romArt, SKIP };
+module.exports = { exportAll, importAll, exportSize, romArt, SKIP };
