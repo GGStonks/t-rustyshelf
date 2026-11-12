@@ -40,6 +40,22 @@ try {
   g = pc.quiverGames('').filter(x => /QuiverApps/.test(x.exe));
   const t4 = g.map(x => x.title).sort();
   check('Quiver 4: the installed app and the one installs.json doesn\'t show yet are both there, once each', t4.length === 2 && t4.includes('Perfect Dark') && t4.includes('Sonic Unleashed Recomp'), t4);
+
+  // (issue 16 again) an app in the apps folder that Quiver's list names without pointing at its folder gets the list's name
+  // (the one the first import gave it), not the folder's; a versioned folder too; a folder no entry matches keeps its own
+  const q3b = path.join(tmp, 'Quiver2');
+  put(path.join(q3b, 'QuiverLauncher.exe'), 'x'); put(path.join(q3b, 'settings.json'), JSON.stringify({ UserAppDisplayNames: { 'Zelda64Recomp/Zelda64Recomp': 'Majora\'s Mask' } }));
+  put(path.join(q3b, 'apps.json'), JSON.stringify({ apps: [{ name: 'Star Fox 64', repository: 'HarbourMasters/Starship', appIconUrl: 'https://example.com/sf.png', tags: ['decomp'] },
+    { name: 'Zelda 64: Recompiled', repository: 'Zelda64Recomp/Zelda64Recomp' }, { name: 'Not Installed', repository: 'Someone/Nothing', folderName: 'Nothing' }] }));
+  exe(path.join(q3b, 'Apps', 'Starship-v1.0.2', 'Starship.exe')); exe(path.join(q3b, 'Apps', 'Zelda64Recomp', 'Zelda64Recompiled.exe')); exe(path.join(q3b, 'Apps', 'Mystery_Port', 'mystery.exe'));
+  const gb = pc.quiverGames(q3b).filter(x => x.exe.includes(q3b)), by = t => gb.find(x => x.title === t);
+  check('Quiver 3: an app its list names by repository gets the list\'s name and icon (a version on the folder\'s end too)', by('Star Fox 64') && /Starship\.exe$/.test(by('Star Fox 64').exe) && by('Star Fox 64').icon === 'https://example.com/sf.png', JSON.stringify(gb));
+  check('Quiver 3: the name you gave an app in Quiver wins', !!by('Majora\'s Mask'), JSON.stringify(gb.map(x => x.title)));
+  check('Quiver 3: a folder no entry matches keeps its folder name; ids stay the folder\'s', !!by('Mystery Port') && gb.length === 3 && by('Star Fox 64').id === 'quiver-' + 'starship-v1-0-2', JSON.stringify(gb.map(x => [x.id, x.title])));
+  // Quiver 4: library.json's entry for an app installs.json doesn't show yet
+  put(path.join(q4, 'library.json'), JSON.stringify([{ id: 'a1', slug: 'perfect-dark', overrides: { name: 'Perfect Dark' } }, { id: 'a2', slug: 'sonic-unleashed-recomp', local: { name: 'Sonic Unleashed' } }]));
+  const g4 = pc.quiverGames('').filter(x => /QuiverApps/.test(x.exe)).map(x => x.title).sort();
+  check('Quiver 4: the app installs.json doesn\'t show yet gets library.json\'s name', JSON.stringify(g4) === JSON.stringify(['Perfect Dark', 'Sonic Unleashed']), g4);
 } catch (e) { check('ran without an error', false, e.stack); }
 finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 console.log(fails ? `\n${fails} check(s) failed` : '\nAll checks passed');

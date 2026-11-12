@@ -336,7 +336,32 @@ function quiverAppsDir(root) {
 // read above only in part) still gets its case: every folder in the apps folder with a program in it, the ones the list
 // already gave (their program is inside) left out, so a rescan never doubles a game
 const NOT_APP = /^(\.|_)|^(temp|tmp|cache|downloads?|logs?|backups?|updates?)$/i;
-function quiverLoose(appsDir, listed) {
+// ((T)rustyShelf, issue 16 again) what Quiver's own lists call an app whose folder they don't point at (no folderName, or a
+// folder named another way): matched by the folder's name against each entry's folder, project, repository and name, in
+// letters and digits only and with a version on the end left off. It gets the name the first import gave it, and with that
+// the box art, instead of its folder's name
+const qKey = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+const qBare = s => qKey(String(s || '').replace(/[\s._-]*v?\d+(\.\d+)+[a-z]?$/i, '')); // "Starship-v1.0.2" → "starship"
+function quiverNames(root) {
+  const m = new Map(), put = (k, v) => { if (typeof k !== 'string') return; for (const f of [qKey, qBare]) { const n = f(k); if (n.length >= 3 && !m.has(n)) m.set(n, v); } };
+  const s = readJson(path.join(root, 'settings.json')) || {}, own = s.UserAppDisplayNames && typeof s.UserAppDisplayNames === 'object' ? s.UserAppDisplayNames : {};
+  const j = readJson(path.join(root, 'apps.json'));
+  for (const a of (j && Array.isArray(j.apps) ? j.apps : []).slice(0, 5000)) {
+    if (!a || typeof a !== 'object') continue; const repo = typeof a.repository === 'string' ? a.repository : '';
+    const title = String(own[repo] || own[a.folderName] || own[a.name] || a.name || a.project || '').trim(); if (!title) continue;
+    const v = { title, icon: typeof a.appIconUrl === 'string' && /^https:\/\//.test(a.appIconUrl) ? a.appIconUrl : '', tags: Array.isArray(a.tags) ? a.tags.map(String) : [] };
+    for (const k of [a.folderName, a.project, repo.split('/').pop(), a.name]) put(k, v);
+  }
+  const lib = readJson(path.join(root, 'library.json')), items = Array.isArray(lib) ? lib : lib && Array.isArray(lib.items) ? lib.items : lib && typeof lib === 'object' ? Object.values(lib) : [];
+  for (const it of items.slice(0, 5000)) {
+    if (!it || typeof it !== 'object') continue; const ov = it.overrides || {};
+    const title = String(ov.name || (it.custom && it.custom.name) || (it.local && it.local.name) || it.name || '').trim(); if (!title) continue;
+    const v = { title, icon: typeof ov.cover === 'string' && /^https:\/\//.test(ov.cover) ? ov.cover : '', tags: [] };
+    for (const k of [it.folder, it.slug, it.local && it.local.folder, typeof it.repository === 'string' ? it.repository.split('/').pop() : '', title]) put(k, v);
+  }
+  return m;
+}
+function quiverLoose(appsDir, listed, names) {
   let ents = []; try { ents = fs.readdirSync(appsDir, { withFileTypes: true }); } catch { return []; }
   const inside = listed.map(e => path.resolve(e).toLowerCase()), out = [];
   for (const e of ents.slice(0, 2000)) {
@@ -344,7 +369,8 @@ function quiverLoose(appsDir, listed) {
     const dir = path.resolve(appsDir, e.name), pre = dir.toLowerCase() + path.sep;
     if (inside.some(x => x.startsWith(pre))) continue;
     const exe = mainExe(dir); if (!exe) continue;
-    out.push({ key: e.name, title: e.name.replace(/[_.]+/g, ' ').replace(/\s+/g, ' ').trim() || titleFromExe(exe), exe, icon: '', tags: [] });
+    const hit = names && (names.get(qKey(e.name)) || names.get(qBare(e.name))); // (the id stays the folder's: a game already on the shelf keeps its settings)
+    out.push({ key: e.name, title: hit ? hit.title : e.name.replace(/[_.]+/g, ' ').replace(/\s+/g, ' ').trim() || titleFromExe(exe), exe, icon: hit ? hit.icon : '', tags: hit ? hit.tags : [] });
   }
   return out;
 }
@@ -353,7 +379,7 @@ function quiverGames(chosen) {
   for (const root of quiverRoots(chosen)) {
     let list = [];
     try { list = isFile(path.join(root, 'installs.json')) ? quiver4(root) : quiver3(root); } catch (e) { log('Quiver read', e.message); }
-    try { const loose = quiverLoose(quiverAppsDir(root), list.map(g => g.exe)); if (loose.length) log('Quiver: ' + loose.length + ' app(s) in its apps folder that its list doesn\'t show'); list = list.concat(loose); } catch (e) { log('Quiver apps folder', e.message); }
+    try { const loose = quiverLoose(quiverAppsDir(root), list.map(g => g.exe), quiverNames(root)); if (loose.length) log('Quiver: ' + loose.length + ' app(s) in its apps folder that its list doesn\'t show'); list = list.concat(loose); } catch (e) { log('Quiver apps folder', e.message); }
     for (const g of list) { const id = 'quiver-' + slug(g.key || g.title); if (seen.has(id) || seen.has(g.exe.toLowerCase())) continue; seen.add(id); seen.add(g.exe.toLowerCase()); out.push({ id, source: 'quiver', ...g }); }
   }
   return out;
