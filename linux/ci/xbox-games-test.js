@@ -1,6 +1,6 @@
 // Boxshelf beta discussion 39: Xbox app / Microsoft Store games showed as not installed. A PowerShell lookup that failed or
 // timed out once left every game remembered as not installed for good, and a MicrosoftGame.config saved in UTF-16 was
-// never read. Run: node linux/ci/xbox-games-test.js
+// never read. (1.6.3) Two or more games asked about in one Get-AppxPackage were refused by Windows, so none showed. Run: node linux/ci/xbox-games-test.js
 'use strict';
 const fs = require('fs'), path = require('path'), os = require('os');
 let fails = 0; const check = (name, ok, detail) => { console.log((ok ? 'PASS  ' : 'FAIL  ') + name + (ok || detail == null ? '' : '  -> ' + String(detail).slice(0, 400))); if (!ok) fails++; };
@@ -37,6 +37,14 @@ const put = (rel, buf) => { const f = path.join(T, rel); fs.mkdirSync(path.dirna
     let asked = ''; io.run = async (c, a) => { calls++; asked = a.join(' '); return 'Microsoft.Chelan|Microsoft.Chelan_8wekyb3d8bbwe\nTS-END\n'; };
     g = await pcg.xboxGames();
     check('a day later a game Windows said wasn\'t installed is asked about again, and shows once installed', /Microsoft\.Chelan/.test(asked) && !/SunriseBaseGame/.test(asked) && g.length === 2, asked + ' ' + JSON.stringify(g.map(x => x.title)));
+    // (1.6.3) PowerShell's own rule: Get-AppxPackage -Name takes one name; a list of two or more is refused (nothing listed),
+    // which made every game look uninstalled for anyone with two Xbox games or more
+    const ps = cmd => { const listed = /-Name\s+'[^']*'\s*,/.test(cmd); if (listed) return 'TS-END\n'; const m = /@\(([^)]*)\)/.exec(cmd); const names = m ? m[1].split(',').map(x => x.trim().replace(/^'|'$/g, '')) : []; return names.map(n => `${n}|${n}_8wekyb3d8bbwe`).join('\n') + '\nTS-END\n'; };
+    fs.writeFileSync(f, JSON.stringify({ 'Microsoft.SunriseBaseGame': '', 'Microsoft.Chelan': '', __askedAt: Date.now() })); pcg._xboxReset(); // (saved by 1.6.2's lookup: both "not installed", today)
+    let cmd = ''; io.run = async (c, a) => { cmd = a.join(' '); return ps(cmd); };
+    g = await pcg.xboxGames();
+    check('answers saved by the old all-at-once lookup are thrown away, and both games are asked about again', /SunriseBaseGame/.test(cmd) && /Chelan/.test(cmd), cmd);
+    check('two installed games are both found (one name per Get-AppxPackage, as PowerShell wants)', g.length === 2 && g.every(x => /_8wekyb3d8bbwe!Game$/.test(x.shellApp)), cmd + ' ' + JSON.stringify(g));
   } catch (e) { check('ran without an error', false, e.stack); }
   finally { fs.rmSync(T, { recursive: true, force: true }); }
   console.log(fails ? `\n${fails} check(s) failed` : '\nAll checks passed');

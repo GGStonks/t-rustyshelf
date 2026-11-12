@@ -175,15 +175,18 @@ async function xboxGames() {
   if (xboxIo.platform() !== 'win32') return [];
   const found = xboxScan(xboxIo.roots());
   if (!found.length) return [];
-  if (!xboxFam) xboxFam = readJson(xboxFile()) || {};
+  // (1.6.3: answers saved by the lookup that asked for every game at once are thrown away: Windows refused that whenever
+  // more than one game was installed, so they all got saved as not installed)
+  if (!xboxFam) { xboxFam = readJson(xboxFile()) || {}; if (xboxFam.__v !== 2) xboxFam = { __v: 2 }; }
   const asked = +xboxFam.__askedAt || 0, stale = Date.now() - asked > XBOX_RECHECK;
   const missing = found.filter(f => !(f.name in xboxFam) || (xboxFam[f.name] === '' && stale)).map(f => f.name); // ('' = asked, not installed)
   let guessed = null;
   if (missing.length) {
     const list = missing.map(n => "'" + n.replace(/'/g, "''") + "'").join(',');
     // (the end mark tells an answer from a PowerShell that failed or timed out: that used to leave every game remembered
-    // as not installed for good, so the Xbox games never showed)
-    const outp = await xboxIo.run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `Get-AppxPackage -Name ${list} | ForEach-Object { $_.Name + '|' + $_.PackageFamilyName }; 'TS-END'`], 30000);
+    // as not installed for good, so the Xbox games never showed). (1.6.3, beta discussion 39) one name per Get-AppxPackage:
+    // its -Name takes a single name, so a list of two or more was refused and the answer came back empty
+    const outp = await xboxIo.run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `foreach ($n in @(${list})) { Get-AppxPackage -Name $n | ForEach-Object { $_.Name + '|' + $_.PackageFamilyName } }; 'TS-END'`], 30000);
     if (/^TS-END\s*$/m.test(outp)) {
       for (const n of missing) xboxFam[n] = '';
       for (const line of outp.split(/\r?\n/)) { const [n, fam] = line.trim().split('|'); if (n && fam) xboxFam[n] = fam; }
