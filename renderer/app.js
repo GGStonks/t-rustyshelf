@@ -4115,7 +4115,9 @@ function toastDone(msg){toastAdd({msg:String(msg),kind:"done"})}
 // row), so the card never takes the D-pad from the shelf. Only where the run can be paused or cancelled (Windows and Linux;
 // on Android since (T)rustyShelf 1.0.1, Boxshelf's issue 9, through the quick menu's row only: Android shows its own card); it
 // goes when the run ends. Its updates wait while the shelf slides
-function artCardText(){const n=x=>Number(x||0).toLocaleString();return ARTC.stopping?"Stopping…":ARTC.total?`${n(Math.min(ARTC.done,ARTC.total))} of ${n(ARTC.total)}${ARTC.paused?" · paused":""}`:"Getting ready…"}
+// ((T)rustyShelf issue 7) the main side says when it keeps the PC awake (a long job runs); the card says so too
+let AWAKE=false;if(api.onAwake)api.onAwake(s=>{AWAKE=!!(s&&s.on);if(ARTC.on)artCardPaint()});
+function artCardText(){const n=x=>Number(x||0).toLocaleString();return ARTC.stopping?"Stopping…":ARTC.total?`${n(Math.min(ARTC.done,ARTC.total))} of ${n(ARTC.total)}${ARTC.paused?" · paused":AWAKE?" · PC kept awake":""}`:"Getting ready…"}
 function artCardEl(){if(ARTC.el)return ARTC.el;const el=document.createElement("div");el.className="art-card";el.setAttribute("role","status");
   el.innerHTML='<div class="ac-top"><span class="ac-t">Box art</span><span class="ac-n"></span></div><div class="ac-bar"><i></i></div><div class="ac-btns"><button type="button" class="ac-b" data-k="pause" tabindex="-1"></button><button type="button" class="ac-b" data-k="cancel" tabindex="-1">Cancel</button></div><div class="ac-hint"></div>';
   el.addEventListener("click",e=>{const b=e.target.closest(".ac-b");if(!b)return;e.stopPropagation();b.blur();setInput("pointer");artCmd(b.dataset.k==="pause"&&ARTC.paused?"resume":b.dataset.k)});app.append(el);ARTC.el=el;return el} // (the Pause button reads Resume while paused: it resumes then; it used to pause again)

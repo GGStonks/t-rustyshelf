@@ -1,7 +1,7 @@
 // Based on Boxshelf by sassiestrhihno (https://github.com/sassiestrhihno/boxshelf-source, GPL-3.0): most of this file is Boxshelf's
 // main.js; modified for (T)rustyShelf (see the git history).
 // (T)rustyShelf — TV-style launcher for emulators, Steam and media apps.
-const { app, BrowserWindow, ipcMain, dialog, protocol, shell, net, nativeImage, session, safeStorage, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, protocol, shell, net, nativeImage, session, safeStorage, screen, powerSaveBlocker } = require('electron');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
 const url = require('url');
@@ -939,6 +939,7 @@ function applyCfg(next) { const prev = cfg, hadMenu = cfg.ui.homeMenu !== false;
   if (!launcher.isRunning() && hadMenu !== (cfg.ui.homeMenu !== false)) { if (cfg.ui.homeMenu === false) padwatch.stop(); else watchShelf(); }
   ra.setCredentials(cfg.ra && cfg.ra.enabled !== false ? cfg.ra.user : '', cfg.ra && cfg.ra.key);
   try { cfgChanged(prev, cfg); } catch (e) { log('settings change', e.message); }
+  if ((prev.ui.keepAwake !== false) !== (cfg.ui.keepAwake !== false) && awakeJobs.size) awakeApply(); // (switched while a job runs)
   return cfg; }
 handle('detect', () => detectAll());
 // ((T)rustyShelf) Settings → Consoles → Find emulators in a folder: the emulator programs in a folder the player picked
@@ -1332,7 +1333,7 @@ async function autoCovers(lib) {
   if (!ids.length) return;
   const list = CONSOLES.filter(d => ids.includes(d.id) && cfg.systems[d.id] && (cfg.systems[d.id].romDirs || []).length).map(def => ({ def, cfg: cfg.systems[def.id] }));
   if (!list.length) return;
-  autoRunning = true; coversBusy = true; let done, cut = false; autoJob = new Promise(r => { done = r; });
+  autoRunning = true; coversBusy = true; awake('box art', true); let done, cut = false; autoJob = new Promise(r => { done = r; });
   try {
     log('Auto covers for', ids.join(','));
     // (its progress goes to the page too, a few times a second at most: the first-run Done screen shows "Getting box art")
@@ -1349,7 +1350,7 @@ async function autoCovers(lib) {
     // the toast counts games that got a front cover (one per game); backs, spines, discs and sharper copies only refresh the shelf
     if (n && alive()) win.webContents.send('library:changed', { covers: (rep.systems || []).reduce((a, r) => a + (r.front || 0), 0) });
   } catch (e) { log('Auto covers failed', e.message); try { if (alive()) win.webContents.send('covers:auto', { end: true, got: 0, failed: true }); } catch {} }
-  finally { const st = autoState; autoState = null; if (st) clearInterval(st.t); coversBusy = false; autoRunning = false; autoJob = null;
+  finally { const st = autoState; autoState = null; if (st) clearInterval(st.t); coversBusy = false; awake('box art', false); autoRunning = false; autoJob = null;
     if (cut || (st && st.stopped)) for (const id of only) if (backMemo) delete backMemo[id]; // (beta.10: a cancelled run's games are looked at again next start, not in a week)
     saveBackMemo(); done(); if (!(st && st.stopped)) setTimeout(() => makeBacks(ids).then(() => makeSpines(ids)), 3000); } // (beta.10: Cancel on the art card stops the made backs and spines too)
 }
@@ -1443,10 +1444,28 @@ handle('dialog:pick', async ({ kind, title, defaultPath, filters, multi }) => {
   });
   return r.canceled ? null : multi ? r.filePaths : r.filePaths[0];
 });
+// ---------- ((T)rustyShelf issue 7) the PC kept awake while a long job runs: a box art download, an export or import, a
+// games folder being read for Add games, the box art database being rebuilt. Electron's powerSaveBlocker
+// ('prevent-app-suspension': the PC doesn't go to sleep, the screen can still turn off), held while any job runs and let go
+// with the last one. Settings → System → "Keep the PC awake during long jobs" (ui.keepAwake, on unless turned off).
+// The screen hears 'awake:state' ({ on, jobs }) to say so on the job's own progress.
+const awakeJobs = new Map(); let awakeId = null;
+function awakeApply() {
+  const want = awakeJobs.size > 0 && cfg.ui.keepAwake !== false;
+  try {
+    if (want && awakeId == null) { awakeId = powerSaveBlocker.start('prevent-app-suspension'); log('Keeping the PC awake:', [...awakeJobs.keys()].join(', ')); }
+    else if (!want && awakeId != null) { powerSaveBlocker.stop(awakeId); awakeId = null; log('The PC may sleep again'); }
+  } catch (e) { log('Keep awake:', e.message); awakeId = null; }
+  try { if (alive()) win.webContents.send('awake:state', awakeState()); } catch {}
+}
+const awakeState = () => ({ on: awakeId != null, jobs: [...awakeJobs.keys()] });
+function awake(job, on) { const n = (awakeJobs.get(job) || 0) + (on ? 1 : -1); if (n > 0) awakeJobs.set(job, n); else awakeJobs.delete(job); awakeApply(); }
+async function whileAwake(job, fn) { awake(job, true); try { return await fn(); } finally { awake(job, false); } }
+handle('awake:state', () => awakeState());
 // ---------- (beta.7) Add games (main/addgames.js): a folder of games scanned; Playnite's library read (experimental) ----------
 let lastScannedCovers = new Set();
 handle('games:scanFolder', async ({ root }) => {
-  const r = await addgames.scanFolderAsync(String(root || ''));
+  const r = await whileAwake('add games', () => addgames.scanFolderAsync(String(root || '')));
   lastScannedCovers = new Set((r.games || []).map(g => g.cover).filter(Boolean).map(f => path.resolve(f).toLowerCase()));
   return { ...r, games: (r.games || []).map(g => ({ ...g, title: g.title, ...(g.cover ? { cover: g.cover } : {}) })) };
 });
@@ -2101,7 +2120,7 @@ handle('covers:download', async ({ systemIds, types, hd }) => {
   if (autoRunning && autoJob) { if (alive()) win.webContents.send('covers:progress', { stage: 'Finishing the background cover download first…' }); autoPause(false); /* (beta.10: a paused one carries on, or this would wait for ever) */ await autoJob; }
   if (coversUserCancel) return { systems: [], hd: !!hd, cancelled: true }; // Cancel pressed while it waited for the background run
   if (coversBusy) throw new Error('Covers are already downloading.');
-  coversBusy = true;
+  coversBusy = true; awake('box art', true);
   try {
     const list = CONSOLES.filter(d => systemIds.includes(d.id) && cfg.systems[d.id] && (cfg.systems[d.id].romDirs || []).length)
       .map(def => ({ def, cfg: cfg.systems[def.id] }));
@@ -2113,7 +2132,7 @@ handle('covers:download', async ({ systemIds, types, hd }) => {
     if (got && alive()) win.webContents.send('library:changed', { covers: 0 }); // the shelf picks the new pictures up
     if (got) artstudio.forget(); // …and so do the Studio's game lists
     return rep;
-  } finally { coversBusy = false; }
+  } finally { coversBusy = false; awake('box art', false); }
 });
 let coversUserCancel = false;
 handle('covers:cancel', (a) => { if (a && a.auto) { const st = autoState; if (st) { st.stopped = true; st.paused = false; clearInterval(st.t); } covers.cancel('auto'); return true; } // (beta.10) the art card: only the background run
@@ -2565,7 +2584,7 @@ handle('art:release', a => artstudio.release(a)); // a console's kept pictures h
 let artIndexing = null, artRefreshing = null;
 // Settings → Art & manuals → Refresh art database (1.71): a forced rebuild of the index (newer picture types appear), through
 // covers' single-build guard; progress { phase, pct, got, total } on art:indexProgress; art:refreshCancel stops it, old index kept
-handle('art:refreshIndex', () => { if (!artRefreshing && coversBusy && !covers.isPaused('auto')) throw new Error('Box art is downloading right now. Try again when it finishes.'); if (!artRefreshing) artRefreshing = covers.refreshIndex(p => { if (alive()) win.webContents.send('art:indexProgress', p); }).then(() => { artstudio.forget(); return covers.indexInfo(); }).finally(() => { artRefreshing = null; }); return artRefreshing; });
+handle('art:refreshIndex', () => { if (!artRefreshing && coversBusy && !covers.isPaused('auto')) throw new Error('Box art is downloading right now. Try again when it finishes.'); if (!artRefreshing) artRefreshing = whileAwake('box art database', () => covers.refreshIndex(p => { if (alive()) win.webContents.send('art:indexProgress', p); })).then(() => { artstudio.forget(); return covers.indexInfo(); }).finally(() => { artRefreshing = null; }); return artRefreshing; });
 handle('art:refreshCancel', () => ({ cancelled: covers.cancelRefresh() }));
 handle('art:indexInfo', () => covers.indexInfo());
 // ---------- Manual Studio (Settings → Art & manuals → Manuals; Details → Choose manual…; the Art Studio's Manual part) ----------
@@ -2788,14 +2807,14 @@ const dataStep = (what) => s => { try { if (alive()) win.webContents.send('data:
 handle('data:export', ({ dest } = {}) => {
   if (dataMoving) throw new Error('An export or import is already running.');
   return (dataMoving = (async () => { await persistCfg(cfg); log('Export everything to', dest);
-    const r = await require('./main/dataexport').exportAll({ dest: String(dest || ''), appRoot: paths.appRoot(), dataDir: app.getPath('userData'), cfg, artDirsFor: paths.artDirsFor, artLib: paths.artLibrary(), version: appVersion(), onStep: dataStep('export') });
+    const r = await whileAwake('export', () => require('./main/dataexport').exportAll({ dest: String(dest || ''), appRoot: paths.appRoot(), dataDir: app.getPath('userData'), cfg, artDirsFor: paths.artDirsFor, artLib: paths.artLibrary(), version: appVersion(), onStep: dataStep('export') }));
     log('Exported:', r.files, 'files,', Math.round(r.bytes / 1048576), 'MB'); return r; })().finally(() => { dataMoving = null; }));
 });
 handle('data:import', ({ src } = {}) => {
   if (dataMoving) throw new Error('An export or import is already running.');
   if (launcher.isRunning()) throw new Error('Close the game first.');
   return (dataMoving = (async () => { log('Import everything from', src);
-    const r = await require('./main/dataexport').importAll({ src: String(src || ''), appRoot: paths.appRoot(), dataDir: app.getPath('userData'), artDirsFor: paths.artDirsFor, artLib: paths.artLibrary(), readCfg: () => { try { return config.load(); } catch { return null; } }, onStep: dataStep('import') });
+    const r = await whileAwake('import', () => require('./main/dataexport').importAll({ src: String(src || ''), appRoot: paths.appRoot(), dataDir: app.getPath('userData'), artDirsFor: paths.artDirsFor, artLib: paths.artLibrary(), readCfg: () => { try { return config.load(); } catch { return null; } }, onStep: dataStep('import') }));
     log('Imported', r.parts, 'parts', r.skipped.length ? `(no place for: ${r.skipped.join('; ')})` : '');
     // the imported settings take over: start again (an AppImage from its own file: the mounted copy goes away on exit)
     setTimeout(() => { try { app.relaunch(process.env.APPIMAGE ? { execPath: process.env.APPIMAGE } : undefined); } catch {} app.exit(0); }, 2500);
