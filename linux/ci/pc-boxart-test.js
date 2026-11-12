@@ -89,7 +89,7 @@ check('Clicking booklet in inspect mode opens reader', /Inspect3D\.hitBooklet\(e
 
 
 // 13. The shelf box is drawn to the 3D case it turns into (case.glb), the spine as on the shelf, the disc inside the case
-check('Inspect3D exports the case shape and paper for the shelf box', /const caseShape = sys => usesCaseModel\(sys\) \? CASE_GLB\.shape : null/.test(inspect3dSrc) && /return \{ caseShape, paperOf,/.test(inspect3dSrc));
+check('Inspect3D exports the case shape and paper for the shelf box', /const caseShape = sys => usesCaseModel\(sys\) \? CASE_GLB\.shape : null/.test(inspect3dSrc) && /return \{ caseShape,[^}]*?\bpaperOf,/.test(inspect3dSrc));
 check('The shelf box (measure and mount) takes its shape from boxShape', /function boxShape\(os,sys\)\{[\s\S]*?Inspect3D\.caseShape\(sys\)/.test(appSrc) && /const b=boxShape\(s,\(cur\(\)\|\|\{\}\)\.id\);/.test(appSrc) && /const b=boxShape\(os,\(shelfFor\(g\)\|\|\{\}\)\.id\)/.test(appSrc) && !/os\.ratio\*os\.depth\*sc/.test(appSrc));
 check('The shelf spine is the printed sheet (--paper) inside the case border', /--spine-bg:linear-gradient\(var\(--paper,var\(--case\)\),var\(--paper,var\(--case\)\)\) content-box,var\(--case\)/.test(styleSrc));
 check('The 3D spine with no art is drawn as the shelf draws it (band, then the title)', /function drawSpine\([\s\S]*?o\.spineBand[\s\S]*?x\.rotate\(Math\.PI \/ 2\)/.test(inspect3dSrc) && /spineBand:style\.spineBand/.test(appSrc));

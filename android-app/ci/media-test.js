@@ -30,16 +30,18 @@ server.listen(0, async () => {
     const shelf = name => page.evaluate(async name => { const w = ms => new Promise(r => setTimeout(r, ms)), t = [...document.querySelectorAll('#tabs .tab')].find(x => x.textContent.trim() === name);
       if (!t) return null; t.click(); await w(1800); const s = document.querySelector('#track .slot:not(.far)'); if (!s) return { none: true };
       const cs = getComputedStyle(s); return { edgeIn: parseFloat(cs.getPropertyValue('--edge-in')) || 0, edge: parseFloat(cs.getPropertyValue('--edge')) || 0, padL: parseFloat(getComputedStyle(s.querySelector('.f-front') || s).paddingLeft) || 0 }; }, name);
-    const x360 = await shelf('Xbox 360'), gc = await shelf('GameCube');
-    // (every console case is case.glb now, whose sheet runs round the spine: GameCube's too, no longer only the Xbox 360's)
-    check('Xbox 360 and GameCube: the cover runs round the spine (no border on that side), as on the 3D case', [x360, gc].every(b => b && b.edge > 0 && b.edgeIn === 0 && b.padL === 0), JSON.stringify({ tabs, x360, gc }));
+    // (1.6.3, beta issue 32) the GameCube, Wii, Wii U and PS2 open into their own modelled cases now: case.glb's shape is
+    // checked on two consoles that still use it, the Xbox 360 and the PS3
+    const near = (a, b) => Math.abs(a - b) < .002;
+    const ps3 = await shelf('PS3'), x360 = await shelf('Xbox 360');
+    check('Xbox 360 and PS3: the cover runs round the spine (no border on that side), as on the 3D case', [x360, ps3].every(b => b && b.edge > 0 && b.edgeIn === 0 && b.padL === 0), JSON.stringify({ tabs, x360, ps3 }));
+    // the Xbox 360 box on the shelf is drawn to the 3D case it turns into (case.glb's shape, as fractions of its height)
+    const box = await page.evaluate(() => { const s = document.querySelector('#track .slot.sel') || document.querySelector('#track .slot:not(.far)'), cs = getComputedStyle(s), v = k => parseFloat(cs.getPropertyValue(k)) || 0, h = v('--bh');
+      return { depth: v('--bd') / h, rc: v('--rc') / h, edge: v('--edge') / h, model: Inspect3D.caseShape('x360') }; });
+    check('The shelf box is as thick as the 3D case, with its corners and border', box.model && near(box.depth, box.model.depth) && near(box.rc, box.model.rc) && near(box.edge, box.model.edge), JSON.stringify(box));
+    await shelf('GameCube');
     // Inspect on the GameCube shelf: open, disc out
     const insp = async () => page.evaluate(() => { const el = document.getElementById('inspect'); return { on: el.classList.contains('on'), cls: [...el.classList].filter(c => ['cart', 'floppy', 'umd'].includes(c)), step: (document.getElementById('ispStep') || {}).textContent, text: el.innerText.replace(/\s+/g, ' '), spine: window.Inspect3D && Inspect3D._st ? Inspect3D._st().spine : null }; });
-    // the GameCube box on the shelf is drawn to the 3D case it turns into (case.glb's shape, as fractions of its height)
-    const box = await page.evaluate(() => { const s = document.querySelector('#track .slot.sel') || document.querySelector('#track .slot:not(.far)'), cs = getComputedStyle(s), v = k => parseFloat(cs.getPropertyValue(k)) || 0, h = v('--bh');
-      return { depth: v('--bd') / h, rc: v('--rc') / h, edge: v('--edge') / h, model: Inspect3D.caseShape('gc') }; });
-    const near = (a, b) => Math.abs(a - b) < .002;
-    check('The shelf box is as thick as the 3D case, with its corners and border', box.model && near(box.depth, box.model.depth) && near(box.rc, box.model.rc) && near(box.edge, box.model.edge), JSON.stringify(box));
     await r3(); await page.waitForTimeout(3000);
     const g0 = await insp();
     // the disc waits inside the shut case (it was hung off a turned bone of case.glb and floated off to the right)
