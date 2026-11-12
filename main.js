@@ -1657,7 +1657,10 @@ async function launchGameNow(systemId, file, sc) {
   if (systemId === 'sw' && /ryujinx|ryubing/i.test(path.basename(sc.emulator || '')) && /^\s*-f\s+-g\s+"\{rom\}"\s*$/.test(sc.gameArgs || '')) { sc = { ...sc, gameArgs: '--fullscreen "{rom}"' }; log('Switch launch: Ryujinx options'); }
 // (beta.11) the standalone emulators a retro shelf can use, by program name, and the options each one takes (DeSmuME and
 // VisualBoyAdvance-M have no reliable fullscreen option: they open the game in their own window, fullscreen per their settings)
-const ALT_ARGS = [[/desmume/i, '"{rom}"'], [/visualboyadvance|vbam/i, '"{rom}"'], [/mgba/i, '-f "{rom}"'], [/melonds/i, '-f "{rom}"'], [/duckstation/i, '-fullscreen -batch -nogui -- "{rom}"']];
+// ((T)rustyShelf, beta discussion 15) BizHawk (EmuHawk: --fullscreen), Gopher64 (--fullscreen) and RAProject64 / Project64 (the
+// game alone: fullscreen per their own settings)
+const ALT_ARGS = [[/desmume/i, '"{rom}"'], [/visualboyadvance|vbam/i, '"{rom}"'], [/mgba/i, '-f "{rom}"'], [/melonds/i, '-f "{rom}"'], [/duckstation/i, '-fullscreen -batch -nogui -- "{rom}"'],
+  [/emuhawk/i, '--fullscreen "{rom}"'], [/gopher64/i, '--fullscreen "{rom}"'], [/^(rap64|project64)/i, '"{rom}"'], [/flycast/i, '"{rom}"']];
   // (beta.11) a retro shelf started in another standalone emulator than the one its options are for (DeSmuME on the DS
   // shelf was handed melonDS's -f, which it refuses; mGBA or VisualBoyAdvance-M on a Game Boy shelf): that emulator's own
   // options, as long as the shelf's options are still the default ones (an edited command line is left as it is)

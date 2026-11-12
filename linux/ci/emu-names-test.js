@@ -21,7 +21,7 @@ check('DS still looks for melonDS first', by('nds').exeNames[0] === 'melonDS.exe
 for (const s of ['gb', 'gbc', 'gba']) { check(`${s} finds visualboyadvance-m.exe`, finds(s, 'visualboyadvance-m.exe')); check(`${s} finds VisualBoyAdvance-M-2.1.9.exe`, finds(s, 'VisualBoyAdvance-M-2.1.9.exe')); check(`${s} finds mGBA.exe`, finds(s, 'mGBA.exe')); check(`${s} looks for RetroArch first`, by(s).exeNames[0] === 'retroarch.exe'); }
 
 // the launch options main.js picks (ALT_ARGS, read from main.js so the test follows it)
-const src = fs.readFileSync(path.join(root, 'main.js'), 'utf8'), m = /const ALT_ARGS = (\[[^\n]*\]);/.exec(src);
+const src = fs.readFileSync(path.join(root, 'main.js'), 'utf8'), m = /const ALT_ARGS = (\[[\s\S]*?\]\]);/.exec(src); // (over several lines since 1.6.3)
 check('main.js has its ALT_ARGS table', !!m);
 if (m) { const ALT = eval(m[1]); const argsFor = (sys, exe) => { const def = by(sys), b = path.basename(exe); if (/retroarch/i.test(b)) return 'retroarch'; const a = ALT.find(([re]) => re.test(b)); return a ? a[1] : def.gameArgs; };
   check('DeSmuME gets the game only (melonDS\'s -f breaks it)', argsFor('nds', 'C:\\Emu\\DeSmuME\\DeSmuME_0.9.13_x64.exe') === '"{rom}"');

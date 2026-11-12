@@ -17,9 +17,9 @@
   const KNOWN = [['eglantine', 'Eglantine'], ['lichii', 'Lichii'], ['orchid', 'Orchid'], ['citron', 'Citron'], ['sudachi', 'Sudachi'], ['ryujinx', 'Ryujinx'], ['ryubing', 'Ryubing'],
     ['eden', 'Eden'], ['yuzu', 'yuzu'], ['suyu', 'Suyu'], ['dolphin', 'Dolphin'], ['cemu', 'Cemu'], ['pcsx2', 'PCSX2'], ['rpcs3', 'RPCS3'], ['shadps4', 'shadPS4'],
     ['ppsspp', 'PPSSPP'], ['xenia', 'Xenia'], ['azahar', 'Azahar'], ['lime3ds', 'Lime3DS'], ['citra', 'Citra'], ['duckstation', 'DuckStation'], ['retroarch', 'RetroArch'],
-    ['melonds', 'melonDS'], ['mgba', 'mGBA'], ['desmume', 'DeSmuME'], ['visualboyadvance', 'VisualBoyAdvance-M'], ['vbam', 'VisualBoyAdvance-M'], ['flycast', 'Flycast'], ['rmg', 'RMG'], ['kyty', 'Kyty'], ['xemu', 'xemu'], ['vita3k', 'Vita3K'], ['mame', 'MAME'], ['blastem', 'BlastEm'], ['stremio', 'Stremio'], ['nuvio', 'Nuvio']];
+    ['melonds', 'melonDS'], ['mgba', 'mGBA'], ['desmume', 'DeSmuME'], ['visualboyadvance', 'VisualBoyAdvance-M'], ['vbam', 'VisualBoyAdvance-M'], ['flycast', 'Flycast'], ['rmg', 'RMG'], ['kyty', 'Kyty'], ['xemu', 'xemu'], ['emuhawk', 'BizHawk'], ['bizhawk', 'BizHawk'], ['gopher64', 'Gopher64'], ['rap64', 'RAProject64'], ['raproject64', 'RAProject64'], ['project64', 'Project64'], ['vita3k', 'Vita3K'], ['mame', 'MAME'], ['blastem', 'BlastEm'], ['stremio', 'Stremio'], ['nuvio', 'Nuvio']];
   // words that say nothing about the build: platforms, packaging, the program's role
-  const NOISE = /^(windows?|win(32|64)?|x86|x86_64|64|x64|amd64|arm64|aarch64|linux|appimage|exe|qt|qt6|sdl2?|setup|portable|release|stable|bin|emu|emulator|cli|msvc|mingw)$/i;
+  const NOISE = /^(windows?|win(32|64)?|x86|x86_64|64|x64|amd64|arm64|aarch64|linux|appimage|exe|qt|qt6|sdl2?|setup|portable|release|stable|bin|emu|emulator|cli|msvc|mingw|emuhawk|rap64)$/i; // (EmuHawk, RAP64: BizHawk's and RAProject64's own program names, not builds)
   // words of a name: split at spaces, _ - ( ) [ ] and dots that aren't inside a version number (2.1.0 stays whole); a
   // platform glued to a word goes ("x86_64mariotennis" → "mariotennis")
   const tokens = s => String(s || '').replace(/(x86_64|x86-64|win64|windows)(?=[a-z])/gi, ' ').replace(/\.(?!\d)|(?<!\d)\./g, ' ')

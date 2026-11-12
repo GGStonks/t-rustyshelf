@@ -29,7 +29,11 @@ function makeIndex(maxDepth = 2, maxDirs = Infinity) {
   };
 }
 const SKIP_DIRS = /^(\$recycle\.bin|system volume information|windows|node_modules)$/i;
+// ((T)rustyShelf) BizHawk covers many consoles: in a folder with another emulator for the console too, that one wins
+const LATE = new Set(['emuhawk.exe']);
 function findIn(index, dir, exeNames) {
+  const late = exeNames.filter(n => LATE.has(n.toLowerCase()));
+  if (late.length && late.length < exeNames.length) return findIn(index, dir, exeNames.filter(n => !LATE.has(n.toLowerCase()))) || findIn(index, dir, late);
   const m = index(dir); let best = null;
   for (const n of exeNames) {
     if (n.startsWith('re:')) { // (Linux) a pattern, for versioned AppImage names: "re:^duckstation.*\.appimage$"
