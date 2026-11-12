@@ -8,6 +8,47 @@
 //   sections: [{ h, items: [[headline, more]] }] }; newest first.
 window.BS_WHATSNEW = [
   {
+    version: '1.7.0.0', android: '1.7.0.0', date: '2026-11-12', title: "A PS Vita shelf, Steam achievements, the emulator and core you want, and a quicker export",
+    highlights: [
+      "A PS Vita shelf, played in Vita3K",
+      "Steam games show their achievements in Details",
+      "Each console lists every emulator found, and RetroArch consoles let you pick the core",
+      "Export everything says how big it is, can pause and cancel, and only copies what changed the next time",
+      "Xbox app games show up when two or more are installed"
+    ],
+    platforms: [
+      "Windows and Linux: the PS Vita shelf, Steam achievements, the emulator and core choices, BizHawk, Gopher64 and RAProject64, Export everything, keeping the PC awake, gamelist.xml names and art.",
+      "Windows: the Xbox app's games.",
+      "All platforms: the boot sound's own volume, the museum's lamps, the cases in Inspect."
+    ],
+    sections: [
+      { h: "Consoles", items: [
+        ["PS Vita", "A new shelf for the PS Vita, in Vita3K. The games Vita3K has installed are found by themselves (its ux0 folder, wherever its settings keep it), named from each game's own info, and start straight in, fullscreen. A .vpk in a psvita folder is handed to Vita3K, which installs it and runs it."],
+        ["Every emulator found", "A console's page in Settings lists every emulator (T)rustyShelf found for it, each one press away: Flycast or RetroArch for the Dreamcast, Gopher64, RMG or RetroArch for the N64. Details → Emulator still lets a single game use another one."],
+        ["RetroArch core of your choice", "Consoles that run in RetroArch have a RetroArch core choice: FCEUmm, Nestopia or QuickNES for the NES, bsnes for the SNES, PCSX ReARMed or Beetle PSX for the PlayStation, and others. A core that isn't there yet is downloaded the first time you play."],
+        ["BizHawk, Gopher64 and RAProject64", "These portable emulators with RetroAchievements built in are found by Find emulators in a folder and by the usual search, and each starts with its own options. BizHawk is used only when there's nothing else for a console, or when you pick it."],
+        ["Batocera and RetroBat gamelists", "A games folder with a gamelist.xml (Batocera, RetroBat and EmulationStation keep one) gives its games their names, and its box art, back covers, cartridges, pictures and PDF manuals, so nothing has to be downloaded again. Art (T)rustyShelf already has for a game comes first."]
+      ] },
+      { h: "PC games", items: [
+        ["Steam achievements", "A Steam game's Details shows its achievements, read from what Steam keeps on your PC: how many you've unlocked, and the full list with icons and unlock dates. Hidden ones stay hidden until you earn them. GOG, EA and Ubisoft keep theirs where they can't be read this way."],
+        ["Xbox app games", "With two or more Xbox app or Game Pass games installed, Windows refused the question (T)rustyShelf asked about them, so they all looked uninstalled. Each game is asked about on its own now, and the wrong answers saved before are thrown away."]
+      ] },
+      { h: "Export everything", items: [
+        ["Its size first", "Settings → System → Export everything says how big the export will be before you choose a folder."],
+        ["Progress, Pause and Cancel", "While an export or import runs, its row shows the size and files done, the time left, and Pause / Resume and Cancel rows. A cancelled export keeps what it copied."],
+        ["Only what changed", "Export into the same folder again and the earlier export is updated: only new or changed files are copied, so the second run of a big collection is quick."]
+      ] },
+      { h: "Sound and power", items: [
+        ["Boot sound volume", "Settings → Sound → Boot sound volume sets how loud the boot sound plays, on its own, without making the menu sounds quieter."],
+        ["The PC kept awake", "While box art downloads, an export or import runs, Add games reads a folder or the box art database is rebuilt, the PC doesn't go to sleep, and goes back to normal when it ends. Settings → System → Keep the PC awake during long jobs turns it off."]
+      ] },
+      { h: "Museum and Inspect", items: [
+        ["Lamps on the right shelf", "In the wide view of a big wall, the shared lamps follow the gold frame, instead of staying where you last looked."],
+        ["Each console's own case", "In Inspect, each console opens into the case its games came in: modelled PS2, Wii, Wii U and GameCube cases, jewel cases for CD consoles, card boxes for cartridge consoles."]
+      ] }
+    ]
+  },
+  {
     version: '1.6.2.0', android: '1.6.2.0', date: '2026-11-12', title: "Xbox app games that show up, and disc cases that look like disc cases inside",
     highlights: [
       "Xbox app and Game Pass games no longer stay \"not installed\" after Windows didn't answer once",
