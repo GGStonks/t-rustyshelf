@@ -545,6 +545,9 @@ function hiddenRows(){if(!(window.Shelf&&Shelf.hiddenList))return [];const L=hid
   return L.map(g=>({t:"action",label:g.title||g.id,btn:"Unhide",info:"Hidden from every shelf, the museum, shuffle and the idle show. Unhide puts it back.",sub:()=>({text:names[g.system]||g.system||""}),ns:true,keys:"hidden hide",
     run:async()=>{await save();shelf("setHidden",g.id,false);if(Array.isArray(cfg.ui.hidden))cfg.ui.hidden=cfg.ui.hidden.filter(x=>x!==g.id);hidden=(hidden||[]).filter(x=>x.id!==g.id);toast(`${g.title||"Item"} is back on the shelf`);bump()}}))}
 
+// ((T)rustyShelf, its discussions #10) every emulator found for a console, asked for once when its page is first shown
+let emuFound={};
+function emuFoundFor(id){if(emuFound[id]===undefined&&api.emulatorsFound){emuFound[id]=null;Promise.resolve(api.emulatorsFound(id)).then(l=>{emuFound[id]=Array.isArray(l)?l:[];bump()},()=>{emuFound[id]=[]})}return emuFound[id]||[]}
 // one console's page
 function conPages(id){
   const def=consoleList().find(c=>c.id===id)||{id,name:id,emulatorName:"Emulator",exeNames:["emulator.exe"]},c=sysCfg(id),p=`systems.${id}.`,emu=def.emulatorName||"Emulator",exe=(def.exeNames||["emulator.exe"])[0];
@@ -569,7 +572,13 @@ function conPages(id){
     {keys:"build builds fork forks eglantine lichii orchid selevet version branch which emulator choose",btn:()=>{const b=sw2Fixed();return b?b.label||progName(b.exe):"Ask each time"},
      sub:()=>(sw2Want(),{text:sw2b==null?"Looking for emulators…":sw2b.length?`${sw2b.length} emulator${sw2b.length===1?"":"s"} · add or remove here`:"None yet · add one here",cls:sw2b&&!sw2b.length?"warn":""})}));
   const d=det&&det.systems&&det.systems[id];
-  if(d&&d.emulator&&d.emulator!==c.emulator)rows.push(A("Use the emulator found","Use","(T)rustyShelf found this copy. Use it for this shelf.",()=>{c.emulator=d.emulator;changed({rescan:true})},{sub:()=>({text:d.emulator}),ns:true}));
+  // ((T)rustyShelf, its discussions #10) every emulator found for this console, each one press away (Flycast or RetroArch for the
+  // Dreamcast, Gopher64, RMG or RetroArch for the N64); the one in use isn't listed
+  {const found=[...new Set([...((d&&(d.emulators&&d.emulators.length?d.emulators:d.emulator?[d.emulator]:[]))||[]),...emuFoundFor(id)])],same=(a,b)=>String(a||"").toLowerCase()===String(b||"").toLowerCase(),lbl=x=>window.BSEmuName?BSEmuName.label(x):progName(x);
+    for(const x of found)if(!same(x,c.emulator))rows.push(A(found.length>1?`Use ${lbl(x)}`:"Use the emulator found","Use",`(T)rustyShelf found ${lbl(x)} here. Use it for this shelf (one game can still use another: Details → Emulator).`,()=>{c.emulator=x;changed({rescan:true});esReset&&esReset(id)},{sub:()=>({text:x}),ns:true,keys:"emulator choose switch other found "+lbl(x)}));}
+  // ((T)rustyShelf, its discussions #10) the RetroArch core this console runs in (the shelf's own, or another libretro core)
+  if(def.retro&&(def.raCores||[]).length>1)rows.push(C("RetroArch core",p+"raCore",def.raCores.map(([v,n])=>[v,v===def.raCore?`${n} (usual)`:n]),def.raCore,`The core RetroArch runs ${def.name} games in. A core that isn't there yet is downloaded the first time you play. Save states made in one core don't load in another; in-game saves usually carry over.`,
+    {when:()=>/retroarch/i.test(progName(c.emulator||(def.retro?gp("retroarch")||"":""))),keys:"core retroarch libretro choose switch "+def.raCores.map(x=>x[1]).join(" "),live:()=>{if(typeof esReset==="function")esReset(id)}}));
   const twin=id==="wii"?"gc":id==="gc"?"wii":null;
   if(twin&&!c.emulator&&sysCfg(twin).emulator)rows.push(A(`Use ${twin==="gc"?"GameCube":"Wii"}'s Dolphin`,"Use","The same Dolphin.exe runs both.",()=>{c.emulator=sysCfg(twin).emulator;changed({rescan:true})},{ns:true}));
   c.romDirs.forEach((dir,i)=>rows.push({t:"folder",label:c.romDirs.length>1?`Games folder ${i+1}`:"Games folder",info:"Where this console's games are. Subfolders are searched too. Select it twice to remove it from this shelf (nothing is deleted).",more:dir,short:folderName,get:()=>dir,ns:true,
@@ -1136,7 +1145,7 @@ async function runDetect(){if(detecting||!api.detect)return;detecting=true;bump(
   try{const d0=await api.detect();
     // Settings closed (or reopened) while it searched: its config was already saved, so filling it in now would save a stale copy over newer changes
     if(my!==openId||!isOpen){detecting=false;return}
-    det=d0;let n=0;
+    det=d0;emuFound={};let n=0;
     for(const[id,d]of Object.entries(det.systems||{})){const c=cfg.systems&&cfg.systems[id];if(!c)continue;if(!c.emulator&&d.emulator){c.emulator=d.emulator;n++}if(!(c.romDirs||[]).length&&(d.romDirs||[]).length){c.romDirs=[...d.romDirs];n++}}
     if(cfg.steam&&!cfg.steam.path&&det.steam&&det.steam.path){cfg.steam.path=det.steam.path;n++}
     for(const[id,a]of Object.entries(det.apps||{}))if(cfg.apps&&cfg.apps[id]&&!cfg.apps[id].path&&a.path){cfg.apps[id].path=a.path;n++}

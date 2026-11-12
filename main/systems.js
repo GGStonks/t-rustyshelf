@@ -13,6 +13,31 @@
 const HAWK = ['EmuHawk.exe'], N64_RA = ['re:^gopher64[^\\\\]*\\.exe$', 'RAP64.exe', 'Project64.exe'];
 const HAWK_DIRS = ['{app}\\BizHawk', '{app}\\Emulators\\BizHawk'], N64_DIRS = ['{app}\\Gopher64', '{app}\\gopher64', '{app}\\RAProject64', '{app}\\RAP64', '%ProgramFiles%\\Project64 3.0', '%ProgramFiles(x86)%\\Project64 3.0'];
 const VBA = ['visualboyadvance-m.exe', 're:^visualboyadvance[^\\\\]*\\.exe$'], VBA_DIRS = ['{app}\\VisualBoyAdvance-M', '{app}\\visualboyadvance-m', '%ProgramFiles%\\VisualBoyAdvance-M']; // ((T)rustyShelf)
+// ((T)rustyShelf, its discussions #10) the RetroArch cores a console can run in, [core, its name]: the first is the shelf's
+// own (raCore above); Settings → the console → RetroArch core picks another (systems.<id>.raCore). Core names as on libretro's
+// buildbot (<core>_libretro.dll), so a missing one is downloaded the same way.
+const RA_CORES = {
+  nes: [['mesen', 'Mesen'], ['fceumm', 'FCEUmm'], ['nestopia', 'Nestopia UE'], ['quicknes', 'QuickNES']],
+  snes: [['snes9x', 'Snes9x'], ['bsnes', 'bsnes'], ['bsnes_hd_beta', 'bsnes-hd beta'], ['mesen-s', 'Mesen-S']],
+  n64: [['mupen64plus_next', 'Mupen64Plus-Next'], ['parallel_n64', 'ParaLLEl N64']],
+  gb: [['gambatte', 'Gambatte'], ['sameboy', 'SameBoy'], ['gearboy', 'Gearboy'], ['mgba', 'mGBA']],
+  gbc: [['gambatte', 'Gambatte'], ['sameboy', 'SameBoy'], ['gearboy', 'Gearboy'], ['mgba', 'mGBA']],
+  gba: [['mgba', 'mGBA'], ['vbam', 'VBA-M'], ['vba_next', 'VBA Next'], ['gpsp', 'gpSP']],
+  nds: [['melondsds', 'melonDS DS'], ['melonds', 'melonDS'], ['desmume', 'DeSmuME']],
+  psx: [['swanstation', 'SwanStation'], ['pcsx_rearmed', 'PCSX ReARMed'], ['mednafen_psx_hw', 'Beetle PSX HW'], ['mednafen_psx', 'Beetle PSX']],
+  megadrive: [['genesis_plus_gx', 'Genesis Plus GX'], ['picodrive', 'PicoDrive'], ['genesis_plus_gx_wide', 'Genesis Plus GX Wide']],
+  mastersystem: [['genesis_plus_gx', 'Genesis Plus GX'], ['picodrive', 'PicoDrive'], ['gearsystem', 'Gearsystem']],
+  gamegear: [['genesis_plus_gx', 'Genesis Plus GX'], ['picodrive', 'PicoDrive'], ['gearsystem', 'Gearsystem']],
+  segacd: [['genesis_plus_gx', 'Genesis Plus GX'], ['picodrive', 'PicoDrive']],
+  saturn: [['mednafen_saturn', 'Beetle Saturn'], ['yabasanshiro', 'YabaSanshiro'], ['kronos', 'Kronos'], ['yabause', 'Yabause']],
+  pcengine: [['mednafen_pce_fast', 'Beetle PCE Fast'], ['mednafen_pce', 'Beetle PCE'], ['mednafen_supergrafx', 'Beetle SuperGrafx']],
+  neogeo: [['fbneo', 'FinalBurn Neo'], ['mame2003_plus', 'MAME 2003-Plus'], ['mame', 'MAME']],
+  arcade: [['fbneo', 'FinalBurn Neo'], ['mame2003_plus', 'MAME 2003-Plus'], ['mame', 'MAME']],
+  atari2600: [['stella', 'Stella'], ['stella2014', 'Stella 2014']],
+  atarilynx: [['handy', 'Handy'], ['mednafen_lynx', 'Beetle Lynx']],
+  dos: [['dosbox_pure', 'DOSBox Pure'], ['dosbox_core', 'DOSBox-core']],
+  ngp: [['mednafen_ngp', 'Beetle NeoPop'], ['race', 'RACE']], ngpc: [['mednafen_ngp', 'Beetle NeoPop'], ['race', 'RACE']],
+};
 const CONSOLES = [
   {
     id: 'gc', name: 'GameCube', emulatorName: 'Dolphin',
@@ -244,7 +269,7 @@ function retro(rows) {
   // (BizHawk is looked for last, after RetroArch too: it's the one used only when nothing else is there)
   const notHawk = x => !HAWK.includes(x) && !HAWK_DIRS.includes(x), hawkOf = (a, h) => a.some(x => !notHawk(x)) ? h : [];
   return rows.map(([id, name, emulatorName, exes, dirs, romFolderNames, extensions, args, raCore, standaloneFirst]) => ({
-    id, name, emulatorName, raCore, retro: true,
+    id, name, emulatorName, raCore, retro: true, raCores: RA_CORES[id] || [[raCore, raCore]],
     exeNames: [...(standaloneFirst ? [...exes.filter(notHawk), ...RA_EXE] : [...RA_EXE, ...exes.filter(notHawk)]), ...hawkOf(exes, HAWK)],
     emulatorFolders: [...(standaloneFirst ? [...dirs.filter(notHawk), ...RA_DIRS] : [...RA_DIRS, ...dirs.filter(notHawk)]), ...hawkOf(dirs, HAWK_DIRS)],
     romFolderNames, extensions,

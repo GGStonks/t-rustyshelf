@@ -943,6 +943,8 @@ function applyCfg(next) { const prev = cfg, hadMenu = cfg.ui.homeMenu !== false;
   return cfg; }
 handle('detect', () => detectAll());
 // ((T)rustyShelf) Settings → Consoles → Find emulators in a folder: the emulator programs in a folder the player picked
+// ((T)rustyShelf, its discussions #10) every copy of this console's emulators found (Settings lists them on the console's page)
+handle('detect:emulators', ({ systemId } = {}) => { const s = CONSOLES.find(c => c.id === systemId); return s && !s.standalone ? require('./main/detect').findAllExe(s.emulatorFolders, s.exeNames) : []; });
 handle('detect:folder', ({ dir } = {}) => require('./main/detect').emulatorsIn(typeof dir === 'string' ? dir.slice(0, 1024) : ''));
 // The last scan is kept on disk so the next launch can show the shelves immediately (as console UIs do) while a fresh
 // scan runs behind them; the renderer only rebuilds if something actually changed.
@@ -1613,6 +1615,10 @@ handle('launch:game', async ({ systemId, file, emulator }) => {
 // (retroarch.cfg's libretro_directory; ":" there means RetroArch's own folder)
 const RA_CORE_NAME = { swanstation: 'SwanStation', mesen: 'Mesen', snes9x: 'Snes9x', mupen64plus_next: 'Mupen64Plus-Next', gambatte: 'Gambatte', mgba: 'mGBA', melondsds: 'melonDS DS', genesis_plus_gx: 'Genesis Plus GX', flycast: 'Flycast',
   mednafen_saturn: 'Beetle Saturn', mednafen_pce_fast: 'Beetle PCE Fast', fbneo: 'FinalBurn Neo', picodrive: 'PicoDrive', stella: 'Stella', handy: 'Handy', mednafen_wswan: 'Beetle Cygne', mednafen_ngp: 'Beetle NeoPop', dosbox_pure: 'DOSBox Pure' };
+// ((T)rustyShelf, its discussions #10) the core this console runs in: the one picked in Settings (systems.<id>.raCore, one
+// of the console's known cores), else its own. Every name in those lists is a core's display name.
+for (const c of CONSOLES) for (const [id, nm] of c.raCores || []) if (!RA_CORE_NAME[id]) RA_CORE_NAME[id] = nm;
+const coreOf = (def, sc) => { const want = sc && sc.raCore; return want && (def.raCores || []).some(([id]) => id === want) ? want : def.raCore; };
 function retroCore(exe, core) {
   const dir = path.dirname(exe), dirs = [path.join(dir, 'cores')];
   for (const cfgFile of [path.join(dir, 'retroarch.cfg'), path.join(process.env.APPDATA || '', 'RetroArch', 'retroarch.cfg')]) {
@@ -1671,10 +1677,10 @@ const ALT_ARGS = [[/desmume/i, '"{rom}"'], [/visualboyadvance|vbam/i, '"{rom}"']
   // said plainly (RetroArch itself would just open its menu)
   { const def = CONSOLES.find(c => c.id === systemId);
     if (def && def.raCore && (linux.isLinux ? linux.isRetroArch(sc.emulator) : /^retroarch\.exe$/i.test(path.basename(sc.emulator || '')))) {
-      let core = linux.isLinux ? linux.retroCore(sc.emulator, def.raCore) : retroCore(sc.emulator, def.raCore); const nm = RA_CORE_NAME[def.raCore] || def.raCore;
+      const cid = coreOf(def, sc); let core = linux.isLinux ? linux.retroCore(sc.emulator, cid) : retroCore(sc.emulator, cid); const nm = RA_CORE_NAME[cid] || cid;
       // (beta.7) a missing core is downloaded now, from the same place RetroArch's Online Updater gets it (Windows)
       if (!core && process.platform === 'win32') { const say = t => { if (alive()) win.webContents.send('launch:status', t); }; say(`Getting RetroArch's ${nm} core…`);
-        try { core = await racores.get(sc.emulator, def.raCore, p => say(`Getting RetroArch's ${nm} core… ${p}%`)); } catch (e) { log('Core download failed:', def.raCore, e.message); throw new Error(`RetroArch doesn't have the ${nm} core for ${def.name} yet, and it couldn't be downloaded (${e.message}). In RetroArch: Main Menu → Online Updater → Core Downloader → ${nm}, then press Play again.`); } }
+        try { core = await racores.get(sc.emulator, cid, p => say(`Getting RetroArch's ${nm} core… ${p}%`)); } catch (e) { log('Core download failed:', cid, e.message); throw new Error(`RetroArch doesn't have the ${nm} core for ${def.name} yet, and it couldn't be downloaded (${e.message}). In RetroArch: Main Menu → Online Updater → Core Downloader → ${nm}, then press Play again.`); } }
       if (!core) throw new Error(`RetroArch doesn't have the ${nm} core for ${def.name} yet. In RetroArch: Main Menu → Online Updater → Core Downloader → ${nm}, then press Play again.`);
       sc.gameArgs = `-f -L "${core}" "{rom}"`; log('RetroArch launch:', def.id, path.basename(core)); } }
   // Dolphin: the Wii remote is let go first, so Dolphin finds it as it always does
@@ -2366,7 +2372,7 @@ handle('emusetup:status', async ({ systemId }) => {
   // and the shared one (Neo Geo: the games folder too). Other emulators: whether their BIOS folder has anything in it.
   let core = null, bios = null;
   if (s.kind === 'retroarch' && def && def.raCore) {
-    core = { id: def.raCore, name: RA_CORE_NAME[def.raCore] || def.raCore, installed: !!retroCore(exe, def.raCore) };
+    const cid = coreOf(def, sc); core = { id: cid, name: RA_CORE_NAME[cid] || cid, installed: !!retroCore(exe, cid) };
     try { bios = await racores.bios(systemId, [emusetup.biosDirOf('retroarch', exe), emusetup.sharedBiosDir(), ...(systemId === 'neogeo' ? sc.romDirs || [] : [])]); } catch {}
   } else if (s.kind === 'duckstation' || s.kind === 'pcsx2') {
     const dirs = [emusetup.biosDirOf(s.kind, exe)].filter(Boolean), re = s.kind === 'pcsx2' ? /^(scph|ps2|bios).*\.bin$/i : /\.bin$/i;
@@ -2382,8 +2388,8 @@ handle('racore:get', async ({ systemId }) => {
   const emu = (sc && sc.emulator) || (def && def.retro && cfg.retroarch ? cfg.retroarch : '');
   if (!emu || !def || !def.raCore) throw new Error('This console doesn\'t use a RetroArch core.');
   const exe = emuPath(emu); if (!/^retroarch\.exe$/i.test(path.basename(exe))) throw new Error('This console doesn\'t run in RetroArch.');
-  const f = await racores.get(exe, def.raCore, p => { if (alive()) win.webContents.send('racore:progress', { systemId, pct: p }); });
-  return { ok: true, file: f, name: RA_CORE_NAME[def.raCore] || def.raCore };
+  const cid = coreOf(def, sc), f = await racores.get(exe, cid, p => { if (alive()) win.webContents.send('racore:progress', { systemId, pct: p }); });
+  return { ok: true, file: f, name: RA_CORE_NAME[cid] || cid };
 });
 // Opens the folder this console's emulator reads its BIOS files from (made if it isn't there yet)
 handle('bios:open', async ({ systemId }) => {

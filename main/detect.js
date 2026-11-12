@@ -71,6 +71,13 @@ function findExe(folders, exeNames, index = makeIndex()) {
   return null;
 }
 
+// ((T)rustyShelf, its discussions #10) every copy of a console's emulators found, not only the first: Settings lists them so
+// another one (Flycast for the Dreamcast, Gopher64 for the N64) is one press away. At most 8, in the order they're found.
+function findAllExe(folders, exeNames, index = makeIndex()) {
+  const out = [], add = h => { if (h && !out.some(x => x.toLowerCase() === h.toLowerCase())) out.push(h); };
+  for (const dir of [...folders.map(expand), ...searchRoots()]) { if (out.length >= 8 || !isDir(dir)) continue; for (const n of exeNames) add(findIn(index, dir, [n])); }
+  return out.slice(0, 8);
+}
 // Look for "<root>\ROMS\<system>" style folders.
 function findRomDirs(sys) {
   const found = new Set();
@@ -120,7 +127,7 @@ async function detectAll() {
   for (const s of CONSOLES) {
     const emu = findExe(s.emulatorFolders, s.exeNames, index);
     if (!foundRetroarch && s.retro && emu && /retroarch/i.test(path.basename(emu))) foundRetroarch = emu;
-    systems[s.id] = { emulator: emu, romDirs: withOwnDirs(s, emu, findRomDirs(s)) };
+    systems[s.id] = { emulator: emu, emulators: emu ? findAllExe(s.emulatorFolders, s.exeNames, index) : [], romDirs: withOwnDirs(s, emu, findRomDirs(s)) };
   }
   const apps = {};
   for (const a of APPS) apps[a.id] = { path: findExe(a.folders, a.exeNames, index) };
@@ -130,7 +137,7 @@ async function detectAll() {
 // ((T)rustyShelf) games an emulator keeps in its own folders: Vita3K's installed games (ux0\app)
 function withOwnDirs(s, emu, dirs) { if (s.id === 'psvita') for (const d of vita3k.appDirs(emu)) if (!dirs.includes(d)) dirs.push(d); return dirs; }
 // one console's emulator and games folders (a console added in an update, found once as setup would have)
-function detectSystem(id) { const s = CONSOLES.find(c => c.id === id); if (!s) return null; const emu = findExe(s.emulatorFolders, s.exeNames); return { emulator: emu, romDirs: withOwnDirs(s, emu, findRomDirs(s)) }; }
+function detectSystem(id) { const s = CONSOLES.find(c => c.id === id); if (!s) return null; const index = makeIndex(), emu = findExe(s.emulatorFolders, s.exeNames, index); return { emulator: emu, emulators: emu ? findAllExe(s.emulatorFolders, s.exeNames, index) : [], romDirs: withOwnDirs(s, emu, findRomDirs(s)) }; }
 
 // ((T)rustyShelf, asked for in Boxshelf's discussions) portable emulators kept anywhere: the emulator programs in a folder
 // the player picks (four folders deep), per console: { systems: { <console id>: program } }
@@ -149,4 +156,4 @@ function emulatorsIn(dir) {
   return { systems, retroarch };
 }
 
-module.exports = { detectAll, detectSystem, findSteam, emulatorsIn };
+module.exports = { detectAll, detectSystem, findSteam, emulatorsIn, findAllExe };
