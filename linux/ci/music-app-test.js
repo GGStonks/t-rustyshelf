@@ -61,7 +61,7 @@ const shot = async (p, name) => { try { const r = await p.send('Page.captureScre
     try { fs.copyFileSync(path.join(HOME, 'TrustyShelf', 'data', 'trustyshelf.log'), path.join(OUT, 'trustyshelf-music.log')); } catch {}
     fs.writeFileSync(path.join(OUT, 'app-output-music.txt'), appOut);
     try { if (p) p.close(); } catch {}
-    try { process.kill(-app.pid, 'SIGTERM'); } catch {} await sleep(1500); try { process.kill(-app.pid, 'SIGKILL'); } catch {}
+    try { process.kill(app.pid, 'SIGTERM'); } catch {} await sleep(1500); try { process.kill(-app.pid, 'SIGKILL'); } catch {}
   }
   console.log(fails ? `${fails} failed` : 'all passed');
   process.exit(fails ? 1 : 0);

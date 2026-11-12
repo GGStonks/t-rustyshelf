@@ -160,14 +160,18 @@ process.on('SIGINT', () => process.exit(130)); process.on('SIGTERM', () => proce
 
   // Every job runs headless, never on the screen in use: the desktop tests get xvfb-run's virtual X screen, but on a Wayland
   // session Electron (39 and later) opens its windows on Wayland whenever WAYLAND_DISPLAY is set, so they showed up on the
-  // real desktop. The Wayland variables are left out and Electron is told to use X11 (the virtual screen); the browsers the
-  // demo and device tests start are headless already.
+  // real desktop. The Wayland variables are left out and the session type says X11 (Electron 39 picks its platform from
+  // XDG_SESSION_TYPE: left at wayland with no Wayland display, the app couldn't start at all); the browsers the demo and
+  // device tests start are headless already.
   const HEADLESS_ENV = { ...process.env, ELECTRON_OZONE_PLATFORM_HINT: 'x11', XDG_SESSION_TYPE: 'x11' };
   for (const k of ['WAYLAND_DISPLAY', 'WAYLAND_SOCKET']) delete HEADLESS_ENV[k];
+  // ...and quietly: no core dumps (ulimit -c 0), so an app a test stops never turns into a "crashed" notification from the
+  // desktop's crash reporter (the tests themselves stop the app the clean way: SIGTERM to its main process, then SIGKILL)
+  const quiet = (cmd, args) => ['sh', ['-c', 'ulimit -c 0 2>/dev/null; exec "$@"', 'job', cmd, ...args]];
   const queue = jobs.slice(); let lastStart = 0;
   const start = j => new Promise(res => {
     const t = Date.now(), log = fs.createWriteStream(path.join(logDir, j.name + '.log'));
-    const p = spawn(j.cmd, j.args, { cwd: j.cwd, env: { ...HEADLESS_ENV, ...j.env }, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const p = spawn(...quiet(j.cmd, j.args), { cwd: j.cwd, env: { ...HEADLESS_ENV, ...j.env }, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
     running.add(p); let out = '';
     p.stdout.on('data', d => { out += d; log.write(d); }); p.stderr.on('data', d => log.write(d));
     p.on('error', e => { log.write('could not start: ' + e.message); });

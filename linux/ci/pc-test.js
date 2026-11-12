@@ -155,7 +155,7 @@ const shot = async (p, name) => { try { const r = await p.send('Page.captureScre
     check('no script errors', !errs.length, errs.slice(0, 3).join(' | '));
   } catch (e) { check('the test ran to the end', false, e && e.stack || e); }
   try { if (p) p.close(); } catch {}
-  try { process.kill(-app.pid, 'SIGTERM'); } catch {} await sleep(1500); try { process.kill(-app.pid, 'SIGKILL'); } catch {}
+  try { process.kill(app.pid, 'SIGTERM'); } catch {} await sleep(1500); try { process.kill(-app.pid, 'SIGKILL'); } catch {}
   try { fs.copyFileSync(path.join(HOME, 'TrustyShelf', 'data', 'trustyshelf.log'), path.join(OUT, 'pc-trustyshelf.log')); } catch {}
   console.log(fails ? `${fails} check(s) failed` : 'all checks passed');
   process.exit(fails ? 1 : 0);

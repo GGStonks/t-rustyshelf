@@ -80,7 +80,7 @@ const shot = async (p, name) => { try { const r = await p.send('Page.captureScre
     try { fs.copyFileSync(path.join(HOME, 'TrustyShelf', 'data', 'trustyshelf.log'), path.join(OUT, 'trustyshelf.log')); } catch {}
     fs.writeFileSync(path.join(OUT, 'app-output.txt'), appOut);
     try { if (p) p.close(); } catch {}
-    try { process.kill(-app.pid, 'SIGTERM'); } catch {} await sleep(1500); try { process.kill(-app.pid, 'SIGKILL'); } catch {}
+    try { process.kill(app.pid, 'SIGTERM'); } catch {} await sleep(1500); try { process.kill(-app.pid, 'SIGKILL'); } catch {}
   }
   // (beta.8) started the way Steam's Game Mode starts it (no options of our own): the AppImage's wrapper adds --no-sandbox
   // and X11, the app comes up, knows it's in Game Mode on a Deck, and shows no Desktop Mode card
@@ -91,7 +91,7 @@ const shot = async (p, name) => { try { const r = await p.send('Page.captureScre
       const logT = (() => { try { return fs.readFileSync(path.join(HOME, 'TrustyShelf', 'data', 'trustyshelf.log'), 'utf8'); } catch { return ''; } })(), line = (logT.match(/Linux start:[^\n]*/g) || []).pop() || '';
       check('started like Steam\'s Game Mode: the wrapper adds --no-sandbox and X11, the app comes up as a Deck in Game Mode, no Desktop Mode card', ok && /Steam Deck/.test(line) && /started by Steam: true/.test(line) && /Game Mode: true/.test(line) && /--no-sandbox/.test(line) && /--ozone-platform=x11/.test(line) && mode === 'browse', line + ' | mode ' + mode);
     } catch (e) { check('the Game Mode start ran to the end', false, (e && e.message) + ' | ' + out2.slice(-400)); }
-    finally { fs.writeFileSync(path.join(OUT, 'app-output-game-mode.txt'), out2); try { if (p2) p2.close(); } catch {} try { process.kill(-app2.pid, 'SIGTERM'); } catch {} await sleep(1500); try { process.kill(-app2.pid, 'SIGKILL'); } catch {} } }
+    finally { fs.writeFileSync(path.join(OUT, 'app-output-game-mode.txt'), out2); try { if (p2) p2.close(); } catch {} try { process.kill(app2.pid, 'SIGTERM'); } catch {} await sleep(1500); try { process.kill(-app2.pid, 'SIGKILL'); } catch {} } }
   console.log(fails ? `${fails} failed` : 'all passed');
   process.exit(fails ? 1 : 0);
 })();

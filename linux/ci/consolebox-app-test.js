@@ -65,7 +65,7 @@ const shot = async (p, name) => { try { const r = await p.send('Page.captureScre
   } catch (e) { check('the test ran to the end', false, e && e.stack || e); }
   finally {
     fs.writeFileSync(path.join(OUT, 'app-output-consolebox.txt'), appOut);
-    try { if (p) p.close(); } catch {} try { process.kill(-app.pid, 'SIGTERM'); } catch {} await sleep(1500); try { process.kill(-app.pid, 'SIGKILL'); } catch {}
+    try { if (p) p.close(); } catch {} try { process.kill(app.pid, 'SIGTERM'); } catch {} await sleep(1500); try { process.kill(-app.pid, 'SIGKILL'); } catch {}
   }
   console.log(fails ? `${fails} failed` : 'all passed'); process.exit(fails ? 1 : 0);
 })();
