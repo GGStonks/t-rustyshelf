@@ -8,6 +8,40 @@
 //   sections: [{ h, items: [[headline, more]] }] }; newest first.
 window.BS_WHATSNEW = [
   {
+    version: '1.9.0.0', android: '1.9.0.0', date: '2026-11-13', title: "Find any game, Seamless play, and box art that copes with a full drive",
+    highlights: [
+      "Find a game: search every shelf by title, from the keyboard, the controller or the Search button",
+      "Seamless play: Steam and store games get the loading screen, the Home menu and the way back to the shelf",
+      "Get box art right in Settings' sidebar, with how far it is",
+      "A full drive stops the box art download cleanly, and manuals no longer freeze the app",
+      "The taskbar is hidden only on the game's screen"
+    ],
+    platforms: [
+      "All platforms: Find a game, Get box art in the sidebar, the full-drive fixes, every custom game on the shelf, Add games and Use RetroArch.",
+      "Windows: Seamless play, the taskbar on the game's screen only, Quiver 4's apps."
+    ],
+    sections: [
+      { h: "New", items: [
+        ["Find a game", "Search every shelf by title: press / or Ctrl+F, the Search button beside Menu, hold the left stick's click, or pick Find a game at the top of the quick menu. Matches show as you type, best first, and with nothing typed it lists what you played last. Pick one and the shelf goes straight to it, whichever console it's on. From sassiestrhihno's beta.12, by sassiestrhihno."],
+        ["Seamless play (Windows)", "Steam games and store games (Epic, Ubisoft Connect, the EA app, Xbox) keep the loading screen up until their window shows, then get the Home menu, their playtime and the way back to the shelf when they end, like the games (T)rustyShelf starts itself. Settings → Display → Screen & motion gets Screen mode (Full screen or a Window that remembers its place; F11 switches), and the Home menu gets Go to desktop. Turn it off in Settings → Display for the old way. From sassiestrhihno's beta.12, by sassiestrhihno."]
+      ] },
+      { h: "Box art and manuals", items: [
+        ["Get box art in the sidebar", "Settings' sidebar has Get box art right under Box art & manuals: the download, its progress and its result in one press, with the percentage done showing on the sidebar from any page. The download adds a row for every console together, and the check before it counts the games checked in all."],
+        ["A full drive stops cleanly", "When the drive your art goes on fills up, the download stops trying there (it used to try every picture for every game, which looked like a freeze), carries on with the other drives, and says which drive is full."],
+        ["Manuals don't freeze the app", "Putting a downloaded manual's pages in place held the app up for several seconds per manual when your library is on another drive. They're moved in the background now."]
+      ] },
+      { h: "PC games", items: [
+        ["Every custom game on the shelf", "The Custom shelf stopped at 500 games; it takes up to 2,000 now, as many as Settings keeps, and finding them no longer holds the app up when a network drive has dropped."],
+        ["Add games: genre folders", "A folder of genre folders (RPG, FPS…) whose games keep their program one folder down now lists the games inside, not one entry per genre. Page Up, Page Down and the arrows work in the list right after the folder window closes."],
+        ["Quiver 4's apps", "Apps Quiver 4 puts in its console folders (Ports\\N64 and the like) are found from Quiver's list again, with the names and covers from Quiver's catalog, instead of turning up under their folder's name."]
+      ] },
+      { h: "Windows and consoles", items: [
+        ["The taskbar on the game's screen only", "Hide the taskbar during games now hides it only on the screen (T)rustyShelf and the game are on; your other screens keep theirs."],
+        ["Use RetroArch", "A console RetroArch runs has Use RetroArch on its page even when no RetroArch was found yet: pick retroarch.exe and the console runs in it, with the core of your choice."]
+      ] }
+    ]
+  },
+  {
     version: '1.8.0.0', android: '1.8.0.0', date: '2026-11-12', title: "Minecraft and Store apps on the shelf, a smooth museum with a big library, and no hang at launch",
     highlights: [
       "No more endless hang at launch while Steam's files are read",
