@@ -4170,7 +4170,8 @@ function artCardOn(i){i=i||{};if(!api.pauseCovers&&!api.cancelCovers)return;cons
     // (beta.10) the card says how it went as it goes (main's got / failed; a run you cancelled with nothing yet: nothing to say).
     // Its "N added" stands in for the library's own "Added covers for N new games" that follows (ARTC.said, see onLibraryChanged)
     const got=Math.max(0,+i.got||0);ARTC.said=0;
-    if(was&&i.failed)toast("Couldn't reach the art sites. Try again from Settings → Box art");
+    if(was&&Array.isArray(i.full)&&i.full.length)toast(`${i.full.map(d=>String(d).replace(/[\\/]+$/,"")).join(", ")} ${i.full.length>1?"are":"is"} full: no more box art could be saved there`); /* ((T)rustyShelf, issue 24) */
+    else if(was&&i.failed)toast("Couldn't reach the art sites. Try again from Settings → Box art");
     else if(was&&typeof i.got==="number"&&(got||!cut)){if(got){ARTC.said=got;ARTC.saidAt=performance.now()}toast(got?`Box art: ${got.toLocaleString()} added`:"No new box art found")}
     return}
   ARTC.on=true;if(i.allTotal!=null){ARTC.done=+i.allDone||0;ARTC.total=+i.allTotal||0}if(typeof i.paused==="boolean"&&!ARTC.stopping)ARTC.paused=i.paused;

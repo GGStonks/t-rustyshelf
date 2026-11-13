@@ -682,7 +682,9 @@ function artGetRows(){dlHook();
         // (1.80) a console with games still missing something opens them in Art Studio (Missing a part), instead of a dead end
         const fix=miss&&api.artStudio?{run:()=>{AG.rep=null;route("artstudio",{systemId:x.id});if(studio){studio.filter="missing";studio.zone="grid"}play("open");render()},btn:(parts.length?parts.join(", ")+" · ":"")+"Fix in Art Studio"}:{};
         L.push(infoRow(x.name||x.id,parts.length?parts.join(", "):"Nothing new",miss?{text:`${miss} not found${kinds?` (${kinds})`:""}`,cls:"warn"}:{text:x.upgraded?`${x.upgraded} made sharper`:"Complete",cls:"ok"},{info:miss?"Not found anywhere: "+(x.missed||[]).slice(0,12).join(", ")+(miss>12?"…":"")+(fix.btn?". Open them in Art Studio to choose another version or use a picture of your own.":""):"",...fix}))});
-      if(r.launchboxError)L.push(infoRow("LaunchBox couldn't be reached","",{text:"Only libretro covers were tried this time",cls:"warn"}));}
+      if(r.launchboxError)L.push(infoRow("LaunchBox couldn't be reached","",{text:"Only libretro covers were tried this time",cls:"warn"}));
+      /* ((T)rustyShelf, issue 24) a drive that filled up: nothing more was saved there */
+      (r.full||[]).forEach(d=>L.push(infoRow(`${String(d).replace(/[\\/]+$/,"")} is full`,"",{text:"No more art could be saved there. Free some space, then download again",cls:"warn"},{info:"The games on that drive were left as they were; the other drives carried on."})));}
     L.push(H(""),A("Back to the list","Back","Your consoles and what they still need.",()=>{AG.rep=null;AG.err=null;AG.cov=null;agLoad()},{ns:true}));return L}
   if(!AG.cov){agLoad();return [infoRow("Checking what you have…","",{text:chkText()||"Starting…"},{info:"Keeps going while you look at other pages; the list is here when you come back."})]}
   const sys=AG.cov.filter(c=>c.total>0);

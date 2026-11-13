@@ -1391,7 +1391,7 @@ async function autoCovers(lib) {
       const now = Date.now(); if (now - sentAt < 300 || !alive()) return; sentAt = now; st.send(); };
     const rep = await covers.downloadCovers(list, tell, ['front', 'back', 'spine', 'disc'], { only, region: cfg.ui.artRegion, hd: cfg.ui.artHD !== false, ...artOpts(false), tag: 'auto' }); // just the games that are due, not their whole consoles; "HD only" (Settings → Box art) applies here too; a console with an Art Studio style follows it, locked parts are left alone
     cut = !!rep.cancelled;
-    try { if (alive()) win.webContents.send('covers:auto', { end: true, got: (rep.systems || []).reduce((a, r) => a + (r.front || 0), 0) }); } catch {}
+    try { if (alive()) win.webContents.send('covers:auto', { end: true, got: (rep.systems || []).reduce((a, r) => a + (r.front || 0), 0), full: rep.full || [] }); } catch {}
     artstudio.forget(); // the Studio's game lists show the new pictures (Settings may hold off the shelf's rescan)
     const n = (rep.systems || []).reduce((a, r) => a + (r.front || 0) + (r.back || 0) + (r.spine || 0) + (r.disc || 0) + (r.upgraded || 0), 0);
     // the toast counts games that got a front cover (one per game); backs, spines, discs and sharper copies only refresh the shelf

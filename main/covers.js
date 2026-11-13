@@ -698,6 +698,11 @@ function pause(tag, on) { let n = 0; for (const t of live) if (!tag || t.tag ===
 // (beta.10) a run (tag 'auto': the background one) is paused right now: main's waiters resume it or don't wait on it
 function isPaused(tag) { for (const t of live) if ((!tag || t.tag === tag) && t.p && !t.c) return true; return false; }
 const held = async tok => { while (tok.p && !tok.c) await new Promise(r => setTimeout(r, 250)); };
+// ((T)rustyShelf, issue 24) a drive that ran out of space during a run: nothing more is tried there (thousands of
+// downloads used to go on failing, one after another, and the run looked frozen); the run's report names it
+const fullDrives = new Set();
+const driveOf = d => path.parse(path.resolve(String(d || '.'))).root.toUpperCase();
+function noteFull(dir) { const r = driveOf(dir); if (fullDrives.has(r)) return; fullDrives.add(r); log('art: the drive', r, 'is full: no more art is saved there this time'); }
 // download into a temp name, keep it only if it's an image and (when replacing) clearly sharper than the old one
 async function fetchInto(url, dir, base, suffix, ext, old, compare, origin = 'auto') {
   const tmp = path.join(dir, `${base}${suffix}.incoming${ext}`);
@@ -706,7 +711,7 @@ async function fetchInto(url, dir, base, suffix, ext, old, compare, origin = 'au
     if (old && compare) { const a = await sizeOfAsync(old), b = await sizeOfAsync(tmp); if (!b || (a && Math.max(...b) < Math.max(...a) * 1.15)) { await fs.promises.unlink(tmp).catch(() => {}); return 'same'; } }
     await placeArt(dir, base, suffix, tmp, ext, origin); // one picture per kind: the one it replaces (any type) moves to replaced\, never deleted
     return true;
-  } catch (e) { try { fs.unlinkSync(tmp); } catch {} log('art download', url, e.message); return false; }
+  } catch (e) { try { fs.unlinkSync(tmp); } catch {} if (e && e.code === 'ENOSPC') { noteFull(dir); return 'full'; } log('art download', url, e.message); return false; }
 }
 
 // systems: [{def, cfg}]. plan: an array of kinds for every console (['front','back',…], 'redo-<kind>' fetches again),
@@ -719,8 +724,8 @@ async function downloadCovers(systems, progress, plan, opts = {}) {
 async function coversRun(systems, progress, plan, opts, tok) {
   const hd = !!opts.hd, region = artRegion(opts.region) ? opts.region : 'auto';
   const kindsFor = id => Array.isArray(plan) ? plan : plan && typeof plan === 'object' ? (plan[id] || []) : ['front', 'back', 'spine', 'disc'];
-  const report = { systems: [], hd, cancelled: false };
-  let lb = null, lbError = null;
+  const report = { systems: [], hd, cancelled: false, full: [] };
+  let lb = null, lbError = null; fullDrives.clear();
   const active = systems.filter(({ def }) => kindsFor(def.id).length);
   for (const { def, cfg } of active) {
     if (tok.c) break;
@@ -741,6 +746,7 @@ async function coversRun(systems, progress, plan, opts, tok) {
       if (tok.c) return; await held(tok); if (tok.c) return; // (beta.10) Pause: the next game waits
       const game = artGame(game0); // ((T)rustyShelf: Details → Art match, looked up under the name picked)
       const dir = artDirFor(cfg, game.file), base = artBase(game.file);
+      if (fullDrives.has(driveOf(dir))) { done++; progress({ system: def.name, systemId: def.id, stage: `${def.name}: ${driveOf(dir)} is full`, game: game.title, done, total: games.length, full: driveOf(dir) }); return; } // (issue 24)
       let touched = false, lg, lgDone = false; const missing = [];
       // Switch / 3DS: GameTDB's full cover scan, downloaded once per game for both its back and its spine (deleted after)
       let tdbTmp, tdbDone = false;
@@ -765,7 +771,7 @@ async function coversRun(systems, progress, plan, opts, tok) {
       };
       try {
         for (const [key, suffix] of KINDS) {
-          if (!want(key) || tok.c || locked[key]) continue;
+          if (!want(key) || tok.c || locked[key] || fullDrives.has(driveOf(dir))) continue;
           // one part at a time per game with Art Studio (opts.serial): a pick made there while this part downloads waits, and a
           // part the user picked or locked meanwhile is left alone (it was read before the download started)
           const part = async () => {
@@ -797,7 +803,7 @@ async function coversRun(systems, progress, plan, opts, tok) {
           const wrapFirst = key === 'spine' && sharp && !!spineCutter;
           if (wrapFirst && await wrapSpine(def.id, lbFor() ? lb.images[lbFor().id] : null, dir, base, old, !!old, reg)) { touched = true; if (upgrade) { rep.upgraded++; rep.up.push([game.title, key]); } else { rep.spine++; rep.got.push([game.title, key]); } return; }
           let ok = false;
-          for (const c of cands) { if (tok.c) break; const r = await fetchInto(c.url, dir, base, suffix, c.ext, old, upgrade); if (r === true) { ok = true; break; } }
+          for (const c of cands) { if (tok.c || fullDrives.has(driveOf(dir))) break; const r = await fetchInto(c.url, dir, base, suffix, c.ext, old, upgrade); if (r === true) { ok = true; break; } }
           // nothing from the databases: the Super Mario Wiki's official box scans (Switch 2 only; fronts and some backs)
           if (!ok && (!old || posterOld) && (key === 'front' || key === 'back') && !tok.c) {
             let wk = null; try { const wa = require('./wikiart'); if (wa.has(def.id)) wk = await wa.find(def.id, lookupNames(game.title), key, /eur/i.test(reg || '') ? 'eur' : /jpn|japan/i.test(reg || '') ? 'jpn' : 'usa'); } catch {}
@@ -842,6 +848,7 @@ async function coversRun(systems, progress, plan, opts, tok) {
   }
   report.cancelled = tok.c;
   report.launchboxError = lbError;
+  report.full = [...fullDrives]; // (issue 24)
   log('Art done', JSON.stringify(report.systems.map(r => ({ s: r.id, f: r.front, b: r.back, sp: r.spine, d: r.disc, up: r.upgraded, had: r.had, missed: r.missed.length }))), report.cancelled ? '(cancelled)' : '');
   return report;
 }
@@ -897,6 +904,6 @@ function hasInfo() { return idxStamp() > 0; } // cheap: never parses the index j
 
 // the index, built (downloaded) if it has to be: Art Studio's "build the LaunchBox index" button
 async function buildIndex(progress) { if (lbOverride) return true; await launchboxIndex(progress || (() => {})); return true; }
-module.exports = { _setIndex: x => { lbOverride = x; }, LAUNCHBOX, PC_BOX_PLATS, consoleBox, consoleBoxes, setArtName, artGame, artMatches, init, matchTitle, matchName, lookupNames, sgMatch, setSpineCutter, setCartMaker, makeCart, CART_SYS, discId, downloadCovers, coverage, cancel, pause, isPaused, isImageBuf, HD_MIN, gameInfo, flushInfoCache, hasInfo, invalidateInfo, norm, launchboxMatch, libretroMatch, pickImages,
+module.exports = { _setIndex: x => { lbOverride = x; }, _fetchInto: (...a) => fetchInto(...a), _fullDrives: () => [...fullDrives], LAUNCHBOX, PC_BOX_PLATS, consoleBox, consoleBoxes, setArtName, artGame, artMatches, init, matchTitle, matchName, lookupNames, sgMatch, setSpineCutter, setCartMaker, makeCart, CART_SYS, discId, downloadCovers, coverage, cancel, pause, isPaused, isImageBuf, HD_MIN, gameInfo, flushInfoCache, hasInfo, invalidateInfo, norm, launchboxMatch, libretroMatch, pickImages,
   // Art Studio (main/artstudio.js) reuses these rather than keeping its own copies
   candidates, libretroAll, libretroIndex, readyIndex, indexState, buildIndex, refreshIndex, cancelRefresh, indexInfo, edition, lbRegion, lrRegion, tdbRegion, download, downloadEx, sizeOf, artFile, isLow, placeArt, setOnPlaced, replacedFor, cutSpine, cutBack, canCut: () => !!spineCutter, pool, KINDS, ART_EXT, REPLACED };

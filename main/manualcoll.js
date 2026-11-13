@@ -212,6 +212,11 @@ async function fetchTo(col, ix, e, stage, base, opts) {
 
 const manualFiles = (dir, base, ls) => { const pre = (base + '-manual').toLowerCase(); return (ls || require('./dircache').fresh).names(dir).filter(f => M.isManualFile(f, pre)); }; // (not a .part)
 function moveFile(a, b) { try { fs.renameSync(a, b); } catch { fs.copyFileSync(a, b); fs.unlinkSync(a); } }
+// ((T)rustyShelf, issue 24) the same without holding the app up: the pages go from the temp folder to the library's drive,
+// another drive as often as not, where a rename can't do and every page was copied with the app frozen (4 to 8 s a manual)
+async function moveFileA(a, b) { try { await fs.promises.rename(a, b); } catch (e) { if (e && e.code === 'ENOSPC') throw e; await fs.promises.copyFile(a, b); await fs.promises.unlink(a); } }
+// (issue 24) a drive that ran out of space: no more manuals are put there this run (each one was downloaded, then failed)
+const fullDrives = new Set(), driveOf = d => path.parse(path.resolve(String(d || '.'))).root.toUpperCase();
 
 // systems: [{def, cfg}]. opts: { renderPdf(pdfPath) -> [dataURL], crop(file, side) -> Buffer, cancelled() }
 // a manual's pages as (T)rustyShelf sees them: how many are real pages, how sharp they are, whether some are junk
@@ -284,17 +289,19 @@ async function one(def, cfg, g, hit, m, key, opts, changes) {
     }
     const pages = fs.readdirSync(stage).filter(f => /-manual-\d+\.(jpe?g|png)$/i.test(f)).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
     // last look before anything in the library moves: a job given up on (tok.dead, past its deadline) must not touch it.
-    // From here to the end there is no await, so the deadline can't land halfway through the moves.
+    // ((T)rustyShelf, issue 24) the moves below are awaited (they froze the app), so a deadline landing meanwhile no longer
+    // stops them halfway: they always finish, or put everything back
     if (opts.cancelled && opts.cancelled()) throw new Error('stopped');
-    fs.mkdirSync(dir, { recursive: true });
+    await fs.promises.mkdir(dir, { recursive: true });
     // Current pages always go to their own .manual-originals\<game>\<time>\, even when the memo says they are our earlier
     // copy (the memo can be wrong, and the user may have swapped files since); an older backup is never overwritten.
     // A failed move puts everything back, so the game never ends up with half a manual.
     const olds = manualFiles(dir, base), keep = olds.length ? spreads.backupDir(dir, base) : null, moved = [], placed = [];
     try {
-      for (const f of olds) { moveFile(path.join(dir, f), path.join(keep, f)); moved.push(f); }
-      pages.forEach((f, i) => { const d = path.join(dir, `${base}-manual-${String(i + 1).padStart(2, '0')}${path.extname(f).toLowerCase()}`); moveFile(path.join(stage, f), d); placed.push(d); });
+      for (const f of olds) { await moveFileA(path.join(dir, f), path.join(keep, f)); moved.push(f); }
+      for (const [i, f] of pages.entries()) { const d = path.join(dir, `${base}-manual-${String(i + 1).padStart(2, '0')}${path.extname(f).toLowerCase()}`); await moveFileA(path.join(stage, f), d); placed.push(d); }
     } catch (e) {
+      if (e && e.code === 'ENOSPC') fullDrives.add(driveOf(dir));
       for (const d of placed) { try { fs.unlinkSync(d); } catch {} }
       for (const f of moved) { try { moveFile(path.join(keep, f), path.join(dir, f)); } catch {} }
       if (keep) { try { fs.rmdirSync(keep); } catch {} } // only when everything went back
@@ -311,7 +318,7 @@ async function one(def, cfg, g, hit, m, key, opts, changes) {
 
 // systems: [{def, cfg}]. opts: { renderPdf(pdfPath) -> [dataURL], crop(file, side) -> Promise<Buffer>, cancelled(), report: [] }
 async function run(systems, opts = {}) {
-  const m = loadMemo(), t0 = Date.now(); let done = 0; const changes = [], jobs = [], ls = require('./dircache').lister();
+  const m = loadMemo(), t0 = Date.now(); let done = 0; const changes = [], jobs = [], ls = require('./dircache').lister(); fullDrives.clear();
   for (const { def, cfg } of systems) {
     const cols = COLLECTIONS[def.id]; if (!cols) continue;
     if (opts.skipSystem && opts.skipSystem(def)) continue; // Manual Studio: a console set to another language / region (the collections are English, North American)
@@ -341,6 +348,7 @@ async function run(systems, opts = {}) {
   await M.pool(batch, PARALLEL_GAMES, async j => {
     if (opts.idle) await opts.idle(); // never while a game is running: downloads and page drawing would take CPU from it
     if (opts.cancelled && opts.cancelled()) return;
+    { const r = driveOf(artDirFor(j.cfg, j.g.file)); if (fullDrives.has(r)) { if (!fullDrives.has(r + '|said')) { fullDrives.add(r + '|said'); log('Manual collections: the drive', r, 'is full: no more manuals are put there this time'); } return; } } // (issue 24)
     const tok = { dead: false }, o2 = Object.assign({}, opts, { cancelled: () => tok.dead || !!(opts.cancelled && opts.cancelled()) });
     try { if (await withDeadline(one(j.def, j.cfg, j.g, j.hit, m, j.key, o2, changes), j.hit.col.digital ? PDF_DEADLINE : GAME_DEADLINE, 'downloading', tok)) done++; }
     catch (e) { const seen = m[j.key] || {}; m[j.key] = Object.assign({}, seen.src ? seen : {}, { v: seen.src ? seen.v : VERSION, at: Date.now(), err: e.message, ev: ERR_V, fails: (seen.err && seen.failV === VERSION && seen.ev === ERR_V ? seen.fails || 1 : 0) + (e.message === 'stopped' ? 0 : 1), failV: VERSION }); log('Manual collections:', path.basename(j.g.file), j.hit.e.name, 'failed:', e.message); }
@@ -378,4 +386,4 @@ function recent(limit = 30) {
     .map(x => ({ title: x.title, system: x.system || '', at: x.at, upgraded: !!x.oldW, oldW: x.oldW || 0, w: x.w || 0, pages: x.pages || 0, source: x.src.startsWith('gdb/') ? 'GamesDatabase' : x.src.split('/')[0] }));
 }
 
-module.exports = { fetchFor, init, run, recent, forget, pick, matches, info, inspect, manualFiles, moveFile, fetchTo, jp2Pages, clean, index, COLLECTIONS, _entryKeys: entryKeys };
+module.exports = { fetchFor, init, run, recent, forget, pick, matches, info, inspect, manualFiles, moveFile, _moveFileA: moveFileA, fetchTo, jp2Pages, clean, index, COLLECTIONS, _entryKeys: entryKeys };
