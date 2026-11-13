@@ -249,32 +249,32 @@ window.Museum = (() => {
     // the old set goes only after the new one has taken its pictures, so a poster both share isn't dropped and fetched again
     const old = o.extras, g = new THREE.Group(); o.extras = g; wall.add(g); const fy = o.bottom - .4;
     // the vitrine lights stay in the room (dark when there are no plinths): a change in the number of lights would recompile every material
-    if (!o.plinthL) o.plinthL = [0, 1].map(() => { const pt = new THREE.PointLight(0xfff0dc, 0, 1.6, 2); wall.add(pt); return pt; }); o.plinthL.forEach(pt => { pt.intensity = 0; });
+    if (!o.plinthL) o.plinthL = [0, 1].map(() => { const pt = new THREE.PointLight(0xfff0dc, 0, 2.2, 2); wall.add(pt); return pt; }); o.plinthL.forEach(pt => { pt.intensity = 0; });
     // gallery pieces, kept to the sides and the foreground so they frame the shelves without ever covering a case
     const metal = new THREE.MeshStandardMaterial({ color: 0x2a2c31, metalness: .85, roughness: .3 }), brassM = new THREE.MeshStandardMaterial({ color: 0xb08a48, metalness: .9, roughness: .25 });
     const favs = (o.posterUrls || []).length ? o.posterUrls : [];
-    const tvW = tvOn ? tvDims().W + 1.05 : 0, tvS0 = tvSide(), sides = [-2.05 - (tvS0 === 'left' ? tvW : 0), (o.rackEnd || o.maxW) + 2.05 + (tvS0 === 'right' ? tvW : 0)]; // gallery pieces step aside for the TV
+    const tvW = tvOn ? tvDims().W + 1.05 : 0, tvS0 = tvSide(), sides = [-2.6 - (tvS0 === 'left' ? tvW : 0), (o.rackEnd || o.maxW) + 2.6 + (tvS0 === 'right' ? tvW : 0)]; // gallery pieces step aside for the TV
     if (room.plinths) sides.forEach((px, k) => {
       // a white plinth with a glass vitrine; inside, one of your favourite games standing under its own small light
-      const pl = new THREE.Mesh(new THREE.BoxGeometry(.72, 1.02, .72), new THREE.MeshStandardMaterial({ color: 0xe9e6df, roughness: .85 })); pl.position.set(px, fy + .51, .75); pl.castShadow = pl.receiveShadow = true; g.add(pl);
-      const glass = new THREE.Mesh(new THREE.BoxGeometry(.6, .7, .6), new THREE.MeshStandardMaterial({ color: 0xddeeff, roughness: .02, metalness: .1, transparent: true, opacity: .12, depthWrite: false })); glass.position.set(px, fy + 1.02 + .35, .75); g.add(glass);
+      const pl = new THREE.Mesh(new THREE.BoxGeometry(1.05, 1.45, 1.05), new THREE.MeshStandardMaterial({ color: 0xe9e6df, roughness: .85 })); pl.position.set(px, fy + .725, .75); pl.castShadow = pl.receiveShadow = true; g.add(pl);
+      const glass = new THREE.Mesh(new THREE.BoxGeometry(.88, .98, .88), new THREE.MeshStandardMaterial({ color: 0xddeeff, roughness: .02, metalness: .1, transparent: true, opacity: .12, depthWrite: false })); glass.position.set(px, fy + 1.45 + .49, .75); g.add(glass);
       const edgeM = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: .35 }); const ed = new THREE.LineSegments(new THREE.EdgesGeometry(glass.geometry), edgeM); ed.position.copy(glass.position); g.add(ed);
       const url = favs[(k + 2) % Math.max(1, favs.length)] || favs[k];
-      const caseM = new THREE.MeshStandardMaterial({ color: 0x1a1b20, roughness: .35 }); const cs = new THREE.Mesh(new THREE.BoxGeometry(.04, .55, .39), [caseM, caseM, caseM, caseM, caseM, caseM]); cs.position.set(px, fy + 1.02 + .3, .75); cs.rotation.y = -Math.PI / 2 + (k ? -.35 : .35); cs.castShadow = true; g.add(cs);
+      const caseM = new THREE.MeshStandardMaterial({ color: 0x1a1b20, roughness: .35 }); const cs = new THREE.Mesh(new THREE.BoxGeometry(.055, .8, .56), [caseM, caseM, caseM, caseM, caseM, caseM]); cs.position.set(px, fy + 1.45 + .42, .75); cs.rotation.y = -Math.PI / 2 + (k ? -.35 : .35); cs.castShadow = true; g.add(cs);
       if (url) { const t = loadTex(url, 'front'); g.userData.texs = (g.userData.texs || []).concat(t); const fm = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: .35 }); cs.material = [fm, caseM, caseM, caseM, caseM, caseM]; whenLoaded(t, () => { if (o.extras !== g) return; fm.map = t; fm.color.set(0xffffff); fm.needsUpdate = true; }, () => {}); }
-      const pt = o.plinthL[k]; pt.intensity = 1.4; pt.position.set(px, fy + 1.02 + .66, .78);
+      const pt = o.plinthL[k]; pt.intensity = 1.4; pt.position.set(px, fy + 1.45 + .95, .78);
     });
     if (room.ropes) sides.forEach(px => {
       // brass stanchions with a red velvet rope in front of each side display
-      const posts = [px - .62, px + .62].map(x => { const p = new THREE.Mesh(new THREE.CylinderGeometry(.03, .03, .95, 16), brassM); p.position.set(x, fy + .475, 1.55); p.castShadow = true; g.add(p); const top = new THREE.Mesh(new THREE.SphereGeometry(.05, 16, 12), brassM); top.position.set(x, fy + .97, 1.55); g.add(top); const base = new THREE.Mesh(new THREE.CylinderGeometry(.16, .18, .04, 24), brassM); base.position.set(x, fy + .02, 1.55); g.add(base); return x; });
-      const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(posts[0], fy + .9, 1.55), new THREE.Vector3(px, fy + .68, 1.55), new THREE.Vector3(posts[1], fy + .9, 1.55)]);
-      const rope = new THREE.Mesh(new THREE.TubeGeometry(curve, 24, .022, 10, false), new THREE.MeshStandardMaterial({ color: 0x7a0e18, roughness: .85 })); rope.castShadow = true; g.add(rope);
+      const posts = [px - .9, px + .9].map(x => { const p = new THREE.Mesh(new THREE.CylinderGeometry(.042, .042, 1.35, 16), brassM); p.position.set(x, fy + .675, 1.75); p.castShadow = true; g.add(p); const top = new THREE.Mesh(new THREE.SphereGeometry(.07, 16, 12), brassM); top.position.set(x, fy + 1.38, 1.75); g.add(top); const base = new THREE.Mesh(new THREE.CylinderGeometry(.22, .25, .055, 24), brassM); base.position.set(x, fy + .028, 1.75); g.add(base); return x; });
+      const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(posts[0], fy + 1.26, 1.75), new THREE.Vector3(px, fy + .98, 1.75), new THREE.Vector3(posts[1], fy + 1.26, 1.75)]);
+      const rope = new THREE.Mesh(new THREE.TubeGeometry(curve, 24, .032, 10, false), new THREE.MeshStandardMaterial({ color: 0x7a0e18, roughness: .85 })); rope.castShadow = true; g.add(rope);
     });
     if (room.bench) {
       // a museum bench in the foreground, facing the shelves (you see it from the wide view)
-      const bz = 4.4, bx = o.maxW / 2, seat = new THREE.Mesh(new THREE.BoxGeometry(1.9, .1, .5), new THREE.MeshStandardMaterial({ color: 0x23201d, roughness: .55 })); seat.position.set(bx, fy + .46, bz); seat.castShadow = seat.receiveShadow = true; g.add(seat);
-      const cush = new THREE.Mesh(new THREE.BoxGeometry(1.84, .05, .46), new THREE.MeshStandardMaterial({ color: 0x3a1f1c, roughness: .9 })); cush.position.set(bx, fy + .535, bz); g.add(cush);
-      [[-.85, -.2], [-.85, .2], [.85, -.2], [.85, .2]].forEach(([dx, dz]) => { const leg = new THREE.Mesh(new THREE.BoxGeometry(.04, .41, .04), metal); leg.position.set(bx + dx, fy + .205, bz + dz); g.add(leg); });
+      const bz = 4.4, bx = o.maxW / 2, seat = new THREE.Mesh(new THREE.BoxGeometry(2.8, .14, .72), new THREE.MeshStandardMaterial({ color: 0x23201d, roughness: .55 })); seat.position.set(bx, fy + .62, bz); seat.castShadow = seat.receiveShadow = true; g.add(seat);
+      const cush = new THREE.Mesh(new THREE.BoxGeometry(2.72, .07, .64), new THREE.MeshStandardMaterial({ color: 0x3a1f1c, roughness: .9 })); cush.position.set(bx, fy + .725, bz); g.add(cush);
+      [[-1.3, -.28], [-1.3, .28], [1.3, -.28], [1.3, .28]].forEach(([dx, dz]) => { const leg = new THREE.Mesh(new THREE.BoxGeometry(.055, .55, .055), metal); leg.position.set(bx + dx, fy + .275, bz + dz); g.add(leg); });
     }
     if (room.posters) {
       const picks = (o.posterUrls || []).slice(0, 2);
@@ -1000,14 +1000,14 @@ window.Museum = (() => {
   const wideN = () => rows.length + (rack && rack.units ? rack.units.length : 0) + (tv ? 1 : 0);
   const tvIdx = () => tv ? wideN() - 1 : -1;
   const galXs = () => { const tvW = tvOn ? tvDims().W + 1.05 : 0, s = tvSide(); // the same spots buildExtras puts the side pieces at
-    return [-2.05 - (s === 'left' ? tvW : 0), (roomObj && roomObj.rackEnd || roomObj && roomObj.maxW || wallW) + 2.05 + (s === 'right' ? tvW : 0)]; };
+    return [-2.6 - (s === 'left' ? tvW : 0), (roomObj && roomObj.rackEnd || roomObj && roomObj.maxW || wallW) + 2.6 + (s === 'right' ? tvW : 0)]; };
   const gals = () => room.plinths && roomObj ? galXs() : [];
   const wideCount = () => wideN() + (gals().length ? 2 : 0);
   const isTvSel = i => !!tv && i === tvIdx();
   const isGalSel = i => !!gals().length && i >= wideN();
   function wideBox(i) {
     const plankT = .055; if (isTvSel(i)) return tvBox();
-    if (isGalSel(i)) { const px = galXs()[i - wideN()], fy = roomObj.bottom - .4; return { x0: px - .5, x1: px + .5, y0: fy - .05, y1: fy + 1.6, z: 1.12, label: 'Display case', sub: 'a favourite under glass' }; }
+    if (isGalSel(i)) { const px = galXs()[i - wideN()], fy = roomObj.bottom - .4; return { x0: px - .65, x1: px + .65, y0: fy - .05, y1: fy + 2.15, z: 1.25, label: 'Display case', sub: 'a favourite under glass' }; }
     if (i < rows.length) { const r = rows[i]; return { x0: -.47, x1: (roomObj ? roomObj.maxW : wallW) + .47, y0: r.y - H / 2 - plankT - .03, y1: r.y + ROW - H / 2 - plankT + .02, label: r.name, sub: `${r.games.length} game${r.games.length === 1 ? '' : 's'}` }; }
     const u = rack && rack.units[i - rows.length]; if (!u) { const r = rows[Math.max(0, Math.min(rows.length - 1, rowI))] || { y: 0 }; return { x0: -.47, x1: (roomObj ? roomObj.maxW : wallW) + .47, y0: r.y - H / 2 - plankT - .03, y1: r.y + ROW - H / 2 - plankT + .02, label: r.name || '', sub: '' }; }
     const plankT2 = .055; let top = ROW - H / 2 + .1, bot = rows[rows.length - 1].y - H / 2 - .1;
@@ -1050,7 +1050,7 @@ window.Museum = (() => {
   const lookFree = () => active && wide && !intro.on && !tw.on && !roomView && !gaze && !delivery && !tvView && !fan && !reader;
   function gazeAt(px) {
     if (gaze && Math.abs(gaze.px - px) < .01) { gaze = null; look.tx = look.ty = 0; lastInput = lastNav = woke(); hooks.onSelect && hooks.onSelect(current()); return; } // A again: back to the whole wall
-    const fy = roomObj.bottom - .4; gaze = { px, x: px, y: fy + .9, z: .75 + 1.9, tx: px, ty: fy + 1.32, tz: .75 }; // stand in front of it, looking at the vitrine
+    const fy = roomObj.bottom - .4; gaze = { px, x: px, y: fy + 1.1, z: .75 + 2.35, tx: px, ty: fy + 1.85, tz: .75 }; // stand in front of it, looking at the vitrine
     look.tx = look.ty = 0; lastInput = lastNav = woke(); snd('zoom'); twStart({ x: gaze.x, y: gaze.y, z: gaze.z }, 0);
     hooks.onSelect && hooks.onSelect(current());
   }
@@ -1498,7 +1498,7 @@ window.Museum = (() => {
   // game, Y shows its ad. Built from a few merged meshes (one per material) on materials made once per visit; the picture
   // effects (scanlines, curvature, glow, static, the power-on line) are in the screen's own shader: no extra pass or light. ----
   let tv = null, tvView = false, tvReturn = null, tvOn = false, tvM = null, tvPeekAt = -1e9;
-  const TV_SZ = { s: .8, m: 1, l: 1.3 }, TV_CH = { ads: 'Vintage commercials', trailers: 'Game trailers', recent: 'Recently played', mix: 'Shuffle all' };
+  const TV_SZ = { s: 1.05, m: 1.35, l: 1.75 }, TV_CH = { ads: 'Vintage commercials', trailers: 'Game trailers', recent: 'Recently played', mix: 'Shuffle all' };
   // the set's measurements for the current choices (needed before it's built: the reading corner makes room for it in the middle)
   function tvDims() { const S = TV_SZ[room.tvSize] || 1, st = ['cart', 'cabinet', 'floor', 'wall'].includes(room.tvStand) ? room.tvStand : 'cart', TW = 1.25 * S, TH = .98 * S, TD = .78 * S;
     return { S, st, TW, TH, TD, W: st === 'cart' ? TW + .22 : st === 'cabinet' ? Math.max(TW + .55, 1.8) : st === 'floor' ? TW * 1.4 : TW }; }
