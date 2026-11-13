@@ -121,7 +121,9 @@ async function isCategory(dir, deeper = 2) { // (a category inside counts like a
   for (const e of ents) {
     if (!e.isDirectory() || GENERIC.test(e.name) || SKIP_DIR.test(e.name) || e.name.startsWith('.')) continue;
     await turn(); const d = path.join(dir, e.name);
-    if ((await looksLikeGame(d) || (deeper > 0 && await isCategory(d, deeper - 1))) && ++n >= 2) return true;
+    // ((T)rustyShelf, issue 4 again) a game whose program sits a level down ("RPG\\Some Game\\Game\\game.exe") counts
+    // too: the genre folders of a big collection used to come out as one game each, their games never listed
+    if ((await looksLikeGame(d) || !!(await mainExeAsync(d, 1)) || (deeper > 0 && await isCategory(d, deeper - 1))) && ++n >= 2) return true;
   }
   return false;
 }

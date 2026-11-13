@@ -1489,6 +1489,9 @@ handle('dialog:pick', async ({ kind, title, defaultPath, filters, multi }) => {
     // (Linux: programs have no .exe, so a "Programs" filter would hide every emulator: there it shows all files)
     filters: kind === 'folder' ? undefined : linux.isLinux && (!filters || filters.some(f => f && Array.isArray(f.extensions) && f.extensions.includes('exe'))) ? undefined : (filters || [{ name: 'Programs', extensions: ['exe'] }])
   });
+  // ((T)rustyShelf, issue 4) the keys back on the page: after the file window closed, Page Up / Page Down and the arrows did
+  // nothing in the list it filled (only the mouse scrolled it) until the page was clicked
+  try { if (alive()) { win.focus(); win.webContents.focus(); } } catch {}
   return r.canceled ? null : multi ? r.filePaths : r.filePaths[0];
 });
 // ---------- ((T)rustyShelf issue 7) the PC kept awake while a long job runs: a box art download, an export or import, a

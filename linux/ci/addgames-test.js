@@ -49,6 +49,18 @@ const mk = (p, body) => { const f = path.join(tmp, p); fs.mkdirSync(path.dirname
     const sk = (cat.skipped || []).find(s => /FUEL/.test(s.folder));
     check('A folder with only an installer is listed as skipped, with the reason', !!sk && sk.why === 'only an installer', JSON.stringify(cat.skipped));
 
+    // (issue 4 again) genre folders whose games keep their program one folder down ("RPG\\Some Game\\Game\\game.exe"): each
+    // genre is stepped into and its games listed, not the genre taken for one game
+    mk('Lib2/RPG/Some Game/Game/somegame.exe', 'a'.repeat(700)); mk('Lib2/RPG/Other Game/Other/other.exe', 'b'.repeat(700));
+    mk('Lib2/FPS/Shooter One/x64/shoot.exe', 'c'.repeat(700)); mk('Lib2/FPS/Shooter Two/ShooterTwo/s2.exe', 'd'.repeat(700));
+    mk('Lib2/Unreal Game/Engine/Binaries/Win64/UnrealHelper.exe', 'e'.repeat(300)); mk('Lib2/Unreal Game/UGame/Binaries/Win64/UGame-Win64-Shipping.exe', 'f'.repeat(900));
+    const g2 = await ag.scanFolderAsync(path.join(tmp, 'Lib2')), t2 = g2.games.map(g => g.title).sort();
+    check('Genre folders whose games keep their program one folder down are stepped into: each game listed, not the genre', ['Other Game', 'Shooter One', 'Shooter Two', 'Some Game'].every(t => t2.includes(t)) && !t2.includes('RPG') && !t2.includes('FPS'), JSON.stringify(t2));
+    check('…while a game with Engine\\ and its own Binaries\\Win64 stays one game', t2.includes('Unreal Game') && !t2.includes('Engine') && !t2.includes('UGame') && t2.length === 5, JSON.stringify(t2));
+
+    { const mainSrc = fs.readFileSync(path.join(__dirname, '..', '..', 'main.js'), 'utf8'), h = mainSrc.slice(mainSrc.indexOf("handle('dialog:pick'"), mainSrc.indexOf("handle('dialog:pick'") + 1400);
+      check('After the file window closes, the keys go back to the page (the Add games list answers Page Up / Page Down and the arrows)', /win\.webContents\.focus\(\)/.test(h)); }
+
     // a big folder: 400 game folders, each with a few nested folders and files
     const big = path.join(tmp, 'Big');
     for (let i = 0; i < 400; i++) { for (let j = 0; j < 4; j++) mk(`Big/Game ${i}/sub${j}/data${j}.pak`, 'p'); mk(`Big/Game ${i}/Game${i}.exe`, 'e'.repeat(1000 + i)); }
