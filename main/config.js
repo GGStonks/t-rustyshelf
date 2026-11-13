@@ -64,7 +64,10 @@ function defaults() {
       // 1.55 Settings
       updateCheck: true, // (1.82) Settings → System → Check for new betas
       autoUpdate: false, // Optional auto update on startup
-      openInto: 'last', display: '', safeArea: 100, clock: 'full', clock24: false, reduceMotion: false, dimMinutes: 0, confirmButton: 'auto', scrollSpeed: 'normal', artRegion: 'auto', audioOut: '', hidden: [], museumStyle: { walkIn: true } }
+      openInto: 'last', display: '', safeArea: 100, clock: 'full', clock24: false, reduceMotion: false, dimMinutes: 0, confirmButton: 'auto', scrollSpeed: 'normal', artRegion: 'auto', audioOut: '', hidden: [],
+      // museum room organization: new installs get the themed rooms ('manufacturer' / 'genre'); a config saved before
+      // the key existed keeps the single Classic wall (existingUser, below)
+      museumStyle: { walkIn: true, grouping: 'manufacturer' } }
   };
 }
 
@@ -118,10 +121,12 @@ function upgrade(cfg) {
   return cfg;
 }
 
-// Defaults for a config file that exists but predates a key (merge alone would give it today's new-install default)
 function existingUser(cfg, saved) {
   const ui = saved && isObj(saved.ui) ? saved.ui : {};
   for (const k of ['autoCovers', 'autoManuals']) if (ui[k] === undefined) cfg.ui[k] = true;
+  // museum organization (issue 19): a config saved before ui.museumStyle.grouping existed keeps the single Classic wall
+  const ms = ui.museumStyle;
+  if (!isObj(ms) || ms.grouping === undefined) cfg.ui.museumStyle.grouping = 'classic';
   return cfg;
 }
 // A file that is there but can't be read right now (EBUSY / EPERM: antivirus or OneDrive holding it) isn't damaged: try
@@ -263,12 +268,14 @@ function sanitize(cfg) {
   for (const [k, lo, hi] of [['volume', 0, 1], ['ambientLevel', 0, .06], ['musicLevel', 0, 1]]) { const n = +ui[k]; ui[k] = typeof ui[k] === 'number' || (typeof ui[k] === 'string' && ui[k].trim() !== '') ? (Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d[k]) : d[k]; }
   ui.museumStyle = isObj(ui.museumStyle) ? ui.museumStyle : {};
   if (typeof ui.museumStyle.walkIn !== 'boolean') ui.museumStyle.walkIn = true;
+  // room organization: classic / manufacturer / genre; anything else falls back to the Classic wall
+  if ('grouping' in ui.museumStyle && !['classic', 'manufacturer', 'genre'].includes(ui.museumStyle.grouping)) ui.museumStyle.grouping = 'classic';
   // the lighting scene (the old moods' ids carry over: gallery is Classic, night Evening, neon Neon night) and the Retro TV's
   // choices: anything unknown is dropped so the room falls back to its default (the Room menu and Settings never show a blank)
   if (ui.museumLight !== undefined && !['gallery', 'daylight', 'night', 'neon', 'spotlit', 'lightsout'].includes(ui.museumLight)) ui.museumLight = 'gallery';
-  { const ms = ui.museumStyle, one = { tvStand: ['cart', 'cabinet', 'floor', 'wall'], tvSize: ['s', 'm', 'l'], tvPos: ['left', 'centre', 'right'], tvCh: ['ads', 'trailers', 'recent', 'mix'] };
+  { const ms = ui.museumStyle, one = { tvStand: ['cart', 'cabinet', 'floor', 'wall'], tvSize: ['s', 'm', 'l'], tvPos: ['left', 'centre', 'right'], tvCh: ['ads', 'trailers', 'recent', 'mix'], tvModel: ['crt', 'wood', 'flat'] };
     for (const [k, list] of Object.entries(one)) if (k in ms && !list.includes(ms[k])) delete ms[k];
-    for (const k of ['tv', 'tvMute', 'tvNear', 'tvAnim']) if (k in ms && typeof ms[k] !== 'boolean') delete ms[k];
+    for (const k of ['tv', 'tvMute', 'tvNear', 'tvAnim', 'tvSpatial']) if (k in ms && typeof ms[k] !== 'boolean') delete ms[k];
     for (const k of ['tvVol', 'tvCrt']) if (k in ms) { const n = +ms[k]; if (typeof ms[k] !== 'number' || !Number.isFinite(n)) delete ms[k]; else ms[k] = Math.min(1, Math.max(0, n)); } }
   // the TV guide: favourites (item keys) and the last thing on per channel. Strings only, capped; anything else is dropped
   if ('tvFavs' in ui) { const seen = new Set(); ui.tvFavs = (Array.isArray(ui.tvFavs) ? ui.tvFavs : []).filter(v => typeof v === 'string' && v && v.length <= 600 && !seen.has(v) && seen.add(v)).slice(0, 500); }

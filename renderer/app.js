@@ -2043,8 +2043,8 @@ if(api.onLaunchStatus)api.onLaunchStatus(t=>{if(mode!=="launch")return;const b=$
 function endLaunch(){pollResume();clearTimeout(launchTimer);clearTimeout(insertT);hideInsert();app.classList.remove("launching");mode="browse";runningKind=null;ambient(true);loadHistory();musLaunchBack()}
 // a game (or Stremio) started from the museum comes back to the museum when it closes, on the shelf you were on
 let musLaunch=null;
-function musLaunchFrom(){const c=window.Museum&&Museum.current&&Museum.current();musLaunch={row:c&&c.row&&c.row.id||(cur()&&cur().id)||null,at:performance.now()}}
-function musLaunchBack(){const m=musLaunch;musLaunch=null;if(!m||mode!=="browse")return;setTimeout(()=>{if(mode==="browse"&&!sysBusy())openMuseum(m.row||undefined)},0)}
+function musLaunchFrom(){const c=window.Museum&&Museum.current&&Museum.current();musLaunch={row:c&&c.row&&c.row.id||(cur()&&cur().id)||null,game:c&&c.game?String(c.game.id):null,at:performance.now()}}
+function musLaunchBack(){const m=musLaunch;musLaunch=null;if(!m||mode!=="browse")return;setTimeout(()=>{if(mode==="browse"&&!sysBusy()){musOpenSel=m.game||null;openMuseum(m.row||undefined)}},0)}
 // library updates that arrive while you're playing / in the museum / Inspect wait here and are applied back on the shelf
 // (beta.10) libLater: a library change that came in mid-scroll ({msgs, rk, n0, watch}); its notes are said once its refresh is applied
 let pendingLib=null,pendingRefresh=false,libLater=null;
@@ -2801,7 +2801,9 @@ function companionStep(){const c=compPlay;if(!c)return;if(performance.now()>c.un
 // Lighting scenes: the ids are the old moods' (a saved choice carries over): Gallery is now Classic, After hours Evening,
 // Neon Neon night. The sliders live under Fine-tune (folded away until you open it).
 const MUS_SCENES=[["gallery","Classic"],["daylight","Daylight"],["night","Evening"],["neon","Neon night"],["spotlit","Spotlit gallery"],["lightsout","Lights out"]];
+const MUS_GROUPINGS=[["classic","Classic wall"],["manufacturer","Rooms by maker"],["genre","Rooms by genre"]]; // the museum's organization (issue 19); separate from the lighting scene named Classic
 const MUS_ROOM=[
+  {group:"Rooms",key:"grouping",label:"Organization",type:"choice",opts:MUS_GROUPINGS,note:"Themed rooms by maker or genre, with an arcade, computers and a reading room; Classic is the single wall"},
   {group:"Lighting",key:"light",label:"Scene",type:"choice",opts:MUS_SCENES,note:"Classic is the original look. Lights out leaves only the TV and the shelves' own glow."},
   {key:"timeOfDay",label:"Follow the time of day",type:"bool",note:"Daylight in the morning, Classic in the afternoon, Evening at night"},
   {key:"walkIn",label:"Lights come on as you walk in",type:"bool",note:"Off: the room opens with the lamps already on"},
@@ -2812,6 +2814,8 @@ const MUS_ROOM=[
   {key:"dust",label:"Dust in the light",type:"range",min:0,max:2,step:.25,fmt:v=>v===0?"Off":Math.round(v*100)+"%",fine:true},
   {group:"Retro TV",key:"tv",label:"Retro TV",type:"bool",note:"A CRT that plays vintage commercials, your games' trailers or what you played lately"},
   {key:"tvguide",label:"What's on TV…",type:"tvguide",room:true,note:"Walks you over to the TV and opens its guide (switching it on if it's off)"},
+  {key:"tvModel",label:"Body",type:"choice",opts:[["crt","Tube set"],["wood","70s console"],["flat","Flat panel"]],tv:true,note:"The set's own design, on any stand"},
+  {key:"tvSpatial",label:"Sound from the set",type:"bool",tv:true,note:"Stereo and distance from where the TV stands (off: plain volume)"},
   {key:"tvStand",label:"Stand",type:"choice",opts:[["cart","Wooden TV cart"],["cabinet","Low cabinet"],["floor","Floor-standing set"],["wall","Wall mount"]],tv:true,note:"The low cabinet has a couple of consoles inside"},
   {key:"tvSize",label:"Size",type:"choice",opts:[["s","Small"],["m","Medium"],["l","Large"]],tv:true},
   {key:"tvPos",label:"Position",type:"choice",opts:[["left","Left"],["centre","Centre"],["right","Right"]],tv:true,note:"Centre: between the shelves and the reading corner, which moves along to make room"},
@@ -2821,6 +2825,7 @@ const MUS_ROOM=[
   {key:"tvNear",label:"Sound only when I'm looking at it",type:"bool",tv:true,note:"Fades in as you face the TV or walk up to it, and away as you leave"},
   {key:"tvCrt",label:"CRT effect",type:"range",min:0,max:1,step:.1,fmt:v=>v<=0?"Off":Math.round(v*100)+"%",tv:true,note:"Scanlines, curved glass and glow"},
   {key:"tvAnim",label:"Power on and off animation",type:"bool",tv:true},
+  {key:"rooms",label:"Rooms…",type:"rooms",room:true,note:"Every room in the museum, picked from a list"},
   {group:"Room",key:"wall",label:"Walls",type:"choice",opts:[["plaster","Dark plaster"],["wood","Wood panels"],["brick","Brick"],["wallpaper","Wallpaper"],["green","Green"],["burgundy","Burgundy"],["navy","Navy"]]},
   {key:"floor",label:"Floor",type:"choice",opts:[["stone","Stone"],["wood","Wood boards"],["carpet","Carpet"],["checker","Checkerboard"]]},
   {key:"shelf",label:"Shelves",type:"choice",opts:[["walnut","Walnut"],["oak","Oak"],["black","Black"],["white","White"]]},
@@ -2828,19 +2833,41 @@ const MUS_ROOM=[
   {group:"On the shelves",key:"fit",label:"Fit this shelf's console…",type:"fit",room:true},
   {key:"find",label:"Find magazines & guides…",type:"find",room:true},
   {key:"reseal",label:"Reseal everything you've opened",type:"reseal",room:true}];
-const MUS_ROOM_DEF={walkIn:true,tv:false,mail:true,bright:1,warmth:0,spot:1,wall:"plaster",floor:"stone",shelf:"walnut",bench:false,plinths:false,ropes:false,posters:false,dust:1,timeOfDay:false,tvStand:"cart",tvSize:"m",tvPos:"right",tvCh:"ads",tvVol:1,tvMute:false,tvNear:false,tvCrt:.6,tvAnim:true};
+const MUS_ROOM_DEF={grouping:"classic",walkIn:true,tv:false,mail:true,bright:1,warmth:0,spot:1,wall:"plaster",floor:"stone",shelf:"walnut",bench:false,plinths:false,ropes:false,posters:false,dust:1,timeOfDay:false,tvStand:"cart",tvSize:"m",tvPos:"right",tvCh:"ads",tvVol:1,tvMute:false,tvNear:false,tvCrt:.6,tvAnim:true,tvModel:"crt",tvSpatial:true};
 
-function musStyle(){const ui=cfgInfo&&cfgInfo.config.ui||{};return Object.assign({},MUS_ROOM_DEF,ui.museumStyle||{},{light:MUS_SCENES.some(x=>x[0]===ui.museumLight)?ui.museumLight:"gallery"})}
+function musStyle(){const ui=cfgInfo&&cfgInfo.config.ui||{};const st=Object.assign({},MUS_ROOM_DEF,ui.museumStyle||{},{light:MUS_SCENES.some(x=>x[0]===ui.museumLight)?ui.museumLight:"gallery"}); // a malformed organization reaching the UI falls back to the Classic wall
+  return MUS_GROUPINGS.some(x=>x[0]===st.grouping)?st:Object.assign(st,{grouping:"classic"})}
 function musLightNow(st){if(!st.timeOfDay)return st.light;const h=new Date().getHours();return h>=6&&h<11?"daylight":h>=11&&h<19?"gallery":"night"}
 // what the 3D room itself takes (the rest is the shelf's: the walk-in, time of day, the TV's volume)
-function musRoomKeys(st){const r={};Object.keys(MUS_ROOM_DEF).forEach(k=>{if(k!=="timeOfDay"&&k!=="walkIn"&&k!=="tvVol"&&k!=="tvMute")r[k]=st[k]});return r}
+function musRoomKeys(st){const r={};Object.keys(MUS_ROOM_DEF).forEach(k=>{if(k!=="timeOfDay"&&k!=="walkIn"&&k!=="tvVol"&&k!=="tvMute"&&k!=="grouping")r[k]=st[k]});return r}
 function musApplyStyle(st){if(!window.Museum||!Museum.setRoom)return;if(Museum.wake)Museum.wake(); /* (an idle handheld museum is asleep: wake it to show the change) */if(st.tv===true&&mode==="museum"&&api.tvScan)api.tvScan().catch(()=>{}); /* the TV just turned on: start finding ads */Museum.setLighting(musLightNow(st));Museum.setRoom(musRoomKeys(st));musTvVol()}
 let musStyleSaveT=0;
-function musSetOpt(key,val){if(!cfgInfo)return;const ui=cfgInfo.config.ui,was=musStyle();if(key==="light"){ui.museumLight=val;if(ui.museumStyle)ui.museumStyle.timeOfDay=false}else ui.museumStyle=Object.assign({},ui.museumStyle||{},{[key]:val});musApplyStyle(musStyle());
+// ---- rooms mode (issue 19): which room holds a system's games, the room HUD and the rooms directory ----
+let musOpenSel=null; // a game id to land on (returning from a launched game), consumed by the next open
+function musRoomFor(sysId,gr){const L=window.BSMuseumLayout;if(!L||!sysId||!gr||gr==="classic")return null;
+  const data=museumData(),entries=[];data.forEach(r=>(r.games||[]).forEach(g=>entries.push({id:String(g.id),systemId:r.id,primaryGenre:g.genre||null,sourceOrder:entries.length})));
+  if(!entries.length)return null;const plan=L.planMuseum(entries,{grouping:gr}),rooms=L.roomsForSystem(plan,sysId);if(!rooms.length)return null;
+  return plan.rooms.findIndex(r=>r.id===rooms[0]);}
+function musRoomChanged(room,list,cur){if(!room)return;const el=document.getElementById("musRoomName");if(el)el.textContent=room.title; // the HUD's room line (readable HTML, not canvas text)
+  musRoomsRender();}
+function musRoomsEl(){let el=document.getElementById("musRooms");if(!el){el=document.createElement("aside");el.id="musRooms";el.className="mus-room mus-rooms";el.setAttribute("aria-label","Rooms");$("museum").appendChild(el)}return el}
+function musRoomsRender(){const el=musRoomsEl(),st=Museum&&Museum.rooms&&Museum.rooms();if(!st||!st.list||musRoom.open){el.classList.remove("on");return}  if(!Museum.roomDir()||!Museum.roomDir().i&&Museum.roomDir().i!==0){el.classList.remove("on");el.innerHTML="";return}
+  el.innerHTML="";const h=document.createElement("div");h.className="mr-head";h.textContent="Rooms";el.appendChild(h);
+  st.list.forEach((r,i)=>{const row=document.createElement("div");row.className="mr-row"+(i===Museum.roomDir().i?" on":"");const l=document.createElement("span");l.className="mr-lbl";l.textContent=r.title;const v=document.createElement("span");v.className="mr-val";v.textContent=r.n?`${r.n} game${r.n===1?"":"s"}`:r.kind==="media"?"Reading & media":"";row.append(l,v);row.addEventListener("click",()=>{setInput("pointer");Museum.roomDir().i=i;musRoomsKey("ok")});el.appendChild(row)});
+  const on=el.querySelector(".mr-row.on");if(on)on.scrollIntoView({block:"nearest"});el.classList.add("on")}
+function musRoomsKey(k){if(!Museum.roomDir())return false;
+  if(k==="back"){Museum.roomDirClose();renderMusHints();return true}
+  if(k==="ok"){Museum.roomDirGo();renderMusHints();return true}
+  if(k==="up"||k==="down")Museum.roomDirMove(k==="up"?-1:1);else if(k==="left"||k==="right")Museum.roomDirMove(k==="left"?-1:1);
+  return true}
+function musSetOpt(key,val){if(!cfgInfo)return;const ui=cfgInfo.config.ui,was=musStyle();if(key==="light"){ui.museumLight=val;if(ui.museumStyle)ui.museumStyle.timeOfDay=false}else ui.museumStyle=Object.assign({},ui.museumStyle||{},{[key]:val});
+  // a different organization is a different museum: rebuild it now (you're already in the museum), keeping the game you're on
+  if(key==="grouping"&&val!==was.grouping&&mode==="museum"&&window.Museum&&Museum.isActive()){const c=Museum.current();musOpenSel=c&&c.game?String(c.game.id):null;museumTeardown();Museum.close();setTimeout(()=>openMuseum(),380);musStyleSaveT=0;api.saveConfig(cfgInfo.config).catch(()=>{});return}
+  musApplyStyle(musStyle());
   // a TV choice shows on the TV: a look at the set for its stand / size / place (Museum.setRoom does that), the new channel
   // straight away if it's on
   if(key==="tvCh"&&val!==was.tvCh&&mode==="museum"&&Museum.tvPowered&&Museum.tvPowered())tvTune();
-  if(mode==="museum"&&Museum.showTv&&/^tv(Crt|Anim|Vol|Mute|Near|Ch)$/.test(key))Museum.showTv();
+  if(mode==="museum"&&Museum.showTv&&/^tv(Crt|Anim|Vol|Mute|Near|Ch|Model|Spatial)$/.test(key))Museum.showTv();
   clearTimeout(musStyleSaveT);musStyleSaveT=setTimeout(()=>{musStyleSaveT=0;api.saveConfig(cfgInfo.config).catch(()=>{})},700)}
 window.TrustyShelfMuseumRoom={opts:MUS_ROOM,defaults:MUS_ROOM_DEF};
 // the Room menu: a panel over the museum. Up/down picks a line, left/right changes it (A flips a switch), B or Start closes
@@ -2854,6 +2881,7 @@ function musRoomRender(){const el=musRoomEl(),st=musStyle(),L=musRoomRows(st);mu
     row.addEventListener("click",ev=>{setInput("pointer");musRoom.i=i;const a=ev.target.closest&&ev.target.closest("i");musRoomKey(a?(a.dataset.d==="-1"?"left":"right"):(o.type==="choice"||o.type==="range"?"right":"ok"))});
     if(o.type==="fold"){v.textContent=musRoom.fine?"Hide ‹":"Open ›";row.classList.add("fold");row.append(l,v);el.appendChild(row);return}
     if(o.type==="find"||o.type==="tvguide"){v.textContent="Open ›";row.append(l,v);el.appendChild(row);return}
+    if(o.type==="rooms"){const st2=window.Museum&&Museum.rooms&&Museum.rooms();v.textContent=st2&&st2.rooms>1?`${st2.roomI+1} of ${st2.rooms} · Open ›`:"One room";row.append(l,v);el.appendChild(row);return}
     if(o.type==="reseal"){const n=window.Museum&&Museum.opened?Museum.opened():0;v.textContent=!n?"Nothing opened":musResealAsk&&Date.now()-musResealAsk<4000?"Press again to reseal":`${n} opened ›`;if(!n)row.classList.add("off");row.append(l,v);el.appendChild(row);return}
     if(o.type==="fit"){const f=window.Museum&&Museum.consoleFit&&Museum.consoleFit();v.textContent=f?"Open ›":"No 3D model here";if(!f)row.classList.add("off");row.append(l,v);el.appendChild(row);return}
     const val=st[o.key];v.textContent=o.type==="bool"?"":o.type==="range"?o.fmt(+val):((o.opts.find(x=>x[0]===val)||o.opts[0])[1]);
@@ -2874,6 +2902,7 @@ function musRoomKey(k){const st=musStyle(),L=musRoomRows(st),o=L[Math.max(0,Math
   else if(k==="left"||k==="right"||k==="ok"){const d=k==="left"?-1:1;
     if(o.type==="fold"){const open=k==="left"?false:k==="right"?true:!musRoom.fine;if(open!==musRoom.fine){musRoom.fine=open;play_(open?"open":"back")}musRoomRender();return}
     if(o.type==="find"){if(k==="ok"||k==="right"){musRoomClose();museumFind("magazine")}return}
+    if(o.type==="rooms"){if(k==="ok"||k==="right"){if(Museum.roomDirOpen&&Museum.roomDirOpen()){musRoomClose();musRoomsRender();renderMusHints()}}return}
     if(o.type==="tvguide"){if(k==="ok"||k==="right")tvGuideGo();return}
     if(o.type==="reseal"){if(k!=="ok"&&k!=="right")return;const n=Museum.opened?Museum.opened():0;if(!n){play_("error");return}
       // two presses, so a stray button doesn't wrap your whole collection back up
@@ -3117,7 +3146,9 @@ function musArtOf(g){const a=g&&g.art||{};return {spine:a.spine||null,back:a.bac
 let musOpenTok=0;
 function openMuseum(at){uiCrumb("Museum");
   if(sysBusy()||(mode!=="browse"&&mode!=="details"))return;if(!window.Museum||!Museum.available()){toast("The museum needs WebGL, which isn't available here");return}
-  if(!allShelves.some(sh=>(sh.kind==="console"||sh.kind==="steam")&&sh.items.some(isGame))){toast("Nothing on the shelves yet");return}
+  // media-only collections may open too (the Reading & media room needs no game shelf); fake rows are never added to get past this
+  const hasGames=allShelves.some(sh=>(sh.kind==="console"||sh.kind==="steam")&&sh.items.some(isGame));
+  if(!hasGames&&!musLib().length){toast("Nothing on the shelves yet");return}
   closeDetails(true);musLaunch=null;
   // shadows follow the Performance level alone (Low turns them off). The old ui.museumShadows switch is no longer shown
   // in Settings, so it is deliberately ignored here: a hidden "off" left over from an older version can't be undone.
@@ -3133,8 +3164,10 @@ function openMuseum(at){uiCrumb("Museum");
     const data=museumData();
     const ri=Math.max(0,data.findIndex(r=>r.id===want));Museum.setRow(ri);museumSelect.first=true;
     Museum.setRoom(musRoomKeys(musStyle())); // the room as you left it, built that way (not rebuilt a moment later)
-    const ok=Museum.open(Object.assign(data,{mail:musStyle().mail!==false,owner:RA.on&&RA.profile&&RA.profile.user||"",hist:HIST,favs:(cfgInfo&&cfgInfo.config.ui.favorites)||[],lib:musLib(),tv:musStyle().tv===true,walkIn:musStyle().walkIn!==false&&!reduced()}),{onTvEnded:err=>err?tvFailed():tvNext(1),onTvChannel:d=>tvNext(d),onTvBand:d=>tvBand(d),booklet:mg=>makeBooklet(mg._g),libCover,movieArt:d=>Promise.all([movieDisc(d).catch(()=>null),movieInsert(d).then(u=>u&&u[0]||null).catch(()=>null)]).then(([disc,inside])=>({disc,inside})),libBack:d=>d.kind==="movie"?movieBack(d).catch(()=>null):api.libraryCover(d.id,"back").catch(()=>null),onSelect:museumSelect,okWord:()=>okWord(),onSound:n=>play_(n),log:m=>api.log&&api.log(m),onShown:()=>{if(musBootSplash)musBootSplash();if(mode==="museum")play_("museum")},onReady:ms=>api.log&&api.log("museum open: build+shaders "+Math.round(performance.now()-tOpen)+" ms (shaders "+ms+" ms)")});
+    const gr=musStyle().grouping,roomI0=gr!=="classic"?musRoomFor(want,gr):null; // which room holds that system (rooms mode)
+    const ok=Museum.open(Object.assign(data,{mail:musStyle().mail!==false,owner:RA.on&&RA.profile&&RA.profile.user||"",hist:HIST,favs:(cfgInfo&&cfgInfo.config.ui.favorites)||[],lib:musLib(),tv:musStyle().tv===true,walkIn:musStyle().walkIn!==false&&!reduced(),grouping:gr,musRoomI:roomI0,musSelId:musOpenSel}),{onTvEnded:err=>err?tvFailed():tvNext(1),onTvChannel:d=>tvNext(d),onTvBand:d=>tvBand(d),booklet:mg=>makeBooklet(mg._g),libCover,movieArt:d=>Promise.all([movieDisc(d).catch(()=>null),movieInsert(d).then(u=>u&&u[0]||null).catch(()=>null)]).then(([disc,inside])=>({disc,inside})),libBack:d=>d.kind==="movie"?movieBack(d).catch(()=>null):api.libraryCover(d.id,"back").catch(()=>null),onSelect:museumSelect,okWord:()=>okWord(),onSound:n=>play_(n),log:m=>api.log&&api.log(m),onRoom:musRoomChanged,onRoomDir:()=>musRoomsRender(),onShown:()=>{if(musBootSplash)musBootSplash();if(mode==="museum")play_("museum")},onReady:ms=>api.log&&api.log("museum open: build+shaders "+Math.round(performance.now()-tOpen)+" ms (shaders "+ms+" ms)")});
     if(!ok){el.classList.remove("on","filling");el.setAttribute("aria-hidden","true");museumTeardown();mode="browse";ambient(true);toast("Couldn't start the museum (WebGL)");return}
+    musOpenSel=null;
     renderMusHints();musApplyStyle(musStyle());libRefresh();if(api.onTvFound&&!tvS.hooked){tvS.hooked=true;api.onTvFound(()=>{if(mode==="museum"&&Museum.tvPowered()&&(tvCh()==="ads"||tvCh()==="mix")&&!tvS.list.length)tvStart()});if(api.onTvProgress)api.onTvProgress(p=>{tvS.prog=p||null;
       // a finished round: refresh the guide's list with what it found (and restart an empty playlist)
       if(p&&p.done&&p.found)tvLoad().then(()=>{if(tvS.guide)tvGuideRender(true);if(mode==="museum"&&Museum.tvPowered()&&(tvCh()==="ads"||tvCh()==="mix")&&!tvS.list.length)tvStart()});
@@ -3359,7 +3392,10 @@ function tvGuidePick(){const G=tvS.guide;if(!G)return;const it=G.items[tvS.gi];i
 function tvGuideClose(quiet){const G=tvS.guide;if(!G)return;tvS.guide=null;tvS.slideAt=performance.now();Museum.setGuideView&&Museum.setGuideView(false);G.el.classList.remove("on");G.el.style.pointerEvents="none";setTimeout(()=>G.el.remove(),220);if(!quiet)play_("back");renderMusHints()}
 // the guide from anywhere in the museum: switches the TV on if needed, walks over to it, then opens
 function tvGuideGo(tab){if(mode!=="museum"||musHand().delivery||rdr.open||musFind.open||musFit.open)return false;if(musRoom.open)musRoomClose();
-  if(!musStyle().tv)musSetOpt("tv",true);if(!Museum.tvAvail()){toast("Turn the Retro TV on in the Room menu first");play_("error");return false}
+  if(!musStyle().tv)musSetOpt("tv",true);
+  // rooms mode: the TV lives in the Reading & media room — walk there first (the guide opens once you arrive)
+  if(window.Museum&&Museum.rooms&&Museum.rooms()){const st=Museum.rooms();if(st&&st.room&&st.room.kind!=="media"){if(!Museum.gotoRoom("media"))return false;renderMusHints()}}
+  if(!Museum.tvAvail()){toast("Turn the Retro TV on in the Room menu first");play_("error");return false}
   if(!musHand().tv){if(tvSelWide())museumActivate();else{if(!Museum.watchTv(true))return false;if(!Museum.tvMeta())tvTune()}}
   tvGuideOpen(tab);return true}
 function museumY(){
@@ -3391,11 +3427,14 @@ let musLightT=0;
 function museumLight(){if(!cfgInfo||musHand().delivery)return;const ids=Museum.lights().map(l=>l[0]);const cur0=musLightNow(musStyle()); /* from the scene on show (with Follow the time of day, not the one saved under it) */const next=ids[(ids.indexOf(cur0)+1)%ids.length];
   cfgInfo.config.ui.museumLight=next;if(cfgInfo.config.ui.museumStyle)cfgInfo.config.ui.museumStyle.timeOfDay=false;const name=Museum.setLighting(next);play_("lamp");toast(`Lighting: ${name}`);clearTimeout(musLightT);musLightT=setTimeout(()=>api.saveConfig(cfgInfo.config).catch(()=>{}),600)}
 Shelf_setMusLight=v=>{if(cfgInfo)cfgInfo.config.ui.museumLight=v;if(window.Museum&&Museum.setLighting)Museum.setLighting(v)};
-function museumBack(){if(Museum.back()){play_("back");renderMusHints();bsSelectSoon();return}closeMuseum()}
+function museumBack(){if(window.Museum&&Museum.roomDir()&&Museum.roomDir().i!=null){musRoomsKey("back");renderMusHints();return}if(Museum.back()){play_("back");renderMusHints();bsSelectSoon();return}closeMuseum()}
 let musHeld={dir:0,t0:0,tl:0};
 // round dead zone (a resting stick is often a little off centre), rescaled so it still reaches full tilt, eased near the middle
 function stickDZ(x,y,dz=.28){const m=Math.hypot(x,y);if(m<dz)return [0,0];const k=Math.min(1,(m-dz)/(1-dz)),e=k*k;return [x/m*e,y/m*e]}
 function museumPad(gp,t,B,ax){
+  if(window.Museum&&Museum.roomDir()&&Museum.roomDir().i!=null){ // the Rooms directory takes the pad while it's open
+    const v=(B(13)||ax[1]>.55)?1:(B(12)||ax[1]<-.55)?-1:0;if(v&&v!==musHeld.dk){Museum.roomDirMove(v)}musHeld.dk=v;
+    edge(gp,0,()=>musRoomsKey("ok"));edge(gp,1,()=>musRoomsKey("back"));edge(gp,2,()=>musRoomsKey("back"));edge(gp,9,()=>musRoomsKey("back"));return}
   if(rdr.open){rdrPad(gp,t,B,ax);return}
   if(tvS.guide){const v=(B(13)||ax[1]>.55)?1:(B(12)||ax[1]<-.55)?-1:0,h=(B(15)||ax[0]>.7)?1:(B(14)||ax[0]<-.7)?-1:0;if(v){if(v!==musHeld.tg){musHeld.tg=v;musHeld.tgt=t;tvGuideMove(v)}else if(t-musHeld.tgt>(t-musHeld.tg0>900?70:140)){musHeld.tgt=t;tvGuideMove(v)}}else{musHeld.tg=0;musHeld.tg0=t}
     if(h&&h!==musHeld.tgh)tvGuideTab(h);musHeld.tgh=h; /* LB / RB, or the D-pad sideways: the tabs */edge(gp,4,()=>tvGuideTab(-1));edge(gp,5,()=>tvGuideTab(1));edge(gp,0,()=>tvGuidePick());edge(gp,2,()=>tvGuideFav());edge(gp,1,()=>tvGuideClose());edge(gp,3,()=>tvGuideClose());return}
@@ -3694,9 +3733,10 @@ addEventListener("keydown",e=>{
   if(mode==="museum"&&(e.key==="t"||e.key==="T")&&!e.repeat&&(musHand().tv||musHand().held||tvSelWide()&&!musRoom.open)){e.preventDefault();setInput("kbd");museumY();return}
   if(mode==="museum"&&(e.key==="p"||e.key==="P")&&!e.repeat&&musHand().fan&&!musRoom.open){e.preventDefault();setInput("kbd");museumY();return} // (beta.11) pick up the issue you're on
   if(mode==="museum"&&musAdd.open){e.preventDefault();setInput("kbd");const m={ArrowUp:"up",ArrowDown:"down",ArrowRight:"ok",Enter:"ok"," ":"ok",Escape:"back",Backspace:"back"}[e.key];if(m&&!e.repeat)musAddKey(m);return} // (beta.11) Add a 3D model
+  if(mode==="museum"&&Museum.roomDir()&&Museum.roomDir().i!=null){e.preventDefault();setInput("kbd");const m={ArrowUp:"up",ArrowDown:"down",ArrowLeft:"left",ArrowRight:"right",Enter:"ok"," ":"ok",Escape:"back",Backspace:"back"}[e.key];if(m)musRoomsKey(m);else if(e.key==="Escape"||e.key==="Backspace")musRoomsKey("back");return} // the Rooms directory
   if(mode==="museum"&&(e.key==="Tab"||musRoom.open)){e.preventDefault();setInput("kbd");if(e.key==="Tab"){musRoom.open?musRoomClose():musRoomOpen();return}const m={ArrowUp:"up",ArrowDown:"down",ArrowLeft:"left",ArrowRight:"right",Enter:"ok"," ":"ok",Escape:"back",Backspace:"back"}[e.key];if(m)musRoomKey(m);return}
   if(mode==="museum"&&musReading()&&/^Arrow/.test(e.key)){setInput("kbd");const k=e.key;if(k==="ArrowLeft")Museum.turnPage(-1);else if(k==="ArrowRight")Museum.turnPage(1);else if(k==="ArrowUp")Museum.readerZoom(1);else Museum.readerZoom(-1);renderMusHints();e.preventDefault();return}
-  if(mode==="museum"){const k=e.key;setInput("kbd");if(k==="."||k===","){Museum.turn(k===","?-8:8,0);e.preventDefault();return}if(k==="ArrowLeft")Museum.isHolding()?Museum.turn(-90,0):Museum.move(-1,0);else if(k==="ArrowRight")Museum.isHolding()?Museum.turn(90,0):Museum.move(1,0);else if(k==="ArrowUp"){if(musHand().held||musHand().libHeld)Museum.zoomHand(1); /* a magazine / Blu-ray in your hands zooms too, as on the pad */else if(!e.repeat)Museum.move(0,-1)}else if(k==="ArrowDown"){if(musHand().held||musHand().libHeld)Museum.zoomHand(-1);else if(!e.repeat)Museum.move(0,1)}else if(k==="q"||k==="Q"||k==="PageUp")Museum.jump(-10);else if(k==="e"||k==="E"||k==="PageDown")Museum.jump(10);else if(k==="l"||k==="L"){if(!e.repeat)museumLight()}else if(k==="p"||k==="P"||k===" "||k==="x"||k==="X"){if(!e.repeat)museumX()}else if(k==="r"||k==="R"){if(!e.repeat)museumX()}else if((k==="w"||k==="W")&&musReading()){Museum.readerPan(-.25)}else if((k==="s"||k==="S")&&musReading()){Museum.readerPan(.25)}else if(/^[wasdWASD]$/.test(k)&&musHand().held){const q=k.toLowerCase();Museum.panHand(q==="a"?-.08:q==="d"?.08:0,q==="w"?.08:q==="s"?-.08:0)}else if(k==="Enter"){if(!e.repeat){if(musHoldable())musHoldBegin();else museumActivate()}}else if(k==="Escape"||k==="Backspace"||k==="m"||k==="M"){if(!e.repeat)museumBack()}else return;e.preventDefault();return}
+  if(mode==="museum"){const k=e.key;setInput("kbd");if(k==="."||k===","){Museum.turn(k===","?-8:8,0);e.preventDefault();return}if(k==="ArrowLeft")Museum.isHolding()?Museum.turn(-90,0):Museum.move(-1,0);else if(k==="ArrowRight")Museum.isHolding()?Museum.turn(90,0):Museum.move(1,0);else if(k==="ArrowUp"){if(musHand().held||musHand().libHeld)Museum.zoomHand(1); /* a magazine / Blu-ray in your hands zooms too, as on the pad */else if(!e.repeat)Museum.move(0,-1)}else if(k==="ArrowDown"){if(musHand().held||musHand().libHeld)Museum.zoomHand(-1);else if(!e.repeat)Museum.move(0,1)}else if(k==="q"||k==="Q"||k==="PageUp")Museum.jump(-10);else if(k==="e"||k==="E"||k==="PageDown")Museum.jump(10);else if(k==="l"||k==="L"){if(!e.repeat)museumLight()}else if(k==="p"||k==="P"||k===" "||k==="x"||k==="X"){if(!e.repeat)museumX()}else if(k==="r"||k==="R"){if(!e.repeat)museumX()}else if((k==="w"||k==="W")&&musReading()){Museum.readerPan(-.25)}else if((k==="s"||k==="S")&&musReading()){Museum.readerPan(.25)}else if(/^[wasdWASD]$/.test(k)&&musHand().held){const q=k.toLowerCase();Museum.panHand(q==="a"?-.08:q==="d"?.08:0,q==="w"?.08:q==="s"?-.08:0)}else if(k==="Enter"){if(!e.repeat){if(musHoldable())musHoldBegin();else museumActivate()}}else if(k==="Escape"||k==="Backspace"||k==="m"||k==="M"){if(!e.repeat)museumBack()}else if((k==="o"||k==="O")&&!e.repeat&&Museum.rooms&&Museum.rooms()&&Museum.rooms().rooms>1){if(Museum.roomDir()&&Museum.roomDir().i!=null)musRoomsKey("back");else if(Museum.roomDirOpen()){musRoomsRender();renderMusHints()}}else return;e.preventDefault();return}
   // Customize: the arrows walk its buttons (as the D-pad does), Q / E (or PageUp / PageDown) switch system; nothing reaches the shelf behind
   if(mode==="customize"){const k=e.key,pn=$("customize"),dir={ArrowUp:"up",ArrowDown:"down",ArrowLeft:"left",ArrowRight:"right"}[k];setInput("kbd");
     if(dir){if(!padNav(pn,dir)&&(k==="ArrowUp"||k==="ArrowDown"))panelScroll(pn,k==="ArrowDown"?1:-1)}
@@ -4613,11 +4653,13 @@ window.Shelf.bottomInfo=async g0=>{const g=g0||curGame();if(!g)return null; /* (
 // (the bottom page draws a made-up one itself), so the message stays small however long the row is.
 window.Shelf.bottomMuseum=async()=>{if(mode!=="museum"||!window.Museum||!Museum.bottomRow)return null;const r=Museum.bottomRow();if(!r)return null;
   const N=r.boxes.length,at=r.sel>=0?r.sel:0,from=Math.max(0,Math.min(N-41,at-20)),st=STYLE[r.id]||STYLE.media,c=Museum.current&&Museum.current();
+  const rst=Museum.rooms&&Museum.rooms(),gen=rst?rst.roomGen:0; // the bottom screen's commands carry this: a stale one from another room is dropped
   const games=r.boxes.slice(from,from+41).map((b,k)=>{const g=b.g._g||{},f=g.art&&g.art.front;return {i:from+k,id:String(b.g.id),title:b.g.title||g.title||"",cover:f?thumb(f,256):null,sealed:b.sealed}});
   const s=r.sel>=0?r.boxes[r.sel]:null,game=s&&s.g._g?await window.Shelf.bottomInfo(s.g._g):null;if(game){game.sealed=s.sealed;game.artOk=!!(s.g._g.kind==="rom"&&s.g._g.file&&api.artStudio&&window.BS_STUDIO)} /* artOk (0.3.5): the companion's Box art button */
   const h=musHand();
   return {row:{id:r.id,name:r.name,i:r.row,n:r.rows,count:N,from,sel:r.sel,held:r.held,wide:!!r.wide,style:{glow:st.glow,tint:st.tint||null,ratio:st.ratio}},games,game,
     hand:{held:!!h.held,open:!!h.open,discOut:!!h.discOut,reading:!!h.reading},room:bsRoom(),
+    mus:rst?{roomI:rst.roomI,wallI:rst.wallI,roomId:rst.room&&rst.room.id,gen}:null, // the current room/wall on the top screen
     hud:{row:$("musRow").textContent,title:$("musTitle").textContent,meta:$("musMeta").textContent,sealed:!!(c&&c.sealed)}}};
 // The Room menu's looks for the bottom screen's room buttons: the lighting scenes, walls, floor, shelves and the gallery
 // pieces (the same lists the Room menu shows), with what's chosen now. Changing one goes through musSetOpt, like the menu.
@@ -4648,8 +4690,8 @@ window.Shelf.bottomShortcut=key=>{if(!ANDROID)return false;const k=String(key||"
   return false};
 window.Shelf.bottomCmd=(c,arg)=>{if(qm.open&&c!=="menu")qmClose(true);
   if(mode==="museum"){if(Museum.wake)Museum.wake(); /* the museum companion's touches: choose a case on this row, unwrap it, play it (an idle handheld museum wakes for them) */
-    if(c==="mpick")return Museum.pickCol&&Museum.pickCol(+arg);
-    if(c==="unwrap"){const ok=Museum.unwrapCol&&Museum.unwrapCol(+arg);if(ok){rumble(.6,.8,260);renderMusHints()}return ok}
+    if(c==="mpick"){const a=typeof arg==="object"&&arg?arg:{i:arg};return Museum.pickCol&&Museum.pickCol(+a.i,a.gen==null?null:+a.gen)}
+    if(c==="unwrap"){const a=typeof arg==="object"&&arg?arg:{i:arg};const ok=Museum.unwrapCol&&Museum.unwrapCol(+a.i,a.gen==null?null:+a.gen);if(ok){rumble(.6,.8,260);renderMusHints()}return ok}
     if(c==="play"){const k=Museum.current();if(k&&k.game&&!k.sealed&&(!Museum.isHolding()||Museum.isHoldingCase()))museumPlay(k.game);return}
     if(c==="prev"||c==="next"){if(!Museum.isHolding())Museum.move(c==="next"?1:-1,0);return}
     // the rest, as the pad would: a row up / down, A (pick the case up; in your hands: open it, then the disc out), B only

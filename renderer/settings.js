@@ -59,8 +59,9 @@ const HELP={gc:"Dolphin runs GameCube games. Point to Dolphin.exe.",wii:"Dolphin
   xbox:"xemu runs original Xbox games: .iso disc images (XISO). Set up its BIOS, boot ROM and hard disk in xemu first (Machine → System).",
   gamecom:"MAME runs Game.com games: .bin or .tgc cartridges. Put the Game.com's own system file, gamecom.zip (from a MAME BIOS set), in MAME's roms folder first.",
   x360:"Xenia runs Xbox 360 games: .iso discs, extracted folders, XBLA .xex files or .zar archives.",n3ds:"Azahar runs 3DS games: decrypted .3ds / .cci / .cxi, or decrypted .cia files (installed into Azahar the first time you play)."};
-const MUS_DEF={tv:false,mail:true,bright:1,warmth:0,spot:1,wall:"plaster",floor:"stone",shelf:"walnut",bench:false,plinths:false,ropes:false,posters:false,dust:1,timeOfDay:false,walkIn:true,tvStand:"cart",tvSize:"m",tvPos:"right",tvCh:"ads",tvVol:1,tvMute:false,tvNear:false,tvCrt:.6,tvAnim:true};
-const MUS_OPTS={light:[["gallery","Classic"],["daylight","Daylight"],["night","Evening"],["neon","Neon night"],["spotlit","Spotlit gallery"],["lightsout","Lights out"]],
+const MUS_DEF={grouping:"classic",tv:false,mail:true,bright:1,warmth:0,spot:1,wall:"plaster",floor:"stone",shelf:"walnut",bench:false,plinths:false,ropes:false,posters:false,dust:1,timeOfDay:false,walkIn:true,tvStand:"cart",tvSize:"m",tvPos:"right",tvCh:"ads",tvVol:1,tvMute:false,tvNear:false,tvCrt:.6,tvAnim:true,tvModel:"crt",tvSpatial:true};
+const MUS_OPTS={grouping:[["classic","Classic wall"],["manufacturer","Rooms by maker"],["genre","Rooms by genre"]],light:[["gallery","Classic"],["daylight","Daylight"],["night","Evening"],["neon","Neon night"],["spotlit","Spotlit gallery"],["lightsout","Lights out"]],
+  tvModel:[["crt","Tube set"],["wood","70s console"],["flat","Flat panel"]],
   tvStand:[["cart","Wooden TV cart"],["cabinet","Low cabinet"],["floor","Floor-standing set"],["wall","Wall mount"]],tvSize:[["s","Small"],["m","Medium"],["l","Large"]],tvPos:[["left","Left"],["centre","Centre"],["right","Right"]],tvCh:[["ads","Vintage commercials"],["trailers","Game trailers"],["recent","Recently played"],["mix","Shuffle all"]],
   wall:[["plaster","Dark plaster"],["wood","Wood panels"],["brick","Brick"],["wallpaper","Wallpaper"],["green","Green"],["burgundy","Burgundy"],["navy","Navy"]],
   floor:[["stone","Stone"],["wood","Wood boards"],["carpet","Carpet"],["checker","Checkerboard"]],shelf:[["walnut","Walnut"],["oak","Oak"],["black","Black"],["white","White"]]};
@@ -294,6 +295,8 @@ function build(){
     C("Dim the screen after","ui.dimMinutes",[[0,"Never"],[10,"10 min"],[20,"20 min"],[30,"30 min"]],0,"Fades the screen to black after a long idle spell, to protect OLED TVs. Any button wakes it.",{keys:"oled burn in screensaver blank sleep",live:v=>applyUi({dimMinutes:v})}),
   ]},
   {g:"(T)rustyShelf",id:"museum",name:"Museum",ic:"museum",lead:"Your collection's room. Changes preview live behind this page; all of them can also be changed inside the museum (Y).",rows:[
+    H("Rooms"),
+    musC("Organization","grouping","The Classic wall is one shelving wall. By maker groups the shelves into Nintendo, Sony and friends with an arcade, computers and a reading room; by genre does the same by game genre. Takes effect the next time the museum opens.",{keys:"rooms organization manufacturer genre grouping"}),
     H("Lighting"),
     {t:"choice",label:"Scene",opts:()=>musOpts("light"),...bindv("ui.museumLight","gallery"),set:v=>{sp("ui.museumLight",v);if(cfg.ui.museumStyle)cfg.ui.museumStyle.timeOfDay=false},info:"The whole room's light at once, cross-faded as you change it. Classic is the original look; Neon night lights each shelf in its console's colour; Lights out leaves only the TV and the shelves' own glow.",keys:"lighting mood daylight evening neon spotlit gallery dark",preview:"mus",live:v=>shelf("setMuseumLight",v)},
     musT("Follow the time of day","timeOfDay","Daylight in the morning, Classic in the afternoon, Evening at night."),
@@ -309,6 +312,7 @@ function build(){
     A("Choose what's on","Open guide","Opens the museum at the TV with its guide: commercials, trailers, recently played, or all three shuffled. Switches the TV on if it's off.",async()=>{await close();if(shelf("openTvGuide")===false)shelf("toast","The museum opens from the shelf");},{keys:"tv guide channel whats on commercials trailers shuffle favourites"}),
     M("TV set & sound","mus-tv","The TV's stand, size, place in the room, channel, sound and CRT look.","How the retro TV looks and sounds.",[
       ...(()=>{const on=()=>!!gp("ui.museumStyle.tv"),pct=v=>v<=0?"Off":Math.round(v*100)+"%";return [
+        musC("Body","tvModel","The set's own design: a deep tube set, a 70s wood console with dials, or a modern flat panel. Works on any stand.",{when:on,keys:"tube crt wood flat panel television"}),
         musC("Stand","tvStand","A wooden cart with a VCR, a low cabinet with a couple of consoles inside, a floor-standing tube set, or a bracket on the wall.",{when:on,keys:"cart cabinet wall mount floor"}),
         musC("Size","tvSize","Small, medium or large.",{when:on}),
         musC("Position","tvPos","Left or right of the room, or in the middle between the shelves and the reading corner (which moves along to make room).",{when:on,keys:"left right centre center"}),
@@ -316,6 +320,7 @@ function build(){
         musS("TV volume","tvVol",0,1,.1,pct,"On top of (T)rustyShelf's own volume.",{when:on,preview:null,keys:"sound loud"}),
         musT("Mute the TV","tvMute","Pictures only.",{when:on,keys:"sound silent"}),
         musT("Sound only when I'm looking at it","tvNear","The sound fades in as you face the TV or walk up to it, and away as you leave.",{when:on,keys:"sound fade near"}),
+        musT("Sound from the set","tvSpatial","Stereo and distance from where the TV stands: its sound sits with the set. Off: plain volume.",{when:on,keys:"stereo spatial 3d panning"}),
         musS("CRT effect","tvCrt",0,1,.1,pct,"Scanlines, curved glass and glow on the TV's picture.",{when:on,keys:"scanlines curvature glow"}),
         musT("Power on and off animation","tvAnim","The picture opens out of a bright line when it switches on, and folds back to a dot when it goes off.",{when:on})]})(),
     ],{when:()=>!!gp("ui.museumStyle.tv")}),
