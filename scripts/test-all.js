@@ -36,12 +36,12 @@ const QUIET = !!arg('quiet');
 const JOBS = Math.max(1, +arg('jobs') || 8), CAP = arg('cap') && arg('cap') !== true ? String(arg('cap')) : '12G';
 
 // the tests, by kind (the first of each is the slowest: they start first)
-const NODE = ['detect', 'gamewatch', 'taskbar', 'pad', 'portable', 'dataexport', 'release-version', 'presence', 'epicdl', 'storage', 'windowmode', 'hoyoplay', 'music', 'looks', 'artmatch', 'fork-survey', 'addgames', 'ra-consoles', 'ytsearch', 'archive-speed', 'emu-names', 'screenscraper', 'retroarch-setting', 'museum-lighting', 'pc-boxart', 'switch-files', 'quiver', 'pc-console-plat', 'pcsx2-ra', 'pcfolder-async', 'steam-async', 'nup-build', 'xemu-detect', 'xbox-games', 'raportable', 'gamelist', 'pcach', 'vdf'];
+const NODE = ['detect', 'gamewatch', 'taskbar', 'pad', 'portable', 'dataexport', 'release-version', 'presence', 'epicdl', 'storage', 'windowmode', 'hoyoplay', 'music', 'looks', 'artmatch', 'fork-survey', 'addgames', 'ra-consoles', 'ytsearch', 'archive-speed', 'emu-names', 'screenscraper', 'retroarch-setting', 'museum-lighting', 'museum-layout', 'pc-boxart', 'switch-files', 'quiver', 'pc-console-plat', 'pcsx2-ra', 'pcfolder-async', 'steam-async', 'nup-build', 'xemu-detect', 'xbox-games', 'raportable', 'gamelist', 'pcach', 'vdf'];
 const DESKTOP = ['app', 'pc', 'xbox', 'home', 'music-app', 'windowmode-app', 'epicdl-app', 'consolebox-app', 'artmatch-app', 'ngp', 'gamecom', 'vita', 'keepawake', 'emuchoice', 'export-app', 'artcheck'];
-const DEMO = ['lamppool', 'caseinside', 'dscase', 'museumwrap', 'sortdrag', 'artresume', 'boxcolor', 'padfeed', 'android-artcard', 'android-pc', 'usermusic', 'windowmode', 'looks', 'artmatch', 'padnote', 'fanlift', 'media', 'bootvolume', 'pcach', 'cardboard', 'find', 'seamless'];
+const DEMO = ['lamppool', 'caseinside', 'dscase', 'museumwrap', 'museumrooms', 'sortdrag', 'artresume', 'boxcolor', 'padfeed', 'android-artcard', 'android-pc', 'usermusic', 'windowmode', 'looks', 'artmatch', 'padnote', 'fanlift', 'media', 'bootvolume', 'pcach', 'cardboard', 'find', 'seamless'];
 const GROUPS = ['screens', 'screens2', 'windows', 'thor3', 'thor2', 'thor', 'windows2']; // (the device test's seven parts, longest first: each 1.5-3.5 minutes)
 // not tests of their own: run by a device group, or a probe
-const NOT_STANDALONE = new Set(['heat-probe.js', 'web-device-test.js', 'device-test-parallel.js']);
+const NOT_STANDALONE = new Set(['heat-probe.js', 'web-device-test.js', 'device-test-parallel.js', 'museum-bench.js']); // (the bench: measurements, not assertions)
 // checks that failed before and are known (printed as known, they don't fail the run)
 // what a test harness says when its browser didn't start (under load), not a check that failed: the job runs once more
 const HARNESS = /Unable to capture screenshot|Target page, context or browser has been closed|browserType\.launch: |Navigation timeout of \d+ ms exceeded|No such process/;
