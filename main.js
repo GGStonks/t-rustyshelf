@@ -2212,7 +2212,8 @@ const shelfGames = () => { if (lastLib) return lastLib; try { return JSON.parse(
 handle('covers:coverage', async () => { const out = [], list = sysList(CONSOLES.map(c => c.id)), lib = shelfGames(), shelves = Array.isArray(lib) ? lib : lib && Array.isArray(lib.shelves) ? lib.shelves : [];
   const games = def => { const sh = shelves.find(x => x && x.id === def.id && Array.isArray(x.games)); const l = sh ? sh.games.filter(g => g && typeof g.file === 'string' && g.file) : []; return l.length ? l : null; };
   const tell = p => { if (alive()) win.webContents.send('covers:checking', p); };
-  for (const [i, s] of list.entries()) { await yieldNow(); out.push(...(await covers.coverage([s], { games, progress: p => tell({ ...p, console: i + 1, consoles: list.length }) }))); }
+  let before = 0; // ((T)rustyShelf, issue 24) the games of the consoles already checked: the whole check's count
+  for (const [i, s] of list.entries()) { await yieldNow(); const got = await covers.coverage([s], { games, progress: p => tell({ ...p, console: i + 1, consoles: list.length, allDone: before + (+p.done || 0) }) }); out.push(...got); before += got.reduce((a, c) => a + (+c.total || 0), 0); }
   tell({ finished: true }); return out; }); // (beta.9: a console at a time, with a breath between: every console's pictures in one go froze Settings' Box art page; beta.10: coverage is async)
 // New games while (T)rustyShelf is open: watch the game folders, and once nothing has changed in them for 8 s (a big copy is
 // finished) tell the shelf to look again. A new game then shows up on the shelf, and in the museum it arrives as a parcel.

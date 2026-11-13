@@ -460,6 +460,9 @@ function build(){
     A("Quit (T)rustyShelf","Quit","Closes (T)rustyShelf completely. Sleep, Restart and Shut down are in the Home menu.",async()=>{await save();api.quit&&api.quit()},{keys:"exit close"}),
   ]},
   ];
+  // ((T)rustyShelf, issue 24) Get box art one press from the sidebar: the download's picker, its progress and its result
+  // (the same rows as Box art & manuals → Download missing art now), with how far it is on the sidebar from any page
+  {const at=SECTIONS.findIndex(x=>x.id==="art");if(at>=0&&api.artCoverage&&api.downloadCovers&&!(window.bsPlatform&&bsPlatform.os==="android"))SECTIONS.splice(at+1,0,{g:"Library",id:"artget",name:"Get box art",ic:"art",lead:"Download what's still missing: covers, backs, spines and discs. It keeps going while you look at other pages.",badge:artBadge,rows:[{t:"dyn",fn:artGetRows}]})}
   if(!api.previewFind)SECTIONS=SECTIONS.filter(s=>s.id!=="previews"); // (beta.9: on Android too; its Settings puts them under Shelf & museum, android-settings.js)
 if(window.bsPlatform&&bsPlatform.filterSections)SECTIONS=bsPlatform.filterSections(SECTIONS,{bind:bindb,M,H,T,A}); // Android: drop what this platform can't do (renderer/platform.js); M…A: the row makers, for a platform's own rows and sub-pages
 }
@@ -665,10 +668,15 @@ function agParts(sys,pl){const on=sys.filter(c=>(pl[c.id]||[]).length);if(!on.le
 // covers:checking says which console it's on, shown here and on the page's row in the list
 let chkHooked=false;
 function chkHook(){if(chkHooked||!api.onCoversChecking)return;chkHooked=true;api.onCoversChecking(p=>{AG.chk=p&&!p.finished?p:null;if(isOpen)bump()})}
-const chkText=()=>{const c=AG.chk;return c?`${c.name} · console ${c.console} of ${c.consoles}`+(c.total?` · ${Math.min(c.done,c.total)} of ${c.total} games`:""):""};
+const chkText=()=>{const c=AG.chk;return c?`${c.name} · console ${c.console} of ${c.consoles}`+(c.total?` · ${Math.min(c.done,c.total)} of ${c.total} games`:"")+(c.allDone?` · ${c.allDone.toLocaleString()} games checked in all`:""):""};
+// ((T)rustyShelf, issue 24) the whole download at once: games done of every console's games, from the progress main sends
+const agAll=()=>{let d=0,t=0;AG.ids.forEach(id=>{const p=AG.prog[id];if(p&&p.total){d+=Math.min(p.done||0,p.total);t+=p.total}});return {d,t}};
+// the sidebar's Get box art: how far the download is (or that the check runs), seen from any page of Settings
+const artBadge=()=>{if(AG.busy){const {d,t}=agAll();return t?Math.floor(d/t*100)+"%":"…"}return AG.chk||AG.loading?"Checking":""};
 function agLoad(){if(AG.loading||!api.artCoverage)return;chkHook();AG.loading=true;AG.chk=null;api.artCoverage().then(c=>{AG.cov=Array.isArray(c)?c:[]}).catch(()=>{AG.cov=[]}).finally(()=>{AG.loading=false;AG.chk=null;if(isOpen)bump()})}
 function artGetRows(){dlHook();
   if(AG.busy){const L=[H("Getting box art",{em:()=>took(AG.started)})];
+    {const {d,t}=agAll();if(t)L.push(infoRow("Every console",`${d.toLocaleString()} of ${t.toLocaleString()} games`,{text:`${Math.floor(d/t*100)}% · ${AG.ids.length} console${AG.ids.length===1?"":"s"}`},{info:"How far the whole download is, every console together."}))} // ((T)rustyShelf, issue 24)
     if(!Object.keys(AG.prog).length)L.push(infoRow(AG.stage||"Starting…",""));
     AG.ids.forEach(id=>{const c=consoleList().find(x=>x.id===id)||{name:id},p=AG.prog[id],tot=p&&p.total||0,dn=p&&p.done||0,fin=!!tot&&dn>=tot;
       L.push(infoRow(c.name,p&&tot?`${dn} of ${tot}`:"",{text:p?(fin?"Finished":p.game?"Now: "+p.game:p.stage||""):"Waiting",cls:fin?"ok":""}))});
