@@ -20,8 +20,11 @@ window.Museum = (() => {
   const ML = () => window.BSMuseumLayout || null;
   let plan = null, roomI = 0, wallI = 0, roomGen = 0, grouping = 'classic', openOpts = null;
   // wall frames in room space: each wall is its own group, so a row built for one wall keeps its local coordinates and
-  // the whole wall turns as one. back faces +z as before; left faces +x; right faces -x.
+  // the whole wall turns as one. back faces +z as before; left faces +x; right faces -x, just past the back wall's end
+  // (its x is the room's width, set when the room is built: the side walls flank the back wall, they don't cut through it).
   const WALL_FRAME = { back: { x: 0, z: 0, ry: 0 }, left: { x: -1.7, z: .3, ry: Math.PI / 2 }, right: { x: 1.7, z: .3, ry: -Math.PI / 2 } };
+  let wallFrames = null; // per wall, as built (the right one moves with the room's width)
+  const frameOf = id => (wallFrames && wallFrames[id]) || WALL_FRAME[id] || WALL_FRAME.back;
   const WALL_ORDER = ['back', 'left', 'right'];
   let wallGroups = null, wallOf = []; // per row: its wall id
   // stepping between a room's walls: the wall frame (which the camera's wall-local → world maths uses) swings from one
@@ -30,17 +33,19 @@ window.Museum = (() => {
   const lerpFrame = (a, b, e) => { let d = b.ry - a.ry; d = ((d % (2 * Math.PI)) + 3 * Math.PI) % (2 * Math.PI) - Math.PI; return { x: a.x + (b.x - a.x) * e, z: a.z + (b.z - a.z) * e, ry: a.ry + d * e }; };
   function setWall(i) { // step to a wall of the active room (from its overview; the camera swings round)
     if (!plan || !wallGroups) return false; const ni = Math.max(0, Math.min(WALL_ORDER.length - 1, i | 0)); if (ni === wallI) return false;
-    wallTurn = { a: wallFrame(), b: WALL_FRAME[WALL_ORDER[ni]], k: 0 }; wallI = ni; lastInput = lastNav = woke(); snd('slide');
+    wallTurn = { a: wallFrame(), b: frameOf(WALL_ORDER[ni]), k: 0 }; wallI = ni; lastInput = lastNav = woke(); snd('slide');
     const ov = overview(); camTargetOnce = ov; hooks.onSelect && hooks.onSelect(current()); return true; }
   let camTargetOnce = null; // a one-frame target (a wall step): used instead of the usual view for this frame
   function wallRowsOf(id) { const out = []; rows.forEach((r, i) => { if (r.wall === id) out.push(i); }); return out; }
   const wallGroupOf = id => (wallGroups && wallGroups[id]) || wall;
-  const wallFrame = () => (wallGroups && WALL_ORDER[wallI] ? (wallTurn ? lerpFrame(wallTurn.a, wallTurn.b, ss(Math.min(1, wallTurn.k))) : WALL_FRAME[WALL_ORDER[wallI]]) : WALL_FRAME.back);
-  const _wpA = { v: null }, _wpB = { v: null }; const wpInto = (h, x, y, z) => { const THREE = T(); if (!THREE) return null; if (!h.v) h.v = new THREE.Vector3(); const f = wallFrame(); return h.v.set(f.x + x * Math.cos(f.ry) + z * Math.sin(f.ry), y, f.z - x * Math.sin(f.ry) + z * Math.cos(f.ry)); };
-  const wp = (x, y, z) => wpInto(_wpA, x, y, z); // wall-local → world (scratch A; a second call would move it)
-  const wp2 = (x, y, z) => wpInto(_wpB, x, y, z); // second scratch, for a position and a look target at once
+  const wallFrame = () => (wallGroups && WALL_ORDER[wallI] ? (wallTurn ? lerpFrame(wallTurn.a, wallTurn.b, ss(Math.min(1, wallTurn.k))) : frameOf(WALL_ORDER[wallI])) : WALL_FRAME.back);
+  const _wpA = { v: null }, _wpB = { v: null }; const wpInto = (h, f, x, y, z) => { const THREE = T(); if (!THREE) return null; if (!h.v) h.v = new THREE.Vector3(); return h.v.set(f.x + x * Math.cos(f.ry) + z * Math.sin(f.ry), y, f.z - x * Math.sin(f.ry) + z * Math.cos(f.ry)); };
+  const wp = (x, y, z) => wpInto(_wpA, wallFrame(), x, y, z); // wall-local → world (scratch A; a second call would move it)
+  const wp2 = (x, y, z) => wpInto(_wpB, wallFrame(), x, y, z); // second scratch, for a position and a look target at once
   // the camera's distance from the active wall's plane (for the fog, which follows it in every orientation)
-  const wallDist = () => { const f = wallFrame(); return Math.abs((camera.position.x - f.x) * Math.sin(f.ry) + (camera.position.z - f.z) * Math.cos(f.ry)); };
+  const wallDist = f => { f = f || wallFrame(); return Math.abs((camera.position.x - f.x) * Math.sin(f.ry) + (camera.position.z - f.z) * Math.cos(f.ry)); };
+  const wpB = (x, y, z) => wpInto(_wpA, WALL_FRAME.back, x, y, z); // back-wall-local → world (the room props: plinths, TV, the reading corner)
+  const wpB2 = (x, y, z) => wpInto(_wpB, WALL_FRAME.back, x, y, z);
   const wallLocal = v => { const f = wallFrame(), dx = v.x - f.x, dz = v.z - f.z, c = Math.cos(f.ry), s = Math.sin(f.ry); return { x: dx * c - dz * s, y: v.y, z: dx * s + dz * c }; };
   // Lighting scenes (Room menu / Settings → Museum, or L in the museum). Ids are the old moods' ids, so a saved choice
   // carries over: gallery = Classic (the original look, unchanged), night = Evening (was After hours), neon = Neon night.
@@ -253,7 +258,11 @@ window.Museum = (() => {
     // gallery pieces, kept to the sides and the foreground so they frame the shelves without ever covering a case
     const metal = new THREE.MeshStandardMaterial({ color: 0x2a2c31, metalness: .85, roughness: .3 }), brassM = new THREE.MeshStandardMaterial({ color: 0xb08a48, metalness: .9, roughness: .25 });
     const favs = (o.posterUrls || []).length ? o.posterUrls : [];
-    const tvW = tvOn ? tvDims().W + 1.05 : 0, tvS0 = tvSide(), sides = [-2.6 - (tvS0 === 'left' ? tvW : 0), (o.rackEnd || o.maxW) + 2.6 + (tvS0 === 'right' ? tvW : 0)]; // gallery pieces step aside for the TV
+    const roomMode = !!wallGroups;
+    const tvW = tvOn ? tvDims().W + 1.05 : 0, tvS0 = tvSide();
+    // room mode: the displays flank the back wall in the free margins beside the side walls (the walls' inner faces are
+    // at -1.25 and maxW+1.25); classic keeps its wider spread beyond the bookcase and the reading corner
+    const sides = roomMode ? [-.62, o.maxW + .62] : [-2.6 - (tvS0 === 'left' ? tvW : 0), (o.rackEnd || o.maxW) + 2.6 + (tvS0 === 'right' ? tvW : 0)]; // gallery pieces step aside for the TV
     if (room.plinths) sides.forEach((px, k) => {
       // a white plinth with a glass vitrine; inside, one of your favourite games standing under its own small light
       const pl = new THREE.Mesh(new THREE.BoxGeometry(1.05, 1.45, 1.05), new THREE.MeshStandardMaterial({ color: 0xe9e6df, roughness: .85 })); pl.position.set(px, fy + .725, .75); pl.castShadow = pl.receiveShadow = true; g.add(pl);
@@ -266,13 +275,13 @@ window.Museum = (() => {
     });
     if (room.ropes) sides.forEach(px => {
       // brass stanchions with a red velvet rope in front of each side display
-      const posts = [px - .9, px + .9].map(x => { const p = new THREE.Mesh(new THREE.CylinderGeometry(.042, .042, 1.35, 16), brassM); p.position.set(x, fy + .675, 1.75); p.castShadow = true; g.add(p); const top = new THREE.Mesh(new THREE.SphereGeometry(.07, 16, 12), brassM); top.position.set(x, fy + 1.38, 1.75); g.add(top); const base = new THREE.Mesh(new THREE.CylinderGeometry(.22, .25, .055, 24), brassM); base.position.set(x, fy + .028, 1.75); g.add(base); return x; });
+      const spread = roomMode ? .55 : .9, posts = [px - spread, px + spread].map(x => { const p = new THREE.Mesh(new THREE.CylinderGeometry(.042, .042, 1.35, 16), brassM); p.position.set(x, fy + .675, 1.75); p.castShadow = true; g.add(p); const top = new THREE.Mesh(new THREE.SphereGeometry(.07, 16, 12), brassM); top.position.set(x, fy + 1.38, 1.75); g.add(top); const base = new THREE.Mesh(new THREE.CylinderGeometry(.22, .25, .055, 24), brassM); base.position.set(x, fy + .028, 1.75); g.add(base); return x; });
       const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(posts[0], fy + 1.26, 1.75), new THREE.Vector3(px, fy + .98, 1.75), new THREE.Vector3(posts[1], fy + 1.26, 1.75)]);
       const rope = new THREE.Mesh(new THREE.TubeGeometry(curve, 24, .032, 10, false), new THREE.MeshStandardMaterial({ color: 0x7a0e18, roughness: .85 })); rope.castShadow = true; g.add(rope);
     });
     if (room.bench) {
       // a museum bench in the foreground, facing the shelves (you see it from the wide view)
-      const bz = 4.4, bx = o.maxW / 2, seat = new THREE.Mesh(new THREE.BoxGeometry(2.8, .14, .72), new THREE.MeshStandardMaterial({ color: 0x23201d, roughness: .55 })); seat.position.set(bx, fy + .62, bz); seat.castShadow = seat.receiveShadow = true; g.add(seat);
+      const bz = 4.4, bx = o.maxW / 2 - (roomMode ? 3.4 : 0), seat = new THREE.Mesh(new THREE.BoxGeometry(2.8, .14, .72), new THREE.MeshStandardMaterial({ color: 0x23201d, roughness: .55 })); seat.position.set(bx, fy + .62, bz); seat.castShadow = seat.receiveShadow = true; g.add(seat);
       const cush = new THREE.Mesh(new THREE.BoxGeometry(2.72, .07, .64), new THREE.MeshStandardMaterial({ color: 0x3a1f1c, roughness: .9 })); cush.position.set(bx, fy + .725, bz); g.add(cush);
       [[-1.3, -.28], [-1.3, .28], [1.3, -.28], [1.3, .28]].forEach(([dx, dz]) => { const leg = new THREE.Mesh(new THREE.BoxGeometry(.055, .55, .055), metal); leg.position.set(bx + dx, fy + .275, bz + dz); g.add(leg); });
     }
@@ -752,9 +761,13 @@ window.Museum = (() => {
     libPending = null; endPeek(); closeFan(true); libHeld = null; if (delivery) dropDelivery(); disposeWall(); opening = null; sleeveM = null; if (shimTex) { try { shimTex.dispose(); } catch {} } if (shimM) { try { shimM.dispose(); } catch {} } shimTex = null; shimM = null; shim = null; unwraps = []; loadUnwrapped(); rack = null; wideFrame = null; rows = []; work = []; dust = []; card = null; wallGen++; spineRow = -1; selKey = '';
     tex.forEach(t => { t.userData.refs = 0; }); // the old wall's cases are gone: nothing holds these any more (kept only for a quick reuse)
     // room mode: one group per wall, so every row keeps its wall-local coordinates and a wall turns as a whole
-    wallGroups = null; wallOf = [];
+    wallGroups = null; wallOf = []; wallFrames = null;
+    const gap0 = .012, plankT0 = .055, PLQ0 = 1.75; // (the room's width is known before its walls stand: dims below use the same numbers)
+    const dims0 = r => { const st = r.style, w = H * (st.h || 1) * st.ratio, d = Math.max(.045, w * st.depth), consoleW = Math.max(1.3, w * 1.7); return r.games.length * (d + gap0) + (r.games.length >= 3 ? .16 : 0) + consoleW + .5 + PLQ0; };
+    const maxBackW = Math.max(4, ...data.filter(r => (r.wall || 'back') === 'back').map(dims0), ...data.map(dims0)); // (an empty back wall: the widest row still bounds the room)
     if (roomPlan && roomPlan.room && roomPlan.room.segments.some(s => s.wallId !== 'back')) {
-      wallGroups = {}; WALL_ORDER.forEach(id => { const g = new THREE.Group(), f = WALL_FRAME[id]; g.position.set(f.x, 0, f.z); g.rotation.y = f.ry; wall.add(g); wallGroups[id] = g; g.visible = true; });
+      wallFrames = { back: WALL_FRAME.back, left: WALL_FRAME.left, right: { x: maxBackW + 1.7, z: .3, ry: -Math.PI / 2 } };
+      wallGroups = {}; WALL_ORDER.forEach(id => { const g = new THREE.Group(), f = wallFrames[id]; g.position.set(f.x, 0, f.z); g.rotation.y = f.ry; wall.add(g); wallGroups[id] = g; g.visible = true; });
     }
     const gap = .012, plankT = .055;
     const PLQ = 1.75; /* room for the name plate beside the console */
@@ -1000,14 +1013,14 @@ window.Museum = (() => {
   const wideN = () => rows.length + (rack && rack.units ? rack.units.length : 0) + (tv ? 1 : 0);
   const tvIdx = () => tv ? wideN() - 1 : -1;
   const galXs = () => { const tvW = tvOn ? tvDims().W + 1.05 : 0, s = tvSide(); // the same spots buildExtras puts the side pieces at
-    return [-2.6 - (s === 'left' ? tvW : 0), (roomObj && roomObj.rackEnd || roomObj && roomObj.maxW || wallW) + 2.6 + (s === 'right' ? tvW : 0)]; };
+    return wallGroups ? [-.62, (roomObj && roomObj.maxW || wallW) + .62] : [-2.6 - (s === 'left' ? tvW : 0), (roomObj && roomObj.rackEnd || roomObj && roomObj.maxW || wallW) + 2.6 + (s === 'right' ? tvW : 0)]; };
   const gals = () => room.plinths && roomObj ? galXs() : [];
   const wideCount = () => wideN() + (gals().length ? 2 : 0);
   const isTvSel = i => !!tv && i === tvIdx();
   const isGalSel = i => !!gals().length && i >= wideN();
   function wideBox(i) {
     const plankT = .055; if (isTvSel(i)) return tvBox();
-    if (isGalSel(i)) { const px = galXs()[i - wideN()], fy = roomObj.bottom - .4; return { x0: px - .65, x1: px + .65, y0: fy - .05, y1: fy + 2.15, z: 1.25, label: 'Display case', sub: 'a favourite under glass' }; }
+    if (isGalSel(i)) { const px = galXs()[i - wideN()], fy = roomObj.bottom - .4; return { x0: px - .65, x1: px + .65, y0: fy - .05, y1: fy + 2.55, z: 1.25, label: 'Display case', sub: 'a favourite under glass' }; }
     if (i < rows.length) { const r = rows[i]; return { x0: -.47, x1: (roomObj ? roomObj.maxW : wallW) + .47, y0: r.y - H / 2 - plankT - .03, y1: r.y + ROW - H / 2 - plankT + .02, label: r.name, sub: `${r.games.length} game${r.games.length === 1 ? '' : 's'}` }; }
     const u = rack && rack.units[i - rows.length]; if (!u) { const r = rows[Math.max(0, Math.min(rows.length - 1, rowI))] || { y: 0 }; return { x0: -.47, x1: (roomObj ? roomObj.maxW : wallW) + .47, y0: r.y - H / 2 - plankT - .03, y1: r.y + ROW - H / 2 - plankT + .02, label: r.name || '', sub: '' }; }
     const plankT2 = .055; let top = ROW - H / 2 + .1, bot = rows[rows.length - 1].y - H / 2 - .1;
@@ -1033,8 +1046,9 @@ window.Museum = (() => {
       if (dx < 0) i = i === first ? (tv ? tvIdx() : Math.min(rows.length - 1, Math.max(0, rowI))) : first;
       else if (dx > 0 && i === first) i = first + 1; return; }
     if (i < rows.length) { if (dy) i = Math.max(0, Math.min(rows.length - 1, i + dy));
-      // room mode: left / right in the overview walk the room's walls (the camera swings round); a single-wall room ignores it
-      else if (dx && wallGroups) { if (dx > 0) { if (!setWall(wallI + 1) && rack && rack.units && rack.units.length && wallI === WALL_ORDER.length - 1) i = rows.length; } else if (dx < 0 && !setWall(wallI - 1) && wallI === 0) i = Math.max(0, Math.min(rows.length - 1, i)); }
+      // room mode: left / right in the overview walk the room's walls (the camera swings round); a single-wall room ignores it.
+      // Past the last wall: the side displays (or the reading corner in classic/media), then the ropes' displays go on
+      else if (dx && wallGroups) { if (dx > 0) { if (!setWall(wallI + 1) && wallI === WALL_ORDER.length - 1) i = rack && rack.units && rack.units.length ? rows.length : wideN(); } else if (dx < 0 && !setWall(wallI - 1) && wallI === 0) i = Math.max(0, Math.min(rows.length - 1, i)); }
       else if (dx > 0 && n > rows.length) i = rack && rack.units && rack.units.length ? rows.length : wideN(); }
     else if (!rack || !rack.units) i = Math.min(rows.length - 1, Math.max(0, rowI)); // the rack went away (library emptied): back to the shelves
     else { const U = rack.units, u = U[i - rows.length], idx = j => rows.length + j;
@@ -1050,7 +1064,7 @@ window.Museum = (() => {
   const lookFree = () => active && wide && !intro.on && !tw.on && !roomView && !gaze && !delivery && !tvView && !fan && !reader;
   function gazeAt(px) {
     if (gaze && Math.abs(gaze.px - px) < .01) { gaze = null; look.tx = look.ty = 0; lastInput = lastNav = woke(); hooks.onSelect && hooks.onSelect(current()); return; } // A again: back to the whole wall
-    const fy = roomObj.bottom - .4; gaze = { px, x: px, y: fy + 1.1, z: .75 + 2.35, tx: px, ty: fy + 1.85, tz: .75 }; // stand in front of it, looking at the vitrine
+    const fy = roomObj.bottom - .4; gaze = { px, x: px, y: fy + 1.8, z: .75 + 3.3, tx: px, ty: fy + 1.95, tz: .75, back: true }; // above the plinth top (1.45) and well back, so the camera never stands in it // stand in front of it, looking at the vitrine (back-wall coordinates: the displays are room props)
     look.tx = look.ty = 0; lastInput = lastNav = woke(); snd('zoom'); twStart({ x: gaze.x, y: gaze.y, z: gaze.z }, 0);
     hooks.onSelect && hooks.onSelect(current());
   }
@@ -1627,11 +1641,12 @@ window.Museum = (() => {
     if (st === 'wall') decal(TW + .55, TH + .5, M.shade, 0, y0 + TH / 2, wallZ + .004, 0); else decal(d.W + .5, (st === 'cabinet' ? TD * 1.12 : TD) + .45, M.shade, 0, .003, 0, -PI / 2);
     const glow = decal(TW * 2.4, 1.9, M.glow, sx, .005, fz + .95, -PI / 2); glow.visible = false;
     // where it stands: left, right, or in the gap the reading corner leaves in the middle
-    const side = tvSide(), fy = roomObj.bottom - .4; let x, ry;
+    const side = tvSide(), fy = roomObj.bottom - .4; let x, ry, z = .62;
     if (side === 'left') { x = -.47 - .8 - d.W / 2; ry = st === 'wall' ? .06 : .2; }
     else if (side === 'centre' && rack) { x = (roomObj.maxW + .47 + rack.x0 - .3) / 2; ry = 0; }
+    else if (wallGroups) { x = o.maxW / 2; z = 2.6; ry = 0; } // room mode: the set stands freestanding in the middle of the aisle, facing you
     else { x = (roomObj.rackEnd || roomObj.maxW + .47) + .75 + d.W / 2; ry = st === 'wall' ? -.06 : -.2; }
-    g.position.set(x, fy, st === 'wall' ? -DEPTH / 2 - .01 - wallZ : .62); g.rotation.y = ry; wall.add(g); g.updateMatrixWorld(true);
+    g.position.set(x, fy, wallGroups ? z : (st === 'wall' ? -DEPTH / 2 - .01 - wallZ : .62)); g.rotation.y = ry; wall.add(g); g.updateMatrixWorld(true);
     const box3 = new THREE.Box3().setFromObject(body), focus = screen.getWorldPosition(new THREE.Vector3());
     tv = { g, body, screen, glow, own, ledG, ledR: ledG && powIdx != null ? ledG.userData.ranges[powIdx] : null, box: box3, focus, sh, ry, mode: 'off', video: null, vtex: null, meta: null, card: null, power: false, pow: 0, blip: 0, gain: room.tvNear ? 0 : 1, base: .7 };
     if (keep) { Object.assign(tv, keep); tvSet(tv.mode === 'video' && !tv.vtex ? 'static' : tv.mode); if (tv.card && tv.mode === 'card') tvDrawCard(); if (tv.video && tv.wasPlaying && tv.power) { try { tv.video.play().catch(() => {}); } catch {} } delete tv.wasPlaying; } else tvLed();
@@ -2447,14 +2462,15 @@ window.Museum = (() => {
     look.x = sm(look.x, look.tx, 1 - Math.exp(-dt * 7)); look.y = sm(look.y, look.ty, 1 - Math.exp(-dt * 7));
     const lookF0 = wide && !intro.on && !roomView && !tvView && !delivery && !fan && !holding && !heldCase && !libHeld;
     lookF = sm(lookF, lookF0 ? 1 : 0, 1 - Math.exp(-dt * 6));
-    camera.position.copy(wp(camP.x + dx * (1 - holdLook), camP.y + .2 * (1 - holdLook) + dy * (1 - holdLook), camP.z + dz * (1 - holdLook)));
+    const gf = gaze && gaze.back, gwp = gf ? wpB : wp, gwp2 = gf ? wpB2 : wp2; // leaning to a side display: the pose is in back-wall coordinates
+    camera.position.copy(gwp(camP.x + dx * (1 - holdLook), camP.y + .2 * (1 - holdLook) + dy * (1 - holdLook), camP.z + dz * (1 - holdLook)));
     { let lx = camP.x + dx * .4 * (1 - holdLook), ly = (camP.y - .05) * (1 - holdLook) + camP.y * holdLook, lz = holdLook > 0.001 ? camP.z - 4 * holdLook - (1 - holdLook) * camP.z : 0;
       if (gazeK > .001) { lx += (gaze.tx - lx) * gazeK; ly += (gaze.ty - ly) * gazeK; lz += (gaze.tz - lz) * gazeK; } // leaning over to a side display: the gaze takes the look target
-      camera.lookAt(wp2(lx, ly, lz));
+      camera.lookAt(gwp2(lx, ly, lz));
       // (issues 11 / 13) the haze and the farthest distance drawn follow the camera when it has to stand far back (a wide
       // wall in the Room menu's view): the wall is never lost in the haze or past the far end. Near the wall: as before.
       // The distance is from the wall's plane, so it works facing any of the room's walls.
-      { const d = Math.max(0, wallDist()), fn = Math.max(28, d + 14), cf = Math.max(120, fn + 80);
+      { const d = Math.max(0, wallDist(gf ? WALL_FRAME.back : undefined)), fn = Math.max(28, d + 14), cf = Math.max(120, fn + 80);
         if (scene.fog && Math.abs(scene.fog.near - fn) > .25) { scene.fog.near = fn; scene.fog.far = fn + 60; }
         if (Math.abs(camera.far - cf) > 1) { camera.far = cf; camera.updateProjectionMatrix(); } }
       if ((Math.abs(look.x) > 1e-4 || Math.abs(look.y) > 1e-4) && lookF > .001) { camera.rotateY(look.x * lookF * (1 - gazeK)); camera.rotateX(look.y * lookF * (1 - gazeK)); } } // the look: turn in place, the wall straight ahead is level again
