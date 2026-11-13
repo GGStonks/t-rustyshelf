@@ -38,6 +38,13 @@ module.exports = async function previewsPass({ browser, base, check, OUT }) {
     const plan = P.dashPlan(mpd, 'https://video.akamai.steamstatic.com/store_trailers/1/2/abc/3/dash_h264.mpd?t=9');
     check('Previews: Steam\'s trailer manifest becomes its 480p video\'s first pieces (about 20 seconds)',
       plan && /init-stream1\.m4s\?t=9$/.test(plan.init) && plan.media.length === 7 && /chunk-stream1-00001\.m4s/.test(plan.media[0]) && /chunk-stream1-00007\.m4s/.test(plan.media[6]), JSON.stringify(plan && { init: plan.init.slice(-30), n: plan.media.length }));
+    // (beta.12) the clip is the picture only: its sound is the manifest's audio track, ~25 seconds of it (a little longer)
+    const mpdA = mpd.replace('<AdaptationSet contentType="audio"></AdaptationSet>', '<AdaptationSet contentType="audio"><Representation id="3" mimeType="audio/mp4"><SegmentTemplate timescale="1000000" duration="3000000" initialization="dash_h264/init-stream$RepresentationID$.m4s" media="dash_h264/chunk-stream$RepresentationID$-$Number%05d$.m4s" startNumber="1"></SegmentTemplate></Representation></AdaptationSet>');
+    const planA = P.dashPlan(mpdA, 'https://video.akamai.steamstatic.com/store_trailers/1/2/abc/3/dash_h264.mpd?t=9', 'audio', 25), clipDirS = path.join(home, 'data', 'previews', 'steam');
+    check('Previews (beta.12): a Steam trailer\'s sound is its audio track\'s first ~25 seconds; a Steam clip file is known by its app id (nothing else is)',
+      planA && /init-stream3\.m4s\?t=9$/.test(planA.init) && planA.media.length === 9 && /chunk-stream3-00009\.m4s/.test(planA.media[8]) && P.dashPlan(mpd, 'https://x/y.mpd', 'audio', 25) === null
+        && P.steamIdOf(path.join(clipDirS, '620.mp4')) === '620' && P.steamIdOf(path.join(home, 'data', 'previews', 'youtube', '620.mp4')) === null && P.steamIdOf(path.join(clipDirS, '..', 'steam', 'x620.mp4')) === null,
+      JSON.stringify(planA && { init: planA.init.slice(-30), n: planA.media.length }));
     check('Previews: YouTube links (watch, youtu.be, embed) give the video; other sites none',
       P.youtubeId('https://www.youtube.com/watch?v=abcdefghijk') === 'abcdefghijk' && P.youtubeId('https://youtu.be/abcdefghijk') === 'abcdefghijk' && P.youtubeId('https://www.youtube-nocookie.com/embed/abcdefghijk') === 'abcdefghijk' && P.youtubeId('https://example.com/watch?v=abcdefghijk') === null);
     fs.rmSync(home, { recursive: true, force: true }); }
@@ -97,7 +104,7 @@ module.exports = async function previewsPass({ browser, base, check, OUT }) {
   const toGame = async () => { for (let i = 0; i < 6; i++) { if (await page.evaluate(() => { const g = Shelf._lib.cur(); return !!g && g.kind === 'rom'; })) return; await page.keyboard.press('ArrowRight'); await pause(500); } };
   const media = () => page.evaluate(() => { const b = document.getElementById('dMedia'), v = document.getElementById('dVideo'), bv = document.getElementById('pvBack'), app = document.getElementById('app');
     return { cls: b.className, src: !!v.getAttribute('src'), t: v.currentTime, bg: app.classList.contains('pv-det'), bgSrc: !!bv.getAttribute('src'), bgT: bv.currentTime, tab: document.querySelector('#details .d-body').dataset.show,
-      yt: !!window.__ytOn, rect: window.__ytRect || null, stops: window.__ytStops || 0, mode: Shelf.getMode() }; });
+      yt: !!window.__ytOn, rect: window.__ytRect || null, stops: window.__ytStops || 0, mode: Shelf.getMode(), paused: v.paused, sec: (document.querySelector('#dvNav .dv-t.cur') || { dataset: {} }).dataset.s || '' }; });
   try {
     // off by default
     await ready('?platform=windows&shelf=1'); await toGame(); await page.keyboard.press('i'); await pause(3500);
@@ -106,23 +113,26 @@ module.exports = async function previewsPass({ browser, base, check, OUT }) {
 
     // Details: a file preview, then a console trailer clip still being made
     await ready('?platform=windows&shelf=1&previews=details'); await toGame();
-    // (beta.9, Windows: the trailer sits at the top of Overview with the info under it; the Media tab is gone. A video file
-    // plays framed there and steps behind the case on Your copy; YouTube's own player is never loaded there by itself)
+    // (beta.12, Windows: Details is one page in sections; the trailer's box is on the first screen beside Your play. A video
+    // file plays framed there, never behind the case; scrolled out of sight (RB to Your copy) it pauses, and back on the
+    // first screen (LB) it plays on; YouTube's own player is never loaded there by itself)
     let file = null, yt = null; const seen = [];
     for (let i = 0; i < 8 && !file; i++) {
       await page.keyboard.press('i'); await pause(1500);
       for (let w = 0; w < 25; w++) { const m = await media(); if (/\bready\b/.test(m.cls) || m.yt) break; await pause(400); } // (the page records its pretend clip the first time: slow on a build machine)
       let m = await media(); seen.push([m.tab, m.bg, m.src, m.cls, (await page.evaluate(() => { const g = Shelf._lib.cur(); return g && g.title; }))].join('/'));
       if (!file && m.tab === 'overview' && /\bready\b/.test(m.cls) && m.src && !m.bg && !/\byt\b/.test(m.cls)) { file = m; await page.screenshot({ path: path.join(OUT, 'previews-details.png') }); await pause(600); file.t2 = (await media()).t;
-        file.above = await page.evaluate(() => { const b = document.getElementById('dMedia'), a = ['dSecAbout', 'dSecInfo', 'dGrid'].map(id => document.getElementById(id)).find(e => e && !e.hidden && e.getBoundingClientRect().height > 0); // (the first info shown: a game without a description has no About)
-          return !!a && b.closest('[data-pane="overview"]') !== null && b.getBoundingClientRect().bottom <= a.getBoundingClientRect().top + 1; });
-        await page.keyboard.press('e'); await pause(1200); const mm = await media(); file.behind = mm.tab === 'copy' && mm.bg && !/\bon\b/.test(mm.cls);
-        await page.keyboard.press('q'); await pause(1200); const m3 = await media(); file.backInBox = m3.tab === 'overview' && /\bready\b/.test(m3.cls) && m3.src && !m3.bg; }
+        file.above = await page.evaluate(() => { const b = document.getElementById('dMedia'), a = [...document.querySelectorAll('#details .dv-sec:not([data-s="overview"])')].find(e => !e.hidden && e.getBoundingClientRect().height > 0); // (the first section after Overview)
+          return !!a && b.closest('.dv-sec[data-s="overview"]') !== null && b.getBoundingClientRect().bottom <= a.getBoundingClientRect().top + 1 && b.getBoundingClientRect().bottom <= innerHeight; });
+        for (let k = 0; k < 8 && (await media()).sec !== 'copy'; k++) { await page.keyboard.press('e'); await pause(700); }
+        await pause(900); const mm = await media(); file.behind = mm.sec === 'copy' && !mm.bg && !mm.bgSrc && /\bon\b/.test(mm.cls) && mm.paused;
+        for (let k = 0; k < 8 && (await media()).sec !== 'overview'; k++) { await page.keyboard.press('q'); await pause(700); }
+        await pause(1200); const m3 = await media(); file.backInBox = m3.tab === 'overview' && /\bready\b/.test(m3.cls) && m3.src && !m3.bg && !m3.paused; }
       await page.keyboard.press('Escape'); await pause(700);
       const after = await media(); if (file && !file.closed) file.closed = !after.src && !after.bgSrc && !after.bg;
       await page.keyboard.press('ArrowRight'); await pause(700);
     }
-    check('Previews in Details (Windows): a video plays framed at the top of Overview above the info, steps behind the case on Your copy and back, and stops the moment Details closes',
+    check('Previews in Details (Windows): a video plays framed in its box on the first screen, never behind the case; it pauses while Your copy is in view (RB) and plays on back at the top (LB); it stops the moment Details closes',
       !!file && file.t2 !== file.t && file.above && file.behind && file.backInBox && file.closed, JSON.stringify(file ? { t: file.t, t2: file.t2, above: file.above, behind: file.behind, back: file.backInBox, closed: file.closed } : seen));
     // a console game whose trailer clip is still being made (main answers "youtube, pending"): Overview's box opens at once
     // with the game's art and waits for the clip; YouTube's own player is never loaded by itself (it lagged and took the
@@ -136,26 +146,28 @@ module.exports = async function previewsPass({ browser, base, check, OUT }) {
     await page.keyboard.press('Escape'); await pause(600);
     check('Previews in Details (Windows): while a console trailer clip is made, Overview\'s box opens at once and waits for it without loading YouTube\'s player (it lagged and took the controller), then plays the clip',
       !!yt.waiting && !/\byt\b/.test(yt.waiting) && yt.ytWhileWaiting === false && yt.roundTrip && !!yt.played && yt.src && yt.ytAfter === false, JSON.stringify(yt));
-    // Details' layout: Play and three small buttons, the rest in More (opened and closed with the keyboard and B / Esc)
+    // Details' layout: Play, Read booklet, Inspect, Favourite and More in one row, the rest in More (opened and closed with the
+    // keyboard and B / Esc); one page in sections, Your play's summary beside the trailer
     await page.keyboard.press('i'); await pause(1200);
     const lay = await page.evaluate(() => { const bar = [...document.querySelectorAll('#details .d-actions > button')].filter(b => !b.hidden).map(b => b.id), menu = [...document.querySelectorAll('#dMenu button')].filter(b => !b.hidden).map(b => b.id);
-      return { bar, menu, tabs: [...document.querySelectorAll('#dTabs button')].filter(b => !b.hidden).map(b => b.dataset.tab), stats: document.querySelectorAll('#dStats .d-stat').length }; });
+      return { bar, menu, secs: [...document.querySelectorAll('#dvNav .dv-t')].filter(b => !b.hidden).map(b => b.dataset.s), tabsShown: getComputedStyle(document.getElementById('dTabs')).display !== 'none', stats: document.querySelectorAll('#dStats .d-stat').length }; });
     await page.click('#dMoreBtn'); await pause(400); const open = await page.evaluate(() => !document.getElementById('dMenu').hidden && document.querySelector('#dMenu .pad-focus') !== null);
     await page.keyboard.press('Escape'); await pause(400); const shut = await page.evaluate(() => document.getElementById('dMenu').hidden && Shelf.getMode() === 'details');
     await page.keyboard.press('Escape'); await pause(500);
-    check('Details: Play with Manual, Inspect and More beside it; the rest in More (Esc closes More first, then Details); tabs and a stats strip',
-      JSON.stringify(lay.bar) === JSON.stringify(['dPlay', 'dManual', 'dInspect', 'dMoreBtn']) && lay.menu.includes('dBoxArt') && lay.menu.includes('dRename') && lay.menu.includes('dCols') && lay.tabs.join() === 'overview,copy' && lay.stats === 3 && open && shut, JSON.stringify({ ...lay, open, shut }));
-    // (beta.9) Details buttons in Settings' style (Windows): Play lit, the small buttons slim icons that show their name on the
-    // controller, Settings' highlight gliding under the one you're on, and the row never wider than the panel
+    check('Details (Windows): Play, Read booklet, Inspect, Favourite and More in one row; the rest in More (Esc closes More first, then Details); sections in place of tabs, and Your play beside the trailer',
+      JSON.stringify(lay.bar) === JSON.stringify(['dPlay', 'dManual', 'dInspect', 'dFav', 'dMoreBtn']) && ['dEmu', 'dGameEmu', 'dBoxArt', 'dRename', 'dChooseManual', 'dHide', 'dCols'].every(id => lay.menu.includes(id)) &&
+      ['overview', 'play', 'copy', 'info'].every(s => lay.secs.includes(s)) && !lay.tabsShown && lay.stats === 3 && open && shut, JSON.stringify({ ...lay, open, shut }));
+    // (beta.9) Details buttons in Settings' style (Windows): Play lit, Settings' highlight gliding under the one you're on, and
+    // the row never wider than the page (beta.12: on a TV-sized window every button says its name)
     await page.mouse.move(5, 5); // (the More click above left the pointer on More: hovering it rightly opens its name)
     await page.keyboard.press('i'); await pause(1200);
     const sl = await page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), out = {};
       const pad = { id: 'Test pad', index: 0, connected: true, mapping: 'standard', timestamp: 0, axes: [0, 0, 0, 0], buttons: Array.from({ length: 17 }, () => ({ pressed: false, touched: false, value: 0 })) };
       Object.defineProperty(navigator, 'getGamepads', { configurable: true, value: () => [pad, null, null, null] }); window.dispatchEvent(Object.assign(new Event('gamepadconnected'), { gamepad: pad }));
       // (beta.11) held 250 ms: a software-drawn runner reads the pad once a frame, and a 150 ms press could fall between two reads
-      const press = async b => { pad.buttons[b] = { pressed: true, touched: true, value: 1 }; pad.timestamp++; await w(250); pad.buttons[b] = { pressed: false, touched: false, value: 0 }; pad.timestamp++; await w(450); };
+      const press = async b => { if (window.__padHold) { await __padHold(pad, b, 250); await w(450); return; } pad.buttons[b] = { pressed: true, touched: true, value: 1 }; pad.timestamp++; await w(250); pad.buttons[b] = { pressed: false, touched: false, value: 0 }; pad.timestamp++; await w(450); };
       const bar = document.querySelector('#details .d-actions'), $ = id => document.getElementById(id);
-      out.fits = bar.scrollWidth <= bar.clientWidth + 1; out.slim = ['dManual', 'dInspect', 'dMoreBtn'].every(id => $(id).offsetWidth < 64);
+      out.fits = bar.scrollWidth <= bar.clientWidth + 1; out.labelled = ['dManual', 'dInspect', 'dFav', 'dMoreBtn'].every(id => { const s = $(id).querySelector('span'); return $(id).offsetWidth > 64 && !!s && getComputedStyle(s).opacity === '1'; });
       out.lit = getComputedStyle($('dPlay')).backgroundImage.includes('gradient');
       // (where things end up is what's judged, not the animation: a software-drawn runner was still mid-glide after 3 s)
       const still = document.createElement('style'); still.textContent = '#details .d-actions, #details .d-actions *, #details .d-actions::before { transition: none !important; animation: none !important }'; document.head.appendChild(still);
@@ -173,8 +185,8 @@ module.exports = async function previewsPass({ browser, base, check, OUT }) {
       try { delete navigator.getGamepads; } catch (e) {} // (the test's own "no controllers" on the prototype comes back)
       return out; });
     await page.keyboard.press('Escape'); await pause(500);
-    check('Details (Windows): Play lit, Manual / Inspect / More slim icons; on the controller the one you\'re on shows its name with Settings\' highlight under it, and the row fits the panel',
-      sl.fits && sl.slim && sl.lit && sl.on === 'dInspect' && sl.glide && sl.named && sl.fits2, JSON.stringify(sl));
+    check('Details (Windows): Play lit, Read booklet / Inspect / Favourite / More labelled; on the controller Settings\' highlight glides under the one you\'re on, and the row fits the page',
+      sl.fits && sl.labelled && sl.lit && sl.on === 'dInspect' && sl.glide && sl.named && sl.fits2, JSON.stringify(sl));
     // a narrow window (under 761 px: Details is the phone-style sheet): moving along the buttons with the controller never
     // shifts them (the highlight layer is never a flex item of the row)
     await page.setViewportSize({ width: 700, height: 900 }); await pause(700); await page.keyboard.press('i'); await pause(1200);
@@ -182,7 +194,7 @@ module.exports = async function previewsPass({ browser, base, check, OUT }) {
       const pad = { id: 'Test pad', index: 0, connected: true, mapping: 'standard', timestamp: 0, axes: [0, 0, 0, 0], buttons: Array.from({ length: 17 }, () => ({ pressed: false, touched: false, value: 0 })) };
       Object.defineProperty(navigator, 'getGamepads', { configurable: true, value: () => [pad, null, null, null] }); window.dispatchEvent(Object.assign(new Event('gamepadconnected'), { gamepad: pad }));
       // (beta.11) held 250 ms: a software-drawn runner reads the pad once a frame, and a 150 ms press could fall between two reads
-      const press = async b => { pad.buttons[b] = { pressed: true, touched: true, value: 1 }; pad.timestamp++; await w(250); pad.buttons[b] = { pressed: false, touched: false, value: 0 }; pad.timestamp++; await w(450); };
+      const press = async b => { if (window.__padHold) { await __padHold(pad, b, 250); await w(450); return; } pad.buttons[b] = { pressed: true, touched: true, value: 1 }; pad.timestamp++; await w(250); pad.buttons[b] = { pressed: false, touched: false, value: 0 }; pad.timestamp++; await w(450); };
       const bar = document.querySelector('#details .d-actions'), xs = () => [...bar.querySelectorAll(':scope>button')].filter(b => !b.hidden).map(b => b.offsetLeft + ',' + b.offsetTop).join(' ');
       const onId = () => (document.querySelector('#details .pad-focus') || {}).id; // (a slow runner can miss a press: right until the controller is off Play, at most six)
       out.x0 = xs(); await press(15); for (let i = 0; i < 6 && (!onId() || onId() === 'dPlay'); i++) await press(15); await press(15); await w(300); out.x1 = xs(); out.on = onId();
@@ -198,20 +210,93 @@ module.exports = async function previewsPass({ browser, base, check, OUT }) {
       const key = k => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true })); key('i'); await w(1500);
       const pad = { id: 'Test pad', index: 0, connected: true, mapping: 'standard', timestamp: 0, axes: [0, 0, 0, 0], buttons: Array.from({ length: 17 }, () => ({ pressed: false, touched: false, value: 0 })) };
       Object.defineProperty(navigator, 'getGamepads', { configurable: true, value: () => [pad, null, null, null] }); window.dispatchEvent(Object.assign(new Event('gamepadconnected'), { gamepad: pad }));
-      const press = async b => { pad.buttons[b] = { pressed: true, touched: true, value: 1 }; pad.timestamp++; await w(150); pad.buttons[b] = { pressed: false, touched: false, value: 0 }; pad.timestamp++; await w(500); };
+      const press = async b => { if (window.__padHold) { await __padHold(pad, b, 150); await w(500); return; } pad.buttons[b] = { pressed: true, touched: true, value: 1 }; pad.timestamp++; await w(150); pad.buttons[b] = { pressed: false, touched: false, value: 0 }; pad.timestamp++; await w(500); };
       const foc = () => document.querySelector('#details .pad-focus');
       out.path = []; out.shots = document.querySelectorAll('#dShots .d-shot').length; out.shotsHidden = document.getElementById('dShots').hidden;
       for (let i = 0; i < 10 && !(foc() && foc().classList.contains('d-shot')); i++) { await press(13); const f = foc(); out.path.push(f ? (f.id || f.className || f.tagName) : '-'); }
       out.inStrip = !!(foc() && foc().classList.contains('d-shot'));
       const strip = document.getElementById('dShots'), lefts = [];
-      for (let i = 0; i < 4; i++) { pad.buttons[15] = { pressed: true, touched: true, value: 1 }; pad.timestamp++; await w(150); pad.buttons[15] = { pressed: false, touched: false, value: 0 }; pad.timestamp++;
-        for (let t = 0; t < 6; t++) { await w(40); lefts.push(Math.round(strip.scrollLeft)); } await w(500); }
+      // (beta.11) each step waits until the highlight has moved, pressing again if the slow runner missed the press, and the
+      // strip is sampled while it moves; a glide = a step that passed through a place between where it was and where it ended
+      const idx = () => [...strip.children].indexOf(foc()); let glides = 0;
+      for (let i = 0; i < 4; i++) { const i0 = idx(), s0 = Math.round(strip.scrollLeft), seen = new Set([s0]);
+        for (let tries = 0; tries < 3 && idx() === i0; tries++) { pad.buttons[15] = { pressed: true, touched: true, value: 1 }; pad.timestamp++; await w(150); pad.buttons[15] = { pressed: false, touched: false, value: 0 }; pad.timestamp++;
+          for (let t = 0; t < 12; t++) { await w(30); const v = Math.round(strip.scrollLeft); seen.add(v); lefts.push(v); } }
+        await w(500); const s1 = Math.round(strip.scrollLeft); if ([...seen].some(v => v !== s0 && v !== s1)) glides++; }
+      out.moved = idx(); out.glides = glides;
       const f = foc(), r = f.getBoundingClientRect(), q = strip.getBoundingClientRect();
       out.steps = new Set(lefts).size; out.scrolled = strip.scrollLeft > 0; out.centre = Math.round(Math.abs((r.left + r.right) / 2 - (q.left + q.right) / 2));
       out.inside = r.left >= q.left - 1 && r.right <= q.right + 1; out.index = [...strip.children].indexOf(f);
       try { delete navigator.getGamepads; } catch (e) {} key('Escape'); await w(600); return out; });
     check('Details (Windows): with the controller the screenshot strip glides to centre the picture you\'re on, which is never cut off',
-      ss.inStrip && ss.scrolled && ss.steps >= 4 && ss.centre <= 40 && ss.inside, JSON.stringify(ss));
+      ss.inStrip && ss.scrolled && ss.glides >= 1 && ss.index >= 3 && ss.centre <= 40 && ss.inside, JSON.stringify(ss));
+
+    // (beta.12) Details redesigned around the case (Windows): Play has the focus when it opens; LB / RB (and Q / E) jump a
+    // section and the bar shows where you are; the trailer's box is on the first screen; Your play from a seeded history;
+    // Status is saved per game; Favourite toggles; every older action is still there
+    const rd = await page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)), out = {}, $ = id => document.getElementById(id);
+      const key = k => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+      for (let i = 0; i < 8 && Shelf.getMode() !== 'browse'; i++) { key('Escape'); await w(400); }
+      const g = Shelf._lib.cur(), now = Date.now() / 1000; out.game = g && g.title;
+      // three sessions: an hour and half an hour this week, two hours twenty days ago; first played thirty days ago
+      Shelf._mus.hist({ [g.id]: { count: 3, ms: 12600000, last: (now - 3600) * 1000, first: (now - 30 * 86400) * 1000, long: 7200000, s: [[Math.round(now - 20 * 86400), 7200], [Math.round(now - 2 * 86400), 1800], [Math.round(now - 3600), 3600]] } });
+      key('i'); for (let i = 0; i < 20 && Shelf.getMode() !== 'details'; i++) await w(150); await w(1200);
+      const cur = () => (document.querySelector('#dvNav .dv-t.cur') || { dataset: {} }).dataset.s || '', foc = () => document.querySelector('#details .pad-focus');
+      out.playFocused = !!foc() && foc().id === 'dPlay' && document.activeElement === $('dPlay') && cur() === 'overview';
+      // the trailer's box: on the first screen, beside Your play, right of the case
+      { const v = $('dvVid').getBoundingClientRect(), p = $('dStats').getBoundingClientRect(), c = document.querySelector('.slot.sel .f-front').getBoundingClientRect();
+        out.box = !$('dvDuo').hidden && v.width > 200 && v.bottom <= innerHeight && v.top >= 0 && Math.abs(p.top - v.top) < v.height && p.left > v.right && v.left > c.right; out.trailerBtn = !$('dTrailer').hidden; }
+      /* (beta.12 test.8: the other cases fade by their faces, so they stay 3D; waited for: on a slow machine the fade is still under way at first) */
+      const othersOut = () => [...document.querySelectorAll('.slot:not(.sel)')].every(s => s.classList.contains('far') || getComputedStyle(s).opacity === '0' || [...s.querySelectorAll(':scope > .box > .face')].every(f => getComputedStyle(f).opacity === '0'));
+      for (let i = 0; i < 30 && !othersOut(); i++) await w(200); out.others = othersOut();
+      // Your play
+      const tile = k => { const t = document.querySelector(`#dvTiles .dv-tile[data-k="${k}"] b`); return t ? t.textContent : ''; };
+      out.stats = { time: tile('Play time'), launches: tile('Launches'), avg: tile('Average'), longest: tile('Longest'), first: tile('First played'), share: document.querySelector('#dvTiles .dv-tile:last-child b').textContent, week: $('dvWk').textContent, bars: $('dvBars').children.length,
+        tallest: [...$('dvBars').children].map(b => parseFloat(b.style.height)).indexOf(100) };
+      out.statsOk = out.stats.time === '3 h 30 min' && out.stats.launches === '3' && out.stats.avg === '1 h 10 min' && out.stats.longest === '2 h' && /\d{4}/.test(out.stats.first) && out.stats.share === '100%' && out.stats.week === '1 h 30 min' && out.stats.bars === 8 && out.stats.tallest === 5;
+      // LB / RB: a pretend controller's bumpers, then Q / E on the keyboard
+      const pad = { id: 'Test pad', index: 0, connected: true, mapping: 'standard', timestamp: 0, axes: [0, 0, 0, 0], buttons: Array.from({ length: 17 }, () => ({ pressed: false, touched: false, value: 0 })) };
+      Object.defineProperty(navigator, 'getGamepads', { configurable: true, value: () => [pad, null, null, null] }); window.dispatchEvent(Object.assign(new Event('gamepadconnected'), { gamepad: pad }));
+      const press = async b => { if (window.__padHold) { await __padHold(pad, b, 250); await w(650); return; } pad.buttons[b] = { pressed: true, touched: true, value: 1 }; pad.timestamp++; await w(250); pad.buttons[b] = { pressed: false, touched: false, value: 0 }; pad.timestamp++; await w(650); };
+      const order = [...document.querySelectorAll('#dvNav .dv-t')].filter(t => !t.hidden).map(t => t.dataset.s); out.order = order;
+      const s0 = cur(); for (let i = 0; i < 3 && cur() === s0; i++) await press(5);
+      const s1 = cur(), f1 = foc(), d = $('details'); out.rb = { from: s0, to: s1, focusIn: !!f1 && !!f1.closest(`.dv-sec[data-s="${s1}"]`) || !!f1 && order.indexOf((f1.closest('.dv-sec') || { dataset: {} }).dataset.s) > order.indexOf(s1), scrolled: d.scrollTop > 0 };
+      for (let i = 0; i < 3 && cur() !== s0; i++) await press(4);
+      out.lb = cur() === s0 && foc() && foc().id === 'dPlay';
+      try { delete navigator.getGamepads; } catch (e) {}
+      key('e'); await w(900); const k1 = cur(); key('e'); await w(900); const k2 = cur(); key('q'); await w(900); out.keys = [k1, k2, cur()];
+      out.keysOk = order.indexOf(k1) === 1 && order.indexOf(k2) === 2 && order.indexOf(out.keys[2]) === 1;
+      out.hint = [...document.querySelectorAll('#hints .lab')].map(x => x.textContent).includes('Sections');
+      // Status: Playing saved for this game, pressed again it's cleared
+      const opt = v => document.querySelector(`#dvStatus .dv-opt[data-v="${v}"]`), saved = async () => ((((await window.trustyshelf.getConfig()).config.games || {})[g.id]) || {}).status || '';
+      const n0 = window.__statusSaved || 0; opt('playing').click(); await w(400);
+      out.status = { on: opt('playing').classList.contains('on') && opt('playing').getAttribute('aria-checked') === 'true', saved: await saved(), calls: (window.__statusSaved || 0) - n0 };
+      opt('finished').click(); await w(400); out.status.changed = await saved(); opt('finished').click(); await w(400); out.status.cleared = await saved();
+      // Favourite: on, then off again (the shelf's own favourite list)
+      const favs = async () => (((await window.trustyshelf.getConfig()).config.ui || {}).favorites || []).includes(g.id);
+      const f0 = await favs(); $('dFav').click(); await w(700); const f1b = await favs(), p1 = $('dFav').getAttribute('aria-pressed'); $('dFav').click(); await w(700);
+      out.fav = { before: f0, on: f1b, pressed: p1, after: await favs(), pressedAfter: $('dFav').getAttribute('aria-pressed') };
+      // every older action is still reachable: in the page, in More, or as Your copy's rows (which press the same buttons)
+      const ids = ['dPlay', 'dManual', 'dInspect', 'dMoreBtn', 'dEmu', 'dGameEmu', 'dBoxArt', 'dRename', 'dChooseManual', 'dHide', 'dCols', 'dClose', 'dTrailer', 'dCmd', 'dGrid', 'dDesc', 'dAch'];
+      out.missing = ids.filter(id => !$(id) || !$('details').contains($(id)));
+      $('dMoreBtn').click(); await w(400); out.menu = [...document.querySelectorAll('#dMenu button')].filter(b => !b.hidden && b.offsetParent).map(b => b.id); key('Escape'); await w(400);
+      out.rows = ['dvArt', 'dvMan', 'dvEmu'].filter(id => $(id) && !$(id).hidden);
+      const emu0 = ((((await window.trustyshelf.getConfig()).config.games || {})[g.id]) || {}).emulator || ''; $('dvEmu').click(); await w(700); const emu1 = ((((await window.trustyshelf.getConfig()).config.games || {})[g.id]) || {}).emulator || '';
+      out.emuRow = emu0 !== emu1; if (emu0 !== emu1) { $('dvEmu').click(); await w(700); }
+      out.mode = Shelf.getMode(); key('Escape'); await w(700); return out; });
+    check('Details redesign (Windows): Play has the focus when Details opens; the other cases fade away; the trailer\'s box is on the first screen beside Your play, right of the case',
+      rd.playFocused && rd.box && rd.others, JSON.stringify({ playFocused: rd.playFocused, box: rd.box, others: rd.others }));
+    check('Details redesign (Windows): LB / RB (and Q / E) jump a section, the bar shows where you are, the controller lands in it; LB back to the top is Play; the hint bar says Sections',
+      rd.rb.from === 'overview' && rd.rb.to === rd.order[1] && rd.rb.focusIn && rd.rb.scrolled && rd.lb && rd.keysOk && rd.hint, JSON.stringify({ order: rd.order, rb: rd.rb, lb: rd.lb, keys: rd.keys, hint: rd.hint }));
+    check('Details redesign (Windows): Your play from the history (time, launches, average, longest, first played, share of the console, hours by week)',
+      rd.statsOk, JSON.stringify(rd.stats));
+    check('Details redesign (Windows): Status is saved per game (Playing, then Finished; pressed again it clears)',
+      rd.status.on && rd.status.saved === 'playing' && rd.status.calls === 1 && rd.status.changed === 'finished' && rd.status.cleared === '', JSON.stringify(rd.status));
+    check('Details redesign (Windows): Favourite in Details adds the game to the shelf\'s favourites and takes it off again',
+      rd.fav.on !== rd.fav.before && rd.fav.pressed === String(!rd.fav.before) && rd.fav.after === rd.fav.before && rd.fav.pressedAfter === String(rd.fav.before), JSON.stringify(rd.fav));
+    check('Details redesign (Windows): every older action is still there (More: emulator, its own emulator, box art, rename, manual, hide, collections; Your copy\'s rows press the same buttons)',
+      !rd.missing.length && ['dEmu', 'dGameEmu', 'dBoxArt', 'dRename', 'dChooseManual', 'dHide', 'dCols'].every(id => rd.menu.includes(id)) && rd.rows.length === 3 && rd.emuRow && rd.mode === 'details',
+      JSON.stringify({ missing: rd.missing, menu: rd.menu, rows: rd.rows, emuRow: rd.emuRow, mode: rd.mode }));
 
     // nothing starts while the shelf is busy
     await page.evaluate(() => { window.__busy = window.BS_BUSY; window.BS_BUSY = () => true; });
@@ -239,7 +324,21 @@ module.exports = async function previewsPass({ browser, base, check, OUT }) {
     const againMs = Date.now() - t0, made2 = await page.evaluate(() => window.__clipsMade || 0);
     // (beta.9, Windows: in Details the clip plays in Overview's box, not behind the case)
     await page.keyboard.press('i'); let dc = false; for (let w = 0; w < 25 && !dc; w++) { await pause(400); dc = await page.evaluate(() => { const b = document.getElementById('dMedia'); return b.classList.contains('ready') && !!document.getElementById('dVideo').getAttribute('src') && !window.__ytOn; }); }
-    await page.screenshot({ path: path.join(OUT, 'previews-console-clip.png') }); await page.keyboard.press('Escape'); await pause(600);
+    await page.screenshot({ path: path.join(OUT, 'previews-console-clip.png') });
+    // (beta.12) sound in the box: A / Enter (here a real click on the box) turns it on: the clip stays muted and its sound file
+    // plays in step; - / + (and LT / RT) set the volume; the speaker turns it off; a video with its own sound just unmutes
+    const boxSt = () => page.evaluate(() => { const v = document.getElementById('dVideo'), a = document.getElementById('dAudio'), s = document.querySelector('#details .dv-snd');
+      return { label: (document.getElementById('dvTrL') || {}).textContent, on: !!(s && s.classList.contains('on')), vMuted: v.muted, aSrc: !!(a && /^(blob|bsfile):/.test(a.getAttribute('src') || '')), aPaused: a ? a.paused : null, aVol: a ? Math.round(a.volume * 100) : null, vVol: Math.round(v.volume * 100), mode: Shelf.getMode() }; });
+    const snd = { before: await boxSt() };
+    await page.click('#dTrailer'); await pause(900); snd.on = await boxSt();
+    await page.focus('#dTrailer'); await page.keyboard.press('-'); await pause(300); snd.down = await boxSt(); await page.keyboard.press('='); await pause(300); snd.up = await boxSt();
+    await page.click('#details .dv-spk'); await pause(400); snd.off = await boxSt();
+    await page.evaluate(() => { window.__ownSound = true; }); await page.click('#dTrailer'); await pause(700); snd.own = await boxSt(); await page.click('#dTrailer'); await pause(300); await page.evaluate(() => { window.__ownSound = false; });
+    check('Details (beta.12, Windows): A on the trailer box turns its sound on right there (its sound file playing, the clip muted), says Mute; - / + set the volume; the speaker turns it off',
+      snd.before.label === 'Turn sound on' && !snd.before.on && snd.on.on && snd.on.label === 'Mute' && snd.on.aSrc && snd.on.vMuted && snd.on.aPaused === false && snd.on.mode === 'details'
+      && snd.down.aVol === snd.on.aVol - 10 && snd.up.aVol === snd.on.aVol && !snd.off.on && snd.off.aPaused === true && snd.off.label === 'Turn sound on', JSON.stringify(snd));
+    check('Details (beta.12): a trailer with its own sound (a Steam one) is simply unmuted in the box', snd.own.on && snd.own.vMuted === false && snd.own.vVol === snd.on.aVol, JSON.stringify(snd.own));
+    await page.keyboard.press('Escape'); await pause(600);
     check('Console trailers: a console game\'s clip plays behind the shelf once it\'s made, is reused the next time (not made again), and plays in Overview\'s box in Details',
       cb && made === 1 && again && made2 === 1 && dc, JSON.stringify({ game: cg, shelf: cb, made, again, againMs, made2, details: dc }));
 
@@ -294,6 +393,15 @@ module.exports = async function previewsPass({ browser, base, check, OUT }) {
       const onShelf = await tp.evaluate(() => document.getElementById('app').classList.contains('pv-on'));
       await tp.keyboard.press('i'); let det = false; for (let w = 0; w < 30 && !det; w++) { await tp.waitForTimeout(400); det = await tp.evaluate(() => document.getElementById('app').classList.contains('pv-det')); }
       const copied = await tp.evaluate(() => (window.__copied || []).join(' ')); await tp.screenshot({ path: path.join(OUT, 'previews-thor-details.png') });
+      // (beta.12) the Thor keeps its own Details: the header with its cover, the tabs (Overview, Media, Your copy), the panes,
+      // the trailer in the Media tab, none of the Windows page's sections, Favourite or backdrop
+      const thorDet = await tp.evaluate(() => { const $ = id => document.getElementById(id), d = $('details');
+        return { mode: Shelf.getMode(), dv2: d.classList.contains('dv2') || document.getElementById('app').classList.contains('dv2'), newBits: ['dvNav', 'dFav', 'dvBack', 'dvTiles', 'dvStatus', 'dvCap'].filter(id => $(id)),
+          tabs: [...$('dTabs').querySelectorAll('button')].map(b => b.dataset.tab).join(), tabsShown: getComputedStyle($('dTabs')).display !== 'none', cover: !!d.querySelector('.d-hero #dCover') && $('dCover').getBoundingClientRect().width > 0,
+          mediaPane: !!d.querySelector('.d-pane[data-pane="media"] #dMedia') && !!d.querySelector('.d-pane[data-pane="media"] #dTrailer'), bar: [...d.querySelectorAll('.d-actions > button')].map(b => b.id).join(), panes: d.querySelectorAll('.d-body > .d-pane').length,
+          sections: d.querySelectorAll('.dv-sec').length }; });
+      check('Thor: Details is unchanged (its header and cover, tabs Overview / Media / Your copy, the trailer in Media; none of the Windows page\'s sections, Favourite or backdrop)',
+        thorDet.mode === 'details' && !thorDet.dv2 && !thorDet.newBits.length && thorDet.tabs === 'overview,media,copy' && thorDet.tabsShown && thorDet.cover && thorDet.mediaPane && thorDet.panes === 3 && !thorDet.sections && !/dFav/.test(thorDet.bar), JSON.stringify(thorDet));
       await tp.keyboard.press('Escape'); await tp.waitForTimeout(800); const after = await tp.evaluate(() => !document.getElementById('pvBack').getAttribute('src') || !document.getElementById('app').classList.contains('pv-det'));
       await tp.evaluate(() => Setup.open({ page: 'shelf' })); await tp.waitForTimeout(1800);
       const row = await tp.evaluate(() => ((document.querySelector('.bss-scroll') || {}).innerText || '').includes('Video previews'));

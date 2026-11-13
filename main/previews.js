@@ -84,18 +84,19 @@ function get(url, hops = 0) {
     req.on('error', reject); req.setTimeout(30000, () => req.destroy(new Error('timed out')));
   });
 }
-// the trailer's DASH manifest: the 480p (else the smallest) H.264 video and its piece names
-function dashPlan(mpd, url) {
-  const vid = /<AdaptationSet[^>]*contentType="video"[\s\S]*?<\/AdaptationSet>/.exec(mpd); if (!vid) return null;
+// the trailer's DASH manifest: the 480p (else the smallest) H.264 video and its piece names; (beta.12) kind "audio": its
+// sound track (AAC), a few seconds longer than the picture so it never runs out first
+function dashPlan(mpd, url, kind = 'video', secs = 20) {
+  const vid = new RegExp(`<AdaptationSet[^>]*contentType="${kind}"[\\s\\S]*?<\\/AdaptationSet>`).exec(mpd); if (!vid) return null;
   const reps = [...vid[0].matchAll(/<Representation\b([^>]*)>([\s\S]*?)<\/Representation>/g)].map(m => ({ id: (/\bid="([^"]+)"/.exec(m[1]) || [])[1], h: +((/\bheight="(\d+)"/.exec(m[1]) || [])[1] || 0), body: m[2] }));
-  const pick = reps.find(r => r.h === 480) || reps.sort((a, b) => a.h - b.h)[0]; if (!pick || !pick.id) return null;
+  const pick = kind === 'video' ? reps.find(r => r.h === 480) || reps.sort((a, b) => a.h - b.h)[0] : reps[0]; if (!pick || !pick.id) return null;
   const t = /<SegmentTemplate\b([^>]*)>/.exec(pick.body) || /<SegmentTemplate\b([^>]*)>/.exec(vid[0]); if (!t) return null;
   const a = n => (new RegExp('\\b' + n + '="([^"]+)"').exec(t[1]) || [])[1];
   const init = a('initialization'), media = a('media'), start = +(a('startNumber') || 1), dur = +(a('duration') || 0) / +(a('timescale') || 1);
   if (!init || !media) return null;
   const fill = (s, n) => s.replace(/\$RepresentationID\$/g, pick.id).replace(/\$Number(?:%0(\d+)d)?\$/g, (_, w) => String(n).padStart(+w || 0, '0'));
   const baseUrl = url.replace(/[^/]*$/, ''), q = (/\?[^#]*$/.exec(url) || [''])[0];
-  const pieces = Math.max(1, Math.min(10, Math.ceil(20 / (dur || 3)))); // the first ~20 seconds
+  const pieces = Math.max(1, Math.min(12, Math.ceil(secs / (dur || 3)))); // the first ~20 seconds (the sound ~25)
   return { init: baseUrl + fill(init, 0) + q, media: Array.from({ length: pieces }, (_, i) => baseUrl + fill(media, start + i) + q) };
 }
 const flights = new Map();
@@ -120,14 +121,47 @@ function steamClip(appid) {
   })().catch(e => { log('Preview: Steam trailer for', appid, 'failed:', e.message); return null; }).finally(() => flights.delete(appid));
   flights.set(appid, p); return p;
 }
+// (beta.12) a Steam clip's sound, <appid>.m4a beside it: the clip is the picture only (small, quick), and Details' box plays
+// this in step with it when sound is turned on. Fetched the first time sound is turned on for it, then kept; null when it
+// can't be had (asked again after 10 minutes)
+const aFlights = new Map(), aFailAt = new Map();
+function steamAudio(appid) {
+  appid = String(appid || ''); if (!/^\d{1,10}$/.test(appid)) return Promise.resolve(null);
+  const out = path.join(steamDir(), appid + '.m4a'); if (isFile(out)) return Promise.resolve(out);
+  if (Date.now() - (aFailAt.get(appid) || 0) < 10 * 60e3) return Promise.resolve(null);
+  if (aFlights.has(appid)) return aFlights.get(appid);
+  const p = (async () => {
+    fs.mkdirSync(steamDir(), { recursive: true });
+    const j = JSON.parse((await get(`https://store.steampowered.com/api/appdetails?appids=${appid}&filters=movies`)).toString('utf8'));
+    const movies = (j && j[appid] && j[appid].success && j[appid].data && j[appid].data.movies) || [];
+    const mv = movies.find(m => m.highlight && m.dash_h264) || movies.find(m => m.dash_h264); // (the same trailer as the clip)
+    if (!mv || !/^https:\/\/[a-z0-9.-]+\.steamstatic\.com\//i.test(mv.dash_h264)) throw new Error('no trailer');
+    const plan = dashPlan((await get(mv.dash_h264)).toString('utf8'), mv.dash_h264, 'audio', 25); if (!plan) throw new Error('no sound track in the trailer');
+    const bufs = [await get(plan.init)];
+    for (const u of plan.media) { try { bufs.push(await get(u)); } catch (e) { if (bufs.length > 1 && /^HTTP 4(04|10)$/.test(e.message)) break; throw e; } }
+    const tmp = out + '.part'; fs.writeFileSync(tmp, Buffer.concat(bufs)); fs.renameSync(tmp, out);
+    aFailAt.delete(appid); log('Preview: Steam trailer sound kept for', appid, Math.round(fs.statSync(out).size / 1024) + ' KB'); return out;
+  })().catch(e => { aFailAt.set(appid, Date.now()); log('Preview: Steam trailer sound for', appid, 'failed:', e.message); return null; }).finally(() => aFlights.delete(appid));
+  aFlights.set(appid, p); return p;
+}
+// the app id of a kept Steam clip file (<appid>.mp4 in the Steam clips folder), else null
+function steamIdOf(f) {
+  try { const r = path.resolve(String(f || '')); if (path.dirname(r).toLowerCase() !== path.resolve(steamDir()).toLowerCase()) return null; const m = /^(\d{1,10})\.mp4$/i.exec(path.basename(r)); return m ? m[1] : null; } catch { return null; }
+}
 // keeps the Steam clips and the console trailer clips (main/ytclips.js, data\previews\youtube) under 400 MB together,
 // dropping the ones not shown for longest
 function trim(limit = 400 << 20) {
   let files = [];
-  for (const d of [steamDir(), path.join(dataDir, 'previews', 'youtube')]) { try { files.push(...fs.readdirSync(d).filter(n => n.endsWith('.mp4')).map(n => { const f = path.join(d, n), s = fs.statSync(f); return { f, size: s.size, at: s.mtimeMs }; })); } catch {} }
+  for (const d of [steamDir(), path.join(dataDir, 'previews', 'youtube')]) { try { const names = fs.readdirSync(d), has = new Set(names.map(n => n.toLowerCase()));
+    // (beta.12) a clip's sound counts too, and one left without its clip (the clip went while the sound was coming) goes
+    for (const n of names) { const m = /^(.+)\.m4a$/i.exec(n); if (m && !has.has((m[1] + '.mp4').toLowerCase()) && !has.has((m[1] + '.hd.mp4').toLowerCase())) { try { fs.unlinkSync(path.join(d, n)); } catch {} } }
+    files.push(...names.filter(n => /\.(mp4|m4a)$/i.test(n)).map(n => { const f = path.join(d, n), s = fs.statSync(f); return { f, size: s.size, at: s.mtimeMs }; })); } catch {} }
+  files = files.filter(x => fs.existsSync(x.f));
   if (!files.length) return;
   let total = files.reduce((a, x) => a + x.size, 0); if (total <= limit) return;
-  files.sort((a, b) => a.at - b.at); for (const x of files) { if (total <= limit * .8) break; try { fs.unlinkSync(x.f); total -= x.size; } catch {} }
+  files.sort((a, b) => a.at - b.at); for (const x of files) { if (total <= limit * .8) break; try { fs.unlinkSync(x.f); total -= x.size; } catch {}
+    // (beta.12) a clip's sound (<id>.m4a beside <id>.hd.mp4 / <appid>.mp4) goes with the last clip of it
+    const base = x.f.replace(/(\.hd)?\.mp4$/i, ''); if (base !== x.f && !fs.existsSync(base + '.mp4') && !fs.existsSync(base + '.hd.mp4')) { try { fs.unlinkSync(base + '.m4a'); } catch {} } }
 }
 function clearSteam() { try { fs.rmSync(steamDir(), { recursive: true, force: true }); } catch {} }
 function steamSize() { try { return fs.readdirSync(steamDir()).reduce((a, n) => { try { return a + fs.statSync(path.join(steamDir(), n)).size; } catch { return a; } }, 0); } catch { return 0; } }
@@ -138,4 +172,4 @@ function youtubeId(url) {
     const id = u.hostname.includes('youtu.be') ? u.pathname.slice(1) : u.searchParams.get('v') || (/\/embed\/([^/?]+)/.exec(u.pathname) || [])[1]; return id && /^[\w-]{6,20}$/.test(id) ? id : null; } catch { return null; }
 }
 
-module.exports = { init, findFile, countFiles, dirsFor, steamClip, youtubeId, dashPlan, trim, clearSteam, steamSize, forget, key };
+module.exports = { init, findFile, countFiles, dirsFor, steamClip, steamAudio, steamIdOf, youtubeId, dashPlan, trim, clearSteam, steamSize, forget, key };

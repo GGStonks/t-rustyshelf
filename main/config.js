@@ -72,6 +72,8 @@ function defaults() {
 // ui, or one system) or an array (favorites, romDirs), a saved value of another shape ("ui": null, a hand-edited string)
 // is dropped for the default: the app reads cfg.ui.x everywhere and would crash on startup.
 const isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);
+// (beta.12) Details' Status per game (cfg.games[id].status): the words the shelf can sort and filter by later
+const GAME_STATUS = ['playing', 'finished', 'notstarted', 'abandoned'];
 function merge(base, saved) {
   if (!isObj(saved)) return saved === undefined ? base : saved;
   const out = Array.isArray(base) ? [] : { ...base };
@@ -208,14 +210,14 @@ function sanitize(cfg) {
   if (!isObj(cfg) || !isObj(cfg.ui)) return cfg;
   const ui = cfg.ui, d = defaults().ui;
   // per-game emulator overrides: plain paths only, a sane number of them
-  const games = {}; if (isObj(cfg.games)) for (const [id, v] of Object.entries(cfg.games).slice(0, 5000)) { if (typeof id !== 'string' || id.length > 2048 || !isObj(v)) continue; const e = typeof v.emulator === 'string' ? v.emulator.trim().slice(0, 1024) : '', t = typeof v.title === 'string' ? v.title.replace(/\s+/g, ' ').trim().slice(0, 120) : '', w = v.window === 'borderless' || v.window === 'windowed' ? v.window : '', ins = v.install === 'installed' || v.install === 'notinstalled' ? v.install : '', an = typeof v.artName === 'string' ? v.artName.replace(/\s+/g, ' ').trim().slice(0, 120) : ''; if (e || t || w || ins || an) games[id] = { ...(e ? { emulator: e } : {}), ...(t ? { title: t } : {}), ...(w ? { window: w } : {}), ...(ins ? { install: ins } : {}), ...(an ? { artName: an } : {}) }; } // (beta.5: title = the name the player gave it; window: a PC game's own window mode, main/windowmode.js; install: an Epic game set by hand to installed / not installed; artName: a console game's art match, Details → Art match)
+  const games = {}; if (isObj(cfg.games)) for (const [id, v] of Object.entries(cfg.games).slice(0, 5000)) { if (typeof id !== 'string' || id.length > 2048 || !isObj(v)) continue; const e = typeof v.emulator === 'string' ? v.emulator.trim().slice(0, 1024) : '', t = typeof v.title === 'string' ? v.title.replace(/\s+/g, ' ').trim().slice(0, 120) : '', w = v.window === 'borderless' || v.window === 'windowed' ? v.window : '', ins = v.install === 'installed' || v.install === 'notinstalled' ? v.install : '', an = typeof v.artName === 'string' ? v.artName.replace(/\s+/g, ' ').trim().slice(0, 120) : '', st = GAME_STATUS.includes(v.status) ? v.status : ''; if (e || t || w || ins || an || st) games[id] = { ...(e ? { emulator: e } : {}), ...(t ? { title: t } : {}), ...(w ? { window: w } : {}), ...(ins ? { install: ins } : {}), ...(an ? { artName: an } : {}), ...(st ? { status: st } : {}) }; } // (beta.5: title = the name the player gave it; window: a PC game's own window mode, main/windowmode.js; install: an Epic game set by hand to installed / not installed; artName: a console game's art match, Details → Art match; (upstream beta.12) status: Details' Status, one of GAME_STATUS)
   cfg.games = games;
   cfg.retroarch = typeof cfg.retroarch === 'string' ? cfg.retroarch.trim().slice(0, 1024) : '';
   // (beta.7) your collections (shelves of your own): [{ id, name, ids: [game ids] }], a sane number and size
   ui.lastSeenVersion = typeof ui.lastSeenVersion === 'string' ? ui.lastSeenVersion.slice(0, 40) : '';
   if (!['off', 'details', 'shelf'].includes(ui.previews)) ui.previews = 'off'; for (const k of ['previewSound', 'previewYoutube', 'previewClips']) if (typeof ui[k] !== 'boolean') ui[k] = d[k];
   { const n = +ui.previewDelay; ui.previewDelay = [0.5, 1, 1.5, 2, 3, 5, 8, 10, 15].includes(n) ? n : 1.5; } // (beta.8: more choices, half a second to 15 seconds)
-  { if (typeof ui.clipHint !== 'boolean') ui.clipHint = false; if (typeof ui.deckHint !== 'boolean') ui.deckHint = false; }
+  { if (typeof ui.clipHint !== 'boolean') ui.clipHint = false; if (typeof ui.deckHint !== 'boolean') ui.deckHint = false; if (typeof ui.leaveHint !== 'boolean') ui.leaveHint = false; if (typeof ui.deckScaled !== 'boolean') ui.deckScaled = false; }
   ui.previewDirs = [...new Set((Array.isArray(ui.previewDirs) ? ui.previewDirs : []).filter(x => typeof x === 'string' && x && x.length <= 1024))].slice(0, 20);
   ui.collections = (Array.isArray(ui.collections) ? ui.collections : []).filter(c => isObj(c) && typeof c.id === 'string' && c.id && typeof c.name === 'string').slice(0, 50)
     .map(c => ({ id: c.id.slice(0, 40), name: c.name.replace(/\s+/g, ' ').trim().slice(0, 40) || 'Collection', ids: [...new Set((Array.isArray(c.ids) ? c.ids : []).filter(x => typeof x === 'string' && x && x.length <= 1024))].slice(0, 5000) }));
@@ -244,6 +246,8 @@ function sanitize(cfg) {
   // (upstream beta.12) Seamless play (main/seamless.js): on unless turned off; the screen mode ('' = never chosen: Start in
   // fullscreen decides); Window mode's last place and size
   if (typeof ui.seamless !== 'boolean') ui.seamless = true;
+  // (upstream beta.12) Details' trailer box volume, 0-1 (its sound is turned on there each time)
+  { const n = +ui.trailerVol; ui.trailerVol = Number.isFinite(n) && n >= 0 && n <= 1 && ui.trailerVol !== null && ui.trailerVol !== '' ? n : .7; }
   if (!['', 'full', 'window'].includes(ui.screenMode)) ui.screenMode = '';
   { const b = ui.windowBounds; ui.windowBounds = isObj(b) && ['x', 'y', 'width', 'height'].every(k => Number.isFinite(b[k]) && Math.abs(b[k]) < 100000) && b.width >= 200 && b.height >= 150 ? { x: Math.round(b.x), y: Math.round(b.y), width: Math.round(b.width), height: Math.round(b.height) } : null; }
   ui.display = typeof ui.display === 'string' || typeof ui.display === 'number' ? String(ui.display).slice(0, 64) : '';
@@ -323,4 +327,4 @@ function sanitizeArt(a, ui) {
 // settings coming back from the screen: same shape rules as a loaded file (a missing or broken section gets its defaults)
 function normalize(c) { if (!isObj(c)) throw new Error('Not a settings object.'); return sanitize(merge(defaults(), c)); }
 
-module.exports = { init, load, save, flush, defaults, normalize, sanitize, file: () => FILE, blocked: () => readBlocked, ART, defaultArtStyle, cleanArtStyle, sanitizeArt };
+module.exports = { init, load, save, flush, defaults, normalize, sanitize, GAME_STATUS, file: () => FILE, blocked: () => readBlocked, ART, defaultArtStyle, cleanArtStyle, sanitizeArt };

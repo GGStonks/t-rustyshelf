@@ -2055,6 +2055,16 @@ handle('game:rename', ({ systemId, file, id, title }) => {
   if (systemId) { try { artstudio.forget(systemId); } catch {} }
   return { ok: true, title: t };
 });
+// (upstream beta.12) Details → Your play → Status: where the player is with a game, in their own words (kept per game id beside its
+// own emulator and name, so the shelf can sort and filter by it later). '' clears it.
+handle('game:status', ({ id, status }) => {
+  const key = String(id == null ? '' : id).slice(0, 2048); if (!key) throw new Error('No game.');
+  const s = config.GAME_STATUS.includes(status) ? status : '';
+  const games = { ...(cfg.games || {}) }, cur = { ...(games[key] || {}) };
+  if (s) cur.status = s; else delete cur.status;
+  if (Object.keys(cur).length) games[key] = cur; else delete games[key];
+  applyCfg({ ...cfg, games }); return { ok: true, games: cfg.games };
+});
 handle('pc:status', async () => { const pc = cfg.pc || {}; let epic = null; try { epic = (linux.isLinux ? linuxpc.epicInstalled() : pcgames.epicGames()).length; } catch {}
   // (beta.7) each store's installed games, counted whether its switch is on or not (Settings says what it would add)
   const n = async f => { try { return (await f()).length; } catch { return null; } };
@@ -2405,6 +2415,16 @@ handle('ytclip:clear', () => { ytclips.clear(); return true; });
 // (beta.8) Steam Deck: where (T)rustyShelf runs (the shelf's Desktop Mode card, Settings), and Add (T)rustyShelf to Steam
 handle('deck:info', () => ({ ...steamdeck.info(), inSteam: linux.isLinux && process.env.APPIMAGE ? steamdeck.inSteam(process.env.APPIMAGE) : false }));
 handle('deck:addToSteam', ({ closeSteam } = {}) => steamdeck.addToSteam({ exe: process.env.APPIMAGE || '', iconSrc: path.join(__dirname, 'renderer', 'app-icon.png'), dataDir: app.getPath('userData'), closeSteam: !!closeSteam }));
+// (upstream beta.12) Details' box: the sound of the clip that's playing, by the clip's own address: { clip: false } for anything but
+// the app's own YouTube clips (their sound is in the video), else { clip: true, url } (url null: it couldn't be had).
+// Kept the first time, so it plays at once after that
+handle('preview:clipAudio', async ({ url } = {}) => {
+  const u = String(url || ''); if (!u.startsWith('bsfile://local/')) return null;
+  let f; try { f = decodeURIComponent(u.slice(15).split('?')[0]); } catch { return null; }
+  const st = previews.steamIdOf(f); if (st) { const a = await previews.steamAudio(st); return { clip: true, url: a ? fileUrl(a) : null }; } // (Steam clips are the picture only too: their sound is fetched the same way)
+  const id = ytclips.idOfClip(f); if (!id) return { clip: false }; // (your own video: its sound is in it)
+  const a = await ytclips.audio(id); return { clip: true, url: a ? fileUrl(a) : null };
+});
 handle('preview:yt', ({ id, rect, muted }) => {
   if (!alive() || !/^[\w-]{6,20}$/.test(String(id || '')) || !rect) return false;
   const v = ytEnsure(); ytWant = id; v.setBounds(ytBounds(rect)); v.setVisible(true);

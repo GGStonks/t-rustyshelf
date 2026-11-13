@@ -102,8 +102,14 @@ window.trustyshelf={
           return {type:"youtube",id}}
         if(o.file&&hash(o.title)%3!==0){const u=await demoUrl();return u?{type:"file",url:u}:null}
         return o.youtube&&(config.ui||{}).previewYoutube!==false?{type:"youtube",id:"aaaaaaaaaaa"}:null},
-      previewYt:async(id,rect)=>{window.__ytRect=rect;window.__ytOn=true;setTimeout(()=>ytFns.forEach(f=>f({id,state:"playing"})),500);return true},
-      previewYtMove:async(rect,show)=>{window.__ytOn=!!show;if(rect)window.__ytRect=rect},previewYtStop:async()=>{window.__ytOn=false;window.__ytStops=(window.__ytStops||0)+1},
+      previewYt:async(id,rect,muted)=>{window.__ytRect=rect;window.__ytOn=true;window.__ytMuted=muted;setTimeout(()=>ytFns.forEach(f=>f({id,state:"playing"})),500);return true},
+      // (beta.12) a clip's sound for Details' box: a few seconds of silence as a WAV (made here, nothing fetched); window.__noClipAudio:
+  // the sound can't be had; window.__ownSound: the video has its own (a Steam trailer)
+  previewClipAudio:async url=>{await new Promise(r=>setTimeout(r,250));if(window.__ownSound)return {clip:false};if(window.__noClipAudio)return {clip:true,url:null};
+    const n=8000*3,b=new Uint8Array(44+n),dv=new DataView(b.buffer),s=(p,t)=>{for(let i=0;i<t.length;i++)b[p+i]=t.charCodeAt(i)};
+    s(0,"RIFF");dv.setUint32(4,36+n,true);s(8,"WAVEfmt ");dv.setUint32(16,16,true);dv.setUint16(20,1,true);dv.setUint16(22,1,true);dv.setUint32(24,8000,true);dv.setUint32(28,8000,true);dv.setUint16(32,1,true);dv.setUint16(34,8,true);s(36,"data");dv.setUint32(40,n,true);b.fill(128,44);
+    window.__clipAudioAsked=(window.__clipAudioAsked||0)+1;return {clip:true,url:URL.createObjectURL(new Blob([b],{type:"audio/wav"}))}}, /* (blob:, as the page's media-src allows; data: isn't) */
+  previewYtMove:async(rect,show)=>{window.__ytOn=!!show;if(rect)window.__ytRect=rect},previewYtStop:async()=>{window.__ytOn=false;window.__ytStops=(window.__ytStops||0)+1},
       onPreviewYt:fn=>{ytFns.push(fn)},previewClearSteam:async()=>true,
       onPreviewClip:fn=>{clipFns.push(fn)},onClipProgress:fn=>{progFns.push(fn)},
       // (beta.8) ?deck=desktop: a Steam Deck in Desktop Mode, (T)rustyShelf not started by Steam (?deck=steam: started by Steam)
@@ -196,6 +202,8 @@ window.trustyshelf={
   pathForFile:()=>null,
   toggleFullscreen:async()=>{},
   quit:async()=>{},power:async k=>{console.log("power",k);return true},chooseArt:async id=>({ok:false,canceled:true}),gameEmulator:async id=>{config.games=config.games||{};if(config.games[id])delete config.games[id];else config.games[id]={emulator:"C:/Emus/shadPS4-perf/shadps4.exe"};return {ok:true,games:JSON.parse(JSON.stringify(config.games))}},
+  // (beta.12) Details → Status, kept per game as main does (cfg.games[id].status)
+  gameStatus:async(id,status)=>{config.games=config.games||{};const k=String(id),o=Object.assign({},config.games[k]);if(["playing","finished","notstarted","abandoned"].includes(status))o.status=status;else delete o.status;if(Object.keys(o).length)config.games[k]=o;else delete config.games[k];window.__statusSaved=(window.__statusSaved||0)+1;return {ok:true,games:JSON.parse(JSON.stringify(config.games))}},
   onExited:fn=>{onExit=fn},
   // 1.55 Settings APIs (fakes): displays, backup / restore, problem report, play history, account status
   listDisplays:async()=>[{id:"1",label:"Display 1 — 1920×1080 (main)",primary:true,current:true,width:1920,height:1080},{id:"2",label:"Display 2 — 3840×2160",primary:false,current:false,width:3840,height:2160}],

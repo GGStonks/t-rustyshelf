@@ -291,7 +291,7 @@ async function toggleFav(){
   const list=new Set(cfgInfo.config.ui.favorites||[]);const on=!list.has(g.id);if(on)list.add(g.id);else list.delete(g.id);
   cfgInfo.config.ui.favorites=[...list];try{await api.saveConfig(cfgInfo.config)}catch{}
   play_(on?"toast":"back");rumble(0,.3,70);toast(on?`♥ ${g.title} added to favorites`:`Removed ${g.title} from favorites`);
-  const s=slots.find(x=>x.g===g);if(s&&s.el)s.el.classList.toggle("fav",on);
+  const s=slots.find(x=>x.g===g);if(s&&s.el)s.el.classList.toggle("fav",on);if(DV2&&mode==="details")dvFavPaint(); /* (beta.12: Details' Favourite button follows H too) */
   const wasHome=cur()===HOME;buildHome();if(wasHome){if(!shelves.includes(HOME)){sysIdx=0;sel=0;build();renderTabs()}else{sel=Math.max(0,Math.min(sel,HOME.items.length-1));build()}}else renderTabs();
   updateInfo();
 }
@@ -1032,22 +1032,23 @@ function fillDetails(){
       tiles.forEach(([k,v])=>{const d=document.createElement("div");d.className="d-stat";const a=document.createElement("span");a.textContent=k;const b=document.createElement("b");b.textContent=v;d.append(a,b);st.append(d)})}}
   // screenshots strip (LaunchBox); the chosen one fills the hero
   const shots=(g.kind==="rom"&&i.shots)||[];shotSel=0;const ds=$("dShots");ds.innerHTML="";ds.hidden=!shots.length;$("dCover").closest(".d-hero").classList.toggle("shot",!!shots.length);
-  shots.forEach((u,k)=>{const d=document.createElement("button");d.type="button";d.className="d-shot"+(k===0?" on":""); /* (a button: the controller can land on it in Media) */const im=document.createElement("img");im.loading="lazy";im.decoding="async";im.alt="";im.src=u;d.append(im);d.addEventListener("click",()=>showShot(k));ds.append(d)}); /* (beta.9: decoded off the main thread) */
+  shots.forEach((u,k)=>{const d=document.createElement("button");d.type="button";d.className="d-shot"+(k===0?" on":""); /* (a button: the controller can land on it in Media) */const im=document.createElement("img");im.loading="lazy";im.decoding="async";im.alt="";im.src=u;d.append(im);d.addEventListener("click",()=>{if(mode==="details")openShotView(k);else showShot(k)}) /* (beta.12: full screen; on Android too, with swipes) */;ds.append(d)}); /* (beta.9: decoded off the main thread) */
   if(shots.length)heroBgSoon(shots[0],g); // (beta.9: decoded first, then swapped in: never a half-drawn or hitching backdrop)
   $("dTrailer").hidden=!(g.kind==="rom"&&i.video);
   // (beta.7) Media: says when there's nothing there yet (a preview found later fills it); the tab is marked when there's something
   {const has=!!shots.length||!$("dTrailer").hidden;$("dNoMedia").hidden=has;$("dTabMedia").classList.toggle("has",has)}
   const grid=$("dGrid");grid.innerHTML="";
-  const skip=new Set(g.kind==="rom"?["Released","Genre","Players","Rating","Community score","Format","File"]:[]);
-  infoRows(g).filter(([k,v])=>!skip.has(k)&&v!=null&&String(v).trim()!=="").forEach(([k,v])=>{ /* (beta.7: a fact with no value isn't shown as an empty box) */const box=document.createElement("div");if(/program|file/i.test(k))box.className="wide";const dt=document.createElement("dt"),dd=document.createElement("dd");dt.textContent=k;dd.textContent=v;box.append(dt,dd);grid.append(box)});
+  /* (beta.12, Windows) the museum placard: every fact, the platform first (the file is in Your copy) */
+  const skip=new Set(g.kind==="rom"?(DV2?["File"]:["Released","Genre","Players","Rating","Community score","Format","File"]):[]);
+  (DV2&&(g.kind==="rom"||g.kind==="steam")&&s?[["Platform",g.kind==="steam"?(PC_SRC[g.source]||"PC"):s.name],...infoRows(g)]:infoRows(g)).filter(([k,v])=>!skip.has(k)&&v!=null&&String(v).trim()!=="").forEach(([k,v])=>{ /* (beta.7: a fact with no value isn't shown as an empty box) */const box=document.createElement("div");if(/program|file/i.test(k))box.className="wide";const dt=document.createElement("dt"),dd=document.createElement("dd");dt.textContent=k;dd.textContent=v;box.append(dt,dd);grid.append(box)});
   // what's on file for this game: the box (front, back, spine), the disc / cartridge label, the manual
   {const box=$("dArt"),row=$("dArtRow");row.innerHTML="";const a=g.art||{},show=g.kind==="rom";box.hidden=!show;$("dTabCopy").hidden=!show;
     if(show){const media=s?mediaWord(s.id):"Disc",man=Array.isArray(a.manual)?a.manual.length:0;
       const items=[["Front cover",!!a.front],["Back cover",!!a.back],["Spine",!!a.spine],[media+" art",!!a.disc],["Manual",man>0,man?`${man} pages`:g.manualMiss?"none found online":""]]; /* (beta.9: manualMiss, the search looked and found none) */
       const full=a.front&&a.back&&a.spine;
       items.forEach(([l,ok,extra])=>{const c=document.createElement("span");c.className="d-art-chip"+(ok?" ok":"");c.textContent=(ok?"✓ ":"")+l+(extra?` · ${extra}`:"");row.appendChild(c)});
-      const sum=document.createElement("div");sum.className="d-art-sum";sum.textContent=full&&a.disc&&man?"Complete: full box, disc and manual":full?"Full box art"+(a.disc?"":" · no disc art")+(man?"":g.manualMiss?" · no manual found online":" · no manual"):"Missing pictures can be fetched in Settings → Box art & manuals → Download missing art now";row.appendChild(sum)}}
-  if(g.kind==="rom"&&i.genres&&i.genres.includes(";")){const box=document.createElement("div");box.className="wide";const dt=document.createElement("dt"),dd=document.createElement("dd");dt.textContent="Genres";dd.textContent=i.genres.replace(/;/g,", ");box.append(dt,dd);grid.append(box)}
+      const sum=document.createElement("div");sum.className="d-art-sum";sum.textContent=full&&a.disc&&man?`Complete: full box, ${lcWord(media)} and manual`:full?"Full box art"+(a.disc?"":` · no ${lcWord(media)} art`)+(man?"":g.manualMiss?" · no manual found online":" · no manual"):"Missing pictures can be fetched in Settings → Box art & manuals → Download missing art now";row.appendChild(sum)}}
+  if(!DV2&&g.kind==="rom"&&i.genres&&i.genres.includes(";")){const box=document.createElement("div");box.className="wide";const dt=document.createElement("dt"),dd=document.createElement("dd");dt.textContent="Genres";dd.textContent=i.genres.replace(/;/g,", ");box.append(dt,dd);grid.append(box)}
   {const si=$("dSecInfo");if(si)si.hidden=!grid.childElementCount}
   let cmd="";
   if(g.kind==="rom")cmd=`${quote(gameEmu(g)||s.emulator||s.emulatorName)} ${argsPreview(s.gameArgs,g.file)}`;
@@ -1070,6 +1071,7 @@ function fillDetails(){
   {const b=$("dGameEmu");if(b){const own=g.kind==="rom"?gameEmu(g):"";b.hidden=!(g.kind==="rom"&&api.gameEmulator);b.textContent=own?(emuLabel(own).length>16?emuLabel(own).slice(0,15)+"…":emuLabel(own)):"Emulator";b.title=own?`Runs in ${own} (just this game). Press to change.`:`Runs in the shelf's ${s.emulatorName||"emulator"}. Press to pick a different build for just this game.`;b.classList.toggle("own",!!own)}}
   {const b1=$("dMoveEarlier"),b2=$("dMoveLater");if(b1&&b2){const ok=cur()&&cur().kind!=="home"&&isGame(g);b1.hidden=!ok;b2.hidden=!ok;}}
   {const bs=$("dBoxSize");if(bs){const ok=isGame(g);bs.hidden=!ok;if(ok){const sc=(cfgInfo&&cfgInfo.config.ui.gameScale&&cfgInfo.config.ui.gameScale[g.id])||1;bs.textContent=`Box size: ${Math.round(sc*100)}%`}}}
+  if(DV2)dvFill(g); // (upstream beta.12) the sections only the Windows Details has: Your play, Status, Favourite, Your copy, the placard
   renderHints(); // Y's prompt follows this game's trailer / achievements row (updateInfo drew the bar before this fill)
   pvSchedule(); // (beta.7) its video preview, after a rest
 }
@@ -1106,17 +1108,25 @@ function pvRect(){const b=$("dMediaIn"),d=$("details");if(!b||!d)return null;con
 // panel); the Media tab plays it in its framed box instead (the background steps back while it does). YouTube can't sit
 // behind the app (its player is a view on top), so a YouTube trailer plays in the Media tab's box only.
 // Before any video, the game's fan art (LaunchBox) is the backdrop (the video's poster); not on the Thor.
-function pvVid(v,url,k,onPlay){uiCrumb("Video: "+String(url).split(/[\\/]/).pop().slice(0,60));v.muted=!pvUi("previewSound");v.volume=v.muted?0:Math.min(1,+(pvUi("volume")??.7));v.onplaying=()=>{if(PV.key===k)onPlay()};v.onerror=()=>{if(PV.key===k){v.onerror=null;pvBoxStop();pvBgStop()}};v.src=url;v.play().catch(()=>{})}
+function pvVid(v,url,k,onPlay){uiCrumb("Video: "+String(url).split(/[\\/]/).pop().slice(0,60));v.muted=!(ANDROID&&v.id==="dVideo"?aSndOn():pvUi("previewSound"));if(v.id==="dVideo"&&DV2&&BOX.on)v.muted=true; /* (beta.12: the box's own sound is turned on by boxSoundOn once the clip loads) */v.volume=v.muted?0:Math.min(1,+(pvUi("volume")??.7));v.onplaying=()=>{if(PV.key===k)onPlay()};v.onerror=()=>{if(PV.key===k){v.onerror=null;pvBoxStop();pvBgStop()}};v.src=url;v.play().catch(()=>{})}
 function pvBgStop(){app.classList.remove("pv-det");const v=$("pvBack");if(v&&v.getAttribute("src")&&!PV.bkey){v.onplaying=v.onerror=null;v.pause();v.removeAttribute("src");try{v.load()}catch{}}}
 function pvBoxStop(){clearTimeout(PV.lt);const box=$("dMedia"),v=$("dVideo");if(box)box.classList.remove("on","yt","ready");if(PV.yt){PV.yt="";if(api.previewYtStop)api.previewYtStop()}
-  if(v&&v.getAttribute("src")){v.onplaying=v.onerror=null;v.pause();v.removeAttribute("src");try{v.load()}catch{}}}
-function pvStop(){clearTimeout(PV.t);clearTimeout(PV.st);PV.key="";PV.r=null;pvBoxStop();pvBgStop();dArtOff()}
+  if(v&&v.getAttribute("src")){v.onplaying=v.onerror=null;v.pause();v.removeAttribute("src");try{v.load()}catch{}}
+  if(ANDROID){const b=$("dSound");if(b)b.hidden=true}} /* (beta.12, Android: no trailer in the box, no sound button) */
+function pvStop(){clearTimeout(PV.t);clearTimeout(PV.st);PV.key="";PV.r=null;PV.held=null;pvBoxStop();pvBgStop();dArtOff()}
+// a screen laid over Details (Achievements, the full-screen trailer): Details' own trailer pauses under it (it used to
+// play on, sound and all) and carries on from there when Details is back, if it's still that game's
+function pvHold(){const L=[$("dVideo"),$("pvBack")].filter(v=>v&&v.getAttribute("src")&&!v.paused);if(!L.length)return;PV.held={k:PV.key,bk:PV.bkey,L};L.forEach(v=>{try{v.pause()}catch{}})}
+/* (back on Details for the same game, or on the shelf with the shelf's own trailer still that game's: Achievements opens from both) */
+function pvResume(){const h=PV.held;PV.held=null;if(!h)return;const ok=mode==="details"?h.k===PV.key:mode==="browse"&&!!h.bk&&h.bk===PV.bkey;if(!ok)return;h.L.forEach(v=>{if(v.getAttribute("src"))v.play().catch(()=>{})})}
 function pvSchedule(){const g=curGame(),k=g?String(g.id!=null?g.id:g.title):"";if(k&&k===PV.key)return;pvStop();
   if(mode!=="details"||!g)return;dArtOn(g,k);if(pvMode()==="off"||!pvCan(g))return;PV.key=k;PV.t=setTimeout(()=>pvStart(g,k),!ANDROID&&performance.now()-(PV.openAt||0)<900?300:pvDelay())} // (300 ms: after the panel has slid in)
+/* (beta.12) Details is still there under the screenshot viewer: a trailer that comes meanwhile is started (and held, boxSync) */
+const pvDet=()=>mode==="details"||mode==="shot";
 async function pvStart(g,k){
-  if(PV.key!==k||mode!=="details")return;
+  if(PV.key!==k||!pvDet())return;
   if(window.BS_BUSY&&BS_BUSY()){PV.t=setTimeout(()=>pvStart(g,k),300);return}
-  const r=await pvAsk(g);if(PV.key!==k||mode!=="details"||!r)return;PV.r=r;
+  const r=await pvAsk(g);if(PV.key!==k||!pvDet()||!r)return;PV.r=r;
   if(r.type==="pending"){pvBoxWait(k);return} // (beta.8) a console trailer clip is being made: api.onPreviewClip plays it when it's ready
   if(r.type==="youtube"&&!api.previewYt)return; // (beta.9: Android has its own YouTube player too, android-api.js)
   $("dTabMedia").classList.add("has");$("dNoMedia").hidden=true;
@@ -1124,22 +1134,85 @@ async function pvStart(g,k){
 // the Media tab's box: the same video framed, or YouTube's player laid over it
 // (beta.9, Windows) the box opens at once with this game's art and a soft shimmer, so you see the trailer is coming (and
 // nothing below jumps when it starts); the Thor's opens once the picture is there, as before
-function pvBoxWait(k){clearTimeout(PV.lt);if(ANDROID||PV.key!==k||dTabNow()!==MEDIA_TAB)return;$("dMediaIn").style.backgroundImage=$("dHeroBg").style.backgroundImage;$("dMedia").classList.add("on");
+function pvBoxWait(k){clearTimeout(PV.lt);if(ANDROID||PV.key!==k||dTabNow()!==MEDIA_TAB)return;if(!DV2)$("dMediaIn").style.backgroundImage=$("dHeroBg").style.backgroundImage;$("dMedia").classList.add("on"); /* (beta.12: the box keeps the poster dvFill gave it) */
   PV.lt=setTimeout(()=>{if(PV.key===k&&!$("dMedia").classList.contains("ready"))pvBoxStop()},45000)} // (a clip that never comes: the box closes again)
-function pvBoxStart(k){const r=PV.r;if(!r||PV.key!==k)return;const box=$("dMedia"),tag=$("dMediaTag");$("dMediaIn").style.backgroundImage=$("dHeroBg").style.backgroundImage; // (this game's art under the picture as it fades in)
-  if(r.type==="file"){pvBgStop();pvBoxWait(k);tag.textContent=r.steam?"Steam trailer":r.yt?"Trailer":"Preview";pvVid($("dVideo"),r.url,k,()=>box.classList.add("on","ready"))}
+/* (beta.12, Details' trailer box, Windows / Linux) Sound where it plays: A / Enter (or the speaker) turns it on and off, LT / RT
+   (or - and +, or the bar) set its volume, Y is full screen. Boxshelf's own YouTube clips are video only (small, quick):
+   their sound is a file of its own (main: preview:clipAudio, <id>.m4a), played in step with the picture; a Steam trailer
+   or your own video has its sound in it. On until Details closes; the volume is kept (ui.trailerVol) */
+const BOX={on:false,busy:false,gen:0,a:null,own:false,saveT:0,user:null}; /* (user: on / off chosen in this Details visit; null: Settings → Video previews' sound decides) */
+const boxVol=()=>{const v=+(cfgInfo&&cfgInfo.config.ui.trailerVol);return Number.isFinite(v)&&v>=0&&v<=1?v:.7};
+function boxAudio(){if(!BOX.a){const a=document.createElement("audio");a.id="dAudio";a.preload="auto";a.loop=true;BOX.a=a;($("dvVid")||document.body).append(a);try{applySinkTo(a);applySinkTo($("dVideo"))}catch{}}return BOX.a}
+function boxApplyVol(){const v=$("dVideo"),vol=boxVol();if(BOX.a)BOX.a.volume=vol;if(BOX.own&&v)v.volume=vol}
+function dvSndPaint(){const d=$("details"),s=d&&d.querySelector(".dv-snd");if(!s||!DV2)return;const on=BOX.on&&!BOX.busy,vol=boxVol();
+  s.classList.toggle("on",on);s.classList.toggle("busy",BOX.busy);const b=s.querySelector(".dv-vbar i");if(b)b.style.transform=`scaleX(${on?vol:0})`;
+  const bar=s.querySelector(".dv-vbar");if(bar)bar.setAttribute("aria-valuenow",String(Math.round((on?vol:0)*100)));
+  const k=s.querySelector(".dv-vk"),st=glyphStyle(),kt=st==="ps"?"L2 R2":st==="nintendo"?"ZL ZR":"LT RT";if(k&&k.textContent!==kt)k.textContent=kt;
+  const l=document.getElementById("dvTrL");if(l)l.textContent=BOX.busy?"Getting the sound…":BOX.on?"Mute":"Turn sound on";
+  const tr=$("dTrailer");if(tr){tr.setAttribute("aria-label",BOX.on?"Mute the trailer":"Turn the trailer's sound on");tr.title=(BOX.on?"Mute":"Sound on")+" (LT / RT: volume · Y: full screen)"}}
+function boxSoundOff(){BOX.on=false;BOX.busy=false;BOX.gen++;const v=$("dVideo");if(v)v.muted=true;if(BOX.a)BOX.a.pause();BOX.own=false;dvSndPaint()}
+async function boxSoundOn(){const v=$("dVideo"),src=v&&v.getAttribute("src");if(!src){BOX.on=true;BOX.busy=false;dvSndPaint();return} /* (beta.12: asked before the clip is in: on, and the clip's loadeddata fetches its sound) */
+  const my=++BOX.gen;BOX.on=true;BOX.busy=true;dvSndPaint();
+  let r=null;try{r=api.previewClipAudio?await api.previewClipAudio(src):{clip:false}}catch{r={clip:true,url:null}} /* (a failed ask: "couldn't get the sound", not a silent unmute) */
+  if(my!==BOX.gen)return; /* (turned off, or asked again, meanwhile) */
+  if(v.getAttribute("src")!==src){BOX.busy=false;dvSndPaint();return} /* (another clip, or none: still on, the next clip's loadeddata asks for its own sound) */
+  BOX.busy=false;
+  if(r&&r.clip&&r.url){const a=boxAudio();if(a.getAttribute("src")!==r.url)a.src=r.url;BOX.own=false;v.muted=true;boxApplyVol();try{a.currentTime=v.currentTime||0}catch{}if(!v.paused)a.play().catch(()=>{})}
+  else if(r&&r.clip){BOX.on=false;toast("Couldn't get this trailer's sound. Check the connection and try again.")}
+  else{BOX.own=true;applySinkTo(v);v.muted=false;boxApplyVol()} /* (its sound is in the video itself) */
+  dvSndPaint()}
+/* the sound file follows the picture: plays and pauses with it, and is put back in step when it drifts (or the clip loops) */
+function boxSync(){const v=$("dVideo");if(!v||v._boxSync)return;v._boxSync=true;
+  const a=()=>BOX.on&&!BOX.own&&BOX.a&&BOX.a.getAttribute("src")?BOX.a:null;
+  v.addEventListener("play",()=>{if(mode==="shot"){v.pause();PV.held={k:PV.key,bk:PV.bkey,L:[v]};return} /* (it came in under the screenshot viewer: it starts when you're back) */
+    const x=a();if(x){try{x.currentTime=v.currentTime}catch{}x.play().catch(()=>{})}});
+  v.addEventListener("pause",()=>{const x=a();if(x)x.pause()});
+  v.addEventListener("timeupdate",()=>{const x=a();if(x&&x.readyState>=2&&Math.abs(x.currentTime-v.currentTime)>.3){try{x.currentTime=v.currentTime}catch{}}});
+  v.addEventListener("emptied",()=>{if(BOX.a)BOX.a.pause()});
+  v.addEventListener("loadeddata",()=>{if(BOX.on||(BOX.user==null&&pvUi("previewSound")))boxSoundOn()})} /* (the next game's clip: its sound too, while sound is on; previews set to play with sound start with it) */
+function boxVolSet(x,save){x=Math.max(0,Math.min(1,Math.round(x*20)/20));if(cfgInfo)cfgInfo.config.ui.trailerVol=x;boxApplyVol();dvSndPaint();
+  clearTimeout(BOX.saveT);BOX.saveT=setTimeout(()=>uiSet("trailerVol",x),save?0:500)}
+/* the pill: the speaker turns the sound on and off; the bar is pressed or dragged for the volume (which turns it on) */
+function dvSndBuild(){const s=document.createElement("div");s.className="dv-snd";
+  s.innerHTML='<button type="button" class="dv-spk" tabindex="-1" aria-label="Sound on or off"><svg viewBox="0 0 24 24"><path class="b" d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path class="w" d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/><path class="x" d="M16 9.5l5 5M21 9.5l-5 5"/></svg></button><span class="dv-vbar" role="slider" aria-label="Trailer volume" aria-valuemin="0" aria-valuemax="100"><i></i></span><span class="dv-vk"></span>';
+  s.querySelector(".dv-spk").addEventListener("click",e=>{e.stopPropagation();setInput("pointer");if(BOX.on){BOX.user=false;boxSoundOff()}else{BOX.user=true;boxSoundOn()}});
+  const bar=s.querySelector(".dv-vbar");let drag=false;const at=e=>{const r=bar.getBoundingClientRect();return (e.clientX-r.left)/Math.max(1,r.width)};
+  bar.addEventListener("pointerdown",e=>{e.stopPropagation();e.preventDefault();setInput("pointer");drag=true;try{bar.setPointerCapture(e.pointerId)}catch{}boxVolSet(at(e));if(!BOX.on){BOX.user=true;boxSoundOn()}});
+  bar.addEventListener("pointermove",e=>{if(drag)boxVolSet(at(e))});
+  const up=e=>{if(!drag)return;drag=false;boxVolSet(at(e),true)};bar.addEventListener("pointerup",up);bar.addEventListener("pointercancel",()=>{drag=false});
+  s.addEventListener("click",e=>e.stopPropagation()); /* (a click on the pill never reaches the box under it) */
+  return s}
+function boxVolStep(d){if(!BOX.on){BOX.user=true;boxSoundOn();return}boxVolSet(boxVol()+d*.1);play_("tick",{dir:d})}
+function trailerA(){const v=$("dVideo"),playing=DV2&&PV&&PV.key&&v&&v.getAttribute("src");if(!playing){openTrailer();return} /* (nothing playing in the box yet: full screen, as before) */
+  play_("tick");if(BOX.on){BOX.user=false;boxSoundOff()}else{BOX.user=true;boxSoundOn()}}
+/* the keyboard: - and + with the trailer box selected */
+addEventListener("keydown",e=>{if(!DV2||mode!=="details"||document.activeElement!==$("dTrailer"))return;const k=e.key;
+  if(k==="-"||k==="_"){e.preventDefault();e.stopImmediatePropagation();setInput("kbd");boxVolStep(-1)}else if(k==="="||k==="+"){e.preventDefault();e.stopImmediatePropagation();setInput("kbd");boxVolStep(1)}}); /* (stopped here: the app's own - / + volume used to change too) */
+function pvBoxStart(k){const r=PV.r;if(!r||PV.key!==k)return;const box=$("dMedia"),tag=$("dMediaTag");if(!DV2)$("dMediaIn").style.backgroundImage=$("dHeroBg").style.backgroundImage; // (this game's art under the picture as it fades in)
+  if(r.type==="file"){pvBgStop();pvBoxWait(k);tag.textContent=r.steam?"Steam trailer":r.yt?"Trailer":"Preview";pvVid($("dVideo"),r.url,k,()=>{box.classList.add("on","ready");aSndPaint();if(DV2&&$("dTrailer").hidden){$("dTrailer").hidden=false;dvSndPaint()}})} /* (beta.12: a clip found by search, with no trailer link, still gets the box's controls: A for its sound) */
   // (beta.9, Windows) Overview never loads YouTube's own player by itself: it's a heavy web page laid over the app, and with the
   // trailer at the top of Overview it loaded on every Details open, lagged and took the controller away while it did. The
   // box waits for the console trailer clip instead (made in the background, a plain video); full screen still opens YouTube
   else if(r.type==="youtube"&&!ANDROID){if(r.pending)pvBoxWait(k)}
   else if(r.type==="pending")pvBoxWait(k); // (back on Overview while the clip is still being made: the waiting box again)
-  else if(r.type==="youtube"){PV.yt=r.id;tag.textContent="Trailer";box.classList.add("on","yt");
+  else if(r.type==="youtube"){PV.yt=r.id;tag.textContent="Trailer";box.classList.add("on","yt");aSndPaint();
     // the box opens first (its poster is this game's art); YouTube's player is laid over it once the box has its size
-    PV.st=setTimeout(()=>{if(PV.key!==k||PV.yt!==r.id)return;const rc=pvRect();if(rc)api.previewYt(r.id,rc,!pvUi("previewSound"))},380)}}
+    PV.st=setTimeout(()=>{if(PV.key!==k||PV.yt!==r.id)return;const rc=pvRect();if(rc)api.previewYt(r.id,rc,!(ANDROID?aSndOn():pvUi("previewSound")));aSndPaint()},380)}}
+/* (beta.12, Android) the Media tab's trailer sound: a button under the box turns it on and off for this visit (the phone's
+   own volume buttons set how loud). Until it's pressed, Settings → Video previews' sound decides, as before. A video file
+   is unmuted where it plays; YouTube's player is started again with or without its sound */
+const ASND={on:null};
+const aSndOn=()=>ASND.on==null?!!pvUi("previewSound"):ASND.on;
+function aSndPaint(){bsCtxSoon();const b=$("dSound");if(!b)return;const v=$("dVideo"),has=ANDROID&&!!PV&&!!PV.key&&(!!(v&&v.getAttribute("src"))||!!PV.yt);b.hidden=!has;if(!has)return;
+  const on=aSndOn(),t=on?"Trailer sound: on":"Trailer sound: off";if(b.textContent!==t)b.textContent=t;b.setAttribute("aria-pressed",String(on))}
+function aSndToggle(){if(!ANDROID||!PV||!PV.key)return;ASND.on=!aSndOn();const v=$("dVideo");
+  if(v&&v.getAttribute("src")){v.muted=!ASND.on;v.volume=ASND.on?Math.min(1,+(pvUi("volume")??.7)):0}
+  else if(PV.yt&&api.previewYt){const rc=pvRect();if(rc)api.previewYt(PV.yt,rc,!ASND.on)}
+  play_("tick");aSndPaint()}
 // switching tabs: into Media the preview moves into the box; out of it, back behind the case
 function pvTab(from,to){if(!PV.key||!PV.r)return;if(to===MEDIA_TAB)pvBoxStart(PV.key);else if(from===MEDIA_TAB){pvBoxStop();if(PV.r.type==="file"){const k=PV.key;pvVid($("pvBack"),PV.r.url,k,()=>app.classList.add("pv-det"))}}}
 // the fan-art backdrop: decoded first, then faded in as the video's poster (no flash, no half-drawn picture)
-function dArtOn(g,k){if(ANDROID||g.kind!=="rom")return;const u=g.info&&g.info.bg;if(!u)return;const im=new Image();im.src=u;im.decode().then(()=>{if(mode!=="details"||curGame()!==g)return;const v=$("pvBack");if(!v.getAttribute("src"))v.poster=u;app.classList.add("d-art-on")}).catch(()=>{})}
+function dArtOn(g,k){if(ANDROID||DV2||g.kind!=="rom")return; /* (beta.12: Details' own backdrop, dvBack, covers what's behind the case) */const u=g.info&&g.info.bg;if(!u)return;const im=new Image();im.src=u;im.decode().then(()=>{if(mode!=="details"||curGame()!==g)return;const v=$("pvBack");if(!v.getAttribute("src"))v.poster=u;app.classList.add("d-art-on")}).catch(()=>{})}
 function dArtOff(){if(!app.classList.contains("d-art-on"))return;app.classList.remove("d-art-on");const v=$("pvBack");setTimeout(()=>{if(!app.classList.contains("d-art-on")&&!app.classList.contains("pv-on"))v.removeAttribute("poster")},700)}
 // ---------- (beta.7) Details' tabs (Overview, Media, Your copy, Info) and its More menu ----------
 const dTabNow=()=>{const b=document.querySelector("#details .d-body");return b?b.dataset.show:"overview"};
@@ -1147,8 +1220,11 @@ const dTabNow=()=>{const b=document.querySelector("#details .d-body");return b?b
 // box, the full-screen button and the screenshots move into Overview, and the preview plays framed there. The Thor keeps
 // its Media tab (MEDIA_TAB "media")
 const MEDIA_TAB=ANDROID?"media":"overview";
+// (beta.12) Windows / Linux: Details redesigned around the case, one page in sections (dvBuild, details2.css); the Thor keeps its own
+const DV2=!ANDROID;
 if(!ANDROID){const ov=document.querySelector('#details .d-pane[data-pane="overview"]');if(ov){ov.prepend($("dMedia"),$("dTrailer"),$("dShots"))}$("dTabMedia").hidden=true;$("details").classList.add("d-one")}
 function dTab(t,quiet){const body=document.querySelector("#details .d-body");if(!body)return;
+  if(DV2&&typeof t==="number"){dvJump(t);return} /* (beta.12) LB / RB, Q / E: a whole section of the one page */
   if(typeof t==="number"){const L=[...$("dTabs").querySelectorAll("button")].filter(b=>!b.hidden),i=L.findIndex(b=>b.dataset.tab===body.dataset.show);t=L[((i<0?0:i)+t+L.length)%L.length].dataset.tab}
   const was=body.dataset.show;if(was===t&&!quiet)return;body.dataset.show=t;
   $("dTabs").querySelectorAll("button").forEach(b=>{const on=b.dataset.tab===t;b.classList.toggle("on",on);b.setAttribute("aria-selected",String(on))});
@@ -1852,6 +1928,9 @@ const MEDIA={gc:{kind:"disc",size:.62,drive:"top"},wii:{kind:"disc",size:.86,dri
 if(window.BS_SYSTEMS_EXTRA)Object.assign(MEDIA,BS_SYSTEMS_EXTRA.media||{});
 // (upstream beta.11) what a console's games come on, in words: DOS games on a floppy disk, cartridges, the PSP's UMD, or a disc
 function mediaWord(id){const m=MEDIA[id]||{};return m.form==="floppy"?"Floppy disk":m.kind==="cart"?"Cartridge":id==="psp"?"UMD":"Disc"}
+const lcWord=w=>w==="UMD"?w:String(w).toLowerCase(); /* (upstream beta.12) in a sentence: "the cartridge", but "the UMD" */
+/* (upstream beta.12) "bs-ctx": what the top screen shows changed (Details, a manual): the Thor's bottom screen asks again (Android only) */
+function bsCtxSoon(){if(!ANDROID)return;clearTimeout(bsCtxSoon.t);bsCtxSoon.t=setTimeout(()=>dispatchEvent(new Event("bs-ctx")),90)}
 const DECK={front:"frontslot",tray:"trayload",hatch:"hatchload"};
 let insertT=null,insertSeatAt=0,slideEndAt=0;const INSERT_3D=false;
 // Every console boots on its own full-screen slide (see bootslide.css). The old disc-into-the-console animation (runInsert below)
@@ -2161,7 +2240,9 @@ async function pcAch(g,force){if(!force&&PCA.has(g.id))return PCA.get(g.id);let 
 async function pcAchDetails(g,force){const box=$("dAch");const p=await pcAch(g,force);if(curGame()!==g||!p||!p.total)return;
   box.dataset.state="ok";$("dAchBtn").hidden=false;$("dAchBtn").textContent="See all";const pct=Math.round(100*p.earned/p.total);
   $("dRing").style.setProperty("--p",pct);$("dRingTxt").textContent=pct+"%";$("dAchTitle").textContent=p.earned===p.total?"Completed":"Achievements";
-  $("dAchSub").textContent=`${p.earned} of ${p.total} unlocked · ${p.source||"Steam"}`;box.hidden=false;if(mode==="details")renderHints()}
+  $("dAchSub").textContent=`${p.earned} of ${p.total} unlocked · ${p.source||"Steam"}`;box.hidden=false;
+  if(DV2&&dv.secs.ach){dv.secs.ach.hidden=false;const t=dv.nav&&dv.nav.querySelector('.dv-t[data-s="ach"]');if(t)t.hidden=false;const e=$("dvAchSrc");if(e)e.textContent=" · "+(p.source||"Steam")} /* (the new Details page: its Achievements section, shown now they're in) */
+  if(mode==="details")renderHints()}
 async function raDetails(g,force){
   const box=$("dAch");box.hidden=true;if(isPcAch(g))return pcAchDetails(g,force);const s=shelfFor(g);if(!raHas(s)||!g||g.kind!=="rom")return;
   const key=s.id+"|"+g.title;let p=force?undefined:RA.game.get(key);
@@ -3494,7 +3575,7 @@ const HINTS=[
   {act:()=>openMuseum(),pad:["⧉"],kbd:["M"],label:"Museum hold",when:notDet},
   {act:()=>openSort(),pad:["☰"],kbd:["G"],label:"Sort hold",when:notDet},
   {act:()=>Setup.open(),pad:["☰"],kbd:["S"],label:"Settings",when:notDet},
-  {act:()=>dTab(1),pad:["L1","R1"],kbd:["Q","E"],label:"Tabs",when:inDet}, // (beta.7)
+  {act:()=>dTab(1),pad:["L1","R1"],kbd:["Q","E"],label:DV2?"Sections":"Tabs",when:inDet}, // (beta.7) (upstream beta.12: one page in sections on Windows / Linux)
   {act:()=>closeDetails(),pad:["o"],kbd:["Esc"],label:"Back",when:inDet}
 ];
 // The controller version of the bar: tap / hold pairs share one entry
@@ -3503,7 +3584,7 @@ const PAD_HINTS=[
   {act:()=>flip(),pad:["tri"],label:"Flip",hold:"♥",when:()=>mode!=="details"},
   // in Details, Y is the trailer / achievements (the bar said "Flip · hold ♥" there, and holding Y doesn't favourite)
   {act:()=>detailsY(),pad:["tri"],label:"Flip",dy:1,when:()=>mode==="details"},
-  {act:()=>mode==="details"?closeDetails():openDetails(),pad:["sq"],label:"Details",when:notDet},
+  {act:()=>mode==="details"?closeDetails():openDetails(),pad:["sq"],label:"Details",when:()=>ANDROID&&notDet()}, /* (beta.12: on Windows / Linux the bar shows Minus for Details, below; X / Square still opens it) */
   {act:()=>play(),pad:["x"],label:"Play"},
   {act:()=>openInspect(),pad:["R3"],label:"Inspect",when:canInspect},
   {act:()=>shuffle(),pad:["L3"],label:"Shuffle",when:notDet},
@@ -3513,7 +3594,7 @@ const PAD_HINTS=[
   {act:()=>qmOpen(),pad:["☰"],label:"Menu",when:notDet},
   {act:()=>panelScroll($("details"),1),pad:["R"],label:"Scroll",when:()=>mode==="details"},
   {act:()=>openSort(),pad:["☰"],label:"",hold:"Sort",when:notDet},
-  {act:()=>dTab(1),pad:["L1","R1"],label:"Tabs",when:inDet}, // (beta.7)
+  {act:()=>dTab(1),pad:["L1","R1"],label:DV2?"Sections":"Tabs",when:inDet}, // (beta.7)
   {act:()=>closeDetails(),pad:["o"],label:"Back",when:inDet}
 ];
 // an empty shelf (only the "Add games" tile): no prompts for keys that do nothing there
@@ -3573,11 +3654,11 @@ function updateSkipText(){const el=document.querySelector(".b-skip");if(el)el.te
 let kbdEver=false;
 const showPad=()=>inputMode==="pad"||(!!padSeen&&(inputMode!=="kbd"||!kbdEver));
 function renderHints(){pvGuard();
-  try{paintMenuGlyph();if(qm.open)qsHints();if(mode==="achv")achHints();if(mode==="customize")custSwitchText()}catch{} // the quick menu's own hint bar follows a switch between pad and keyboard too
-  const usePad=showPad();const g=curGame();
+  try{paintMenuGlyph();if(qm.open)qsHints();if(mode==="achv")achHints();if(mode==="customize")custSwitchText();if(mode==="shot")svPaint()}catch{} // the quick menu's own hint bar follows a switch between pad and keyboard too
+  const usePad=showPad();const g=curGame();if(DV2&&mode==="details")dvCapGlyph(usePad); /* (upstream beta.12) */
   const es=!g&&!!emptyShelf();const sig=usePad+"|"+glyphStyle()+"|"+(g&&g.kind)+"|"+!!(g&&g.pick)+"|"+es+"|"+(mode==="details")+"|"+(mode==="details"?detailsYLab().join():"")+"|"+canInspect(rawItem());if(sig===renderHints.sig&&$("hints").childElementCount)return;renderHints.sig=sig; // only rebuilt when something it shows changed
   const h=$("hints");h.innerHTML="";
-  (usePad?PAD_HINTS:HINTS).forEach(hn=>{if(hn.when&&!hn.when(rawItem()))return;const b=document.createElement("button");b.type="button";b.className="hint"+(/Letter|Shuffle/.test(hn.label)?" hint-lo":"");
+  (usePad?PAD_HINTS:HINTS).forEach(hn=>{if(hn.when&&!hn.when(rawItem()))return;const b=document.createElement("button");b.type="button";b.className="hint"+(/Letter|Shuffle/.test(hn.label)||hn.lo?" hint-lo":"");
     const keys=(usePad?hn.pad.map(glyph):hn.kbd.map(k=>`<span class="g">${k}</span>`)).join("");
     const label=hn.label==="Play"&&(es||(g&&g.kind==="setup"))?"Set up":hn.label==="Play"&&g&&(g.kind==="app"||g.kind==="emulator")?"Open":hn.label==="Play"&&g&&g.kind==="random"?(g.pick?"Play":"Pick a game"):hn.label;
     const dy=hn.dy?detailsYLab():null,hold=dy?dy[1]:hn.hold,lab=dy?dy[0]:usePad?label:label==="♥ hold"?"♥ Favorite":label.replace(/ hold$/,"");
@@ -3989,6 +4070,7 @@ function pollBody(t){
       if(v&&!prevBtn.v){setInput("pad");bpMove(v)}prevBtn.v=!!v;prevBtn.h=!!h;
       edge(gp,0,()=>bpChoose());edge(gp,1,()=>bpDone(""));return;
     }
+    if(mode==="shot"){if(h&&!prevBtn.h){setInput("pad");svStep(h)}prevBtn.h=!!h;prevBtn.v=!!v;edge(gp,4,()=>{setInput("pad");svStep(-1)});edge(gp,5,()=>{setInput("pad");svStep(1)});edge(gp,1,()=>{setInput("pad");svClose()});edge(gp,0,()=>{setInput("pad");svClose()});return} /* (beta.12) the screenshot viewer: left / right and LB / RB go through them, B (or A) back to Details */
     if(mode==="note"){if(h&&!prevBtn.h){setInput("pad");noteMove(h)}prevBtn.h=!!h;prevBtn.v=!!v;edge(gp,0,()=>notePick());edge(gp,1,()=>noteClose());return} // (beta.7) the shelf's note card: A picks, B closes, left / right
     if(mode==="sort"){
       if(h&&!prevBtn.h){setInput("pad");sortStep(h)}if(v&&!prevBtn.v){setInput("pad");spRow=1-spRow;play_("tick",{dir:v});renderSort()}prevBtn.v=!!v;prevBtn.h=!!h;
@@ -4051,6 +4133,8 @@ function pollBody(t){
         if(!B(3)&&prevBtn[3]&&yAt){yAt=0;setInput("pad");detailsY()}
         prevBtn[3]=B(3);
         edge(gp,4,()=>{setInput("pad");dMenuClose(true);dTab(-1)});edge(gp,5,()=>{setInput("pad");dMenuClose(true);dTab(1)}); // (beta.7) bumpers: the tabs (screenshots are buttons in Media now)
+        /* (beta.12, Windows / Linux) the trailer box selected: LT / RT its volume (turning its sound on first) */
+        if(DV2&&document.activeElement===$("dTrailer")){edge(gp,6,()=>{setInput("pad");boxVolStep(-1)});edge(gp,7,()=>{setInput("pad");boxVolStep(1)})}else{prevBtn[6]=B(6);prevBtn[7]=B(7)} /* (kept in step elsewhere: a trigger held before doesn't eat the first press on the box) */
       }else{
         // Y: tap flips, hold (~half a second) favorites
         if(B(3)&&!prevBtn[3])yAt=t;
@@ -4095,7 +4179,8 @@ function dGlide(el){if(ANDROID)return;const bar=$("details").querySelector(".d-a
   if(first)requestAnimationFrame(()=>{hl.style.transition=""})}
 function padSet(root,el){root.querySelectorAll(".pad-focus").forEach(e=>e.classList.remove("pad-focus"));if(!el){if(root.id==="details")dGlide(null);return}el.classList.add("pad-focus");try{el.focus({preventScroll:true})}catch{}if(root.id==="details")dGlide(el); // (after the focus moves: the button left behind closes first)
   // the Details buttons sit in a bar pinned to the bottom: always in view, so moving onto them never scrolls the text
-  if(el.closest(".d-actions"))return;
+  if(el.closest(".d-actions")&&!(DV2&&root.id==="details"))return; /* (beta.12, Windows: the buttons are part of the page, which scrolls back to them) */
+  if(DV2&&root.id==="details")dvFocused(el);
   // scroll only the panel itself (scrollIntoView also scrolled the whole app sideways and dragged a hidden panel into view);
   // what's under the pinned button bar counts as out of view
   const sc=el.closest(".settings,.details,.d-scroll")||root;
@@ -4104,9 +4189,10 @@ function padSet(root,el){root.querySelectorAll(".pad-focus").forEach(e=>e.classL
   /* (beta.11) the button bar only hides what's under it while it's pinned to the panel's bottom: sitting in its place
      below the header (Windows), the More menu right under it counted as hidden, so every step scrolled the panel on */
   const barTop=(bar,pr)=>{if(!bar)return pr.bottom;const b=bar.getBoundingClientRect();return b.bottom>=pr.bottom-2?Math.min(pr.bottom,b.top):pr.bottom};
-  if(!ANDROID&&(root.id==="details"||root.id==="dMenu")&&sc.classList.contains("details")){revealIn(el,sc);const pr=sc.getBoundingClientRect(),er=el.getBoundingClientRect(),bot=barTop(sc.querySelector(":scope>.d-actions"),pr);
-    const cur=sc.scrollTop,T0=sc._gT!=null&&performance.now()-(sc._gAt||0)<700?sc._gT:cur,top=er.top-pr.top+cur,btm=er.bottom-pr.top+cur,vis=bot-pr.top;let T=T0;
-    if(btm>T+vis-12)T=btm-vis+24;else if(top<T+12)T=top-24;T=Math.max(0,Math.min(sc.scrollHeight-sc.clientHeight,T));
+  if(!ANDROID&&(root.id==="details"||root.id==="dMenu")&&sc.classList.contains("details")){revealIn(el,sc);const pr=sc.getBoundingClientRect(),er=el.getBoundingClientRect(),bot=DV2?dvClearBottom(pr):barTop(sc.querySelector(":scope>.d-actions"),pr);
+    /* (beta.12) the section bar pinned at the top and the hint bar at the bottom count as out of view */
+    const pt=DV2?dvNavH():0,cur=sc.scrollTop,T0=sc._gT!=null&&performance.now()-(sc._gAt||0)<700?sc._gT:cur,top=er.top-pr.top+cur,btm=er.bottom-pr.top+cur,vis=bot-pr.top;let T=T0;
+    if(DV2&&root.id==="details"&&el.closest(".d-actions"))T=0;else if(btm>T+vis-12)T=btm-vis+24;else if(top<T+pt+12)T=top-pt-24;T=Math.max(0,Math.min(sc.scrollHeight-sc.clientHeight,T));
     if(Math.abs(T-T0)>.5||Math.abs(T-cur)>.5){sc._gT=T;sc._gAt=performance.now();sc.scrollTo({top:T,behavior:document.body.classList.contains("reduce-motion")?"auto":"smooth"})}return}
   revealIn(el);const pr=sc.getBoundingClientRect(),er=el.getBoundingClientRect(),bot=barTop(sc.querySelector(":scope>.d-actions"),pr);
   if(er.bottom>bot-12)sc.scrollTop+=er.bottom-bot+24;else if(er.top<pr.top+12)sc.scrollTop-=pr.top-er.top+24}
@@ -4120,6 +4206,12 @@ function padNav(root,dir){
     // up / down: side-by-side distance counts from the edges, so a full-width button right below (Play) wins over a small one nearer the middle
     const gx=Math.max(0,q.left-r.right,r.left-q.right);const sc=dir==="left"||dir==="right"?Math.abs(dx)+Math.abs(dy)*3:Math.abs(dy)+gx*.6;if(sc<bs){bs=sc;best=e}}
   if(!best&&(dir==="left"||dir==="right")){const i=L.indexOf(cur)+(dir==="right"?1:-1);best=L[i]||null}
+  /* (beta.12, Windows Details) the page in between counts: an item more than half a screen past the edge is reached by
+     scrolling the page there first (false: the caller scrolls), and after the page was scrolled away from the item you
+     were on, the first one in view that way is next */
+  if(DV2&&root.id==="details"&&(dir==="up"||dir==="down")){const pr=root.getBoundingClientRect(),top=pr.top+dvNavH(),bot=dvClearBottom(pr),h=bot-top;
+    if(r.bottom<=top||r.top>=bot){const vis=L.filter(e=>{const q=e.getBoundingClientRect();return q.height&&q.top>=top-2&&q.bottom<=bot+2});best=(dir==="down"?vis[0]:vis[vis.length-1])||null;if(!best)return false}
+    else if(best){const q=best.getBoundingClientRect();if(dir==="down"?q.bottom>bot+h*.5:q.top<top-h*.5)return false}}
   if(best){padSet(root,best);play_("tick",{dir:dir==="left"||dir==="up"?-1:1});return true}
   return false
 }
@@ -4204,9 +4296,40 @@ function loadHistory(){if(api.history)api.history().then(h=>{HIST=h||{};bootMark
 // Open into → Home: at start-up the Home shelf may only appear once the play history is in (it lists recent games)
 function homeStartCheck(){if(openInto!=="home-wait")return;openInto="done";const i=shelves.indexOf(HOME);if(i<0||i===sysIdx||mode!=="browse"||sysBusy()||lastInputAt>0)return;
   if(!revealedAt){sysIdx=i;sel=0;flipped=false;spin=0;spinT=0;build();tuneTo(cur())}else setSystem(i)}
-function showShot(k){const g=curGame(),shots=(g&&g.info&&g.info.shots)||[];if(!shots.length)return;shotSel=((k%shots.length)+shots.length)%shots.length;heroBgSoon(shots[shotSel],g);[...$("dShots").children].forEach((d,j)=>d.classList.toggle("on",j===shotSel));const el=$("dShots").children[shotSel];if(el)el.scrollIntoView({inline:"center",block:"nearest",behavior:"smooth"});play_("tick",{dir:1})}
-function openTrailer(){const g=curGame();if(!g||!g.info||!g.info.video)return;play_("open");api.openTrailer(g.info.video).then(r=>{if(r&&r.external)toast("Trailer opened in your browser")}).catch(e=>toast(e.message))}
-$("dTrailer").addEventListener("click",openTrailer);
+function showShot(k){const g=curGame(),shots=(g&&g.info&&g.info.shots)||[];if(!shots.length)return;shotSel=((k%shots.length)+shots.length)%shots.length;heroBgSoon(shots[shotSel],g);if(DV2)dvShot(shots[shotSel]); /* (beta.12) the screenshot shows in the trailer's box */[...$("dShots").children].forEach((d,j)=>d.classList.toggle("on",j===shotSel));const el=$("dShots").children[shotSel];if(el)el.scrollIntoView({inline:"center",block:"nearest",behavior:"smooth"});play_("tick",{dir:1})}
+/* (beta.12, Windows / Linux) the screenshot viewer: A on a screenshot in Details opens it full screen, grown out of its
+   thumbnail; left / right (LB / RB, the arrow keys, the wheel) go through them; B / Esc (or a click beside it) shrinks it
+   back into the strip, on the screenshot you ended on. Its own mode ("shot"); the trailer holds still meanwhile (pvHold) */
+const SV={el:null,k:0,prev:"details"};
+function svEl(){if(SV.el)return SV.el;const el=document.createElement("div");el.id="shotView";el.setAttribute("role","dialog");el.setAttribute("aria-label","Screenshot");
+  el.innerHTML='<div class="sv-stage"><img class="sv-img" alt="" decoding="async"></div><button type="button" class="sv-nav sv-prev" aria-label="Previous screenshot">‹</button><button type="button" class="sv-nav sv-next" aria-label="Next screenshot">›</button><div class="sv-bar"><span class="sv-n"></span><span class="sv-keys"></span></div><button type="button" class="sv-x" aria-label="Close">✕</button>';
+  el.addEventListener("click",e=>{if(performance.now()-(SV.swipeAt||0)<350)return; /* (the tap that ends a swipe) */if(e.target.closest(".sv-x")){svClose();return}if(e.target.closest(".sv-prev")){svStep(-1);return}if(e.target.closest(".sv-next")){svStep(1);return}if(!e.target.closest(".sv-img"))svClose()});
+  /* (beta.12, touch) a swipe across goes to the next or the one before; a swipe down closes */
+  {let sx=0,sy=0,sid=-1;el.addEventListener("pointerdown",e=>{if(e.pointerType==="mouse")return;sx=e.clientX;sy=e.clientY;sid=e.pointerId},{passive:true});
+    el.addEventListener("pointerup",e=>{if(e.pointerId!==sid)return;sid=-1;const dx=e.clientX-sx,dy=e.clientY-sy,ax=Math.abs(dx),ay=Math.abs(dy);
+      if(ax>48&&ax>ay*1.4){SV.swipeAt=performance.now();svStep(dx<0?1:-1)}else if(dy>90&&ay>ax*1.4){SV.swipeAt=performance.now();svClose()}},{passive:true});
+    el.addEventListener("pointercancel",()=>{sid=-1},{passive:true})}
+  el.addEventListener("animationend",e=>{if(e.target===el&&el.classList.contains("out"))el.classList.remove("out")}); /* (shrunk back: gone) */
+  el.addEventListener("wheel",e=>{e.preventDefault();if(Math.abs(e.deltaY)+Math.abs(e.deltaX)<8)return;const t=performance.now();if(t-(SV.wt||0)<220)return;SV.wt=t;svStep((e.deltaY||e.deltaX)>0?1:-1)},{passive:false});
+  document.body.appendChild(el);SV.el=el;return el}
+const svShots=()=>{const g=curGame();return (g&&g.info&&g.info.shots)||[]};
+function svOrigin(){const t=$("dShots").children[SV.k],el=svEl();if(!t)return;const r=t.getBoundingClientRect();el.style.setProperty("--ox",Math.round(r.left+r.width/2)+"px");el.style.setProperty("--oy",Math.round(r.top+r.height/2)+"px")}
+function svPaint(){const sh=svShots(),el=svEl();if(!sh.length)return;const img=el.querySelector(".sv-img"),u=sh[SV.k];
+  if(img.getAttribute("src")!==u&&SV.want!==u){SV.want=u;const tok=SV.tok=(SV.tok||0)+1,pre=new Image();pre.decoding="async";pre.src=u;
+    Promise.resolve(pre.decode?pre.decode():null).catch(()=>{}).then(()=>{if(tok!==SV.tok)return;SV.want=null;if(svShots()[SV.k]===u)img.src=u})} /* (only the newest ask lands, and it clears itself: a quick right-left-right can't leave the old picture) */
+  bsCtxSoon();el.querySelector(".sv-n").textContent=`${SV.k+1} / ${sh.length}`;el.classList.toggle("one",sh.length<2);
+  el.querySelector(".sv-keys").textContent=inputMode==="pad"?`${padWord("L1")} ${padWord("R1")} or ◀ ▶  Flip · ${btnWord("back")}  Back`:ANDROID?(sh.length>1?"Swipe to flip · ":"")+"Swipe down or ✕ to close":"← →  Flip · Esc  Back"}
+function openShotView(k){const sh=svShots();if(!sh.length||mode!=="details")return;SV.k=((k%sh.length)+sh.length)%sh.length;SV.prev=mode;showShot(SV.k);
+  pvHold();if(PV.yt&&api.previewYtMove)api.previewYtMove(null,false); /* (Android: YouTube's player sits over everything; it steps aside) */mode="shot";const el=svEl();{const im=el.querySelector(".sv-img");if(im.getAttribute("src")!==sh[SV.k]){im.removeAttribute("src");SV.want=null}} /* (never another game's last picture while this one decodes) */svOrigin();svPaint();el.classList.remove("out");void el.offsetWidth;el.classList.add("on");play_("open");renderHints()}
+function svStep(d){const sh=svShots();if(mode!=="shot"||sh.length<2)return;SV.k=(SV.k+d+sh.length)%sh.length;showShot(SV.k);svPaint()}
+function svClose(){if(mode!=="shot")return;const el=svEl();svOrigin();el.classList.remove("on");el.classList.add("out");mode=SV.prev==="details"?"details":"browse";pvResume();if(PV.yt&&api.previewYtMove&&mode==="details")setTimeout(()=>{if(PV.yt&&mode==="details"){const rc=pvRect();api.previewYtMove(rc,!!rc)}},260); /* (YouTube's player back once the viewer has shrunk away) */sfx.back();renderHints();
+  const t=$("dShots").children[SV.k];if(t){try{t.focus({preventScroll:true})}catch{}if(typeof padSet==="function")padSet($("details"),t)}}
+/* the keyboard, ahead of everything else while it's open */
+addEventListener("keydown",e=>{if(mode!=="shot")return;const k=e.key;e.preventDefault();e.stopImmediatePropagation();if(e.repeat&&!/Arrow/.test(k))return;setInput("kbd");
+  if(k==="ArrowRight"||k==="ArrowDown"||k==="]")svStep(1);else if(k==="ArrowLeft"||k==="ArrowUp"||k==="[")svStep(-1);else if(k==="Escape"||k==="Backspace"||k==="Enter"||k===" ")svClose()},true);
+function openTrailer(){const g=curGame();if(!g||!g.info||!g.info.video)return;play_("open");
+  pvHold();addEventListener("focus",()=>setTimeout(pvResume,300),{once:true}); /* (Details' own trailer waits while the full one plays; back to the app, it carries on) */api.openTrailer(g.info.video).then(r=>{if(r&&r.external)toast("Trailer opened in your browser")}).catch(e=>{toast(e.message);pvResume()})}
+$("dTrailer").addEventListener("click",()=>trailerA());{const b=$("dSound");if(b)b.addEventListener("click",()=>aSndToggle())} /* (beta.12, Android: the trailer's sound, on / off) */ /* (beta.12: on Windows / Linux the box's own sound; full screen on Y or when nothing plays there yet) */
 $("dMore").addEventListener("click",()=>{const d=$("dDesc"),m=$("dMore");const c=d.classList.toggle("clamp");m.textContent=c?"Read more":"Show less"});
 $("dPlay").addEventListener("click",play);$("dInspect").addEventListener("click",openInspect);$("dManual").addEventListener("click",()=>{openInspect();setTimeout(()=>{if(mode==="inspect"){ispAdvance();setTimeout(openReader,700)}},150)});$("dEmu").addEventListener("click",openEmulator);$("dClose").addEventListener("click",()=>closeDetails());
 $("launch").addEventListener("click",()=>{if($("lNote").classList.contains("on"))back()});
@@ -4495,6 +4618,167 @@ function paintArtMatchBtn(g){const b=$("dArtMatch");if(!b)return;b.hidden=!artMa
   });
   c.before(b1);c.before(b2);c.before(bs);
 })();
+
+/* ---------- (beta.12, Windows / Linux) Details, redesigned around the case ----------
+   The shelf fades away behind the game's own art (tinted with its console's shelf colour); the chosen 3D case stays where
+   it was and turns a little toward the page, which opens in the space the other cases left (details2.css). One page in
+   sections: LB / RB (Q / E) jump a section and the bar at the top shows where you are; the D-pad goes row to row (padNav)
+   and the page keeps the row clear of the hint bar (padSet). The panel's own elements (their ids) are moved into the
+   sections, so fillDetails, the previews and every button work as before. New here: Favourite, Your play (from the
+   sessions main keeps in history.json), Status, Your copy's objects and the placard. The Thor keeps its own Details. */
+const DV_SECS=[["overview","Overview"],["media","Screenshots"],["about","About"],["play","Your play"],["ach","Achievements"],["copy","Your copy"],["info","Info"]];
+const DV_STATUS=[["notstarted","Not started"],["playing","Playing"],["finished","Finished"],["abandoned","Abandoned"]];
+const DV_ICO={art:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 15l3-3 5 5"/></svg>',
+  book:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/></svg>',
+  pad:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="11" rx="4"/><path d="M8 11v3M6.5 12.5h3M15 12h.01M17 13.5h.01"/></svg>',
+  heart:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>'};
+const dv={secs:{},nav:null,cur:"",lock:0,raf:0,back:null,poster:null,obj:{},gid:""};
+const dvMk=(tag,cls,html)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(html!=null)e.innerHTML=html;return e};
+const statusOf=g=>{const o=g&&cfgInfo&&cfgInfo.config.games&&cfgInfo.config.games[g.id];return o&&o.status||""};
+const dvUrl=u=>`url("${String(u).replace(/"/g,"%22")}")`;
+// a picture is decoded first, then shown (never a half-drawn one), and only if it's still the one wanted
+function dvPic(u,put){if(!u){put("");return}const im=new Image();im.decoding="async";im.src=u;(im.decode?im.decode():Promise.resolve()).then(()=>put(u),()=>{})}
+function dvBuild(){
+  const d=$("details");if(!DV2||!d||d.classList.contains("dv2"))return;
+  d.classList.add("dv2");app.classList.add("dv2");
+  // behind the case: the game's art with the shelf's tint (the other cases fade out); under it, Inspect for the mouse
+  const bk=dvMk("div","dv-back",'<img alt="" decoding="async"><i></i>');bk.id="dvBack";bk.setAttribute("aria-hidden","true");$("scene").before(bk);
+  const cap=dvMk("button","dv-cap",'<span class="dv-capg" id="dvCapG"></span><span>Inspect the case</span>');cap.type="button";cap.id="dvCap";cap.addEventListener("click",()=>{if(mode==="details")openInspect()});$("scene").after(cap);
+  const hero=d.querySelector(".d-hero"),acts=d.querySelector(".d-actions");
+  // the section bar: a click (or a tap) jumps there; the controller uses the bumpers
+  const nav=dvMk("div","dv-nav");nav.id="dvNav";nav.setAttribute("role","tablist");nav.setAttribute("aria-label","Sections");const navT=dvMk("div","dv-navt");
+  nav.append(dvMk("span","dv-bump dv-lb"),navT,dvMk("span","dv-bump dv-rb"));dv.nav=nav;
+  const sec=(k,label)=>{const s=k==="overview"?hero:dvMk("section");s.classList.add("dv-sec");s.dataset.s=k;if(label){const h=dvMk("div","dv-sh");h.textContent=label;s.append(h)}dv.secs[k]=s;
+    const t=dvMk("div","dv-t");t.setAttribute("role","tab");t.dataset.s=k;t.textContent=DV_SECS.find(x=>x[0]===k)[1];t.addEventListener("click",()=>{setInput("pointer");dvGo(k)});navT.append(t);return s};
+  // Overview: the title, Play and its row (Favourite is new), then the trailer's box beside "Your play"
+  const ov=sec("overview");
+  const fav=dvMk("button","btn d-ico dv-fav",DV_ICO.heart+"<span>Favourite</span>");fav.type="button";fav.id="dFav";fav.title="Favourite (H)";fav.setAttribute("aria-pressed","false");
+  fav.addEventListener("click",()=>{Promise.resolve(toggleFav()).then(dvFavPaint,dvFavPaint)});($("dBoxArtPc")||$("dMoreBtn")).before(fav);
+  const tr=$("dTrailer");tr.innerHTML='<span class="dv-vfull"><span class="dv-trg" id="dvTrG"></span><span id="dvTrL">Pause</span></span>';tr.setAttribute("aria-label","Pause the trailer");tr.title="Pause (Y: full screen)"; /* (beta.12: A pauses / plays it here; Y is full screen) */
+  const vid=dvMk("div","dv-vid");vid.id="dvVid";const none=dvMk("span","dv-none");none.id="dvNone";vid.append($("dMedia"),none,tr,dvSndBuild());boxSync(); /* (beta.12: the speaker and volume bar; the box's sound follows its picture) */
+  const p1=dvMk("div","dv-p1",'<div class="dv-sh">Your play</div>');p1.append($("dStats"));
+  const duo=dvMk("div","dv-duo");duo.id="dvDuo";duo.append(vid,p1);
+  ov.append(acts,$("dMenu"),duo);
+  const media=sec("media","Screenshots");media.append($("dShots"));
+  const about=sec("about"),sa=$("dSecAbout");sa.classList.add("dv-sh");about.append(sa,$("dDesc"),$("dMore"));
+  // Your play: the numbers, the last eight weeks, and the Status the player sets
+  const play=sec("play","Your play");
+  const tiles=dvMk("div","dv-tiles");tiles.id="dvTiles";
+  const weeks=dvMk("div","dv-weeks",'<div class="dv-chart"><div class="dv-bars" id="dvBars"></div><div class="dv-wk"><span>8 weeks ago</span><span>This week</span></div></div><div class="dv-kv dv-r"><span>Hours by week</span><b id="dvWk"></b><small>this week</small></div>');weeks.id="dvWeeks";
+  const st=dvMk("div","dv-status",'<div class="dv-tx"><b>Status</b><small>Yours to set, for this game.</small></div><div class="dv-seg" role="radiogroup" aria-label="Status"></div>');st.id="dvStatus";
+  DV_STATUS.forEach(([k,l])=>{const b=dvMk("button","dv-opt");b.type="button";b.dataset.v=k;b.textContent=l;b.setAttribute("role","radio");b.setAttribute("aria-checked","false");b.addEventListener("click",()=>dvSetStatus(curGame(),k));st.lastElementChild.append(b)});
+  play.append(tiles,weeks,st);
+  const ach=sec("ach","Achievements");{const em=dvMk("em");em.id="dvAchSrc";em.textContent=" · RetroAchievements";ach.firstChild.append(em)}
+  const off=dvMk("p","dv-how");off.id="dvAchOff";off.textContent="Not connected. Sign in to RetroAchievements in Settings · Accounts & services, and this game's achievements show here.";
+  ach.append($("dAch"),off);
+  // Your copy: the box, spine, disc and manual as objects, with what's on file; the rows press the panel's own buttons
+  const copy=sec("copy","Your copy");{const em=dvMk("em");em.id="dvCopySum";copy.firstChild.append(em)}
+  const tray=dvMk("div","dv-tray");tray.id="dvTray";
+  [["box","Box"],["spine","Spine"],["disc","Disc"],["manual","Manual"]].forEach(([k,l])=>{const o=dvMk("div","dv-obj",`<div class="dv-art"><i class="dv-${k}"></i></div><b></b><small></small>`);o.dataset.o=k;o.querySelector("b").textContent=l;tray.append(o);dv.obj[k]=o});
+  const rows=dvMk("div","dv-rows");
+  const row=(id,ico,title,sub,target)=>{const b=dvMk("button","dv-row",`<span class="dv-ic">${ico}</span><span class="dv-tx"><b></b><small></small></span><span class="dv-val"></span><span class="dv-chev" aria-hidden="true">›</span>`);b.type="button";b.id=id;
+    b.querySelector("b").textContent=title;b.querySelector("small").textContent=sub;b.addEventListener("click",()=>{const t=target();if(t&&!t.hidden)t.click()});rows.append(b)};
+  row("dvArt",DV_ICO.art,"Box art","Front, back, spine and disc in the Art Studio.",()=>$("dBoxArt"));
+  row("dvMan",DV_ICO.book,"Find a manual…","Search online, or add your own scan.",()=>$("dChooseManual"));
+  row("dvEmu",DV_ICO.pad,"Emulator for this game","",()=>$("dGameEmu"));
+  copy.append(tray,rows,$("dArt"));
+  // Info: a museum placard, then how it plays and the launch command at the bottom
+  const info=sec("info"),si=$("dSecInfo");si.classList.add("dv-sh");
+  const plac=dvMk("div","dv-plac",'<div class="dv-pl" id="dvPl"></div><h4 class="dv-ph" id="dvPh"></h4>');plac.append($("dGrid"));
+  info.append(si,plac,$("dHow"),d.querySelector(".d-adv"));
+  const foot=dvMk("div","dv-foot");foot.setAttribute("aria-hidden","true"); /* (the page fades out under the hint bar) */
+  hero.before(nav);hero.after(media,about,play,ach,copy,info);d.after(foot);
+  // the bar follows the page (one look a frame while it scrolls, nothing at rest)
+  d.addEventListener("scroll",()=>{if(!dv.raf)dv.raf=requestAnimationFrame(()=>{dv.raf=0;dvWhere()})},{passive:true});
+  // the trailer's box scrolled out of sight pauses its video; back in sight it plays on
+  if(window.IntersectionObserver)new IntersectionObserver(es=>{const v=$("dVideo");if(!v.getAttribute("src")||mode!=="details"||PV.held)return;for(const e of es){if(e.isIntersecting){if(v.paused)v.play().catch(()=>{})}else if(!v.paused)v.pause()}},{root:d,threshold:.2}).observe($("dMedia"));
+}
+// a screenshot picked: it becomes the trailer box's picture (under the video, if one is playing)
+function dvShot(u){const pu=u?thumb(u,512):"";if(!pu||dv.poster===pu)return;dv.poster=pu;$("dvVid").classList.remove("dv-empty");dvPic(pu,x=>{if(dv.poster===x)$("dMediaIn").style.backgroundImage=dvUrl(x)})}
+function dvList(){return DV_SECS.map(x=>dv.secs[x[0]]).filter(s=>s&&!s.hidden)}
+function dvNavH(){return dv.nav?dv.nav.offsetHeight:0}
+// the lowest a row may sit: above the hint bar where that bar lies over the page
+function dvClearBottom(pr){const h=$("hints");if(!h||h.hidden)return pr.bottom;const r=h.getBoundingClientRect();return r.height&&r.top<pr.bottom&&r.right>pr.left?Math.min(pr.bottom,r.top-10):pr.bottom}
+const dvSecOf=el=>{const s=el&&el.closest&&el.closest(".dv-sec");return s?s.dataset.s:""};
+function dvMark(k){if(!k||dv.cur===k||!dv.nav)return;dv.cur=k;dv.nav.querySelectorAll(".dv-t").forEach(t=>{const on=t.dataset.s===k;t.classList.toggle("cur",on);t.setAttribute("aria-selected",String(on))})}
+function dvFocused(el){if(performance.now()<dv.lock)return;dv.hold=null;dvMark(dvSecOf(el))}
+// where you are: the section of the item you're on while it's in view, else the one at the top of the page
+function dvWhere(){if(mode!=="details"||performance.now()<dv.lock)return;const d=$("details"),L=dvList();if(!L.length)return;
+  /* a section jumped to stays the one shown while the page rests there (even when its first item is further down) */
+  if(dv.hold){if(Math.abs(d.scrollTop-dv.hold.T)<24){dvMark(dv.hold.k);return}dv.hold=null}
+  const pr=d.getBoundingClientRect(),top=pr.top+dvNavH(),bot=dvClearBottom(pr),f=d.querySelector(".pad-focus");
+  if(f){const r=f.getBoundingClientRect();if(r.height&&r.top>=top-2&&r.bottom<=bot+2){dvMark(dvSecOf(f));return}}
+  if(d.scrollTop+d.clientHeight>=d.scrollHeight-4){dvMark(L[L.length-1].dataset.s);return}
+  const y=d.scrollTop+dvNavH()+d.clientHeight*.15;let k=L[0].dataset.s;for(const s of L)if(s.offsetTop<=y)k=s.dataset.s;dvMark(k)}
+// a section: the page glides to it and the controller lands on its first item (or the next one below, if it has none)
+function dvGo(k){const d=$("details"),s=dv.secs[k];if(!s||s.hidden||mode!=="details")return;dMenuClose(true);
+  const T=k==="overview"?0:Math.max(0,Math.min(d.scrollHeight-d.clientHeight,s.offsetTop-dvNavH()-6));
+  d._gT=T;d._gAt=performance.now();if(Math.abs(d.scrollTop-T)>.5)d.scrollTo({top:T,behavior:document.body.classList.contains("reduce-motion")?"auto":"smooth"});
+  dv.lock=0;dvMark(k);dv.lock=performance.now()+800;dv.hold={k,T};
+  let it=k==="overview"?$("dPlay"):padItems(s)[0];
+  if(!it){const L=padItems(d);it=L.find(e=>s.compareDocumentPosition(e)&Node.DOCUMENT_POSITION_FOLLOWING)||null}
+  if(it)padSet(d,it)}
+function dvJump(dir){if(mode!=="details")return;const L=dvList();if(!L.length)return;let i=L.findIndex(s=>s.dataset.s===dv.cur);if(i<0)i=0;
+  const j=i+(dir>0?1:-1);if(j<0||j>=L.length)return;dvGo(L[j].dataset.s);play_("tick",{dir:dir>0?1:-1})}
+function dvCapGlyph(pad){const c=$("dvCapG"),t=$("dvTrG"),k=pad?"p":"k";if(dv.glyphs===k+glyphStyle())return;dv.glyphs=k+glyphStyle();
+  if(c)c.innerHTML=pad?glyph("R3"):'<span class="g">V</span>';if(t)t.innerHTML=pad?glyph("x"):'<span class="g">Enter</span>';
+  if(dv.nav){const b=dv.nav.querySelectorAll(".dv-bump");b[0].innerHTML=pad?glyph("L1"):'<span class="g">Q</span>';b[1].innerHTML=pad?glyph("R1"):'<span class="g">E</span>'}}
+function dvFavPaint(){const b=$("dFav"),g=curGame();if(!b)return;const ok=!!g&&isGame(g),on=ok&&isFav(g);b.hidden=!ok;b.classList.toggle("set",on);b.setAttribute("aria-pressed",String(on));b.title=on?"In your favourites (H takes it out)":"Add to your favourites (H)"}
+function dvStatusPaint(g){const v=statusOf(g);$("dvStatus").querySelectorAll(".dv-opt").forEach(b=>{const on=b.dataset.v===v;b.classList.toggle("on",on);b.setAttribute("aria-checked",String(on))})}
+// Status: the one pressed again clears it; saved per game in the settings (main: game:status)
+async function dvSetStatus(g,k){if(!g||!isGame(g)||!api.gameStatus)return;const v=statusOf(g)===k?"":k,c=cfgInfo&&cfgInfo.config;
+  if(c){c.games=Object.assign({},c.games);const o=Object.assign({},c.games[g.id]);if(v)o.status=v;else delete o.status;if(Object.keys(o).length)c.games[g.id]=o;else delete c.games[g.id]}
+  dvStatusPaint(g);play_("tick",{dir:1});
+  try{const r=await api.gameStatus(g.id,v);if(r&&r.games&&cfgInfo)cfgInfo.config.games=r.games}catch(e){toast(String(e&&e.message||e))}
+  if(mode==="details"&&curGame()===g)dvStatusPaint(g)}
+// Your play, from the history main keeps: launches, time, last played, and (since beta.12) first played, the longest
+// session and the last sessions (start, length in seconds)
+const dvAgo=t=>{const d=Math.floor((Date.now()-t)/864e5);return d<1?"today":d<2?"yesterday":d<14?d+" days ago":d<61?Math.round(d/7)+" weeks ago":d<730?Math.round(d/30.4)+" months ago":Math.round(d/365)+" years ago"};
+function dvStats(g){const h=HIST[g.id]||{},S=Array.isArray(h.s)?h.s:[],n=h.count||0,ms=h.ms||(g.kind==="steam"&&g.minutes?g.minutes*60000:0),sh=shelfFor(g);
+  const day=t=>new Date(t).toLocaleDateString(undefined,{day:"numeric",month:"short",year:"numeric"});
+  const m0=new Date();m0.setDate(1);m0.setHours(0,0,0,0);let month=0,long=h.long||0;for(const [t,l] of S){if(t*1000>=m0.getTime())month+=l*1000;if(l*1000>long)long=l*1000}
+  let tot=0;for(const x of (sh&&sh.items)||[]){const e=x&&HIST[x.id];if(e&&e.ms)tot+=e.ms}
+  const avg=h.ms&&n?h.ms/n:0;
+  const T=[["Play time",ms?fmtPlay(ms):"Not yet","all sessions"],["Launches",String(n),n===1?"time started":"times started"],["Average",avg?fmtPlay(avg):"–","a session"],
+    ["Last played",h.last?fmtDate(h.last/1000):"Never",h.last?day(h.last):""],["First played",h.first?day(h.first):n?"Not recorded":"Not yet",h.first?dvAgo(h.first):n?"recorded from now on":""],
+    ["Longest",long?fmtPlay(long):"–","one session"],["This month",month?fmtPlay(month):"None",new Date().toLocaleDateString(undefined,{month:"long"})],
+    ["Of "+(sh&&sh.name||"its shelf"),tot&&h.ms?Math.max(1,Math.round(100*h.ms/tot))+"%":"–","of your time on it"]];
+  const tiles=$("dvTiles");tiles.textContent="";T.forEach(([k,v,sm])=>{const t=dvMk("div","dv-tile");t.dataset.k=k;const a=dvMk("span"),b=dvMk("b"),c=dvMk("small");a.textContent=k;b.textContent=v;c.textContent=sm;t.append(a,b,c);tiles.append(t)});
+  // hours by week: the last eight weeks, this one on the right
+  const W=new Array(8).fill(0),now=Date.now()/1000;for(const [t,l] of S){const k=Math.floor((now-t)/604800);if(k>=0&&k<8)W[7-k]+=l}
+  const mx=Math.max(...W),bars=$("dvBars");bars.textContent="";W.forEach(v=>{const b=dvMk("i");b.style.height=(mx?Math.max(3,Math.round(100*v/mx)):3)+"%";b.title=v?fmtPlay(v*1000):"None";bars.append(b)});
+  $("dvWk").textContent=W[7]?fmtPlay(W[7]*1000):"None"}
+function dvCopy(g){const a=g.art||{},s=shelfFor(g),st=stOf(g),man=Array.isArray(a.manual)?a.manual:[],same=dv.gid===String(g.id);dv.gid=String(g.id);
+  const O={box:[!!a.front,a.front?(a.back?"Front and back":"Front only"):"No scan yet",frontUrl(g)],spine:[!!a.spine,a.spine?"On file":"No scan yet",a.spine],
+    disc:[!!a.disc,a.disc?"On file":"No scan yet",a.disc],manual:[man.length>0,man.length?`${man.length} pages`:g.manualMiss?"None found online":"Not yet",man[0]]};
+  let n=0;for(const k of Object.keys(O)){const [ok,txt,u]=O[k],o=dv.obj[k],pic=o.querySelector(".dv-art i"),sm=o.querySelector("small");if(ok)n++;
+    o.classList.toggle("miss",!ok);sm.textContent=txt;sm.classList.toggle("ok",ok);if(k==="disc")o.querySelector("b").textContent=s?mediaWord(s.id):"Disc";
+    if(k==="spine"){const sb=st.spineBand||{};pic.style.setProperty("--sb",sb.bg||"#2c2c35");pic.style.setProperty("--sf",sb.fg||"#c3c3cf");pic.textContent=a.spine?"":g.title}
+    const want=typeof u==="string"&&u?thumb(u,k==="box"||k==="manual"?220:160):"";if(!same)pic.style.backgroundImage="";pic.dataset.want=want;
+    dvPic(want,x=>{if(pic.dataset.want===x)pic.style.backgroundImage=x?dvUrl(x):""})}
+  $("dvCopySum").textContent=n===4?" · all on file":` · ${n} of 4 on file`;
+  const ba=$("dBoxArt"),cm=$("dChooseManual"),ge=$("dGameEmu"),mn=$("dvMan"),em=$("dvEmu");
+  $("dvArt").hidden=!ba||ba.hidden;mn.hidden=!cm||cm.hidden;if(cm)mn.querySelector("b").textContent=cm.textContent;em.hidden=!ge||ge.hidden;
+  const own=gameEmu(g);em.querySelector("small").textContent=[String(g.file||"").split(/[\\/]/).pop(),fmtSize(g.sizeBytes),g.discs&&g.discs.length>1?g.discs.length+" discs":""].filter(Boolean).join(" · ");
+  em.querySelector(".dv-val").textContent=own?emuLabel(own):`${s.emulatorName||"Emulator"}, the shelf's`}
+function dvFill(g){const d=$("details");if(!d.classList.contains("dv2")||!g)return;const s=shelfFor(g),i=g.info||{},rom=g.kind==="rom",game=rom||g.kind==="steam";
+  app.style.setProperty("--dv-tint",stOf(g).glow||"#9d8cff");
+  // the art behind the case, and the trailer box's poster: fan art first, then a screenshot, then the box's own art
+  const shots=rom&&i.shots||[],art=(rom&&i.bg)||(g.art&&g.art.hero)||shots[0]||frontUrl(g)||"",post=(rom&&i.bg)||shots[0]||(g.art&&g.art.hero)||""; /* (never the cover: the real case is right there) */
+  const bu=art?thumb(art,360):"";if(dv.back!==bu){dv.back=bu;dvPic(bu,u=>{if(dv.back!==u)return;const im=$("dvBack").firstChild;if(u)im.src=u;else im.removeAttribute("src")})}
+  const pu=post?thumb(post,512):"";if(dv.poster!==pu){dv.poster=pu;$("dMediaIn").style.backgroundImage="";dvPic(pu,u=>{if(dv.poster===u)$("dMediaIn").style.backgroundImage=u?dvUrl(u):""})}
+  $("dvVid").classList.toggle("dv-empty",!pu);$("dvNone").textContent=$("dTrailer").hidden?"No trailer or screenshots yet":"Trailer";
+  /* ((T)rustyShelf) a Steam game's achievements (main/pcach.js) have the section too, once they're in (pcAchDetails shows it) */
+  const pcA=typeof isPcAch==="function"&&isPcAch(g)&&!$("dAch").hidden;$("dvAchSrc").textContent=pcA?" · Steam":" · RetroAchievements";
+  const show={overview:true,media:!$("dShots").hidden,about:!$("dDesc").hidden,play:game,ach:rom&&(!RA.on||raHas(s))||pcA,copy:rom,info:true};
+  for(const [k] of DV_SECS){const sc=dv.secs[k];if(sc)sc.hidden=!show[k];const t=dv.nav.querySelector(`.dv-t[data-s="${k}"]`);if(t)t.hidden=!show[k]}
+  $("dvDuo").hidden=!game;$("dvAchOff").hidden=!(rom&&!RA.on);
+  dvSndPaint();
+  {const by=[i.dev,i.pub&&i.pub!==i.dev?i.pub:""].filter(Boolean).join(" · ");if(by&&game){const e=dvMk("span","dv-by");e.textContent=by;$("dChips").append(e)}} /* (after the chips: developer · publisher) */
+  dvFavPaint();dvStatusPaint(g);if(game)dvStats(g);if(rom)dvCopy(g);
+  $("dvPl").textContent=[g.kind==="steam"?(PC_SRC[g.source]||"PC"):s&&s.name,yearOf(g),i.dev].filter(Boolean).join(" · ");$("dvPh").textContent=g.title;
+  $("dvCap").hidden=!rom;dvCapGlyph(showPad());if(d.scrollTop<4){dv.lock=0;dv.hold=null;dvMark("overview")}}
+dvBuild();
 
 // Called by the setup screen.
 window.Shelf={

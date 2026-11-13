@@ -85,8 +85,10 @@ let run = (args, timeout) => new Promise((resolve, reject) => {
 });
 // the trailer's 720p (else 480p or smaller) H.264 video stream: { url, headers }. (beta.9: 720p first; YouTube's 480p is
 // so compressed that it looked soft stretched behind the shelf, about a quarter of a Steam clip's data per second)
-async function streamOf(id) {
-  const fmt = ['136', '135', '134', '133', 'bv*[ext=mp4][vcodec^=avc1][height<=720]'].map(f => f + '[protocol=https]').join('/');
+// (beta.12) audio: the trailer's AAC sound stream (140, else 139, else any m4a), fetched the same way for the same stretch
+const VIDEO_FMT = ['136', '135', '134', '133', 'bv*[ext=mp4][vcodec^=avc1][height<=720]'], AUDIO_FMT = ['140', '139', 'ba[ext=m4a][acodec^=mp4a]'];
+async function streamOf(id, audio) {
+  const fmt = (audio ? AUDIO_FMT : VIDEO_FMT).map(f => f + '[protocol=https]').join('/');
   const j = JSON.parse(await run(['--no-warnings', '--no-playlist', '--quiet', '-f', fmt, '-j', '--', 'https://www.youtube.com/watch?v=' + id], 45000));
   if (!j || !j.url || !/^https:\/\/[a-z0-9.-]+\.(googlevideo|youtube)\.com\//i.test(j.url)) throw new Error('no usable stream');
   const h = {}; for (const [k, v] of Object.entries(j.http_headers || {})) if (/^(user-agent|accept|accept-language|origin|referer)$/i.test(k)) h[k] = String(v);
@@ -162,7 +164,7 @@ function clip(id, o = {}) {
   if (flights.has(id)) { if (!o.low) { const j = q.find(x => x.id === id); if (j) j.low = false; } return flights.get(id); }
   const p = new Promise(resolve => {
     q.push({ id, low: !!o.low, run: () => (Date.now() - (asked.get(id) || 0) > FRESH ? Promise.resolve(null) : make(id, out, none)).then(resolve, () => resolve(null)), drop: () => resolve(null) });
-    while (q.length > QMAX) { const k = q.findIndex(x => x.low); q.splice(k >= 0 ? k : 0, 1)[0].drop(); }
+    while (q.length > QMAX) { const k = q.findIndex(x => x.low), k2 = k >= 0 ? k : Math.max(0, q.findIndex(x => !x.sound)); q.splice(k2, 1)[0].drop(); } /* (beta.12: the sound you just turned on isn't the one dropped) */
   });
   flights.set(id, p); p.finally(() => flights.delete(id)); pump(); return p;
 }
@@ -176,7 +178,8 @@ async function make(id, out, none) {
     const frags = await fetch(ranged(st.url, pl.from, pl.to - 1), { headers: st.headers, cap: MAX_BYTES + (1 << 20), timeout: 60000 });
     if (frags.length !== pl.to - pl.from) throw new Error('short read ' + frags.length + ' of ' + (pl.to - pl.from));
     const tmp = out + '.part'; fs.writeFileSync(tmp, Buffer.concat([head.subarray(0, pl.headEnd), frags])); fs.renameSync(tmp, out);
-    fails = 0; failAt.delete(id); require('./previews').trim(); log('Console trailers: clip kept for', id, pl.seconds + ' s', Math.round(fs.statSync(out).size / 1024) + ' KB'); return out;
+    fails = 0; failAt.delete(id); require('./previews').trim(); log('Console trailers: clip kept for', id, pl.seconds + ' s', Math.round(fs.statSync(out).size / 1024) + ' KB');
+    return out;
   } catch (e) {
     const m = String(e && e.message || e); log('Console trailers:', id, 'failed:', m);
     if (GONE.test(m)) { try { fs.writeFileSync(none, m.slice(0, 200)); } catch {} return null; }
@@ -187,6 +190,41 @@ async function make(id, out, none) {
     return null;
   }
 }
+// (beta.12) the clip's sound, <id>.m4a beside it: the clip itself is video only (small and quick), and Details' box plays this
+// in step with it when sound is turned on. The same first fragments as the video (a few seconds more, so it never runs out
+// before the picture). Made the first time sound is turned on for it (not with every clip: most are never heard, and each
+// fetch is one more helper run), then kept; null when it can't be had
+// It waits in the clips' queue (one more helper run, counted with them), only the newest one asked for waits (a game you've
+// moved on from isn't fetched), and one that failed isn't asked again for 10 minutes (offline: everything pauses, as clips do)
+const audioOf = id => path.join(clipDir(), id + '.m4a'), aFlights = new Map(), aFailAt = new Map();
+function audio(id) {
+  if (!supported() || !okId(id)) return Promise.resolve(null);
+  const out = audioOf(id); if (isFile(out)) return Promise.resolve(out);
+  const now = Date.now();
+  if (!helperState().have || now < pausedTill || now - (aFailAt.get(id) || 0) < 10 * 60e3) return Promise.resolve(null);
+  if (aFlights.has(id)) return aFlights.get(id);
+  for (let k = q.length - 1; k >= 0; k--) if (q[k].sound) { const j = q.splice(k, 1)[0]; j.drop(); }
+  const p = new Promise(resolve => { q.push({ id, sound: true, low: false, run: () => makeAudio(id, out).then(resolve, () => resolve(null)), drop: () => resolve(null) }); pump(); });
+  aFlights.set(id, p); p.finally(() => aFlights.delete(id)); return p;
+}
+function makeAudio(id, out) {
+  return (async () => {
+    fs.mkdirSync(clipDir(), { recursive: true });
+    const st = await streamOf(id, true);
+    let head = await fetch(ranged(st.url, 0, 65535), { headers: st.headers, cap: 1 << 20 }), pl = plan(head, SECONDS + 5);
+    if (!pl) { head = await fetch(ranged(st.url, 0, 524287), { headers: st.headers, cap: 2 << 20 }); pl = plan(head, SECONDS + 5); }
+    if (!pl) throw new Error('no fragment index in the sound stream');
+    const frags = await fetch(ranged(st.url, pl.from, pl.to - 1), { headers: st.headers, cap: MAX_BYTES + (1 << 20), timeout: 60000 });
+    if (frags.length !== pl.to - pl.from) throw new Error('short read ' + frags.length + ' of ' + (pl.to - pl.from));
+    const tmp = out + '.part'; fs.writeFileSync(tmp, Buffer.concat([head.subarray(0, pl.headEnd), frags])); fs.renameSync(tmp, out);
+    aFailAt.delete(id); log('Console trailers: sound kept for', id, pl.seconds + ' s', Math.round(fs.statSync(out).size / 1024) + ' KB'); return out;
+  })().catch(e => { const m = String(e && e.message || e); log('Console trailers: sound for', id, 'failed:', m);
+    if (OFFLINE.test(m)) pausedTill = Date.now() + 2 * 60e3; else aFailAt.set(id, Date.now()); return null; });
+}
+// the YouTube id of a kept clip file (<id>.hd.mp4 / <id>.mp4 in the clips folder), else null: the screen asks for a clip's
+// sound by its file, and only Boxshelf's own clips have one to fetch
+function idOfClip(f) { try { if (path.resolve(path.dirname(String(f))).toLowerCase() !== path.resolve(clipDir()).toLowerCase()) return null; } catch { return null; }
+  const m = /^([\w-]{6,20})(\.hd)?\.mp4$/.exec(path.basename(String(f))); return m ? m[1] : null; }
 // a kept clip (marked as just shown, so the 400 MB limit drops the ones not seen for longest)
 // (a 480p one from before: shown now, its 720p one made in the background for next time. The 480p file is removed the
 // next time the clip is asked for, once the 720p one is there: never while it may still be playing)
@@ -257,8 +295,8 @@ async function clipFromSearch(title, sys, sysName, o = {}) {
   if (ids.length) { const e = sLoad()[sKey(title, sys)]; if (e && !memoIds(e).length) { sLoad()[sKey(title, sys)] = { id: null, alts: [], at: Date.now() }; sSave(); } }
   return null;
 }
-function size() { try { return fs.readdirSync(clipDir()).filter(n => n.endsWith('.mp4')).reduce((a, n) => { try { a.n++; a.bytes += fs.statSync(path.join(clipDir(), n)).size; } catch {} return a; }, { n: 0, bytes: 0 }); } catch { return { n: 0, bytes: 0 }; } }
+function size() { try { return fs.readdirSync(clipDir()).filter(n => /\.(mp4|m4a)$/i.test(n)).reduce((a, n) => { try { if (/\.mp4$/i.test(n)) a.n++; a.bytes += fs.statSync(path.join(clipDir(), n)).size; } catch {} return a; }, { n: 0, bytes: 0 }); } catch { return { n: 0, bytes: 0 }; } } /* (beta.12: the clips' sound files count in the size) */
 function clear() { try { fs.rmSync(clipDir(), { recursive: true, force: true }); } catch {} }
 function status() { const h = helperState(); return { supported: supported(), helper: h.have, getting: !!helperFlight, ...size() }; }
 
-module.exports = { init, supported, status, helperState, getHelper, clip, cached, clear, size, plan, boxes, sidx, gone, search, searchList, clipFromSearch, searchKnown, pickResult, rankResults, _setRun: f => { run = f; }, _fetch: f => { fetch = f; }, _force: v => { force = !!v; }, _reset: () => { failAt.clear(); asked.clear(); fails = 0; pausedTill = 0; updated = false; wantUpdate = false; sMemo = null; } };
+module.exports = { init, supported, status, helperState, getHelper, clip, cached, audio, idOfClip, clear, size, plan, boxes, sidx, gone, search, searchList, clipFromSearch, searchKnown, pickResult, rankResults, _setRun: f => { run = f; }, _fetch: f => { fetch = f; }, _force: v => { force = !!v; }, _reset: () => { failAt.clear(); asked.clear(); fails = 0; pausedTill = 0; updated = false; wantUpdate = false; sMemo = null; } };

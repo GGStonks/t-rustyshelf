@@ -153,7 +153,7 @@ contextBridge.exposeInMainWorld('trustyshelf', {
   storeApps: () => call('pc:storeApps'), // (beta discussion 39)
   playniteFind: (dir) => call('playnite:find', { dir }), emulatorIn: (dir, systemId) => call('games:emuIn', { dir, systemId }), playnitePlan: (dir) => call('playnite:plan', { dir }),
   previewFind: (o) => call('preview:find', o || {}), previewWarm: (list) => call('preview:warm', Array.isArray(list) ? list : []) /* (upstream beta.11) the neighbours' trailers made ahead */, previewYt: (id, rect, muted) => call('preview:yt', { id, rect, muted }), previewYtMove: (rect, show) => call('preview:ytMove', { rect, show }),
-  previewYtStop: () => call('preview:ytStop'), previewCount: () => call('preview:count'), previewClearSteam: () => call('preview:clearSteam'),
+  previewYtStop: () => call('preview:ytStop'), previewClipAudio: url => call('preview:clipAudio', { url: String(url || '') }), /* (upstream beta.12) a clip's sound for Details' box */ previewCount: () => call('preview:count'), previewClearSteam: () => call('preview:clearSteam'),
   onPreviewYt: (fn) => { const h = (_e, d) => fn(d); ipcRenderer.on('preview:yt', h); return () => ipcRenderer.removeListener('preview:yt', h); },
   // (beta.8) console trailers: a clip became ready; the helper's status, download and progress; clearing the clips
   onPreviewClip: (fn) => { const h = (_e, d) => fn(d); ipcRenderer.on('preview:clip', h); return () => ipcRenderer.removeListener('preview:clip', h); },
@@ -175,6 +175,7 @@ contextBridge.exposeInMainWorld('trustyshelf', {
   setScreenMode: mode => call('seamless:screenMode', { mode: String(mode || '') }), // (beta.12) Seamless play: 'full' | 'window'
   watchCancel: () => call('seamless:cancel'), // (beta.12) B before a watched Steam / store game showed up: { cancelled }
   onWatchGaveUp: fn => ipcRenderer.on('run:watchGaveUp', () => fn()), // (beta.12) it never showed up: the old "Running through" note
+  gameStatus: (id, status) => call('game:status', { id, status }), // (upstream beta.12) Details → Your play → Status
   winMode: mode => call('app:winMode', { mode: String(mode || '') }), // the smoothness test: 'full' | 'max' | 'half'
   quit: why => call('app:quit', { why: typeof why === 'string' ? why : '' }),
   power: kind => call('app:power', kind),
