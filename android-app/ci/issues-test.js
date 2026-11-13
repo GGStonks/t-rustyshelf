@@ -33,7 +33,7 @@ module.exports = async function issuesPass({ browser, base, check, OUT }) {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bx-issues-')), exe = path.join(tmp, 'Game.exe'); fs.writeFileSync(exe, 'MZ');
     const cfg = config.defaults(); cfg.pc.custom = [{ id: 'a', title: 'On PC', exe, args: '', shelf: 'pc' }, { id: 'b', title: 'On Custom', exe, args: '' }, { id: 'c', title: 'Odd', exe, args: '', shelf: 'nope' }];
     config.sanitize(cfg);
-    const games = pcgames.customGames(cfg.pc.custom);
+    const games = await pcgames.customGames(cfg.pc.custom);
     check('A game added by hand can be put on the PC shelf: its choice survives the settings check, other values are dropped',
       cfg.pc.custom[0].shelf === 'pc' && !('shelf' in cfg.pc.custom[1]) && !('shelf' in cfg.pc.custom[2]) && games[0].shelf === 'pc' && !games[1].shelf && !games[2].shelf,
       JSON.stringify(games.map(g => [g.title, g.shelf || ''])));

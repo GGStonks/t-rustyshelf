@@ -726,7 +726,7 @@ async function buildLibrary() {
   // (beta.7) GOG Galaxy, Ubisoft Connect, the EA app and Xbox / Game Pass join the PC shelf too, like Epic (store games)
   tS = await step('pc stores'); try { epic.push(...await pcgames.storeGames(pc)); } catch (e) { log('PC stores', e.message); } slow('the PC stores', tS);
   tS = await step('quiver'); if (pc.quiver !== false) try { mine.push(...pcgames.quiverGames(pc.quiverPath)); } catch (e) { log('Quiver library', e.message); } slow('Quiver', tS);
-  tS = await step('custom games'); try { mine.push(...pcgames.customGames(pc.custom)); } catch (e) { log('Custom games', e.message); } slow('the custom games', tS);
+  tS = await step('custom games'); try { mine.push(...await pcgames.customGames(pc.custom)); } catch (e) { log('Custom games', e.message); } slow('the custom games', tS);
   for (const g of [...epic, ...mine]) { const t = ownTitle(g.id); if (t) { g.fileTitle = g.title; g.title = t; } } // (beta.5: renamed in Details)
   pcgames.remember([...epic, ...mine]);
   // (Steam art by title only for Epic's store games: a recomp or a program added by hand often shares its name with an

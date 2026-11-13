@@ -413,10 +413,19 @@ function quiverGames(chosen) {
 }
 
 // ---------- games added by hand (cfg.pc.custom: [{ id, title, exe, args }]) ----------
-function customGames(list) {
-  // (beta discussion 39) or a Microsoft Store app added by hand (shellApp: <package family>!<app id>, started as the Windows
-  // app it is, like the Xbox games)
-  return (Array.isArray(list) ? list : []).filter(c => c && (typeof c.exe === 'string' && c.exe && isFile(c.exe) || isShellApp(c.shellApp))).slice(0, 500)
+// ((T)rustyShelf, issue 24) as many as Settings keeps (2,000; the shelf stopped at 500), and each program looked for with
+// fs.promises (a thousand checks on a network drive that had dropped held the app up for 25 s)
+const CUSTOM_MAX = 2000;
+async function customGames(list) {
+  const L = (Array.isArray(list) ? list : []).filter(c => c && (typeof c.exe === 'string' && c.exe || isShellApp(c.shellApp))).slice(0, CUSTOM_MAX * 2), ok = new Array(L.length).fill(false);
+  const isFileA = f => fs.promises.stat(f).then(s => s.isFile(), () => false);
+  for (let i = 0; i < L.length; i += 32) await Promise.all(L.slice(i, i + 32).map(async (c, k) => { ok[i + k] = typeof c.exe === 'string' && c.exe ? await isFileA(c.exe) : isShellApp(c.shellApp); }));
+  return customFrom(L.filter((c, i) => ok[i]).slice(0, CUSTOM_MAX));
+}
+// (beta discussion 39) or a Microsoft Store app added by hand (shellApp: <package family>!<app id>, started as the Windows
+// app it is, like the Xbox games)
+function customFrom(list) {
+  return list
     .map(c => { const app = !(typeof c.exe === 'string' && c.exe) && isShellApp(c.shellApp), exe = app ? '' : c.exe;
       return { id: 'custom-' + slug(c.id || c.title || path.basename(exe || c.shellApp)), source: 'custom', title: String(c.title || path.basename(exe, '.exe') || 'Game').trim().slice(0, 120), exe, ...(app ? { shellApp: c.shellApp } : {}), args: typeof c.args === 'string' ? c.args.slice(0, 1000) : '', ...(ON_SHELF.has(c.shelf) ? { shelf: c.shelf } : {}) }; }); // (beta.10: shelf 'pc' = shown on the PC shelf instead of Custom; supalii: or a console's)
 }

@@ -59,7 +59,7 @@ const put = (rel, buf) => { const f = path.join(T, rel); fs.mkdirSync(path.dirna
     check('the Store apps in the Start menu are listed by name, sorted, without plain programs or doubles', JSON.stringify(apps) === JSON.stringify([{ title: 'A Store Game', app: 'Publisher.AStoreGame_abc123xyz!Game' }, { title: 'Calculator', app: 'Microsoft.WindowsCalculator_8wekyb3d8bbwe!App' }]), JSON.stringify(apps));
     io.run = async () => '';
     check('Windows not answering: no list (the page says so) rather than an empty one', await pcg.storeApps() === null);
-    const cg = pcg.customGames([{ id: 's1', title: 'A Store Game', exe: '', shellApp: 'Publisher.AStoreGame_abc123xyz!Game' }, { id: 's2', title: 'Bad', exe: '', shellApp: 'shell:evil & calc' }]);
+    const cg = await pcg.customGames([{ id: 's1', title: 'A Store Game', exe: '', shellApp: 'Publisher.AStoreGame_abc123xyz!Game' }, { id: 's2', title: 'Bad', exe: '', shellApp: 'shell:evil & calc' }]);
     check('a Store app added by hand is a custom game started as that app; a malformed address is left out', cg.length === 1 && cg[0].shellApp === 'Publisher.AStoreGame_abc123xyz!Game' && cg[0].exe === '' && cg[0].title === 'A Store Game', JSON.stringify(cg));
   } catch (e) { check('ran without an error', false, e.stack); }
   finally { fs.rmSync(T, { recursive: true, force: true }); }

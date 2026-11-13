@@ -65,7 +65,10 @@ module.exports = async function pcGamesPass({ browser, base, check, newPage }) {
     check('PC games: Quiver 4 gives each install its program and the name the player chose',
       g4.length === 1 && g4[0].title === 'Ship of Harkinian' && /soh\.exe$/.test(g4[0].exe), JSON.stringify(g4.map(g => ({ t: g.title, e: path.basename(g.exe) }))));
     // games added by hand: a missing program is left out; the config keeps clean entries only
-    const c = pcg.customGames([{ id: 'a', title: 'Mine', exe: path.join(q3, 'QuiverLauncher.exe'), shelf: 'ps2' }, { id: 'b', title: 'Gone', exe: path.join(tmp, 'gone.exe') }]);
+    const c = await pcg.customGames([{ id: 'a', title: 'Mine', exe: path.join(q3, 'QuiverLauncher.exe'), shelf: 'ps2' }, { id: 'b', title: 'Gone', exe: path.join(tmp, 'gone.exe') }]);
+    // ((T)rustyShelf, issue 24) more than 500 games added by hand all reach the shelf (it stopped at 500)
+    { const many = []; for (let i = 0; i < 600; i++) { const e = path.join(tmp, 'many', `g${i}.exe`); mk(e, 'MZ'); many.push({ id: 'm' + i, title: 'Game ' + i, exe: e }); }
+      const got = await pcg.customGames(many); check('PC games: 600 games added by hand are all on the shelf (it stopped at 500)', got.length === 600, got.length); }
     const config = require(path.join(root, 'main', 'config.js'));
     const clean = config.normalize({ pc: { custom: [{ title: 'Ok', exe: 'C:\\x.exe', platform: 'ps2' }, { title: 'PC game', exe: 'C:\\y.exe', platform: 'pc', args: '-dx12' }, { title: 'Bad platform', exe: 'C:\\z.exe', platform: 'not-a-console' }, { title: 'No exe' }, 'junk'], epic: 'yes' } }).pc;
     // (main/launcher.js asks for Electron's shell, which plain Node can't load: a stand-in while it loads; buildArgs doesn't use it)
