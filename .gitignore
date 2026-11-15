@@ -62,6 +62,9 @@ title.keys
 *.jks
 # the 3D PC model isn't part of the public source (its origin isn't recorded)
 renderer/models/*.glb
+# ((T)rustyShelf issue 27) its own keep cases are part of the source: built from renderer/models/src/keepcases.py (Blender),
+# they were caught by the rule above and never reached a build, so every release fell back to the coded case
+!renderer/models/case-*.glb
 # ((T)rustyShelf issue 26) the ScreenScraper developer login CI writes from secrets: never in git
 main/ss-dev.json
 android-app/android/app/src/main/assets/ss-dev.json

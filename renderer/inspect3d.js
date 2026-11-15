@@ -592,7 +592,9 @@ window.Inspect3D = (() => {
     const man = new THREE.Mesh(new THREE.PlaneGeometry(w * .8, h * .86), new THREE.MeshStandardMaterial({ map: o.manual ? loadTex(o.manual) : null, color: o.manual ? 0xffffff : 0xe8e4dc, roughness: .75 }));
     man.position.set(-w / 2, 0, .002); lidPivot.add(man); manualPlane = man;
     if (o.manual) { const mt = man.material.map; let n = 0; const chk = () => { if (manualPlane !== man) return; const img = mt.image; if (!img || !(img.naturalWidth || img.width)) { if (n++ < 100) setTimeout(chk, 100); return; } fitCover(man, coverRect(img, false), w * .8, h * .86); }; chk(); }
-    [[-.36, .34], [-.36, -.34]].forEach(([x, y]) => { const clip = new THREE.Mesh(new THREE.BoxGeometry(w * .08, h * .09, .006), side); clip.position.set(-w / 2 + x * w * .5, y * h, .005); lidPivot.add(clip); });
+    // ((T)rustyShelf issue 27) clear plastic, as on the real cases (in the case's solid colour they were white or coloured blocks over the booklet's art)
+    { const clear = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: .15, metalness: 0, transparent: true, opacity: .28, clearcoat: .6, depthWrite: false });
+      [[-.36, .34], [-.36, -.34]].forEach(([x, y]) => { const clip = new THREE.Mesh(new THREE.BoxGeometry(w * .08, h * .09, .006), clear); clip.renderOrder = 2; clip.position.set(-w / 2 + x * w * .5, y * h, .005); lidPivot.add(clip); }); }
 
     if (cur.caseForm === 'model') { const g = ensureCaseModel(o.sys); if (g && g !== 'loading') applyCaseModel(o, g); }
     else { ensureUniversalModel(); if (universalGltf) applyUniversalModel(o); }

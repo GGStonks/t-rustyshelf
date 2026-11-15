@@ -33,6 +33,10 @@ server.listen(0, async () => {
     const src = fs.readFileSync(path.join(WWW, 'inspect3d.js'), 'utf8');
     check('Inspect: the modelled cases\' booklet clips are clear plastic, not solid blocks over the booklet', /\/Clip\/\.test\(n\.name \|\| ''\)\) \{ n\.material = clear;/.test(src) && /opacity: \.28/.test(src));
     check('Inspect: a disc game in the card case doesn\'t show that case\'s booklet under its disc', /if \(disc && names\.includes\('Booklet'\)\) \{ n\.visible = false;/.test(src));
+    check('Inspect: the coded case\'s booklet clips are clear plastic too', /\[\[-\.36, \.34\], \[-\.36, -\.34\]\]\.forEach\(\(\[x, y\]\) => \{ const clip = new THREE\.Mesh\(new THREE\.BoxGeometry\(w \* \.08, h \* \.09, \.006\), clear\)/.test(src));
+    // the four modelled cases were caught by an ignore rule and never reached a build (releases fell back to the coded case)
+    let tracked = ''; try { tracked = require('child_process').execFileSync('git', ['-C', path.join(__dirname, '..', '..'), 'ls-files', 'renderer/models'], { encoding: 'utf8' }); } catch {}
+    check('the modelled cases (GameCube, PS2, Wii, Wii U) are in git, so builds carry them', ['gc', 'ps2', 'wii', 'wiiu'].every(k => tracked.includes('renderer/models/case-' + k + '.glb')) && ['gc', 'ps2', 'wii', 'wiiu'].every(k => fs.existsSync(path.join(WWW, 'models', 'case-' + k + '.glb'))), tracked);
     check('no page errors', !errors.length, errors.slice(0, 3).join(' | '));
   } catch (e) { check('ran without throwing', false, e.stack); }
   finally { await browser.close(); server.close(); console.log(fails ? `\n${fails} FAILED` : '\nall passed'); process.exit(fails ? 1 : 0); }
