@@ -71,6 +71,21 @@ try {
   check('Quiver 4: an app in a console group folder (Ports\\N64) is read from installs.json, with the catalog\'s name and art', g4g.some(x => x.title === 'Zelda 64: Recompiled' && /Zelda64Recompiled\.exe$/.test(x.exe) && x.icon === 'https://example.com/z64.jpg'), JSON.stringify(g4g));
   check('Quiver 4: an app its installs.json doesn\'t show yet, inside a group folder, gets the catalog\'s name, not a folder\'s', t4g.includes('Star Fox 64 (Starship)') && t4g.includes('ares'), t4g);
   check('Quiver 4: the group folders themselves (Ports, N64, Emulators) are never taken for apps, nothing twice', !t4g.some(t => /^(Ports|N64|Emulators)$/.test(t)) && g4g.length === 3, t4g);
+  // (issue 16, a fourth time) moved from Quiver 3 to Quiver 4: Settings still points at the old Quiver 3 folder (read first),
+  // and Quiver 4 (in AppData) keeps using that folder's Apps. An app installed with Quiver 4 isn't in Quiver 3's apps.json,
+  // so the Quiver 3 pass took it from the folder under its folder's name, and Quiver 4's entry for it (the proper name)
+  // was dropped as a double. Quiver 4's list now wins wherever both know an app
+  const q3m = path.join(tmp, 'Quiver3m'), apps3m = path.join(q3m, 'Apps'), q4m = path.join(process.env.APPDATA, 'com.quiverlauncher.app');
+  put(path.join(q3m, 'QuiverLauncher.exe'), 'x'); put(path.join(q3m, 'settings.json'), JSON.stringify({}));
+  put(path.join(q3m, 'apps.json'), JSON.stringify({ apps: [{ name: 'Ship of Harkinian', repository: 'HarbourMasters/Shipwright', folderName: 'Shipwright' }] }));
+  exe(path.join(apps3m, 'Shipwright', 'soh.exe')); exe(path.join(apps3m, 'SpaghettiKart', 'Spaghettify.exe'));
+  put(path.join(q4m, 'apps-folder.json'), JSON.stringify({ path: apps3m }));
+  put(path.join(q4m, 'installs.json'), JSON.stringify({ 'github:HarbourMasters/SpaghettiKart': { folder: 'SpaghettiKart', executables: ['Spaghettify.exe'] } }));
+  put(path.join(q4m, 'library.json'), JSON.stringify([{ id: 'github:HarbourMasters/SpaghettiKart' }]));
+  put(path.join(q4m, 'catalog.json'), JSON.stringify([{ id: 'github:HarbourMasters/SpaghettiKart', slug: 'spaghettikart', name: 'Mario Kart 64 (SpaghettiKart)', tags: [] }]));
+  const gm = pc.quiverGames(q3m).filter(x => x.exe.includes(apps3m)), tm = gm.map(x => x.title).sort();
+  check('Quiver 3 moved to Quiver 4, Settings on the old folder: the Quiver 4 app has Quiver 4\'s name, not its folder\'s; the Quiver 3 one keeps its own; nothing twice',
+    JSON.stringify(tm) === JSON.stringify(['Mario Kart 64 (SpaghettiKart)', 'Ship of Harkinian']), JSON.stringify(gm.map(x => [x.id, x.title])));
 } catch (e) { check('ran without an error', false, e.stack); }
 finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 console.log(fails ? `\n${fails} check(s) failed` : '\nAll checks passed');

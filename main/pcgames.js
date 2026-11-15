@@ -403,11 +403,23 @@ function quiverLoose(appsDir, listed, names, grouped) {
 }
 function quiverGames(chosen) {
   const out = [], seen = new Set();
-  for (const root of quiverRoots(chosen)) {
-    let list = [];
-    try { list = isFile(path.join(root, 'installs.json')) ? quiver4(root) : quiver3(root); } catch (e) { log('Quiver read', e.message); }
-    try { const loose = quiverLoose(quiverAppsDir(root), list.map(g => g.exe), quiverNames(root), isFile(path.join(root, 'installs.json'))); if (loose.length) log('Quiver: ' + loose.length + ' app(s) in its apps folder that its list doesn\'t show'); list = list.concat(loose); } catch (e) { log('Quiver apps folder', e.message); }
-    for (const g of list) { const id = 'quiver-' + slug(g.key || g.title); if (seen.has(id) || seen.has(g.exe.toLowerCase())) continue; seen.add(id); seen.add(g.exe.toLowerCase()); out.push({ id, source: 'quiver', ...g }); }
+  // ((T)rustyShelf, issue 16) moved from Quiver 3 to Quiver 4, both folders are read (Settings on the old one, Quiver 4 in
+  // AppData using the same Apps folder). Every root's own list comes first, Quiver 4's ahead of Quiver 3's, then the apps
+  // folders' loose apps with the names from every list: one root at a time, the Quiver 3 pass took an app only Quiver 4
+  // knew from its folder, under the folder's name, and Quiver 4's proper entry was then dropped as a double
+  const q4 = r => isFile(path.join(r, 'installs.json'));
+  const roots = quiverRoots(chosen).sort((x, y) => q4(y) - q4(x)), lists = new Map(), names = new Map();
+  for (const root of roots) {
+    let list = []; try { list = q4(root) ? quiver4(root) : quiver3(root); } catch (e) { log('Quiver read', e.message); }
+    lists.set(root, list);
+    try { for (const [k, v] of quiverNames(root)) if (!names.has(k)) names.set(k, v); } catch (e) { log('Quiver names', e.message); }
+  }
+  const add = g => { const id = 'quiver-' + slug(g.key || g.title); if (seen.has(id) || seen.has(g.exe.toLowerCase())) return; seen.add(id); seen.add(g.exe.toLowerCase()); out.push({ id, source: 'quiver', ...g }); };
+  for (const root of roots) lists.get(root).forEach(add);
+  const listed = out.map(g => g.exe);
+  for (const root of roots) {
+    try { const loose = quiverLoose(quiverAppsDir(root), listed.concat(out.map(g => g.exe)), names, q4(root)).filter(g => !seen.has(g.exe.toLowerCase()));
+      if (loose.length) log('Quiver: ' + loose.length + ' app(s) in its apps folder that its list doesn\'t show'); loose.forEach(add); } catch (e) { log('Quiver apps folder', e.message); }
   }
   return out;
 }
