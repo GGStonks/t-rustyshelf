@@ -3144,7 +3144,6 @@ if (firstInstance) app.whenReady().then(() => { try { startUp(); } catch (e) {
   try { app.exit(1); } catch { process.exit(1); }
 } });
 function startUp() {
-  romm.init({ dataDir: app.getPath('userData'), log: (...a) => log(...a) }); rommApply(); // (upstream beta.12) RomM: its saved library and covers live in the data folder
   if (session && session.defaultSession) denyPermissions(session.defaultSession);
   config.init(app.getPath('userData'), log);
   arcadenames.init(app.getPath('userData'), log); // (beta.7) arcade game names, main/arcadenames.js
@@ -3159,6 +3158,7 @@ function startUp() {
   { const e = cfg.systems.sw2 && cfg.systems.sw2.emulator; if (e && !paths.isFile(emuPath(e))) nx2.builds(sw2Roots()).then(l => { const b = l.sort((a, c) => c.date - a.date)[0]; if (b && cfg.systems.sw2 && !paths.isFile(emuPath(cfg.systems.sw2.emulator))) { log('Switch 2: shelf build gone, now', b.label); applyCfg({ ...cfg, systems: { ...cfg.systems, sw2: { ...cfg.systems.sw2, emulator: b.exe } } }); } }).catch(() => {}); }
   if (cfg.ra && cfg.ra.key) { try { const raw = JSON.parse(fs.readFileSync(config.file(), 'utf8')); if (raw && raw.ra && raw.ra.key) persistCfg(cfg); } catch {} } // an older plain-text key: encrypt it now
   covers.init(app.getPath('userData'), log); covers.setArtName(g => artNameOf(g.id)); // ((T)rustyShelf issue #2: Details → Art match)
+  romm.init({ dataDir: app.getPath('userData'), log: (...a) => log(...a) }); rommApply(); // (upstream beta.12) RomM: its saved library and covers live in the data folder (after the settings are read: it needs cfg)
   require('./main/steamgrid').init({ dataDir: app.getPath('userData'), log, key: () => (cfg && cfg.keys && cfg.keys.steamgriddb) || '' }); require('./main/screenscraper').init({ dataDir: app.getPath('userData'), log, creds: () => { const k = (cfg && cfg.keys) || {}; return { user: k.ssUser || '', pass: k.ssPass || '', devId: k.ssDevId || '', devPass: k.ssDevPass || '' }; } }); initArtStudio(); initManualStudio(); // (SteamGridDB: the Art Studio's optional poster source)
   commercials.init({ log, dir: path.join(app.getPath('userData'), 'commercials'), memoFile: path.join(app.getPath('userData'), 'commercials.json'), fetchBuf: async url => { const r = await net.fetch(url, { signal: AbortSignal.timeout(30000) }); /* (beta.10: a stalled answer gives up) */ if (r.status === 404) return null; if (!r.ok) throw new Error('archive.org answered ' + r.status); return Buffer.from(await r.arrayBuffer()); }, // (busy / down: a failure, so no game is noted as "no ad" for a month)
     // url → file, streamed; resolves to the bytes written (0: not found), rejects past max bytes
