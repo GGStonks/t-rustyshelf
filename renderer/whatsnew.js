@@ -8,6 +8,34 @@
 //   sections: [{ h, items: [[headline, more]] }] }; newest first.
 window.BS_WHATSNEW = [
   {
+    version: '1.10.0.0', android: '1.10.0.0', date: '2026-11-15', title: "A Details page built around the case, RomM on your shelves, and tag shelves",
+    highlights: [
+      "Details redesigned around the case: one page in sections, the trailer with its sound, your play and a Status",
+      "RomM: your RomM server's games on your shelves, downloaded when you press Play",
+      "Tag shelves: every console's Racing (or any genre's) games on one shelf",
+      "Spines as tall as their boxes again, and clean case insides in Inspect",
+      "Settings always leaves when you ask, and a games folder out of reach keeps its games"
+    ],
+    platforms: [
+      "Windows and Linux: the new Details page, RomM, tag shelves, the Quiver, Settings and games-folder fixes.",
+      "All platforms: spines and case insides, the ScreenScraper developer login in the builds."
+    ],
+    sections: [
+      { h: "New", items: [
+        ["Details, redesigned", "The shelf fades behind the game's own art and the case you chose stays beside the page, which is one page in sections: Overview (Play, Favourite, the trailer with your play beside it), Screenshots, About, Your play (launches, time, the last eight weeks and a Status you set: Not started, Playing, Finished, Abandoned), Achievements (RetroAchievements, or Steam's for a Steam game), Your copy and Info. LB / RB or Q / E jump a section. The trailer plays with its sound: A or the speaker turns it on, LT / RT or the bar set its volume. Every Details button you had is still there. From sassiestrhihno's beta.12, by sassiestrhihno."],
+        ["RomM", "Settings → Accounts & services → RomM: your server's address, then pair with a QR code on your phone (RomM 5.0 and newer) or an 8-digit code. Its games join their console's shelf with a cloud on the case; Play downloads one into that console's games folder first (B stops it, and it carries on next time). From sassiestrhihno's beta.12, by sassiestrhihno, with two fixes reported by audioslayer: RomM covers show, and its genres no longer break the shelf."],
+        ["Tag shelves", "Settings → Shelf → Collections → Add a tag shelf lists the genres your games have. Add one and its shelf gathers every game with that genre from every console; you can still add any other game to it from its Details (Collections)."]
+      ] },
+      { h: "Fixed", items: [
+        ["Spines and case insides", "Spines stuck out below their boxes on most consoles: they're as tall as the box again. In Inspect, the booklet clips are clear plastic instead of blocks over the booklet's art, a disc game no longer shows a booklet under its disc, and the GameCube, PS2, Wii and Wii U cases are in the builds at last."],
+        ["Settings always leaves", "With the app busy reading a slow network drive, leaving Settings could hang, and Esc or Back did nothing until a restart. It closes at once now and finishes saving behind."],
+        ["A games folder out of reach", "A games folder on a network drive that dropped for a moment left its console's shelf empty. Its games stay now, and the folder is read again when it's back."],
+        ["Quiver after a move to Quiver 4", "Apps installed with Quiver 4 after a move from Quiver 3 came in under their folder names. They take Quiver 4's names now."],
+        ["ScreenScraper sign-in", "The builds can carry (T)rustyShelf's own ScreenScraper developer login, so your account works with the Developer fields left blank once that login is in place."]
+      ] }
+    ]
+  },
+  {
     version: '1.9.0.0', android: '1.9.0.0', date: '2026-11-13', title: "Find any game, Seamless play, and box art that copes with a full drive",
     highlights: [
       "Find a game: search every shelf by title, from the keyboard, the controller or the Search button",
