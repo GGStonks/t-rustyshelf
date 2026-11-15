@@ -32,6 +32,14 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - name: Build Rust tools
         run: node scripts/build-rust.js
+      # ((T)rustyShelf issue 26) its own ScreenScraper developer login, from the repository's secrets (never in git or the
+      # log): ScreenScraper only answers apps that have one. Skipped until the SS_DEV_ID and SS_DEV_PASS secrets exist
+      - name: ScreenScraper developer login (from secrets)
+        shell: bash
+        env:
+          SS_DEV_ID: ${{ secrets.SS_DEV_ID }}
+          SS_DEV_PASS: ${{ secrets.SS_DEV_PASS }}
+        run: node scripts/ss-dev.js main/ss-dev.json
       - name: Build the AppImage
         run: >
           npx electron-builder --linux AppImage --publish never
@@ -59,6 +67,14 @@ jobs:
       - name: Build Rust tools
         shell: bash
         run: node scripts/build-rust.js
+      # ((T)rustyShelf issue 26) its own ScreenScraper developer login, from the repository's secrets (never in git or the
+      # log): ScreenScraper only answers apps that have one. Skipped until the SS_DEV_ID and SS_DEV_PASS secrets exist
+      - name: ScreenScraper developer login (from secrets)
+        shell: bash
+        env:
+          SS_DEV_ID: ${{ secrets.SS_DEV_ID }}
+          SS_DEV_PASS: ${{ secrets.SS_DEV_PASS }}
+        run: node scripts/ss-dev.js main/ss-dev.json
       - name: Build the portable exe
         shell: bash
         run: >
@@ -100,6 +116,14 @@ jobs:
       - name: Copy the shared UI into the Android app
         working-directory: android-app
         run: npm run sync
+      # ((T)rustyShelf issue 26) its own ScreenScraper developer login, from the repository's secrets (never in git or the
+      # log): ScreenScraper only answers apps that have one. Skipped until the SS_DEV_ID and SS_DEV_PASS secrets exist
+      - name: ScreenScraper developer login (from secrets)
+        shell: bash
+        env:
+          SS_DEV_ID: ${{ secrets.SS_DEV_ID }}
+          SS_DEV_PASS: ${{ secrets.SS_DEV_PASS }}
+        run: node scripts/ss-dev.js android-app/android/app/src/main/assets/ss-dev.json
       - name: Build the APK
         working-directory: android-app/android
         env:

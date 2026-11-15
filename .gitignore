@@ -62,3 +62,6 @@ title.keys
 *.jks
 # the 3D PC model isn't part of the public source (its origin isn't recorded)
 renderer/models/*.glb
+# ((T)rustyShelf issue 26) the ScreenScraper developer login CI writes from secrets: never in git
+main/ss-dev.json
+android-app/android/app/src/main/assets/ss-dev.json

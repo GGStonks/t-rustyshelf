@@ -28,6 +28,7 @@ jobs:
   build:
     name: Build
     uses: ./.github/workflows/build.yml
+    secrets: inherit # ((T)rustyShelf issue 26: the ScreenScraper developer login)
     with:
       version: ${{ inputs.version }}
       semver: ${{ inputs.semver }}
