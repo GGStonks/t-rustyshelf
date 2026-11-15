@@ -448,6 +448,9 @@ window.Inspect3D = (() => {
       const disc = o.kind !== 'cart';
       universalCase.traverse(n => { if (!n.isMesh) return; const names = matNames(n), m = caseMaterial(n, o, coverTex); if (m) n.material = m;
         if (disc && names.includes('PP Cloudy')) { n.visible = false; n.userData.cartOnly = true; }
+        // ((T)rustyShelf issue 27) its booklet lies on the tray side, beside a cartridge: under a disc it showed through and round
+        // it (the disc floating over the manual's art, the card case's clips over both). A disc case holds the disc alone there
+        if (disc && names.includes('Booklet')) { n.visible = false; n.userData.cartOnly = true; }
         if (disc && !isClearCase(o) && names.includes('Cover Inside')) n.material = new THREE.MeshPhysicalMaterial({ color: new THREE.Color(o.caseSide || o.caseColor || 0x222222), roughness: .42, metalness: .02, clearcoat: .35 }); });
       [spineG, backPivot, lidPivot].forEach(g => { if (g) g.visible = false; }); // the built case stays behind, hidden
       dockAnchor = new THREE.Object3D();
@@ -632,7 +635,10 @@ window.Inspect3D = (() => {
         else if (name === 'CoverSpine') r = sleeve(o.spine ? loadTex(o.spine) : spineTexture(o.title, o.caseColor, o.spineInk));
         else r = new THREE.MeshPhysicalMaterial({ color: mt && mt.color ? mt.color.clone() : new THREE.Color(0x222222), roughness: name === 'Logo' ? .62 : .42, metalness: .02, clearcoat: name === 'Shell' ? .3 : .15, clearcoatRoughness: .4 });
         return (mats[name] = r); };
-      m.traverse(n => { if (n.isMesh) n.material = Array.isArray(n.material) ? n.material.map(matFor) : matFor(n.material); });
+      // ((T)rustyShelf issue 27) the booklet and insert clips are clear plastic on the real cases: drawn in the case's own solid
+      // colour they sat over the booklet's art as white (Wii) or coloured blocks
+      const clear = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: .15, metalness: 0, transparent: true, opacity: .28, clearcoat: .6, depthWrite: false });
+      m.traverse(n => { if (!n.isMesh) return; if (/Clip/.test(n.name || '')) { n.material = clear; n.renderOrder = 2; return; } n.material = Array.isArray(n.material) ? n.material.map(matFor) : matFor(n.material); });
       const put = (node, pivot, dx) => { node.parent.remove(node); node.position.x += dx; pivot.add(node); };
       put(L, lidPivot, D / 2); put(B, backPivot, -D / 2); put(S, spineG, 0);
       // (the empties sit in Back / Lid, which only move along x on their pivots)
