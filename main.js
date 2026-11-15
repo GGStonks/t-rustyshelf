@@ -670,6 +670,23 @@ function iconQuick(exe) {
 // the PC games whose own folder is the game (its size is the folder's): not a program added by hand, which may sit in a shared folder
 const SIZED_SRC = new Set(['folder', 'epic', 'hoyoplay']);
 const STORE_SRC = new Set(['epic', 'gog', 'ubisoft', 'ea', 'xbox', 'folder']); // (folder: a game in the PC games folder, named by its folder)
+// ((T)rustyShelf, its discussion 31) games folders that don't answer within 5 s (or aren't there): their games come from
+// the last library, and a minute later they're tried again; back, the scan's kept list is dropped and the shelf rebuilt
+async function unreachable(dirs) {
+  const one = d => { let t; return Promise.race([fs.promises.readdir(emuPath(d) || d).then(() => true, () => false), new Promise(r => { t = setTimeout(() => r(false), 5000); })]).finally(() => clearTimeout(t)); };
+  const L = (dirs || []).filter(Boolean); const ok = await Promise.all(L.map(one)); return L.filter((d, i) => !ok[i]);
+}
+function keptFrom(sysId, gone, have) {
+  const lib = shelfGames(), shelves = Array.isArray(lib) ? lib : lib && Array.isArray(lib.shelves) ? lib.shelves : [];
+  const sh = shelves.find(x => x && x.id === sysId && Array.isArray(x.games)); if (!sh) return [];
+  const got = new Set(have.map(g => String(g.file || '').toLowerCase()));
+  return sh.games.filter(g => g && g.file && !got.has(String(g.file).toLowerCase()) && gone.some(d => paths.inDir(g.file, emuPath(d) || d)));
+}
+let lookT = null; const lookDirs = new Set();
+function lookAgain(gone) { gone.forEach(d => lookDirs.add(d)); if (lookT) return;
+  lookT = setTimeout(async () => { lookT = null; const dirs = [...lookDirs]; lookDirs.clear(); const still = await unreachable(dirs);
+    if (still.length < dirs.length) { log('library: a games folder is back, reading it again'); scanForget(); if (alive()) win.webContents.send('library:changed', { back: 1 }); }
+    if (still.length) lookAgain(still); }, 60000); }
 async function buildLibrary() {
   // (upstream beta.12) RomM: the saved copy of its library for this build, and one background sync a little after the first
   if (rommOn() && !rommLib) await rommLoad();
@@ -688,6 +705,10 @@ async function buildLibrary() {
     const games = []; let t0 = Date.now();
     for (const g of await scanSystemAsync(def, sc)) { if (Date.now() - t0 > 25) { await new Promise(r => setImmediate(r)); t0 = Date.now(); }
       games.push({ ...g, ...(artNameOf(g.id) ? { artName: artNameOf(g.id) } : {}), info: covers.gameInfo(def.id, artNameOf(g.id) || g.title), manualMiss: manualMiss(def.id, g), art: { front: fileUrl(g.art.front), hero: fileUrl(g.art.hero), back: fileUrl(g.art.back), madeBack: g.art.madeBack || undefined, spine: fileUrl(g.art.spine), madeSpine: g.art.madeSpine || undefined, disc: fileUrl(g.art.disc), manual: def.id === 'wiiu' ? await withCoverAsync(def.id, g, (g.art.manual || []).map(fileUrl)) /* (beta.10: async) */ : (g.art.manual || []).map(fileUrl), manualPdf: fileUrl(g.art.manualPdf) } }); }
+    // ((T)rustyShelf, its discussion 31) a games folder that can't be reached (a network drive gone for a moment) gives no
+    // games, and the shelf came out empty until the next scan: its games from the last library stay instead, and the
+    // folders are looked at again a minute later
+    { const gone = await unreachable(sc.romDirs); if (gone.length) { const kept = keptFrom(def.id, gone, games); games.push(...kept); log(`library: ${def.name}: ${gone.length} games folder${gone.length === 1 ? '' : 's'} not reachable, ${kept.length} game${kept.length === 1 ? '' : 's'} kept from the last scan`); lookAgain(gone); } }
     for (const g of rommGames(def.id, games)) games.push(g); // (upstream beta.12) this console's RomM games not on this PC yet
     // (beta.7) arcade zips are named from FinalBurn Neo's list: fetched once in the background, then the shelf refreshes
     if (games.length && arcadenames.SYSTEMS.has(def.id) && !arcadenames.ready()) arcadenames.fetchNames().then(ok => { if (ok && alive()) win.webContents.send('library:changed', { arcade: 1 }); });
