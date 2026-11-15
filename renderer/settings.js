@@ -1582,14 +1582,23 @@ function show(inf,opts){if(window.Shelf&&Shelf.previewStop)Shelf.previewStop(); 
 }
 // (beta.10) how many games the last library scan found (every console's, from Shelf.gameCounts), for the rescan's "Found N new games"
 function libTotal(){const m=shelf("gameCounts");if(!m||typeof m!=="object")return null;let n=0;for(const k in m)if(typeof m[k]==="number")n+=m[k];return n}
-async function close(){if(closing||!isOpen)return;closing=true;
-  try{if(edit)cancelEdit();active=false;stopPoll();cover(false);await save();isOpen=false;root.classList.remove("on");root.setAttribute("aria-hidden","true");E.mus.classList.remove("on");
+// ((T)rustyShelf, its discussion 30) Settings goes the moment you leave, whatever the main process is doing: the save went
+// through main, and with main held up (a library scan on a slow network drive) the screen stayed up and every later Esc /
+// Back was ignored as "already closing". The save is waited for 2.5 s at most and finishes behind; the rescan runs after
+// the close is over, so Settings opened again meanwhile closes as usual
+async function close(){if(closing||!isOpen)return;closing=true;let id=-1,rescan=false,ra=false;
+  try{if(edit)cancelEdit();active=false;stopPoll();cover(false);
+    const saving=Promise.resolve(save());let late=false;await Promise.race([saving,new Promise(r=>setTimeout(()=>{late=true;r()},2500))]);
+    if(late)saving.catch(e=>{console.warn("settings: save",e);toast("Couldn't save your settings: "+errMsg(e))});
+    isOpen=false;root.classList.remove("on");root.setAttribute("aria-hidden","true");E.mus.classList.remove("on");
     shelf("holdInput");shelf("setMode","browse");play("back"); /* (the press that closed Settings, A on a row above all, does nothing on the shelf) */
-    // (beta.10) the rescan says what it's doing and what it found (it used to run silently)
-    if(needRescan){needRescan=false;const n0=libTotal();shelf("toast","Looking for games…");try{await shelf("refresh",true);const n1=libTotal();shelf("toast",n0==null||n1==null?"Library updated":n1>n0?`Found ${n1-n0} new game${n1-n0===1?"":"s"}`:"No new games found")}catch(e){console.warn("settings: refresh",e)}} // a failed rescan must not skip settingsClosed / raReload below
-    shelf("settingsClosed");
-    if(raChanged&&window.Shelf&&Shelf.raReload)shelf("raReload")}
-  finally{closing=false}}
+    id=openId;rescan=needRescan;needRescan=false;ra=raChanged}
+  finally{closing=false}
+  if(id<0)return;
+  // (beta.10) the rescan says what it's doing and what it found (it used to run silently)
+  if(rescan){const n0=libTotal();shelf("toast","Looking for games…");try{await shelf("refresh",true);const n1=libTotal();shelf("toast",n0==null||n1==null?"Library updated":n1>n0?`Found ${n1-n0} new game${n1-n0===1?"":"s"}`:"No new games found")}catch(e){console.warn("settings: refresh",e)}} // a failed rescan must not skip settingsClosed / raReload below
+  if(openId===id&&!isOpen)shelf("settingsClosed"); /* (not if Settings was opened again meanwhile) */
+  if(ra&&window.Shelf&&Shelf.raReload)shelf("raReload")}
 // a classic page (box art planner, manual downloads, the Internet Archive finder, a console's detection lists…) over this
 // screen: it shares this config, and closing it comes back here at the same row
 async function legacy(page,o){o=o||{};if(!(window.Setup&&Setup.openLegacy)){toast("Not available");return}
