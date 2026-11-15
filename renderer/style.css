@@ -863,3 +863,7 @@ html.reduce-motion .art-card,html.reduce-motion .ac-bar i{transition:none}
 
 /* ((T)rustyShelf, manual sorting) the box being moved to a new place */
 .slot.picked{opacity:.55}
+/* (upstream beta.12) a RomM game not on this device yet: a small cloud in the cover's top-left corner (the favourite's heart is
+   top-right); Play downloads it first */
+.slot.cloud .f-front::after{content:"";position:absolute;left:calc(8px*var(--os,1));top:calc(8px*var(--os,1));z-index:3;width:calc(26px*var(--os,1));height:calc(26px*var(--os,1));border-radius:50%;
+  background:rgba(10,10,16,.75) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a9bfff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M7 18h10a4 4 0 0 0 .5-7.97A6 6 0 0 0 6.1 9.2 4.5 4.5 0 0 0 7 18z'/><path d='M12 10v6m-2.5-2.5L12 16l2.5-2.5'/></svg>") center/62% no-repeat;pointer-events:none}

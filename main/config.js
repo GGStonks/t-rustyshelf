@@ -56,7 +56,10 @@ function defaults() {
     ra: { user: '', key: '', enabled: true },
     // autoCovers / autoManuals: downloads from the Internet are opt-in for new installs; load() keeps them on for a config
     // saved before the keys existed, so nothing changes for people already using (T)rustyShelf
-    keys: { fanart: '', steamgriddb: '', ssUser: '', ssPass: '', ssDevId: '', ssDevPass: '' }, // Settings → Accounts & services: personal API keys, kept encrypted on disk (steamgriddb: Art Studio posters; ss*: the ScreenScraper sign-in, 1.71)
+    // (upstream beta.12) RomM (main/romm.js): the server's address, its HTTPS check skipped for a home server's own certificate,
+    // and whether games not on this device show (with a cloud badge). Its sign-in token is keys.rommToken (kept by main)
+    romm: { server: '', skipTls: false, cloud: true },
+    keys: { fanart: '', steamgriddb: '', ssUser: '', ssPass: '', ssDevId: '', ssDevPass: '', rommToken: '', rommTokenServer: '' }, // Settings → Accounts & services: personal API keys, kept encrypted on disk (steamgriddb: Art Studio posters; ss*: the ScreenScraper sign-in, 1.71)
     // Art Studio: styles = per console shelf style (a console without one follows defaultArtStyle(ui), i.e. the old Box art
     // region / Prefer HD settings, so nothing changes until a style is chosen); locks = per game parts auto-fetch never touches
     art: { styles: {}, locks: {} },

@@ -147,6 +147,20 @@ window.trustyshelf={
   // (beta.7) Add games: a pretend folder of games and a pretend Playnite library
   gameTitles:async exes=>exes.map(e=>({exe:e,title:/Moon Forge/.test(e)?"Moon Forge":/Star Rally/.test(e)?"Star Rally":e.split("\\").pop().replace(/\.exe$/i,"")})),
   scanGameFolder:async r=>{await wait(300);return {root:r,games:[["Aurora Drift","AuroraDrift.exe"],["Clockwork Garden","Clockwork.exe"],["Neon Harbor","NeonHarbor.exe"]].map(([t,e])=>({folder:r+"\\"+t,title:t,exe:r+"\\"+t+"\\"+e,others:[]}))}},
+  // (beta.12) RomM, pretend: pairing approves on the 2nd poll; a wrong code is refused; Test / Sync answer
+  rommStatus:async()=>({server:"",paired:!!window.__rommPaired,count:window.__rommPaired?3:null,at:null,offline:false,skipped:null}),
+  rommPairStart:async()=>{window.__rommPolls=0;return {ok:true,userCode:"ABCD-EFGH",qrUrl:"http://romm.local/pair/device?user_code=ABCDEFGH",qr:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" class="pretend-qr"><rect width="10" height="10" fill="#fff"/><rect x="1" y="1" width="3" height="3"/></svg>',expiresAt:Date.now()+600000}},
+  rommPairPoll:async()=>{window.__rommPolls=(window.__rommPolls||0)+1;if(window.__rommPolls>=2){window.__rommPaired=true;return {state:"ok"}}return {state:"pending",wait:1000}},
+  rommPairCancel:async()=>true,
+  rommPairCode:async code=>code==="12345678"?(window.__rommPaired=true,{ok:true}):{ok:false,error:"not accepted"},
+  rommTest:async()=>window.__rommPaired?{ok:true,version:"5.4.1",platforms:3}:{ok:false,error:"auth"},
+  rommSync:async()=>({ok:true,count:3,offline:false}),
+  rommForget:async()=>{window.__rommPaired=false;return true},
+  rommCancel:async()=>{window.__rommCancel=(window.__rommCancel||0)+1;return true},
+  // (beta.12) RocketLauncher, pretend: found with ?rl=1, GameCube set up and in the same folder, NES with no emulator yet
+  rocketFind:async()=>/[?&]rl=1/.test(location.search)?"C:\\HyperSpin\\RocketLauncher\\RocketLauncher.exe":"",
+  rocketSystems:async()=>/[?&]rl=1/.test(location.search)?{list:[{name:"Nintendo GameCube",ready:true},{name:"Nintendo Entertainment System",ready:false},{name:"Sony PlayStation 2",ready:true}],
+    names:{gc:{name:"Nintendo GameCube",known:true,ready:true,folders:1,matches:true},nes:{name:"Nintendo Entertainment System",known:true,ready:false,folders:1,matches:false},ps2:{name:"Sony PlayStation 2",known:true,ready:true,folders:1,matches:false}}}:{list:[],names:{}},
   playniteFind:async()=>/[?&]playnite=1/.test(location.search)?{app:"C:\\Users\\you\\AppData\\Local\\Playnite",library:"C:\\Users\\you\\AppData\\Roaming\\Playnite\\library",portable:false}:null,
   playnitePlan:async()=>{await wait(400);return {total:9,app:"C:\\Users\\you\\AppData\\Local\\Playnite",portable:false,pc:[{key:"p1",title:"Lantern Path",exe:"D:\\Games\\Lantern Path\\lantern.exe",args:"",cover:null,favorite:true,there:true},{key:"p2",title:"Old Tower",exe:"D:\\Games\\Old Tower\\tower.exe",args:"-w",cover:null,favorite:false,there:false}],consoles:{gc:{dirs:["E:\\ROMs\\GameCube"],count:3,emulatorDir:"D:\\Emus\\Dolphin"}},skipped:{store:2,hidden:1,link:1,nothing:0}}},
   emulatorIn:async()=>null,gameCovers:async items=>items.length,

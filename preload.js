@@ -175,6 +175,10 @@ contextBridge.exposeInMainWorld('trustyshelf', {
   setScreenMode: mode => call('seamless:screenMode', { mode: String(mode || '') }), // (beta.12) Seamless play: 'full' | 'window'
   watchCancel: () => call('seamless:cancel'), // (beta.12) B before a watched Steam / store game showed up: { cancelled }
   onWatchGaveUp: fn => ipcRenderer.on('run:watchGaveUp', () => fn()), // (beta.12) it never showed up: the old "Running through" note
+  // (upstream beta.12) RomM
+  rommStatus: () => call('romm:status'), rommPairStart: () => call('romm:pairStart'), rommPairPoll: () => call('romm:pairPoll'),
+  rommPairCancel: () => call('romm:pairCancel'), rommPairCode: code => call('romm:pairCode', { code }), rommTest: () => call('romm:test'),
+  rommSync: () => call('romm:sync'), rommForget: () => call('romm:forget'), rommCancel: () => call('romm:cancel'),
   gameStatus: (id, status) => call('game:status', { id, status }), // (upstream beta.12) Details → Your play → Status
   winMode: mode => call('app:winMode', { mode: String(mode || '') }), // the smoothness test: 'full' | 'max' | 'half'
   quit: why => call('app:quit', { why: typeof why === 'string' ? why : '' }),

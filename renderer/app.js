@@ -424,6 +424,7 @@ function mount(s){
   }
   if(isFav(g))slot.classList.add("fav");
   if(g.installed===false)slot.classList.add("notinst"); // (an Epic game the account owns but isn't installed: greyed, Play offers to install it)
+  if(g.romm&&g.romm.cloud)slot.classList.add("cloud"); /* (upstream beta.12) a RomM game not on this device yet: Play downloads it */
   slot.querySelectorAll(".spine-band").forEach(band=>{band.style.background=os.spineBand.bg;band.style.color=os.spineBand.fg;band.textContent=g.kind==="emulator"?"EMU":g.kind==="setup"?"ADD":os.spineBand.label});
   slot.querySelectorAll(".spine-title").forEach(t=>t.textContent=g.title);
   // (beta.10) Android: the spine's small copy sized like the front's (thumb), not the 1024 px display copy, on every case made
@@ -556,6 +557,7 @@ function drainCovers(){
 // of blank and then again; and never decoded in the middle of a frame), each attach gets a frame of its own, and nothing is
 // attached while the shelf is sliding. Swapping ten covers in one frame was ten decodes, ten face redraws and ten texture
 // uploads at once on the Thor: the "lag when the box art loads in".
+let launchCloud=false; /* (upstream beta.12) a RomM game downloading before it starts */
 const artQ=[];let artBusy=false;
 function artSwapQueue(s){if(!artQ.includes(s))artQ.push(s);artSwapNext()}
 function artSwapNext(){
@@ -2097,7 +2099,7 @@ async function launchNow(g,underInsert){if(g&&g.installed===false){offerInstall(
       clearTimeout(launchTimer);launchTimer=setTimeout(()=>note(["Running through Steam. Press ",{b:btnWord("back")}," or ",{b:"Esc"}," to return to the shelf."]),1800);return}
     else if(g.kind==="app"){showLaunch("Opening app",g.title,quote(g.path));await wait(650);const r=await api.launchApp(g.appId,g.link);sendHomeMeta(g);if(r&&r.cover){const bar=$("launch").querySelector(".l-bar i");bar.style.animation="none";void bar.offsetWidth;bar.style.animation=`load ${Math.min(r.cover,8)}s cubic-bezier(.5,0,.2,1) forwards`}}
     else if(g.kind==="emulator"){showLaunch(`Opening ${s.emulatorName}`,"Emulator settings",quote(s.emulator));await wait(650);await api.launchEmulator(s.id)}
-    else{showLaunch(`Starting ${s.emulatorName}`,g.title,`${quote(emu||s.emulator)} ${argsPreview(s.gameArgs,g.file)}`);await wait(underInsert?Math.max(650,insertSeatAt-performance.now()):650);const r=await (emu?api.launchGame(s.id,g.file,emu):api.launchGame(s.id,g.file));sendHomeMeta(g);if(underInsert){clearTimeout(insertT);insProgress(r&&r.cover)} /* the insert screen stays, with a progress line, until the game's window is up */if(r&&r.cover){const bar=$("launch").querySelector(".l-bar i");bar.style.animation="none";void bar.offsetWidth;bar.style.animation=`load ${r.cover}s linear forwards`}}
+    else{showLaunch(`Starting ${s.emulatorName}`,g.title,`${quote(emu||s.emulator)} ${argsPreview(s.gameArgs,g.file)}`);await wait(underInsert?Math.max(650,insertSeatAt-performance.now()):650);launchCloud=!!(g.romm&&g.romm.cloud);let r;try{r=await (emu?api.launchGame(s.id,g.file,emu):api.launchGame(s.id,g.file))}finally{launchCloud=false}sendHomeMeta(g); /* (upstream beta.12) launchCloud: a RomM game downloading first, B stops it */if(underInsert){clearTimeout(insertT);insProgress(r&&r.cover)} /* the insert screen stays, with a progress line, until the game's window is up */if(r&&r.cover){const bar=$("launch").querySelector(".l-bar i");bar.style.animation="none";void bar.offsetWidth;bar.style.animation=`load ${r.cover}s linear forwards`}}
     if(runningKind==="error")return;
     clearTimeout(launchTimer);launchTimer=setTimeout(()=>note(cfgInfo&&cfgInfo.config.ui.homeMenu===false?"Playing · close the game to come back here":`Playing · press ${padWord("guide")} for the Home menu`),1800);
   }catch(err){clearTimeout(insertT);clearTimeout(launchTimer);hideInsert();note([String(err&&err.message||err)," ",{br:1},"Press ",{b:btnWord("back")}," or ",{b:"Esc"}," to go back."],true);runningKind="error"}
@@ -2173,7 +2175,8 @@ function back(){
   if(mode==="boot"){endBoot(true);return}
   if(mode==="customize"){if(!czClosePick())closeCustomize();return}
   if(mode==="launch"&&runningKind==="watch"){watchBack();return} // (beta.12) Seamless play: a watched game not up yet
-  if(mode==="launch"){if(runningKind==="steam"||runningKind==="error"){endLaunch();sfx.back()}else toast("Close the game or app to come back");return}
+  if(mode==="launch"){if(launchCloud&&api.rommCancel){api.rommCancel().catch(()=>{});toast("Stopping the download…");return} /* (upstream beta.12) a RomM game still downloading: B stops it (the part is kept for a resume) */
+    if(runningKind==="steam"||runningKind==="error"){endLaunch();sfx.back()}else toast("Close the game or app to come back");return}
   if(mode==="details"){if(!$("dMenu").hidden){dMenuClose();return}closeDetails();return} // (beta.7: B closes the More menu first)
   if(flipped)flip();else if((mode==="browse"||mode==="details")&&(Math.abs(spin)>1||Math.abs(spinT)>1)){spinT=0;spinEase();sfx.flip()} // resting on a spine: B turns it to the front too
 }

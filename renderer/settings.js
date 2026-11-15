@@ -137,7 +137,7 @@ addEventListener("bs-padstyle",()=>{try{oskSig="";if(device==="pad"&&typeof rend
 function comboOpts(){const st=padStyle(),N=st==="ps"?{lb:"L1",rb:"R1",start:"Options",back:"Share",b:"Circle"}:st==="nintendo"?{lb:"L",rb:"R",start:"Plus",back:"Minus",b:"A"}:{lb:"LB",rb:"RB",start:"Start",back:"Back",b:"B"};
   return [["l3+r3","L3 + R3"],["lb+rb+start",`${N.lb} + ${N.rb} + ${N.start}`],["back+b",`${N.back} + ${N.b}`],["start+back",`${N.start} + ${N.back}`]]}
 // Accounts & services (1.71): one row per service, A opens its own small page (sub kind "svc") with its fields, Test and the sign-up link
-const SVC_N={ra:"RetroAchievements",fanart:"fanart.tv",steamgriddb:"SteamGridDB",screenscraper:"ScreenScraper"},ART_SVC=["fanart","steamgriddb","screenscraper"];
+const SVC_N={ra:"RetroAchievements",fanart:"fanart.tv",steamgriddb:"SteamGridDB",screenscraper:"ScreenScraper",romm:"RomM"},ART_SVC=["fanart","steamgriddb","screenscraper"];
 const svcSet=s=>s==="ra"?!!(gp("ra.user")&&gp("ra.key")):s==="screenscraper"?!!((gp("keys.ssUser")||gp("keys.ssDevId"))&&(gp("keys.ssPass")||gp("keys.ssDevPass"))):!!gp("keys."+s);
 function svcState(s){const st=status[s]||{};if(!svcSet(s))return {state:"none"};return st.state&&st.state!=="none"?st:{state:"unknown"}} // set up but never checked: main says "none" (Not checked yet)
 function acctDot(){const L=["ra",...ART_SVC].map(svcState).filter(x=>x.state!=="none"&&x.state!=="unknown");if(!L.length)return null;return L.some(x=>x.state==="fail")?"warn":"ok"}
@@ -415,6 +415,7 @@ function build(){
     svcRow("fanart","Official disc art and logos for the museum's movie shelves.","api key movies fanart"),
     svcRow("steamgriddb","Community-made posters, offered in Art Studio next to the real box scans.","api key steamgriddb steam grid posters art studio"),
     svcRow("screenscraper","Box fronts, backs, full wraps (for spines) and disc / cartridge art by region, offered in Art Studio.","screenscraper screen scraper account art studio box back spine disc"),
+    {...svcRow("romm","Your RomM server's games on your shelves: (T)rustyShelf's full box art and manuals for them, and a game not on this device yet is downloaded when you press Play.","romm rom manager server self hosted library download nas"),when:()=>!!api.rommStatus,sub:rommSub},
   ]},
   {g:"System",id:"phone",name:"Phone companion",ic:"phone",dot:()=>phone&&phone.on?"ok":phone&&phone.enabled&&phone.error?"warn":null,lead:"Browse your games on your phone, start one on the TV, read its manual, and use the phone as a remote and keyboard. The phone has to be on the same Wi-Fi as this PC.",rows:[
     {t:"toggle",label:"Phone companion",info:"Runs a small web page on your home network for paired phones. Only phones that scanned the code (or typed the PIN) can use it; nothing is reachable from the internet. Windows may ask the first time whether to allow (T)rustyShelf on your network: choose Private networks.",get:()=>!!(phone&&phone.enabled),set:setPhone,nosave:true,keys:"phone mobile remote companion qr pair wifi app",when:()=>!!api.companionSet},
@@ -482,6 +483,18 @@ function svcPage0(id){const n=SVC_N[id]||id,P=(lead,rows)=>({g:"Library",id:"acc
     {t:"dyn",fn:emuRows},
     A("Check again",()=>raEmuBusy?"Checking…":"Check","Looks at each emulator's achievements sign-in again.",()=>loadRaEmu(true),{when:()=>!!api.raEmulators,keys:"retroachievements emulator sign in"}),
   ]);
+  // (beta.12) RomM (main/romm.js): the address, pairing (a QR on your phone, or an 8-digit code), Test, Sync, games not on
+  // this device on or off, Sign out
+  if(id==="romm")return P("Your own RomM server's games join your shelves, with (T)rustyShelf's full box art, manuals and achievements. A game that isn't on this device yet has a cloud on its case and is downloaded into its console's games folder when you press Play.",[
+    X("Server address","romm.server","Your RomM server's address as you open it in a browser, like http://192.168.1.20:8080.",{ph:"Not set",keys:"romm server address url"}),
+    A("Pair (T)rustyShelf with RomM",()=>RM.pair&&RM.pair.on?"Cancel":rommPaired()?"Pair again":"Pair","Shows a QR code: scan it with your phone, sign in to RomM there and approve (T)rustyShelf. No password is typed here, and RomM keeps (T)rustyShelf signed in. Needs RomM 5.0 or newer (older: Pair with a code, below).",rommPairToggle,{when:()=>!!gp("romm.server"),keys:"romm pair qr sign in login"}),
+    H("",{pair:rommPairHtml,when:()=>!!(RM.pair&&(RM.pair.on||RM.pair.msg))}),
+    {t:"text",label:"Pair with a code",info:"In RomM: your profile → Client API tokens → Pair, then type the 8-digit code here (RomM 4.8 and newer).",get:()=>RM.code||"",set:v=>{RM.code=String(v||"").replace(/\D/g,"").slice(0,12);rommPairCodeTry()},ph:"8-digit code",nosave:true,ns:true,when:()=>!!gp("romm.server"),keys:"romm pair code token"},
+    A("Test the connection",()=>RM.busy?"Checking…":"Test","Checks the address and the pairing.",rommTestNow,{when:()=>!!gp("romm.server"),keys:"romm test",sub:()=>RM.test}),
+    A("Look for new games now",()=>RM.syncing?"Looking…":"Sync","(T)rustyShelf checks RomM for new and changed games by itself a little after it starts; this does it now.",rommSyncNow,{when:rommPaired,keys:"romm sync refresh update"}),
+    T("Show games that aren't on this device","romm.cloud",true,"Off: only RomM games you've already downloaded show on the shelves.",{rescan:true,when:rommPaired,keys:"romm cloud download show"}),
+    T("Skip the HTTPS certificate check","romm.skipTls",false,"Only for a home server with its own (self-signed) certificate. Leave off otherwise.",{when:()=>/^https:/i.test(gp("romm.server")||""),keys:"romm https certificate self signed"}),
+    A("Sign out of RomM","Sign out","Forgets the pairing and RomM's list of games on this device. Games you downloaded stay where they are.",()=>twice("romm-out",async()=>{await api.rommForget().catch(()=>{});RM.st=null;toast("Signed out of RomM");rommStatusLoad(true)}),{when:rommPaired,keys:"romm sign out forget"})]);
   if(id==="fanart")return P("Official disc art and logos for the movies on the museum's movie shelves. Without a key, discs are printed from each title's own logo and art.",[
     X("Key","keys.fanart","Your personal fanart.tv API key. Stored encrypted.",{secret:true,ph:"Not set",fan:true,keys:"api key movies fanart"}),
     test("Test the key","Checks the key."),
@@ -563,6 +576,32 @@ function hiddenRows(){if(!(window.Shelf&&Shelf.hiddenList))return [];const L=hid
 // ((T)rustyShelf, its discussions #10) every emulator found for a console, asked for once when its page is first shown
 let emuFound={};
 function emuFoundFor(id){if(emuFound[id]===undefined&&api.emulatorsFound){emuFound[id]=null;Promise.resolve(api.emulatorsFound(id)).then(l=>{emuFound[id]=Array.isArray(l)?l:[];bump()},()=>{emuFound[id]=[]})}return emuFound[id]||[]}
+// (upstream beta.12) RomM on the Accounts & services page: its status (paired, games, last sync), the pairing card (QR + code,
+// polled at RomM's own pace until approved, denied or expired), the code typed in, Test and Sync
+const RM={st:null,busy:false,syncing:false,pair:null,code:"",test:null,loading:false};
+function rommPaired(){return !!(RM.st&&RM.st.paired)}
+function rommStatusLoad(force){if(!api.rommStatus||RM.loading||(RM.st&&!force))return;RM.loading=true;api.rommStatus().then(s=>{RM.st=s}).catch(()=>{}).finally(()=>{RM.loading=false;if(isOpen)bump()})}
+function rommSub(){rommStatusLoad();const s=RM.st;if(!gp("romm.server"))return {text:"Not set up"};if(!s)return {text:"…"};if(!s.paired)return {text:"Not paired yet",cls:"warn"};
+  return {text:(s.count!=null?`${s.count} game${s.count===1?"":"s"}`:"Paired")+(s.offline?" · server not reachable, the saved list shows":""),cls:s.offline?"warn":"ok"}}
+function rommPairHtml(){const p=RM.pair;if(!p)return "";if(p.msg&&!p.on)return `<div class="bss-pairmsg ${p.bad?"bad":""}">${esc(p.msg)}</div>`;
+  if(!p.code)return `<div class="bss-pairmsg">Asking RomM for a code…</div>`;
+  return `<div class="bss-pair"><div class="qr">${p.qr||""}</div><div class="pt"><div class="lbl">Scan with your phone's camera, or open</div><div class="url">${esc(p.url||"")}</div><div class="lbl">and enter</div><div class="pin">${esc(String(p.code))}</div><div class="note">Sign in to RomM there and approve (T)rustyShelf.</div></div></div>`}
+async function rommPairToggle(){if(RM.pair&&RM.pair.on){RM.pair={msg:"Pairing stopped"};api.rommPairCancel().catch(()=>{});bump();return}
+  await save();const my=openId;RM.pair={on:true};bump();let r=null;try{r=await api.rommPairStart()}catch(e){r={error:errMsg(e)}}
+  if(!isOpen||openId!==my||!RM.pair||!RM.pair.on)return;
+  if(!r||!r.ok){RM.pair={msg:r&&r.useCode?"This RomM is older than 5.0: pair with a code instead (below).":"RomM didn't answer: "+((r&&r.error)||"check the address"),bad:true};bump();return}
+  RM.pair={on:true,code:r.userCode,qr:r.qr,url:r.qrUrl};bump();
+  while(isOpen&&openId===my&&RM.pair&&RM.pair.on){let q=null;try{q=await api.rommPairPoll()}catch(e){q={state:"error",error:errMsg(e)}}
+    if(!RM.pair||!RM.pair.on||openId!==my)return;
+    if(q&&q.state==="ok"){RM.pair={msg:"Paired. Your RomM games are on their way to the shelves."};toast("Paired with RomM");rommStatusLoad(true);needRescan=true;bump();return}
+    if(q&&(q.state==="denied"||q.state==="expired"||q.state==="error")){RM.pair={msg:q.state==="denied"?"Pairing was turned down in RomM.":q.state==="expired"?"The code ran out: press Pair for a new one.":"Pairing stopped: "+(q.error||"no answer"),bad:true};bump();return}
+    await new Promise(res=>setTimeout(res,Math.max(1000,(q&&q.wait)||5000)))}}
+async function rommPairCodeTry(){const c=RM.code;if(!c||c.length<6)return;await save();let r=null;try{r=await api.rommPairCode(c)}catch(e){r={ok:false,error:errMsg(e)}}
+  RM.code="";if(r&&r.ok){toast("Paired with RomM");rommStatusLoad(true);needRescan=true}else toast("RomM didn't accept that code"+(r&&r.error&&r.error!=="not accepted"?": "+r.error:""));bump()}
+async function rommTestNow(){if(RM.busy)return;await save();RM.busy=true;bump();let r=null;try{r=await api.rommTest()}catch(e){r={ok:false,error:errMsg(e)}}RM.busy=false;
+  RM.test=r&&r.ok?{text:"Connected"+(r.version?" · RomM "+r.version:"")+(r.platforms!=null?` · ${r.platforms} platforms`:""),cls:"ok"}:{text:/auth|401|403/i.test(String(r&&r.error))?"Not paired, or the pairing was removed":"Not reachable: "+truncEnd(String((r&&r.error)||"no answer"),40),cls:"warn"};rommStatusLoad(true);bump()}
+async function rommSyncNow(){if(RM.syncing)return;RM.syncing=true;bump();let r=null;try{r=await api.rommSync()}catch(e){r={ok:false,error:errMsg(e)}}RM.syncing=false;
+  toast(r&&r.ok?`RomM: ${r.count} game${r.count===1?"":"s"}`+(r.offline?" (the saved list: the server isn't reachable)":""):"RomM: "+((r&&r.error)||"no answer"));rommStatusLoad(true);needRescan=true;bump()}
 // one console's page
 function conPages(id){
   const def=consoleList().find(c=>c.id===id)||{id,name:id,emulatorName:"Emulator",exeNames:["emulator.exe"]},c=sysCfg(id),p=`systems.${id}.`,emu=def.emulatorName||"Emulator",exe=(def.exeNames||["emulator.exe"])[0];
@@ -1532,7 +1571,8 @@ function route(page,o){if(!page)return;o=o||{};
     if(k>=0)rowI=k}}
 // a deep link into one of the current section's sub-pages: B comes back to the row that opens it
 function inMore(id){const at=rowsOf(sec()).findIndex(r=>r.pg===id);if(at<0)return;subRet=at;sub={kind:"more",id};rowI=0}
-function prep(inf,opts){opts=opts||{};ensureDom();openId++;info=inf;cfg=clone(inf.config);ensureCfg();colRowsBy.clear();ADD.rows=null;COV.n=null;sw2Rm=false;sDirect=0; /* (beta.8) rows built for the last visit held that visit's copy of the settings */
+function prep(inf,opts){opts=opts||{};ensureDom();openId++;info=inf;cfg=clone(inf.config);ensureCfg();colRowsBy.clear();ADD.rows=null;COV.n=null;sw2Rm=false;sDirect=0;
+  /* (upstream beta.12) a RomM pairing left showing when Settings closed: its poll stopped with that visit, so it's cancelled, not shown stale */if(RM.pair&&RM.pair.on){RM.pair=null;try{api.rommPairCancel().catch(()=>{})}catch{}} /* (beta.8) rows built for the last visit held that visit's copy of the settings */
   studioClear();sRet=0;sInfo=null;sInfoBusy=false;sGames={};sCands={};sSets={};sBusy={};needRescan=false;raChanged=false;pending=false;raEmu=null;emuAsk=null;listSig="";edit=null;grab=null;results=null;query="";preSearch=null;sub=null;secI=0;rowI=0;ci=0;focus="side";infoOpen=false;det=null;ipl=null;pathOk={};status={};askT={};displays=null;outputs=null;hidden=null;readWhere=null;readOld=null;mInfo=null;mInfoBusy=false;mGames={};mCands={};mBusy={};mMsg={};
   device=document.body.classList.contains("pad-input")?"pad":"key";
   try{const g=window.BS_activePad?window.BS_activePad():[...(navigator.getGamepads?navigator.getGamepads():[])].find(x=>x&&x.connected);if(g)padId=g.id}catch{}
@@ -2587,7 +2627,7 @@ function renderPage(){
     E.hl=document.createElement("div");E.hl.className="bss-hl jump";list.append(E.hl);let k=0;
     if(results&&!results.length&&query)list.insertAdjacentHTML("beforeend",'<div class="bss-empty">Nothing matches that. Try another word.</div>');
     shownRows.forEach(r=>{
-      if(r.t==="head"&&r.pair){const d=document.createElement("div");d.className="bss-pairbox";d._pair=1;list.append(d);return} // the phone companion's pairing card (not a row: nothing to select)
+      if(r.t==="head"&&r.pair){const d=document.createElement("div");d.className="bss-pairbox";d._pair=1;d._fn=typeof r.pair==="function"?r.pair:null;list.append(d);return} /* (beta.12: r.pair a function: its own card, RomM's pairing) */ // the phone companion's pairing card (not a row: nothing to select)
       if(r.t==="head"){if(r.text){const d=document.createElement("div");d.className="bss-head";d.innerHTML=`<span>${esc(r.text)}</span>${r.em?`<em>${esc(r.em()||"")}</em>`:""}`;d._r=r;list.append(d)}return}
       const idx=k++;
       if(r.t==="consoles"){const wrap=document.createElement("div");wrap.className="bss-consoles";
