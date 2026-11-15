@@ -281,7 +281,7 @@ function build(){
     ...(window.bsPlatform&&bsPlatform.os==="android"?[]:[A("Show the tour","Start","A one-minute look at the basics: consoles, Details, Inspect, the quick menu, the Art Studio and where to add games.",()=>{Promise.resolve(close()).then(()=>setTimeout(()=>{if(window.BS_TOUR)BS_TOUR.start()},450))},{keys:"tour tutorial intro help guide basics how learn"})]),
     A("Console order","Reorder","The order of the consoles along the top. Home always comes first.",()=>openSub({kind:"order"}),{keys:"shelf order arrange tabs move"}),
     // (beta.7) your own shelves (Details → Collections adds games to them): renamed and deleted here
-    M("Collections","shelf-cols","Shelves of your own, mixing games from any console (Details → Collections adds a game). Rename or delete them here.","Each one is a shelf beside Home.",[{t:"dyn",fn:colManageRows}],{keys:"collections lists playlists own shelves"}),
+    M("Collections","shelf-cols","Shelves of your own, mixing games from any console (Details → Collections adds a game), and tag shelves that gather a genre from every console. Rename or delete them here.","Each one is a shelf beside Home.",[{t:"dyn",fn:colManageRows}],{keys:"collections lists playlists own shelves"}),
     T("All games shelf","ui.allShelf",false,"A tab with your complete collection in alphabetical order, each game in its authentic box.",{keys:"all games shelf whole library tab collection alphabet",live:v=>applyUi({allShelf:v})}),
     T("Show game sizes","ui.showSize",true,"Shows how much room each game takes on your drive, under its name and in Details: a console game's file, a PC game's install.",{keys:"size gb storage space disk install"}),
     // (beta.11) one row: where Surprise me picks from, or Off (no Surprise me case on the shelves); it was "Shuffle from every shelf"
@@ -1521,7 +1521,7 @@ function emuSetupRows(id){const s=esGet(id);if(s.rows)return s.rows;const st=s.s
 // Settings → Shelf → Collections renames and deletes them. (Rows made once per page: the editor finds its row by identity)
 let colState=null;const colRowsBy=new Map();
 const colList=()=>{cfg.ui=cfg.ui||{};if(!Array.isArray(cfg.ui.collections))cfg.ui.collections=[];return cfg.ui.collections};
-const colChanged=()=>{shelf("setCollections",colList().map(c=>({id:c.id,name:c.name,ids:[...c.ids]})))};
+const colChanged=()=>{shelf("setCollections",colList().map(c=>({id:c.id,name:c.name,ids:[...c.ids],...(c.tag?{tag:c.tag}:{})})))};
 function colRows(){const s=colState;if(!s)return [];const out=[];
   for(const c of colList()){let r=colRowsBy.get("in|"+c.id+"|"+s.gid);
     if(!r){r=T(c.name,"",false,`On: ${s.title} is on this shelf.`,{get:()=>c.ids.includes(s.gid),set:v=>{const i=c.ids.indexOf(s.gid);if(v&&i<0)c.ids.push(s.gid);if(!v&&i>=0)c.ids.splice(i,1);colChanged()},keys:"collection shelf list"});colRowsBy.set("in|"+c.id+"|"+s.gid,r)}
@@ -1532,13 +1532,23 @@ function colNew(v){const s=colState;v=String(v||"").replace(/\s+/g," ").trim().s
   const ex=L.find(c=>c.name.toLowerCase()===v.toLowerCase());if(ex){if(!ex.ids.includes(s.gid))ex.ids.push(s.gid)}else L.push({id:"c"+Date.now().toString(36),name:v,ids:[s.gid]});
   s.newName="";scheduleSave();colChanged();play("tick",1);toast(`${s.title} is on ${v}`);bump()}
 // Settings → Shelf → Collections: each one's name (Enter renames) and Delete (pressed twice)
-function colManageRows(){const L=colList();if(!L.length){if(!colRowsBy.has("none"))colRowsBy.set("none",A("No collections yet","","Open a game's Details and choose Collections to make one.",()=>{},{ns:true,keys:"collections"}));return [colRowsBy.get("none")]}const out=[];
+// ((T)rustyShelf, its discussion 33) Add a tag shelf: one per genre your games have (from their details, every console):
+// a shelf gathering every game with that genre, plus any you add to it by hand (Details → Collections)
+function tagRows(){const G=shelf("genreCounts");const L=colList(),out=[H("Add a tag shelf",{em:()=>"every console's games with that genre, on one shelf"})];
+  if(!Array.isArray(G)||!G.length){if(!colRowsBy.has("tag:none"))colRowsBy.set("tag:none",infoRow("No genres yet","",{text:"They come with your games' details (box art downloads fetch them)"}));out.push(colRowsBy.get("tag:none"));return out}
+  for(const [g,n] of G){const have=L.some(c=>c.tag&&c.tag.toLowerCase()===g.toLowerCase());let r=colRowsBy.get("tag|"+g);
+    if(!r){r=A(g,()=>L.some(c=>c.tag&&c.tag.toLowerCase()===g.toLowerCase())?"Added":"Add",`A shelf of every ${g} game, from every console. You can still add other games to it from their Details (Collections).`,()=>{
+      if(L.some(c=>c.tag&&c.tag.toLowerCase()===g.toLowerCase())){toast(`There's a ${g} shelf already`);return}if(L.length>=50){toast("That's the most collections there can be (50).");return}
+      L.push({id:"t"+Date.now().toString(36),name:g.slice(0,40),ids:[],tag:g.slice(0,40)});scheduleSave();colChanged();play("tick",1);toast(`${g} shelf added`);bump()},{ns:true,keys:"tag tags genre category shelf "+g});colRowsBy.set("tag|"+g,r)}
+    r.sub=()=>({text:`${n} game${n===1?"":"s"}`+(L.some(c=>c.tag&&c.tag.toLowerCase()===g.toLowerCase())?" · on your shelves":""),cls:L.some(c=>c.tag&&c.tag.toLowerCase()===g.toLowerCase())?"ok":""});out.push(r)}
+  return out}
+function colManageRows(){const L=colList();if(!L.length){if(!colRowsBy.has("none"))colRowsBy.set("none",A("No collections yet","","Open a game's Details and choose Collections to make one, or add a tag shelf below.",()=>{},{ns:true,keys:"collections"}));return [colRowsBy.get("none"),...tagRows()]}const out=[];
   for(const c of L){let n=colRowsBy.get("name|"+c.id);
     if(!n){n=X("Name","",`The shelf's name (${c.ids.length} game${c.ids.length===1?"":"s"}). Enter renames it.`,{get:()=>c.name,set:v=>{const t=String(v||"").replace(/\s+/g," ").trim().slice(0,40);if(t)c.name=t},live:()=>colChanged(),keys:"collection rename"});colRowsBy.set("name|"+c.id,n)}
     let d=colRowsBy.get("del|"+c.id);
     if(!d){d=A("Delete "+c.name,"Delete","Removes this shelf (the games stay everywhere else). Press twice.",()=>{if(d.armed){const i=L.indexOf(c);if(i>=0)L.splice(i,1);scheduleSave();colChanged();play("back");toast(`${c.name} deleted`)}else{d.armed=true;d.btn="Press again";setTimeout(()=>{d.armed=false;d.btn="Delete";bump()},4000)}bump()},{ns:true,keys:"collection delete remove"});colRowsBy.set("del|"+c.id,d)}
-    d.label="Delete "+c.name;out.push(H(c.name),n,d)}
-  return out}
+    d.label="Delete "+c.name;out.push(H(c.name,c.tag?{em:()=>"tag shelf: every "+c.tag+" game"}:{}),n,d)}
+  return [...out,...tagRows()]}
 function route(page,o){if(!page)return;o=o||{};
   if(page==="addgames"){MORE.addgames=MORE.addgames||{id:"addgames",name:"Add games",lead:"Every way to put games on the Custom shelf. You see what was found before anything is added.",rows:[{t:"dyn",fn:addRows}]};goSecId("custom");focus="page";rowI=0;openSub({kind:"more",id:"addgames"});return} // (beta.7) the Custom shelf's Add games tile
   if(page==="whatsnew"){goSecId("sys");focus="page";rowI=0;openSub({kind:"more",id:"whatsnew"});return} // (beta.7) the note card's See what's new / All the notes

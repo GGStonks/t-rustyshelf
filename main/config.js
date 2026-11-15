@@ -223,7 +223,9 @@ function sanitize(cfg) {
   { if (typeof ui.clipHint !== 'boolean') ui.clipHint = false; if (typeof ui.deckHint !== 'boolean') ui.deckHint = false; if (typeof ui.leaveHint !== 'boolean') ui.leaveHint = false; if (typeof ui.deckScaled !== 'boolean') ui.deckScaled = false; }
   ui.previewDirs = [...new Set((Array.isArray(ui.previewDirs) ? ui.previewDirs : []).filter(x => typeof x === 'string' && x && x.length <= 1024))].slice(0, 20);
   ui.collections = (Array.isArray(ui.collections) ? ui.collections : []).filter(c => isObj(c) && typeof c.id === 'string' && c.id && typeof c.name === 'string').slice(0, 50)
-    .map(c => ({ id: c.id.slice(0, 40), name: c.name.replace(/\s+/g, ' ').trim().slice(0, 40) || 'Collection', ids: [...new Set((Array.isArray(c.ids) ? c.ids : []).filter(x => typeof x === 'string' && x && x.length <= 1024))].slice(0, 5000) }));
+    .map(c => ({ id: c.id.slice(0, 40), name: c.name.replace(/\s+/g, ' ').trim().slice(0, 40) || 'Collection', ids: [...new Set((Array.isArray(c.ids) ? c.ids : []).filter(x => typeof x === 'string' && x && x.length <= 1024))].slice(0, 5000),
+      // ((T)rustyShelf, its discussion 33) a tag shelf: every game, from every console, whose genres include it (plus the ids added by hand)
+      ...(typeof c.tag === 'string' && c.tag.trim() ? { tag: c.tag.replace(/\s+/g, ' ').trim().slice(0, 40) } : {}) }));
   // ((T)rustyShelf) Looks (Settings -> Display -> Looks): named sets of look settings; plain values only, the screen decides which keys it uses
   ui.looks = (Array.isArray(ui.looks) ? ui.looks : []).filter(l => isObj(l) && typeof l.name === 'string').slice(0, 20).map(l => { const set = {};
     if (isObj(l.set)) for (const [k, v] of Object.entries(l.set).slice(0, 30)) if (/^[A-Za-z][A-Za-z0-9]{0,30}$/.test(k) && ((typeof v === 'string' && v.length <= 80) || (typeof v === 'number' && Number.isFinite(v)) || typeof v === 'boolean')) set[k] = v;

@@ -161,6 +161,7 @@ function groupOf(g){
 const playersOf=g=>{const m=String((g.info&&g.info.players)||"").match(/\d+/g);return m?Math.max(...m.map(Number)):null};
 const coopOf=g=>{const c=g.info&&g.info.coop;return !!c&&!/^(no|false|0)$/i.test(String(c).trim())};
 const genresOf=g=>((g.info&&g.info.genres)||"").split(";").map(s=>s.trim()).filter(Boolean);
+const tagKey=s=>String(s||"").toLowerCase().replace(/\s+/g," ").trim(); /* ((T)rustyShelf, its discussion 33) tag shelves match genres loosely */
 let flCache=null;
 function filterList(){
   const games=allShelves.flatMap(s=>s.kind==="home"?[]:(s._base||s.items||[]).filter(isGame));
@@ -269,7 +270,11 @@ function buildHome(){
   // Home, mixing consoles the way Home does (each case keeps its own console's look); the games in the order added
   const cols=[],byId=new Map(all.map(g=>[String(g.id),g]));
   for(const c of ((cfgInfo&&cfgInfo.config&&cfgInfo.config.ui&&cfgInfo.config.ui.collections)||[])){
-    if(!c||!c.id||!Array.isArray(c.ids))continue;const its=c.ids.map(id=>byId.get(String(id))).filter(Boolean);if(!its.length)continue;
+    if(!c||!c.id||!Array.isArray(c.ids))continue;const its=c.ids.map(id=>byId.get(String(id))).filter(Boolean);
+    /* ((T)rustyShelf, its discussion 33) a tag shelf: the games of every console whose genres include the tag ("Racing" also
+       finds "Racing / Driving"), after the ones added by hand, in title order */
+    if(c.tag){const t=tagKey(c.tag),have=new Set(its.map(g=>g.id));allUni.filter(g=>!have.has(g.id)&&genresOf(g).some(x=>tagKey(x).split(/ *[\/,&] */).includes(t)||tagKey(x)===t)).forEach(g=>its.push(g))}
+    if(!its.length)continue;
     const id="col-"+c.id;STYLE[id]=STYLE[id]||STYLE.home||STYLE.media;WORDMARKS[id]=[String(c.name||"Collection"),"Your collection"];
     let sh=COLS.get(id);if(!sh){sh={id,kind:"home",col:true,name:"",games:[],items:[],hasEmulator:false};COLS.set(id,sh)}
     sh.name=String(c.name||"Collection");sh.items=its;sh.games=its;cols.push(sh)}
@@ -4838,6 +4843,8 @@ window.Shelf={
   // 1.55 Settings: live previews / changes for safeArea, clock, clock24, reduceMotion, attractMinutes, dimMinutes,
   // confirmButton, scrollSpeed, audioOut, openInto (read at the next start), effects / performance
   applyUi,hiddenList,setHidden,audioOutputs,
+  /* ((T)rustyShelf, its discussion 33) Settings → Collections → Add a tag shelf: the genres your games have, most games first */
+  genreCounts:()=>{const m=new Map(),seen=new Set();allShelves.forEach(sh=>{if(!sh||sh.kind==="home"||sh.col)return;(sh._base||sh.items||[]).forEach(g=>{if(!g||!isGame(g)||seen.has(g.id))return;seen.add(g.id);for(const x of genresOf(g)){const k=x.replace(/\s+/g," ").trim();if(k)m.set(k,(m.get(k)||0)+1)}})});return [...m].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).slice(0,60)},
   gameCounts:()=>{const o={};(lastLib||[]).forEach(s=>{if(s&&s.id)o[s.id]=(s.games||[]).length});return o}, // Settings' console pages and tiles ("13 games")
   getMode:()=>mode,
   // Android's background box art: which shelf is in front and the game in focus (its cases come first in the fetch queue;
