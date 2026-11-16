@@ -1007,7 +1007,7 @@ server.listen(0, async () => {
         await wait(1300); bsBottom.recv(JSON.stringify(Object.assign({ type: 'museum' }, m))); await wait(300); // the wall answers later, still on case 1 (in this test)
         q('[data-m="unwrap"]').click(); await wait(1200);
         out.after = bsBottom.state().msealed; out.itemSealed = q('.mi[data-i="1"]').classList.contains('sealed');
-        out.sent = window.__bsSent.filter(x => x.cmd === 'mpick' || x.cmd === 'unwrap').map(x => x.cmd + ':' + x.arg);
+        out.sent = window.__bsSent.filter(x => x.cmd === 'mpick' || x.cmd === 'unwrap').map(x => x.cmd + ':' + (x.arg && typeof x.arg === 'object' ? x.arg.i : x.arg)); // (museum rooms: the touch carries { i, gen }, the row's generation)
         // touch controls: a row up / down and Pick up; in your hands Put back / Open case and a drag turns it; the Room drawer
         const n0 = window.__bsSent.length, pills = () => [...document.querySelectorAll('.mpill span')].map(x => x.textContent).join('/');
         out.pills = pills(); document.querySelectorAll('.mpill').forEach(b => b.click());

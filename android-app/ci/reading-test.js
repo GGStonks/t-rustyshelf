@@ -118,6 +118,8 @@ module.exports = async function readingPass({ browser, base, check, newPage, OUT
     const lib = await page.evaluate(() => BS_READING.rescan());
     await page.keyboard.press('m'); await pause(5000);
     await page.evaluate(async () => { const w = ms => new Promise(r => setTimeout(r, ms)); for (let i = 0; i < 6 && window.Museum && Museum._dv && Museum._dv(); i++) { Museum.skipDelivery(); await w(800); } });
+    // rooms (the new-install organization): the rack is in the Reading & media room, built only once you walk in
+    await page.evaluate(async () => { if (window.Museum && Museum.rooms && Museum.rooms() && Museum.gotoRoom('media')) await new Promise(r => setTimeout(r, 900)); });
     const inRack = await until(() => { const r = (window.Museum && Museum._rack && Museum._rack()) || []; return ['Nintendo Power Issue 008', 'Zelda Comic Collection', 'GamePro 1994-05', 'Mario Guide'].every(t => r.some(x => x.d && x.d.title.startsWith(t))); }, null, 60000);
     const rack = await page.evaluate(() => ((Museum._rack && Museum._rack()) || []).map(x => `${x.d.kind}:${x.d.title}${x.d.series ? ' [' + x.d.series + ']' : ''}`));
     check('Reading corner: the downloads and the PC-copied magazines / guides are on the museum\'s rack', inRack && lib.some(i => i.type === 'arch' && i.kind === 'guide') && lib.some(i => i.type === 'dir'), rack.join(' | '));
