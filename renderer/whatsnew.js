@@ -8,6 +8,29 @@
 //   sections: [{ h, items: [[headline, more]] }] }; newest first.
 window.BS_WHATSNEW = [
   {
+    version: '1.11.0.0', android: '1.11.0.0', date: '2026-11-16', title: "Museum rooms, and a Retro TV with its own body and sound",
+    highlights: [
+      "Museum rooms: a room per maker or per genre, with an Arcade wing, a Computers room and a Reading & media room",
+      "Walk the rooms with L1 / R1 (Q / E) or the Rooms… list, and come back from a game to the same case",
+      "The Retro TV: a tube set, a 70s wood console or a flat panel, with sound from where it stands",
+      "The Retro TV's commercial search shows how far it has got"
+    ],
+    platforms: [
+      "All platforms: museum rooms, the Retro TV's bodies and sound, the commercial search's progress."
+    ],
+    sections: [
+      { h: "New", items: [
+        ["Museum rooms", "Room menu → Rooms… or Settings → Museum → Organization. By maker: Nintendo, Sony, Sega, Microsoft, Atari and Other each get a room, plus an Arcade wing grouped by genre and a Computers room (DOS, PC, Custom). By genre: one room per primary genre. A whole console fits one room (up to 1,200 games over three walls), and only the room you're in is built. A Reading & media room holds the magazine and guide racks, the movie shelves and the Retro TV. New installs open on rooms by maker; if you already had the museum, it stays the Classic wall until you choose. Games added since your last visit still arrive as mail, in their own room. By TrapEmAll (issue 19)."],
+        ["Getting around the rooms", "L1 / R1 (Q / E) or the Rooms… list (O on the keyboard) walk the rooms, and ← / → in a room's overview turn between its walls. Back from a game, you're in the same room, on the same shelf and case. Choose what's on from another room walks you to the TV. By TrapEmAll."],
+        ["The Retro TV's body and sound", "The set's design is its own choice: the deep tube set, a 70s wood console with dials, or a flat panel, on any stand. What's playing carries on through a body, stand or size change, and pauses when you leave the Reading & media room. With Sound from the set on, the sound pans and fades with where the TV stands. Bigger gallery pieces too: a larger bench, bigger TVs, taller plinths. By TrapEmAll."]
+      ] },
+      { h: "Fixed", items: [
+        ["The reading room's rack", "A magazine or guide you downloaded while you were in another room is on the rack when you walk into the Reading & media room."],
+        ["The commercial search's progress", "The TV guide's \"Looking for commercials · 42/300 · found 6\" line and the TV's counts never showed while the search ran. They do now. The progress line is TrapEmAll's."]
+      ] }
+    ]
+  },
+  {
     version: '1.10.0.0', android: '1.10.0.0', date: '2026-11-15', title: "A Details page built around the case, RomM on your shelves, and tag shelves",
     highlights: [
       "Details redesigned around the case: one page in sections, the trailer with its sound, your play and a Status",

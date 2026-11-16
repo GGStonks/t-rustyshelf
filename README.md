@@ -433,9 +433,9 @@ ports, automatic SteamGridDB posters for PC games with no cover, hiding the Open
 
 Brought into (T)rustyShelf from other people's forks (they are the authors or co-authors of these commits):
 
+- [TrapEmAll](https://github.com/TrapEmAll): Retro TV: the commercial search's progress line shows while it looks; Museum rooms: magazines and guides that arrive while you're in another room are on the rack when you walk into the reading room; Retro TV guide: the progress line no longer stops the guide drawing; Retro TV: live progress for the commercial search and ad downloads; Credit TrapEmAll for the Museum's look-around; Museum: look left and right, and the side displays reachable from the wide view
 - [Thanks2111](https://github.com/Thanks2111): Português (Brasil): the language is a choice now
 - [supalii](https://github.com/supalii): Custom games on any shelf, the Xbox One shelf, PC posters and hidden tiles (from supalii's fork)
-- [TrapEmAll](https://github.com/TrapEmAll): Retro TV guide: the progress line no longer stops the guide drawing; Retro TV: live progress for the commercial search and ad downloads; Credit TrapEmAll for the Museum's look-around; Museum: look left and right, and the side displays reachable from the wide view
 
 <!-- /fork-survey credits -->
 
