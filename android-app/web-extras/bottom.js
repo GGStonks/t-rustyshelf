@@ -703,7 +703,7 @@
     setSel(i);
     const x = mMsg && mMsg.games.find(g => g.i === i);
     if (x) paintMCard(Object.assign({}, mMsg, { game: null, pick: x })); // show it at once; its details follow from the shelf
-    send({ type: 'cmd', cmd: 'mpick', arg: i });
+    send({ type: 'cmd', cmd: 'mpick', arg: { i, gen: mMsg && mMsg.row && mMsg.row.gen } });
   }
   // touch on the shelf: tap a case to choose it, drag to scrub along the row (lands on the nearest case)
   let mDrag = null, mRaf = 0;
@@ -912,7 +912,7 @@
     const ub = mCard.querySelector('[data-m="unwrap"]');
     if (ub) { ub.outerHTML = '<button class="mbig play" type="button" data-cmd="play"><svg viewBox="0 0 24 24"><path class="fill" d="M8 5.5v13l10.5-6.5z"/></svg><span>Play</span></button>'; }
     mCard.dataset.key = mCard.dataset.key.replace('|true|', '|false|');
-    if (tell && sel >= 0) send({ type: 'cmd', cmd: 'unwrap', arg: sel });
+    if (tell && sel >= 0) send({ type: 'cmd', cmd: 'unwrap', arg: { i: sel, gen: mMsg && mMsg.row && mMsg.row.gen } });
   }
 
   // ---------- the Art Studio (body.studio: while the top screen's Art Studio is up) ----------

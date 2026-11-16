@@ -177,6 +177,39 @@ shadows toggle if the museum stutters on your GPU.
 
 Lighting: Gallery (warm picture lights), Daylight, After hours (dim room, strong spotlight) or Neon (each row lit in its console's colour). Press Y on the pad or L on the keyboard inside the museum to cycle, or pick one in Settings → Display → Museum. The case you're on gets its own soft spotlight, and the card beside it shows maker, year, publisher, genre, rating and your play history.
 
+### Rooms
+
+Organization is a setting of its own (Room menu in the museum or Settings → (T)rustyShelf → Museum → Organization).
+The **Classic wall** above stays available; new installs default to **Rooms by maker**:
+
+- **By maker**: Nintendo, Sony, Sega, Microsoft, Atari and Other (TurboGrafx-16, Neo Geo, WonderSwan, Game.com and
+  anything the launcher meets later) each get a room, plus a dedicated **Arcade** wing (cabinets, grouped by genre)
+  and a **Computers** room (DOS, PC programs, the Custom shelf). A room holds at most 1,200 games on at most 30 shelf
+  segments (40 cases each, one source system per segment) over three walls — sized so one platform's whole collection
+  (Xbox 360 alone: 1,000+ titles) fits a single room; only a bigger one continues into another room of the same maker,
+  and a system is never split across rooms that could hold it whole.
+- **By genre**: one room per primary genre (from each game's LaunchBox details), with Arcade and Computers as their own
+  categories and everything without a genre in *Unknown*. Each genre room keeps one shelf segment per source system.
+- A **Reading & media** room holds the magazine and guide racks (up to 2,000 items on its ledges; the rest keep working
+  through search and the fans), the
+  movie/TV-show shelves and the Retro TV. The TV lives there: from another room, "Choose what's on" walks you there,
+  and B at a room's overview leaves the museum while **L1/R1 (Q/E) or the Rooms… directory** (Room menu → Rooms…, or O
+  on the keyboard) walks the rooms. In the overview, ←/→ step between a room's walls (the camera swings round the
+  room); nothing but the room you're in is ever built or lit.
+
+Games added since your last visit still arrive as mail — now collection-wide: pending parcels wait in their own room
+until you visit it, and unpacking one room never reseals or re-numbers another. When you return from a game you come
+back to the same room, shelf and case.
+
+### The Retro TV's body and sound
+
+The TV's body design (Room menu → Retro TV or Settings → Museum → TV) is now its own choice — the deep tube set, a 70s
+wood console with dials, or a modern flat panel — independent of the stand. What's playing survives a body, stand, size
+or place change and follows you between rooms: leaving the Reading & media room pauses it and coming back picks the
+same element and playhead up again. With **Sound from the set** on (default), TV audio is routed through Web Audio: it
+stereo-pans and fades with where the set stands in the room. If a browser or stream can't do that, the plain volume
+takes over — the same mute, volume and "Only when I'm looking at it" controls apply either way.
+
 ## Home, Continue and favorites
 
 Once you've played something, a **Home** shelf appears first: the games you launched most recently (any system),

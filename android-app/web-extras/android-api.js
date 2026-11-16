@@ -66,7 +66,8 @@
   ready.then(() => setTimeout(() => sharpenDisplays().catch(e => log('box art: sharpen', e && e.message)), 6000)); // (0.3.2) the 512 px copies made again at 1024
   function sysDefaults() { return { enabled: true, emulator: '', gameArgs: '', emulatorArgs: '', romDirs: [], artDir: '', bootOnLaunch: true, core: '' }; }
   function defaultConfig() { const systems = {}; for (const s of SYS) systems[s.id] = sysDefaults();
-    return { version: 1, setupDone: false, systems, steam: { enabled: false, path: '' }, apps: { stremio: { enabled: false, path: '' }, nuvio: { enabled: false, path: '' } }, ui: { sound: true, startFullscreen: true, autoCovers: true } }; }
+    return { version: 1, setupDone: false, systems, steam: { enabled: false, path: '' }, apps: { stremio: { enabled: false, path: '' }, nuvio: { enabled: false, path: '' } }, // new installs get the museum's themed rooms (existing configs without ui.museumStyle keep the Classic wall)
+      ui: { sound: true, startFullscreen: true, autoCovers: true, museumStyle: { grouping: 'manufacturer' } } }; }
 
   // ---------- paths ----------
   // SAF ids look like "primary:ROMs/gc" (internal storage) or "1A2B-3C4D:ROMs" (SD card)

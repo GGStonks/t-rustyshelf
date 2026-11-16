@@ -96,7 +96,7 @@
   // what may come with a command: a number (a case on the row, a step), a turn ({ dx, dy }) or a room choice ({ key, val })
   function argOf(a) {
     if (a == null) return null;
-    if (typeof a === 'object') { const o = {}; for (const k of ['dx', 'dy', 'key', 'val']) if (k in a && /^(number|string|boolean)$/.test(typeof a[k])) o[k] = a[k]; return o; }
+    if (typeof a === 'object') { const o = {}; for (const k of ['dx', 'dy', 'key', 'val', 'i', 'gen']) if (k in a && /^(number|string|boolean)$/.test(typeof a[k])) o[k] = a[k]; return o; }
     return +a;
   }
   function run(c, arg) {
